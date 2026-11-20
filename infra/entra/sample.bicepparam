@@ -2,7 +2,7 @@
 // environments entra-test / entra-prod) and fill in the real host names and the pilot department.
 using 'main.bicep'
 
-param ragAdminHost = 'rag-admin.example.invalid'
+param ragAdminHost = 'kalla-admin.example.invalid'
 param openWebUiHost = 'chat.example.invalid'
 param pilotDepartmentName = 'Exempelnämnden'
 param pilotDepartmentKey = 'exempel'

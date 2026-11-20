@@ -10,21 +10,21 @@ read from the code on `main` (2026-11-06; line references re-checked against `v0
 staff browser ──OIDC (Keycloak realm ume)──▶ frontend app (its own backend)
                                               │  Authorization: Bearer kalla-sk-…   (server side only)
                                               ▼
-                                         rag-api  /v1/models, /v1/chat/completions, /v1/feedback
-staff browser ──────── citation links ──────▶ rag-api  /v1/documents/{id}/content?grant=…   (staff network)
+                                         kalla-api  /v1/models, /v1/chat/completions, /v1/feedback
+staff browser ──────── citation links ──────▶ kalla-api  /v1/documents/{id}/content?grant=…   (staff network)
                 └───── citation links ──────▶ intranet page URLs
 ```
 
 | Rule | Why | Reference |
 |---|---|---|
-| The app calls rag-api **from its own backend**, never from the browser | the key is a secret; rag-api has no CORS (no `AddCors`/`UseCors` in `src/Kalla.Api/Program.cs`), so browser calls fail anyway | identity §6 |
+| The app calls kalla-api **from its own backend**, never from the browser | the key is a secret; kalla-api has no CORS (no `AddCors`/`UseCors` in `src/Kalla.Api/Program.cs`), so browser calls fail anyway | identity §6 |
 | One Ume.Rag client of kind **`integration`** and one `kalla-sk-` key for it | `integration` accepts a secret key (`src/Kalla.Domain/Access/AccessPolicy.cs:203-211`); the key is sent as `Authorization: Bearer …`, `x-api-key` or `api-key` (`src/Kalla.Infrastructure/Keys/KeyStore.cs:49-67`) | identity §3 table, row "Integration with a key" (P1) |
-| Staff sign in to **the app**, not to Ume.Rag | rag-api accepts no user tokens today: the OAuth token path is designed but not built (identity §7.1 "Not built yet") | identity §7 |
+| Staff sign in to **the app**, not to Ume.Rag | kalla-api accepts no user tokens today: the OAuth token path is designed but not built (identity §7.1 "Not built yet") | identity §7 |
 | The app decides who may use it | Ume.Rag sees every request as the key (`SubjectId` = the key's id, `src/Kalla.Api/KnowledgeCallers.cs:95`; no header can name the end user), so audience by department or group does not apply to it (identity §4.3 step 10) | gap SA-5 |
 | The rate limit is the app key's own | for a key subject the chat limit is the key's `RequestsPerMinute` when set, else `Settings.Chat.messagesPerMinutePerUser` (`ChatRateLimiter.LimitFor`, `src/Kalla.Api/ChatStreaming.cs:250-257`); the platform admin sets it on the app key (§2, §7) | chat §4.1 step 4 |
-| Only the app's backend may use the key | the key's `AllowedIpRanges` are checked on every request, else 403 `address_not_allowed` (`src/Kalla.Domain/Services/KeyChecks.cs:38`, `src/Kalla.Api/KnowledgeCallers.cs:64-71`). Behind the reverse proxy, rag-api takes the client address from `X-Forwarded-For` only when the connection comes from one of `Settings.TrustedProxies` (`src/Kalla.Api/ClientAddressMiddleware.cs`) | identity §6.3 step 4 |
+| Only the app's backend may use the key | the key's `AllowedIpRanges` are checked on every request, else 403 `address_not_allowed` (`src/Kalla.Domain/Services/KeyChecks.cs:38`, `src/Kalla.Api/KnowledgeCallers.cs:64-71`). Behind the reverse proxy, kalla-api takes the client address from `X-Forwarded-For` only when the connection comes from one of `Settings.TrustedProxies` (`src/Kalla.Api/ClientAddressMiddleware.cs`) | identity §6.3 step 4 |
 
-**Sign-in for the app.** The app gets its own OIDC client in Keycloak realm `kalla` (the realm shared with the gateway;
+**Sign-in for the app.** The app gets its own OIDC client in Keycloak realm `fors` (the realm shared with the gateway;
 Decisions "P1 pilot sign-in", "Gateway release 1 …"). It is the app's client, not one of RAG's: the realm's
 administrator creates it, and a realm role or group for support staff lets the app check who may use it. Which
 accounts exist and how support staff get them is the same open point as for Open WebUI (identity §5.3, "Who may sign
@@ -38,10 +38,10 @@ in … in P1 is not settled").
 | Create its key, scoped to the support assistant (`Scopes.AssistantIds`), with an expiry, `requestsPerMinute` for the whole app (e.g. 200 for twenty staff) and `allowedIpRanges` = the app backend's addresses | platform admin | `POST /api/keys`, edit with `PUT /api/keys/{id}` (`src/Kalla.AdminApi/KeyEndpoints.cs:41`, `:66`; fields `:240-245`, `requestsPerMinute` 1–100,000); rotate with `POST /api/keys/{id}/rotate`, which copies both (`src/Kalla.Domain/Services/KeyRotation.cs:43-44`) |
 | Hand the key over once, through a secret channel | platform admin → frontend team | never in a repository or ticket |
 | Make the assistant available to the client | department admin | assistant page, *Audience* (`PUT /api/assistants/{id}/audiences`) |
-| Trusted proxies: the reverse proxy's own addresses, so rag-api sees the app backend's address and not the proxy's | operator, platform admin | `PUT /api/settings/network` `trustedProxies` (`src/Kalla.AdminApi/SettingsEndpoints.cs:28-32`; a `/0` network is refused, `:224-228`). Without it every request comes from the proxy, and the key's allow-list and the download limit see only the proxy |
-| Route the app's backend host to rag-api | operator | reverse proxy and firewall: `/v1/models`, `/v1/chat/completions`, `/v1/feedback` from the app's backend only; `/v1/documents/*` from the staff network (identity §5.3; knowledge §4.6) |
-| Absolute citation links | operator | `Knowledge:PublicBaseUrl` = rag-api's staff-network address (set from `UME_RAG_API_PUBLIC_URL`, `deploy/compose.prod.yaml:157`) |
-| Allow the chat body through the proxy | operator | rag-api accepts 2 MB on `/v1/chat/completions` (`src/Kalla.Api/ChatEndpoints.cs:19`); the generated proxy configuration and the printed routes allow it since #552 ([`../../../docs/production-setup.md`](../../../docs/production-setup.md), "Reverse proxy and PKI"); a proxy configured before 0.3.1/0.4.0 needs `client_max_body_size 2m` on the api host |
+| Trusted proxies: the reverse proxy's own addresses, so kalla-api sees the app backend's address and not the proxy's | operator, platform admin | `PUT /api/settings/network` `trustedProxies` (`src/Kalla.AdminApi/SettingsEndpoints.cs:28-32`; a `/0` network is refused, `:224-228`). Without it every request comes from the proxy, and the key's allow-list and the download limit see only the proxy |
+| Route the app's backend host to kalla-api | operator | reverse proxy and firewall: `/v1/models`, `/v1/chat/completions`, `/v1/feedback` from the app's backend only; `/v1/documents/*` from the staff network (identity §5.3; knowledge §4.6) |
+| Absolute citation links | operator | `Knowledge:PublicBaseUrl` = kalla-api's staff-network address (set from `KALLA_API_PUBLIC_URL`, `deploy/compose.prod.yaml:157`) |
+| Allow the chat body through the proxy | operator | kalla-api accepts 2 MB on `/v1/chat/completions` (`src/Kalla.Api/ChatEndpoints.cs:19`); the generated proxy configuration and the printed routes allow it since #552 ([`../../../docs/production-setup.md`](../../../docs/production-setup.md), "Reverse proxy and PKI"); a proxy configured before 0.3.1/0.4.0 needs `client_max_body_size 2m` on the api host |
 
 The proxy and the firewall still restrict the routes; the key's allow-list is the second line, so a leaked key is
 useless outside the app's backend.
@@ -105,7 +105,7 @@ The assistants this key may use (`src/Kalla.Api/ChatEndpoints.cs:26-48`):
       { "document_id": "0193b0d2-c4f8-7c1e-9a3f-5e2d1b0a9c8d", "title": "VPN – Fel 809",
         "url": "https://intranat.umea.se/it/vpn/fel-809", "collection": "it-support", "rank": 1, "cited": true, "number": 1 },
       { "document_id": "0193a7e1-5b2c-7d40-8e11-2f6a9c0b4d7e", "title": "Felsökning av VPN-klienten",
-        "url": "https://rag-api.umea.local/v1/documents/0193a7e1-5b2c-7d40-8e11-2f6a9c0b4d7e/content?grant=g1.…#page=3",
+        "url": "https://kalla-api.umea.local/v1/documents/0193a7e1-5b2c-7d40-8e11-2f6a9c0b4d7e/content?grant=g1.…#page=3",
         "collection": "it-support", "rank": 2, "cited": false } ],
     "follow_ups": [ "Hur installerar jag om VPN-klienten?", "Vilka portar måste vara öppna för VPN?" ] } }
 ```
@@ -204,7 +204,7 @@ citation; one document keeps one number.
 The grant link also unlocks the document's metadata: `GET /v1/documents/{id}?grant=…` with the same grant returns
 title, display name, media type, modified date, language and page count (`src/Kalla.Api/KnowledgeEndpoints.cs:97-116`).
 The document id is the path segment of the link. Crawled pages have no grant and no served content
-(`content_not_served`; serving crawled HTML from rag-api's origin would be an XSS vector,
+(`content_not_served`; serving crawled HTML from kalla-api's origin would be an XSS vector,
 `src/Kalla.Answering/KnowledgeService.cs:180-191`).
 
 Suggested UI: render the answer's Markdown, turn each `[n]` (by the annotation's indices) into a link, and list the
@@ -299,7 +299,7 @@ value applies at once. Over it: 429 `rate_limited` with `Retry-After`. Downloads
   sign in to the admin UI as a test platform admin, create an `integration` client and key, a small collection and an
   assistant. The FakeGateway answers deterministically, so the app's parsing and rendering can be tested without
   model cost.
-- **API reference:** rag-api publishes an OpenAPI document and a Scalar page when `Knowledge:PublishApiReference` is
+- **API reference:** kalla-api publishes an OpenAPI document and a Scalar page when `Knowledge:PublishApiReference` is
   on (default on; `src/Kalla.Api/Program.cs:60-71`, `:138-144`). It is titled "Ume.Rag Knowledge API"; whether the
   chat routes appear in it is unverified. This file and chat §3 are the contract until then.
 - **Test host:** the same routes as production, with the app's backend host routed by the operator.
@@ -308,10 +308,10 @@ value applies at once. Over it: 429 `rate_limited` with `Retry-After`. Downloads
 
 | # | Step | Who |
 |---|---|---|
-| 1 | App's OIDC client and a support-staff role in realm `kalla` | realm administrator |
+| 1 | App's OIDC client and a support-staff role in realm `fors` | realm administrator |
 | 2 | Ume.Rag `integration` client; key scoped to the assistant, with `requestsPerMinute` (e.g. 200) and `allowedIpRanges` = the app backend's addresses | Ume.Rag platform admin |
 | 3 | Assistant audience = the client | support department admin |
-| 4 | Proxy and firewall: app backend → rag-api chat routes (2 MB body); staff network → `/v1/documents/*`; the proxy's addresses in `Settings.TrustedProxies` | operator, platform admin |
+| 4 | Proxy and firewall: app backend → kalla-api chat routes (2 MB body); staff network → `/v1/documents/*`; the proxy's addresses in `Settings.TrustedProxies` | operator, platform admin |
 | 5 | `Knowledge:PublicBaseUrl` set; `Settings.Chat.allowedLinkHosts` includes the intranet host | operator, platform admin |
 | 6 | App: server-side calls, streaming parser with the `kalla` chunks, citation rendering, related documents, follow-up chips, outcome styling, feedback, the 16,000-character check, error handling | frontend team |
 | 7 | Contract check on the test host: one cited answer with related documents and follow-ups (stream and JSON), one not-found, one long ticket, one uploaded-file download, one feedback, one call from an address outside the allow-list (403) | both teams |

@@ -48,7 +48,7 @@ existing environment between demo and empty, stop the stack, delete the AppHost'
 again.
 
 **Generated secrets.** The AppHost generates its passwords and keys on the first run and keeps them in its user
-secrets (`UserSecretsId` `ume-rag-apphost-dev`) as `Parameters:<name>`: `postgres-password`, `key-pepper`, `dev-key`,
+secrets (`UserSecretsId` `kalla-apphost-dev`) as `Parameters:<name>`: `postgres-password`, `key-pepper`, `dev-key`,
 `oidc-client-secret`, `dev-user-password`, `api-client-secret`, `openwebui-client-secret`, `cache-key-pepper`,
 `download-grant-key`, `render-ws-path`, `openwebui-jwt-secret`, `openwebui-secret-key`, the services' dev credential
 keys for the fake gateway (`gateway-key-api`, `gateway-key-admin`, `gateway-key-worker`) and, when their switch is on,
@@ -89,7 +89,7 @@ that way.
 **Blob master key.** `internal` blobs are envelope-encrypted (`URB2`, data-model §7) with the master key file
 `rag-blob-internal` in `KeyProvider:Directory` (default `/run/keys`, the Compose mount). Without it, syncs of `internal`
 sources fail with "Master key 'rag-blob-internal' is not available"; `public` sources need no key. In run mode the
-AppHost creates a development key once under `~/.ume-rag/keys/rag-blob-internal` (32 random bytes, base64, mode 600)
+AppHost creates a development key once under `~/.kalla/keys/rag-blob-internal` (32 random bytes, base64, mode 600)
 and passes `KeyProvider__Directory` to the worker, the api and the admin (#165); `KeyProvider:Directory` in the AppHost's
 configuration wins. Keep the file as long as the development blobs: without it their `internal` blobs cannot be read.
 An earlier manual key in the same place is used as it is.
@@ -98,7 +98,7 @@ An earlier manual key in the same place is used as it is.
 dashboard's `adminapi` resource, or `aspire logs adminapi` when the stack runs under `aspire start`; the wizard is the admin UI's `/setup`. A database whose setup is already done (any earlier run signed in with the AppHost's
 values) stays closed: also set `Setup:Reopen` to a new value, which the AppHost passes on. In the wizard the values to
 test are the bundled Keycloak's realm, `https://localhost:7411/realms/ume`, and the AppHost parameter
-`oidc-client-secret` as the client secret; the client ID `ume-rag-admin` is set by the AppHost and shows as locked.
+`oidc-client-secret` as the client secret; the client ID `kalla-admin` is set by the AppHost and shows as locked.
 Remove both settings to go back.
 
 Service ports (launch profiles): api `https://localhost:7401`, worker `7403`, admin API `7402`, fake gateway `7404`.
@@ -108,7 +108,7 @@ parser `7413`, ClamAV `7414`, Redis `7415` (when `Redis:Enabled`), renderer `741
 
 ## Keycloak test realm
 
-Without `Oidc:Authority` the AppHost starts Keycloak and imports the realm `kalla` from `dev/keycloak/` (stream B,
+Without `Oidc:Authority` the AppHost starts Keycloak and imports the realm `fors` from `dev/keycloak/` (stream B,
 identity design §11). Every test user has the same password, the `dev-user-password` parameter.
 
 | User | Roles | Department codes |
@@ -123,8 +123,8 @@ identity design §11). Every test user has the same password, the `dev-user-pass
 | `rag-no-role` | none (every `/api` call answers 403) | 1000 |
 | `rag-chat-user` | none (delegated chat tokens) | none |
 
-Clients: `ume-rag-admin` (the admin BFF, code + PKCE), `ume-rag-api-dev` (client credentials, roles
-`Knowledge.Read.All` and `Chat.Invoke.All`), `ume-rag-chat-dev` (public, PKCE, loopback redirect, scopes `Chat.Use`,
+Clients: `kalla-admin` (the admin BFF, code + PKCE), `kalla-api-dev` (client credentials, roles
+`Knowledge.Read.All` and `Chat.Invoke.All`), `kalla-chat-dev` (public, PKCE, loopback redirect, scopes `Chat.Use`,
 `Knowledge.Read`, `Mcp.Use`) and `open-webui-dev`. Their secrets are AppHost parameters as well.
 
 ## Fake gateway
@@ -196,42 +196,42 @@ project as a process of its own and `Kalla.AdminApi.Tests` as five, which takes 
 
 The integration tests start Postgres with Testcontainers, so Docker must be running. By default they use the same
 pinned `pgvector/pgvector` image as the AppHost (`TestPostgres.DefaultImage`). To run them against the production
-image, build it and name it in `UME_RAG_TEST_POSTGRES_IMAGE`:
+image, build it and name it in `KALLA_TEST_POSTGRES_IMAGE`:
 
 ```bash
-docker build -f images/postgres/Dockerfile -t ume-rag.local/postgres:dev .
-UME_RAG_TEST_POSTGRES_IMAGE=ume-rag.local/postgres:dev dotnet test --solution Kalla.slnx -c Release
+docker build -f images/postgres/Dockerfile -t kalla.local/postgres:dev .
+KALLA_TEST_POSTGRES_IMAGE=kalla.local/postgres:dev dotnet test --solution Kalla.slnx -c Release
 ```
 
-**Name local images with a registry part that has a dot** (`ume-rag.local/...`). When
+**Name local images with a registry part that has a dot** (`kalla.local/...`). When
 `TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX` is set (CI sets `mirror.gcr.io/` to avoid Docker Hub's pull limit),
-Testcontainers puts the prefix in front of every image without a registry, so `ume-rag/postgres:dev` would be pulled as
-`mirror.gcr.io/ume-rag/postgres:dev` and not found.
+Testcontainers puts the prefix in front of every image without a registry, so `kalla/postgres:dev` would be pulled as
+`mirror.gcr.io/kalla/postgres:dev` and not found.
 
 The contract tests (`tests/Kalla.ContractTests`) run the worker's parser client against a parser image. Without
-`UME_RAG_TEST_PARSER_IMAGE` the tests that need the image skip:
+`KALLA_TEST_PARSER_IMAGE` the tests that need the image skip:
 
 ```bash
-docker build -t ume-rag.local/parser:ci src/parser
-UME_RAG_TEST_PARSER_IMAGE=ume-rag.local/parser:ci dotnet test --project tests/Kalla.ContractTests
+docker build -t kalla.local/parser:ci src/parser
+KALLA_TEST_PARSER_IMAGE=kalla.local/parser:ci dotnet test --project tests/Kalla.ContractTests
 ```
 
 **Image tests.** Each image has a test script that runs it hardened, as Compose does:
 
 ```bash
-docker build -f images/postgres/Dockerfile -t ume-rag/postgres:latest .
-bash deploy/postgres/test.sh ume-rag/postgres:latest      # pgvector, HNSW, TLS, archive-push, backup and restore
-docker build -t ume-rag/clamav:dev images/clamav
-bash images/clamav/test.sh ume-rag/clamav:dev             # offline: a one-line EICAR signature
-bash images/clamav/test.sh --online ume-rag/clamav:dev    # downloads the real signatures (about 115 MB)
-docker build -t ume-rag/renderer:dev images/renderer
-bash images/renderer/test.sh ume-rag/renderer:dev         # sandbox, a rendered page, nothing outside its network
+docker build -f images/postgres/Dockerfile -t kalla/postgres:latest .
+bash deploy/postgres/test.sh kalla/postgres:latest      # pgvector, HNSW, TLS, archive-push, backup and restore
+docker build -t kalla/clamav:dev images/clamav
+bash images/clamav/test.sh kalla/clamav:dev             # offline: a one-line EICAR signature
+bash images/clamav/test.sh --online kalla/clamav:dev    # downloads the real signatures (about 115 MB)
+docker build -t kalla/renderer:dev images/renderer
+bash images/renderer/test.sh kalla/renderer:dev         # sandbox, a rendered page, nothing outside its network
 ```
 
 The renderer test uses the subnets `10.214.0.0/24` and `10.214.1.0/24`; set `RENDER_TEST_SUBNET` and
 `RENDER_TEST_OUTSIDE_SUBNET` where they are taken.
 
-**Browser tests.** `Start-E2E.ps1` starts the stack on its own Postgres volume (`ume-rag-e2e-postgres`), reset on every
+**Browser tests.** `Start-E2E.ps1` starts the stack on its own Postgres volume (`kalla-e2e-postgres`), reset on every
 start, with demo data and the fake gateway forced on. It uses the dev stack's ports, so stop the dev stack first. The
 Playwright tests are in `tests/e2e` ([its README](../tests/e2e/README.md)).
 
@@ -243,10 +243,10 @@ Playwright tests are in `tests/e2e` ([its README](../tests/e2e/README.md)).
 ```
 
 The setup wizard's spec (`tests/e2e/specs/setup.spec.ts`) needs `Setup:Try` on a fresh database, so `-Setup` starts
-that stack on a volume of its own (`ume-rag-e2e-setup-postgres`, reset on every start, without parser, renderer, ClamAV
+that stack on a volume of its own (`kalla-e2e-setup-postgres`, reset on every start, without parser, renderer, ClamAV
 and Open WebUI). Run it with `npx playwright test --project=setup` in `tests/e2e`, and the other specs with
 `--project=pilot --project=accessibility` on the normal stack. Finishing closes setup, so start `-Setup` again before
-another run. Without pwsh, set the script's variables by hand (`DevelopmentVolumes__Postgres=ume-rag-e2e-setup-postgres
+another run. Without pwsh, set the script's variables by hand (`DevelopmentVolumes__Postgres=kalla-e2e-setup-postgres
 Seed__Enabled=true FakeGateway__Enabled=true Setup__Try=true Parser__Mode=off Render__Mode=off ClamAv__Mode=off
 OpenWebUi__Enabled=false`), and set `ASPIRE_CLI` when `aspire` is not on the path: the spec reads the setup code with it.
 
@@ -260,8 +260,8 @@ cd src/parser
 uv sync --frozen
 uv run ruff check . && uv run ruff format --check .
 uv run pytest
-docker build --target test -t ume-rag/parser:test .
-docker run --rm --network none ume-rag/parser:test     # the tests that need Docling, the models and Tesseract
+docker build --target test -t kalla/parser:test .
+docker run --rm --network none kalla/parser:test     # the tests that need Docling, the models and Tesseract
 ```
 
 The image is about 3 GB. After changing `ume_parser/models.py`, run `uv run python -m scripts.export_schema` and
@@ -271,31 +271,31 @@ commit `contracts/parser/v1/`; CI fails when they differ.
 
 To try the production files locally, build the images, then run `init-deployment.sh` in a scratch copy of `deploy/`
 (not in the clone: it writes `deploy/.env` next to itself). The certificates and secrets go into the project's Docker
-volumes (`rag-bootstrap` creates them at the first `up`). The image defaults in `compose.rag.yaml` are the released
+volumes (`kalla-bootstrap` creates them at the first `up`). The image defaults in `compose.rag.yaml` are the released
 pins, so name the local builds with `--set`:
 
 ```bash
-docker build -f images/postgres/Dockerfile -t ume-rag/postgres:latest .
-docker build -t ume-rag/clamav:latest images/clamav
-docker build -t ume-rag/parser:latest src/parser
-docker build -t ume-rag/renderer:latest images/renderer
-for p in Api AdminApi Worker MigrationService; do dotnet publish src/Ume.Rag.$p -c Release -t:PublishContainer; done
+docker build -f images/postgres/Dockerfile -t kalla/postgres:latest .
+docker build -t kalla/clamav:latest images/clamav
+docker build -t kalla/parser:latest src/parser
+docker build -t kalla/renderer:latest images/renderer
+for p in Api AdminApi Worker MigrationService; do dotnet publish src/Kalla.$p -c Release -t:PublishContainer; done
 mkdir -p ~/rag-deploy-test && cp -r deploy ~/rag-deploy-test/
 images=()
-for s in postgres migrations api admin worker parser clamav renderer; do images+=(--set "RAG_${s^^}_IMAGE=ume-rag/$s:latest"); done
+for s in postgres migrations api admin worker parser clamav renderer; do images+=(--set "RAG_${s^^}_IMAGE=kalla/$s:latest"); done
 ~/rag-deploy-test/deploy/init-deployment.sh --api-host localhost --gateway-url https://<a gateway> \
   --backup-target local "${images[@]}" --yes
 docker compose --env-file ~/rag-deploy-test/deploy/.env up -d --wait
-docker compose --env-file ~/rag-deploy-test/deploy/.env logs rag-admin | grep 'Setup code'
+docker compose --env-file ~/rag-deploy-test/deploy/.env logs kalla-admin | grep 'Setup code'
 ```
 
-Sign-in is then set in the setup wizard at `https://localhost:9543/setup`, with the setup code from rag-admin's log. A
+Sign-in is then set in the setup wizard at `https://localhost:9543/setup`, with the setup code from kalla-admin's log. A
 gateway whose certificate comes from its own CA needs `--gateway-ca-file` (its CA certificate, `ca.pem`). With
 `--hardened` (the host firewall's subnets, the ingestion slice, the renderer's seccomp profile) the copy also needs
 `images/renderer/seccomp.json` at `~/rag-deploy-test/images/renderer/` (the layout of a release bundle) and, without
-the slice installed, the line `UME_RAG_INGESTION_SLICE=` in `deploy/.env` (`--set UME_RAG_INGESTION_SLICE=`; the script keeps this one
-empty value on a re-run). The .NET images are tagged `ume-rag/<service>:latest` (`ContainerImageTag` in
-`Directory.Build.props`). See [production-setup.md](production-setup.md) for what `rag-bootstrap` generates, and
+the slice installed, the line `KALLA_INGESTION_SLICE=` in `deploy/.env` (`--set KALLA_INGESTION_SLICE=`; the script keeps this one
+empty value on a re-run). The .NET images are tagged `kalla/<service>:latest` (`ContainerImageTag` in
+`Directory.Build.props`). See [production-setup.md](production-setup.md) for what `kalla-bootstrap` generates, and
 [p1a-local-run.md](p1a-local-run.md) for the local P1a run (now on the dev Keycloak and FakeGateway, then the live
 block's shared Keycloak and gateway).
 
@@ -330,8 +330,8 @@ process-wide `ActivitySource` or meter must filter to its own scope (#431), or a
 
 - `Chat:*Timeout` knobs are TimeSpans (`00:00:03`); a bare `3` means three days.
 - Some knobs live in two services: `Render:MaxConcurrent` is the worker's render cap *and* the admin API's ceiling for
-  `renderPerHost`, so a local test value needs both user secrets (`ume-rag-worker`, `ume-rag-adminapi`).
-- rag-api writes snake_case JSON on every route (its OpenAI routes set it globally), including `/version` (#497).
+  `renderPerHost`, so a local test value needs both user secrets (`kalla-worker`, `kalla-adminapi`).
+- kalla-api writes snake_case JSON on every route (its OpenAI routes set it globally), including `/version` (#497).
 - AppHost containers cannot have a read-only root: DCP copies files into a container before it starts. The production
   Compose files keep it read-only.
 
@@ -355,7 +355,7 @@ its front proxy answers an intermittent `error code: 502`, so chat-model rerank 
   build fails on style rules. A new worktree needs `dotnet restore` first. Tell the other stream on its PR.
 - **SQL in `src/Kalla.Infrastructure/` is in the API's SQL contract** (`tests/Kalla.Api.Tests/sql-shapes.json`),
   not only the worker's: an agent that adds a statement there must also run `tests/Kalla.Api.Tests` (regenerate with
-  `UME_RAG_UPDATE_CONTRACTS=1`). A-39's agent ran only the worker tests and CI failed.
+  `KALLA_UPDATE_CONTRACTS=1`). A-39's agent ran only the worker tests and CI failed.
 
 **Shell.** `pkill -f <pattern>` kills its own shell when the pattern appears in its command line: use
 `pgrep -f '<pat>[.]sh' | xargs -r kill`, or kill by PID.
@@ -366,8 +366,8 @@ its front proxy answers an intermittent `error code: 502`, so chat-model rerank 
 |---|---|
 | On WSL, the first `aspire` command asks to trust the development certificate in the Windows certificate store | Trust it once with `dotnet dev-certs https --trust`; the dashboard and the services' HTTPS endpoints use that certificate |
 | `docker compose up` of the production files fails with "Pool overlaps with other one on this network" | With `compose.hardened.yaml` the Compose networks use fixed subnets in `172.30.0.0/16`, and another Docker network on your machine already uses one. List them with `docker network inspect $(docker network ls -q) --format '{{.Name}} {{range .IPAM.Config}}{{.Subnet}} {{end}}'`; remove the network that collides, or keep `172.30.0.0/16` out of Docker's `default-address-pools` |
-| Integration tests pull `mirror.gcr.io/ume-rag/...` and fail | A local image without a registry part while `TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX` is set: name it `ume-rag.local/...` |
+| Integration tests pull `mirror.gcr.io/kalla/...` and fail | A local image without a registry part while `TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX` is set: name it `kalla.local/...` |
 | The parser stays unhealthy for minutes after a start | It warms up its slots (Docling, the models) and runs a self-test first; set `Parser:Mode=off` when you do not need it |
-| ClamAV is slow to become healthy on the first start | freshclam downloads the signatures into the `ume-rag-clamav-db` volume first; later starts reuse them. `ClamAv:Mode=off` skips it |
+| ClamAV is slow to become healthy on the first start | freshclam downloads the signatures into the `kalla-clamav-db` volume first; later starts reuse them. `ClamAv:Mode=off` skips it |
 | Postgres authentication fails after you cleared the user secrets | The volume keeps the old password: restore `Parameters:postgres-password`, or delete the volume (and its data) |
-| `ume-rag-e2e-postgres` cannot be removed | A stack still uses it: `.\scripts\Start-E2E.ps1 -Stop`, or stop the AppHost first |
+| `kalla-e2e-postgres` cannot be removed | A stack still uses it: `.\scripts\Start-E2E.ps1 -Stop`, or stop the AppHost first |

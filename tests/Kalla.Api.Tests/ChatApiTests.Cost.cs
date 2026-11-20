@@ -64,7 +64,7 @@ public sealed partial class ChatApiTests
 
             var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken);
             var response = await base.SendAsync(request, cancellationToken);
-            // A stream that breaks off or stalls is passed on unread, so rag-api sees the break or the stall as it happens (B-48).
+            // A stream that breaks off or stalls is passed on unread, so kalla-api sees the break or the stall as it happens (B-48).
             if (!response.IsSuccessStatusCode || body.Contains("fake-stream-broken", StringComparison.Ordinal) || body.Contains("fake-stream-stall", StringComparison.Ordinal))
             {
                 return response;

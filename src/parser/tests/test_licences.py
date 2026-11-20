@@ -15,7 +15,7 @@ import pytest
 from scripts import licences
 from ume_parser.settings import Settings
 
-LICENSES = Path("/usr/share/doc/ume-rag-parser/LICENSES.md")
+LICENSES = Path("/usr/share/doc/kalla-parser/LICENSES.md")
 
 # The image's working directory; a checkout on a runner or a laptop is never there.
 pytestmark = pytest.mark.skipif(

@@ -30,7 +30,7 @@ public sealed class EvaluationRunTests(RagDatabaseFixture database, FakeGatewayF
 {
     private static readonly EvaluationVariant[] ThreeWay = [EvaluationVariant.Vector, EvaluationVariant.Hybrid, EvaluationVariant.HybridNoDecompounder];
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-eval-blobs-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-eval-blobs-");
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

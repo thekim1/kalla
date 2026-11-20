@@ -22,7 +22,7 @@ their own copy of everything.
 | S6 | **Too many things to back up separately, and differently per form:** the pepper, the Data Protection certificate, the blob key, the pgBackRest passphrase, the CA key; Compose has pgBackRest, escrow and timers, Portainer manual dumps | A restore without one of them is unusable, and the list is spread over three guides | One command that writes one escrow set with all of them, the same in both forms |
 | S7 | **Gateway keys still need hand work after the manifest:** the integration is moved to a team, and assigned keys are created per department before an assistant can be published | The first assistant waits on a step no page asks for | The manifest names the owner at install and creates a first assigned key |
 | S8 | **Operator documents carry project history:** about 5,000 lines on twelve pages, with phase names, item IDs and issue numbers | It is why so much had gone stale (#795 corrected about 80 statements) | Operator pages without project vocabulary; the script's `--help` is the only option list |
-| S9 | **Open WebUI is assumed in places although not every installation needs it** (user, 2026-11-16) | `deploy/portainer/stack.env.example` presets `COMPOSE_PROFILES=clamav,openwebui`; `UME_DOMAIN` names a `chat.` host and the stack's proxy serves five host names; the last step of *Get started* is *Make available in Open WebUI*; the first-install guides walk through it. The setup wizard already hides its Open WebUI step when Open WebUI is off | Off unless asked for, in every form, and nothing mentions it when it is off |
+| S9 | **Open WebUI is assumed in places although not every installation needs it** (user, 2026-11-16) | `deploy/portainer/stack.env.example` presets `COMPOSE_PROFILES=clamav,openwebui`; `FORS_DOMAIN` names a `chat.` host and the stack's proxy serves five host names; the last step of *Get started* is *Make available in Open WebUI*; the first-install guides walk through it. The setup wizard already hides its Open WebUI step when Open WebUI is off | Off unless asked for, in every form, and nothing mentions it when it is off |
 
 ## Smaller items from the first analysis (the same goal, not started)
 
@@ -42,13 +42,13 @@ They remove the most code and documentation without changing what the system doe
 
 ### S1 One bootstrap
 
-- **Today.** `rag-bootstrap` (Portainer) generates the CAs, certificates, secrets and derived files into the volumes
-  `rag-certs` and `rag-secrets` from environment variables, is idempotent, re-issues certificates near expiry and
+- **Today.** `kalla-bootstrap` (Portainer) generates the CAs, certificates, secrets and derived files into the volumes
+  `kalla-certs` and `kalla-secrets` from environment variables, is idempotent, re-issues certificates near expiry and
   prints a checklist of what is missing. `init-deployment.sh` does the same into `deploy/certs` and `deploy/secrets` on
   the host from options, and also writes `deploy/.env`, the proxy configuration, the ClamAV confs and the pgBackRest
   repository settings.
 - **Decided** (user, 2026-11-16, session 46; Decisions "One deployment bootstrap"):
-  1. **The files live in Docker volumes in Compose too** (`rag-certs`, `rag-secrets`, `rag-config`), so escrow, the
+  1. **The files live in Docker volumes in Compose too** (`kalla-certs`, `kalla-secrets`, `kalla-config`), so escrow, the
      gateway's CA, PKI certificates and `create-secrets.sh` read from or mount into a volume.
   2. **The script writes only `deploy/.env`** (host names, the gateway's address and keys, the backup target, the
      optional parts). M-17's C13 is absorbed: the options whose values moved go with the rest.
@@ -83,27 +83,27 @@ They remove the most code and documentation without changing what the system doe
   - **The one file** is `deploy/compose.rag.yaml`, a valid Compose file that starts Ume.Rag alone: today's
     `portainer/compose.rag.template.yaml` with the `rag-` names, its static files as `configs` with `file:`, the
     networks and the two gateway inputs of its own (`llm` and `edge` defined here; the gateway's CA and its manifest
-    keys as host paths, `UME_RAG_GATEWAY_CA_DIR` and `UME_RAG_GATEWAY_SECRETS_DIR`, both optional).
+    keys as host paths, `KALLA_GATEWAY_CA_DIR` and `KALLA_GATEWAY_SECRETS_DIR`, both optional).
   - **What differs in the joined Portainer stack** is marked in that file line by line, as `nginx.portainer.conf.template`
     marks its blocks: a line that exists only joined is a comment `#@joined ...` (waiting for the gateway's `bootstrap`
-    and `migrations`, the volumes `ume-certs` and `integration-secrets`), a line that exists only alone ends in
+    and `migrations`, the volumes `fors-certs` and `integration-secrets`), a line that exists only alone ends in
     `#@alone` (the two networks' definitions, the host-path mounts). `build-stack.sh` applies the marks, turns each
     `file:` config into inline `content:` and adds the sections to the gateway's file as today. `build-stack.sh
     --check` and the boot test show that the generated stack is the one the VM runs (same service, volume and
     variable names).
   - **Overlays, Compose hosts only:** `compose.backup.yaml` (WAL archiving on, the pgBackRest settings from
-    `rag-secrets`, the repository, the `backup` network, `rag-upload-backup`), `compose.hardened.yaml` (the fixed
+    `kalla-secrets`, the repository, the `backup` network, `rag-upload-backup`), `compose.hardened.yaml` (the fixed
     subnets for `deploy/host/docker-user-firewall.sh`, the ingestion slice, the restart-unhealthy labels, the
     renderer's seccomp file), and `compose.rolling.yaml`, `compose.host-24g.yaml` and `compose.clamav-conf.yaml` as
     today under the new names. `deploy/.env`'s `COMPOSE_FILE` lists the ones in use.
-  - **One set of variable names:** the stack's (`RAG_*_IMAGE`, `UME_OTEL_*`, `UME_DOMAIN`, the profiles `clamav`,
-    `render`, `openwebui`, `proxy`); Compose's own `UME_RAG_CLAMAV_MODE`, `UME_RAG_OPENWEBUI_BASE_URL`,
-    `UME_RAG_CERTS_DIR`, `UME_RAG_SECRETS_DIR` and `*_IMAGE` go. The release bundle's image file follows.
+  - **One set of variable names:** the stack's (`RAG_*_IMAGE`, `FORS_OTEL_*`, `FORS_DOMAIN`, the profiles `clamav`,
+    `render`, `openwebui`, `proxy`); Compose's own `KALLA_CLAMAV_MODE`, `KALLA_OPENWEBUI_BASE_URL`,
+    `KALLA_CERTS_DIR`, `KALLA_SECRETS_DIR` and `*_IMAGE` go. The release bundle's image file follows.
   - **What reads the volumes afterwards:** `escrow-keys.sh`, `cert-expiry.sh`, `rolling-update.sh` and the tests,
     through `docker run` with the volume mounted read-only; `backup-postgres.sh`, `restore-pitr.sh` and
-    `backup-uploads.sh` take the service name `rag-postgres`.
+    `backup-uploads.sh` take the service name `kalla-postgres`.
   - **Gone with it:** `compose.prod.yaml`, `compose.ingestion.yaml`, `compose.openwebui.yaml` (S3),
-    `rag-blobs-init` (the bootstrap does it), `deploy/tests/openwebui-parity.sh` (one definition, nothing to compare).
+    `kalla-blobs-init` (the bootstrap does it), `deploy/tests/openwebui-parity.sh` (one definition, nothing to compare).
   - **Tests:** `pilot-stack.sh` and `release-smoke.sh` boot the one file with the overlays; the smoke test checks
     the setup wizard's state as `portainer-boot.sh` does. A Compose install made with the old files has no upgrade
     path (none exists outside tests); the release says so.
@@ -114,7 +114,7 @@ They remove the most code and documentation without changing what the system doe
 ### S3 Open WebUI as a profile in Compose
 
 `deploy/compose.openwebui.yaml` moves into the main project as the profile `openwebui`, as in the Portainer stack
-(`rag-openwebui`, `rag-openwebui-setup`); `--openwebui-host` adds the profile; the firewall rules for its network come
+(`kalla-openwebui`, `kalla-openwebui-setup`); `--openwebui-host` adds the profile; the firewall rules for its network come
 with the same run. Its sizing note stays (the 24 GB host). Falls out of S1 if the stack files merge.
 
 ### S9 Open WebUI easy to skip (user, 2026-11-16)
@@ -125,7 +125,7 @@ point in the code (the list above is from reading, not from a run without Open W
 - **Defaults:** `stack.env.example` without `openwebui` in `COMPOSE_PROFILES`, with one commented line to turn it on;
   Compose as S3. An existing stack keeps its profile, so nothing changes for the user's VM.
 - **Nothing left over when it is off:** no `chat.` host name asked for or served by the stack's proxy, no Open WebUI
-  client created by `rag-migrate`, no Open WebUI secrets generated, no note about it in the bootstrap's checklist.
+  client created by `kalla-migrate`, no Open WebUI secrets generated, no note about it in the bootstrap's checklist.
 - **The admin UI:** the last step of *Get started* names what the installation has (Open WebUI, or an app and its key
   under *Apps and keys*); the Open WebUI settings and the feedback page say that Open WebUI is not part of this
   installation instead of showing empty fields. Texts are in `labels.ts` and `messages.ts` (stream b's paths).
@@ -144,14 +144,14 @@ sections for 0.2.0 to 0.4.0 can go (the changelog keeps the history). The sectio
 
 Low-hanging fruit that an upgrade path was the only reason to keep. Check each in the code before removing it:
 
-- the retired-variable list and its notice (`bootstrap.sh`, `UME_RAG_RETIRED_SET`, Home's deployment notice): a clean
+- the retired-variable list and its notice (`bootstrap.sh`, `KALLA_RETIRED_SET`, Home's deployment notice): a clean
   list at the next release instead of 20 names carried along;
-- the clean-up branches in `init-deployment.sh` and `rag-bootstrap` for files of earlier releases (per-level gateway
+- the clean-up branches in `init-deployment.sh` and `kalla-bootstrap` for files of earlier releases (per-level gateway
   keys, the Data API key, refused old options);
 - every per-version upgrade section older than the VM's version (0.5.x), in `docs/upgrade-guide.md` and
   `docs/portainer.md`;
 - renaming or merging variables and volumes where S1 is simpler with one layout for both forms;
-- the hand-issued key path (`UME_RAG_*_GATEWAY_KEY`) beside the manifest, if one way is enough.
+- the hand-issued key path (`KALLA_*_GATEWAY_KEY`) beside the manifest, if one way is enough.
 
 ## S2, S5 and S7 (user, 2026-11-16: "do what you think is best")
 

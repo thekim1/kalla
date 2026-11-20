@@ -6,7 +6,7 @@ namespace Kalla.Worker.Tests.Processing;
 
 /// <summary>
 /// <see cref="PostgresEmbeddingProfileStore"/> reads <c>"RequestDimensions"</c> (U-b, #142) and the last canary check
-/// (#353) as <c>ume_rag_worker</c>.
+/// (#353) as <c>kalla_worker</c>.
 /// </summary>
 [Collection(RagDatabaseGroup4.Name)]
 public sealed class EmbeddingProfileStoreTests(RagDatabaseFixture database) : IAsyncLifetime

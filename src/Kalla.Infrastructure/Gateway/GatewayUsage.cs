@@ -41,7 +41,7 @@ public sealed record ModelPrices(decimal? InputPerMillionUsd, decimal? CachedInp
         return new ModelPrices(model.InputPerMillionUsd, model.CachedInputPerMillionUsd, model.OutputPerMillionUsd);
     }
 
-    /// <summary>The prices of a model as the config snapshot holds them (<see cref="PolicySnapshot.ModelPrices"/>; rag-api reads no row per call).</summary>
+    /// <summary>The prices of a model as the config snapshot holds them (<see cref="PolicySnapshot.ModelPrices"/>; kalla-api reads no row per call).</summary>
     public static ModelPrices Of(ModelPricesEntry model)
     {
         ArgumentNullException.ThrowIfNull(model);

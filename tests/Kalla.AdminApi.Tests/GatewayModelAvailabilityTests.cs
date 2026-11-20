@@ -24,7 +24,7 @@ namespace Kalla.AdminApi.Tests;
 [Collection(AdminDatabaseGroup2.Name)]
 public sealed class GatewayModelAvailabilityTests(AdminDatabaseFixture database)
 {
-    private const string AdminKey = "fake-eu-key-availability-0123456"; // rag-admin\'s credential key
+    private const string AdminKey = "fake-eu-key-availability-0123456"; // kalla-admin\'s credential key
     private const string Listed = "fors/chat-eu"; // the FakeGateway serves it at Eu
     private const string ListedRerank = "bge-reranker-v2-m3"; // served while FakeGateway:RerankEnabled
     private const string ExternalOnly = "fors/chat-advanced"; // served only at External

@@ -10,7 +10,7 @@ namespace Kalla.ContractTests;
 /// The worker contracts of P1a item 4 (hand-off J3): every file under <c>contracts/{sources,pipeline,jobs,site-profiles}/</c>
 /// is the export of a record in <c>Kalla.Pipelines</c> (<see cref="ContractSchemas.All"/>). The records are the source,
 /// because the worker binds them and the admin validates against the same schemas: a hand edit of a file, or a record
-/// change without a new export, fails here. With <c>UME_RAG_UPDATE_CONTRACTS=1</c> the test writes the files instead of
+/// change without a new export, fails here. With <c>KALLA_UPDATE_CONTRACTS=1</c> the test writes the files instead of
 /// comparing; commit the result.
 /// </summary>
 public sealed class WorkerContractTests
@@ -34,14 +34,14 @@ public sealed class WorkerContractTests
         var contract = ContractSchemas.All.Single(c => c.Path == path);
         var file = Path.Combine(ContractFiles.RepoRoot, "contracts", path);
         var exported = contract.Export().ToJsonString(Indented) + "\n";
-        if (Environment.GetEnvironmentVariable("UME_RAG_UPDATE_CONTRACTS") == "1")
+        if (Environment.GetEnvironmentVariable("KALLA_UPDATE_CONTRACTS") == "1")
         {
             Directory.CreateDirectory(Path.GetDirectoryName(file)!);
             File.WriteAllText(file, exported);
         }
 
-        File.Exists(file).ShouldBeTrue($"{path} is missing. Run with UME_RAG_UPDATE_CONTRACTS=1 to export it.");
-        File.ReadAllText(file).ReplaceLineEndings("\n").ShouldBe(exported, $"{path} differs from {contract.Type.Name}. Run with UME_RAG_UPDATE_CONTRACTS=1 to regenerate.");
+        File.Exists(file).ShouldBeTrue($"{path} is missing. Run with KALLA_UPDATE_CONTRACTS=1 to export it.");
+        File.ReadAllText(file).ReplaceLineEndings("\n").ShouldBe(exported, $"{path} differs from {contract.Type.Name}. Run with KALLA_UPDATE_CONTRACTS=1 to regenerate.");
     }
 
     [Fact]
@@ -64,7 +64,7 @@ public sealed class WorkerContractTests
         var file = Path.Combine(ContractFiles.RepoRoot, "contracts", path);
         var schema = JsonNode.Parse(File.ReadAllText(file))!.AsObject();
         schema["$schema"]!.GetValue<string>().ShouldBe(ContractSchemaExporter.Dialect);
-        schema["$id"]!.GetValue<string>().ShouldBe($"https://ume-rag.local/contracts/{path}");
+        schema["$id"]!.GetValue<string>().ShouldBe($"https://kalla.local/contracts/{path}");
         Should.NotThrow(() => SchemaValidator.Compile(schema));
     }
 

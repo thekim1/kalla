@@ -14,7 +14,7 @@ internal static class TestBlobKeys
 
     private static readonly Lazy<string> Root = new(() =>
     {
-        var directory = System.IO.Directory.CreateTempSubdirectory("ume-rag-keys-").FullName;
+        var directory = System.IO.Directory.CreateTempSubdirectory("kalla-keys-").FullName;
         WriteKey(directory, Internal);
         return directory;
     });

@@ -10,14 +10,14 @@ using Kalla.Worker.Connectors.Malware;
 namespace Kalla.Worker.Tests.Connectors;
 
 /// <summary>
-/// The image named by <c>UME_RAG_TEST_CLAMAV_IMAGE</c> (built from <c>images/clamav</c>), started with clamd alone and a
+/// The image named by <c>KALLA_TEST_CLAMAV_IMAGE</c> (built from <c>images/clamav</c>), started with clamd alone and a
 /// one-line EICAR test signature, as <c>images/clamav/test.sh</c> does offline: no download from database.clamav.net.
 /// Without the variable nothing starts and the tests skip. Use a name with a registry part that has a dot (for example
-/// <c>ume-rag.local/clamav:ci</c>): Testcontainers prefixes other names with the Docker Hub mirror CI sets.
+/// <c>kalla.local/clamav:ci</c>): Testcontainers prefixes other names with the Docker Hub mirror CI sets.
 /// </summary>
 public sealed class ClamAvContainer : IAsyncLifetime
 {
-    public const string ImageVariable = "UME_RAG_TEST_CLAMAV_IMAGE";
+    public const string ImageVariable = "KALLA_TEST_CLAMAV_IMAGE";
     private const int Port = 3310;
 
     private IContainer? _container;

@@ -134,21 +134,21 @@ jobs:
         with:
           dotnet-version: 10.0.401
       - name: Build the Postgres image
-        # The integration tests run against ume-rag/postgres as built from this commit, not only the stock base (hand-off
+        # The integration tests run against kalla/postgres as built from this commit, not only the stock base (hand-off
         # H3). The name has a registry part with a dot, so Testcontainers does not prefix it with the Docker Hub mirror
-        # below (it would then pull mirror.gcr.io/ume-rag/postgres) and uses the local image.
-        run: docker build -f images/postgres/Dockerfile -t ume-rag.local/postgres:ci --build-arg REVISION=${{ github.sha }} .
+        # below (it would then pull mirror.gcr.io/kalla/postgres) and uses the local image.
+        run: docker build -f images/postgres/Dockerfile -t kalla.local/postgres:ci --build-arg REVISION=${{ github.sha }} .
       - name: Build the ClamAV image
         # The worker's ClamAV client test (tests/Kalla.Worker.Tests, connectors design §18) talks to clamd as built from
         # this commit, with an offline test signature; the dotted registry part keeps Testcontainers on the local image.
-        run: docker build -t ume-rag.local/clamav:ci --build-arg REVISION=${{ github.sha }} images/clamav
+        run: docker build -t kalla.local/clamav:ci --build-arg REVISION=${{ github.sha }} images/clamav
       - name: Build and test backend
         env:
           # Testcontainers pulls Postgres and its Ryuk image from Docker Hub, whose anonymous pull limit is shared by every
           # job on the runner's address; Google's mirror of Docker Hub is not subject to it (as the gateway).
           TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io/
-          UME_RAG_TEST_POSTGRES_IMAGE: ume-rag.local/postgres:ci
-          UME_RAG_TEST_CLAMAV_IMAGE: ume-rag.local/clamav:ci
+          KALLA_TEST_POSTGRES_IMAGE: kalla.local/postgres:ci
+          KALLA_TEST_CLAMAV_IMAGE: kalla.local/clamav:ci
         run: |
           dotnet build Kalla.slnx -c Release --nologo
           # Tests marked [Trait(TestCategory.Name, TestCategory.Flaky)] run locally and in the weekly flake hunt, not here;
@@ -163,7 +163,7 @@ jobs:
   evaluation-smoke:
     # Knowledge design §16.4, repo-and-deployment §8.2: without the AppHost, the 13 pages of tests/evaluation/smoke go
     # through the worker (an upload batch; Markdown is parsed in the worker, so no parser or ClamAV image) into
-    # ume-rag/postgres as built from this commit, then the 30 questions through rag-api in process on the FakeGateway:
+    # kalla/postgres as built from this commit, then the 30 questions through kalla-api in process on the FakeGateway:
     # recall@10 >= 0.8 on POST /v1/retrieve and a citation on every chat answer (EvaluationSmokeTests in
     # tests/Kalla.Worker.Tests, trait Category=EvaluationSmoke, which the backend job leaves out). Detailed output
     # prints the recall numbers.
@@ -177,44 +177,44 @@ jobs:
           dotnet-version: 10.0.401
       - name: Build the Postgres image
         # As in the backend job: the dotted registry part keeps Testcontainers on the local image.
-        run: docker build -f images/postgres/Dockerfile -t ume-rag.local/postgres:ci --build-arg REVISION=${{ github.sha }} .
+        run: docker build -f images/postgres/Dockerfile -t kalla.local/postgres:ci --build-arg REVISION=${{ github.sha }} .
       - name: Ingest the smoke set and run its 30 questions
         env:
           TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io/
-          UME_RAG_TEST_POSTGRES_IMAGE: ume-rag.local/postgres:ci
+          KALLA_TEST_POSTGRES_IMAGE: kalla.local/postgres:ci
         run: |
           dotnet build tests/Kalla.Worker.Tests -c Release --nologo
           dotnet test --project tests/Kalla.Worker.Tests -c Release --no-build --filter-trait "Category=EvaluationSmoke" --output Detailed
 
   images:
-    # ume-rag/postgres: the image test of repo-and-deployment §5.2 (pgvector version, HNSW build, pg_stat_statements,
+    # kalla/postgres: the image test of repo-and-deployment §5.2 (pgvector version, HNSW build, pg_stat_statements,
     # wal_compression=lz4, TLS, archive-push, backup and restore from inside the image, read-only root, uid 999);
-    # ume-rag/clamav (§5.5) with its own test; ume-rag/renderer (§5.4) is in the renderer job. The images are pushed to
+    # kalla/clamav (§5.5) with its own test; kalla/renderer (§5.4) is in the renderer job. The images are pushed to
     # ghcr only by release.yml (§8.1).
     needs: changes
     if: needs.changes.outputs.images == 'true'
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Build ume-rag/postgres
+      - name: Build kalla/postgres
         run: |
-          docker build -f images/postgres/Dockerfile -t ume-rag/postgres:ci --build-arg REVISION=${{ github.sha }} .
-          docker image ls ume-rag/postgres:ci
+          docker build -f images/postgres/Dockerfile -t kalla/postgres:ci --build-arg REVISION=${{ github.sha }} .
+          docker image ls kalla/postgres:ci
       - name: Image test
-        run: bash deploy/postgres/test.sh ume-rag/postgres:ci
-      - name: Build ume-rag/clamav
+        run: bash deploy/postgres/test.sh kalla/postgres:ci
+      - name: Build kalla/clamav
         run: |
-          docker build -t ume-rag/clamav:ci --build-arg REVISION=${{ github.sha }} images/clamav
-          docker image ls ume-rag/clamav:ci
+          docker build -t kalla/clamav:ci --build-arg REVISION=${{ github.sha }} images/clamav
+          docker image ls kalla/clamav:ci
       - name: ClamAV image test
         # Offline: a one-line EICAR test signature in a fresh volume, no download from database.clamav.net
         # (images/clamav/test.sh --online exercises freshclam locally).
-        run: bash images/clamav/test.sh ume-rag/clamav:ci
+        run: bash images/clamav/test.sh kalla/clamav:ci
 
   renderer:
-    # ume-rag/renderer (repo-and-deployment §5.4) with its image test, then the worker rendering a fixture SPA through
+    # kalla/renderer (repo-and-deployment §5.4) with its image test, then the worker rendering a fixture SPA through
     # that image (RendererContainerTests in tests/Kalla.Worker.Tests, connectors design §8.3), which the backend job
-    # skips because it does not set UME_RAG_TEST_RENDERER_IMAGE.
+    # skips because it does not set KALLA_TEST_RENDERER_IMAGE.
     needs: changes
     if: needs.changes.outputs.renderer == 'true'
     runs-on: [self-hosted, linux, x64]
@@ -223,22 +223,22 @@ jobs:
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: 10.0.401
-      - name: Build ume-rag/renderer
+      - name: Build kalla/renderer
         # The dotted registry part keeps Testcontainers on the local image (as the backend job's images).
         run: |
-          docker build -t ume-rag/renderer:ci -t ume-rag.local/renderer:ci --build-arg REVISION=${{ github.sha }} images/renderer
-          docker image ls ume-rag/renderer:ci
+          docker build -t kalla/renderer:ci -t kalla.local/renderer:ci --build-arg REVISION=${{ github.sha }} images/renderer
+          docker image ls kalla/renderer:ci
       - name: Renderer image test
         # Hardened as in Compose with images/renderer/seccomp.json on an internal network of its own: refuses to start
         # without its secret path, Chromium's sandbox on, a routed page renders, no WebRTC candidate, and nothing outside
         # the network resolves or connects from inside the renderer (connectors design §8.3).
-        run: bash images/renderer/test.sh ume-rag/renderer:ci
+        run: bash images/renderer/test.sh kalla/renderer:ci
       - name: Worker renders through the image
         # The image as Compose runs it, on a network of its own (10.215.0.0/24). --fail-skips and
         # --minimum-expected-tests turn a skip (no image variable) or a filter that matches nothing into a failure.
         env:
           TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io/
-          UME_RAG_TEST_RENDERER_IMAGE: ume-rag.local/renderer:ci
+          KALLA_TEST_RENDERER_IMAGE: kalla.local/renderer:ci
         run: |
           dotnet build tests/Kalla.Worker.Tests -c Release --nologo
           dotnet test --project tests/Kalla.Worker.Tests -c Release --no-build \
@@ -248,7 +248,7 @@ jobs:
     # Production Compose (P0 checklist #14, repo-and-deployment §8.2): deploy/compose.rag.yaml with every supported
     # combination of its overlays and profiles renders with `docker compose config` against placeholder settings, every
     # image is pinned by digest (a release bundle pins the pushed ones, §7.2, checked here with placeholder digests),
-    # init-deployment.sh writes deploy/.env and the host firewall's subnets are compose.hardened.yaml's, rag-bootstrap
+    # init-deployment.sh writes deploy/.env and the host firewall's subnets are compose.hardened.yaml's, kalla-bootstrap
     # keeps its secrets on a re-run in the Compose form and in the Portainer stack, the deployment scripts pass
     # shellcheck and the host units pass systemd-analyze verify (deploy/host/).
     needs: changes
@@ -258,9 +258,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Compose files are valid and pin every image
         env:
-          UME_DOMAIN: example.se
-          UME_RAG_GATEWAY_URL: https://llm.example.se
-          UME_RAG_BACKUP_TARGET: local
+          FORS_DOMAIN: example.se
+          KALLA_GATEWAY_URL: https://llm.example.se
+          KALLA_BACKUP_TARGET: local
         run: |
           profiles=(--profile clamav --profile render --profile openwebui --profile proxy --profile backup)
           for files in "rag" "rag backup" "rag hardened" "rag backup hardened" "rag host-24g clamav-conf" \
@@ -277,16 +277,16 @@ jobs:
           if echo "$images" | grep -vE '@sha256:[0-9a-f]{64}$'; then echo "images not pinned by digest"; exit 1; fi
           # Each optional service only with its profile (#505, #535, S3); the worker's dependency on ClamAV is optional.
           base=(-f deploy/compose.rag.yaml)
-          for svc in rag-clamav rag-renderer rag-openwebui rag-openwebui-setup rag-proxy; do
+          for svc in kalla-clamav kalla-renderer kalla-openwebui kalla-openwebui-setup kalla-proxy; do
             if docker compose "${base[@]}" --profile backup config --services | grep -qx "$svc"; then
               echo "$svc runs without its profile"; exit 1
             fi
           done
-          docker compose "${base[@]}" config --format json | jq -e '.services["rag-worker"].depends_on["rag-clamav"].required == false' >/dev/null
+          docker compose "${base[@]}" config --format json | jq -e '.services["kalla-worker"].depends_on["kalla-clamav"].required == false' >/dev/null
           # The renderer is on the internal render network only, which it shares with the worker (§5.4, §6.1).
           docker compose "${base[@]}" --profile render config --format json | jq -e '
-            (.services["rag-renderer"].networks | keys) == ["rag-render"] and .networks["rag-render"].internal == true
-            and ([.services | to_entries[] | select(.value.networks | has("rag-render")) | .key] | sort) == ["rag-renderer", "rag-worker"]' >/dev/null
+            (.services["kalla-renderer"].networks | keys) == ["kalla-render"] and .networks["kalla-render"].internal == true
+            and ([.services | to_entries[] | select(.value.networks | has("kalla-render")) | .key] | sort) == ["kalla-renderer", "kalla-worker"]' >/dev/null
       - name: Kubernetes manifests are up to date and render
         # docs/kubernetes.md: the config copies match deploy/postgres, and the base, the example overlay and the overlay
         # with every optional component render. The bundle step below checks they get pinned images.
@@ -301,25 +301,25 @@ jobs:
           np() { awk -v n="$2" '/^---$/ { if (f) exit; d = ""; next } { d = d $0 "\n" } $0 == "  name: " n { f = 1 } END { if (f) printf "%s", d }' "$1"; }
           kustomize deploy/kubernetes/base > "$RUNNER_TEMP/k8s-base.yaml"
           # The base denies all traffic to and from the stack's pods (#706); the policies after it allow the flows.
-          diff -u - <(np "$RUNNER_TEMP/k8s-base.yaml" ume-rag-default-deny) <<'EOF'
+          diff -u - <(np "$RUNNER_TEMP/k8s-base.yaml" kalla-default-deny) <<'EOF'
           apiVersion: networking.k8s.io/v1
           kind: NetworkPolicy
           metadata:
             labels:
-              app.kubernetes.io/part-of: ume-rag
-            name: ume-rag-default-deny
+              app.kubernetes.io/part-of: kalla
+            name: kalla-default-deny
           spec:
             podSelector:
               matchLabels:
-                app.kubernetes.io/name: ume-rag
+                app.kubernetes.io/name: kalla
             policyTypes:
             - Ingress
             - Egress
           EOF
           kustomize deploy/kubernetes/example > "$RUNNER_TEMP/k8s-example.yaml"
           # ClamAV is its own component, in the example by default with the worker's ClamAv__Mode on (#535); without it
-          # the overlay sets off, and nothing of rag-clamav is left but the worker's unused ClamAv__Host.
-          awk '/^---/ { k = "" } /^kind: / { k = $2 } k == "Deployment" && /^  name: rag-clamav$/ { f = 1 } END { exit !f }' \
+          # the overlay sets off, and nothing of kalla-clamav is left but the worker's unused ClamAv__Host.
+          awk '/^---/ { k = "" } /^kind: / { k = $2 } k == "Deployment" && /^  name: kalla-clamav$/ { f = 1 } END { exit !f }' \
             "$RUNNER_TEMP/k8s-example.yaml"
           grep -qx '  ClamAv__Mode: "on"' "$RUNNER_TEMP/k8s-example.yaml"
           cp -R deploy/kubernetes "$RUNNER_TEMP/k8s-noclamav"
@@ -327,22 +327,22 @@ jobs:
             "$RUNNER_TEMP/k8s-noclamav/example/kustomization.yaml"
           kustomize "$RUNNER_TEMP/k8s-noclamav/example" > "$RUNNER_TEMP/k8s-noclamav.yaml"
           grep -qx '  ClamAv__Mode: "off"' "$RUNNER_TEMP/k8s-noclamav.yaml"
-          if grep -v -x '  ClamAv__Host: rag-clamav' "$RUNNER_TEMP/k8s-noclamav.yaml" | grep -q rag-clamav; then
-            echo "rag-clamav is rendered without components/clamav"; exit 1
+          if grep -v -x '  ClamAv__Host: kalla-clamav' "$RUNNER_TEMP/k8s-noclamav.yaml" | grep -q kalla-clamav; then
+            echo "kalla-clamav is rendered without components/clamav"; exit 1
           fi
           cp -R deploy/kubernetes "$RUNNER_TEMP/k8s"
           sed -i -e 's|# - \.\./components/renderer|- ../components/renderer|' "$RUNNER_TEMP/k8s/example/kustomization.yaml"
           kustomize "$RUNNER_TEMP/k8s/example" > "$RUNNER_TEMP/k8s.yaml"
           for kind in NetworkPolicy Deployment StatefulSet Job; do printf '%s ' "$kind"; grep -c "^kind: $kind$" "$RUNNER_TEMP/k8s.yaml"; done
-          grep -q 'name: rag-renderer' "$RUNNER_TEMP/k8s.yaml"
+          grep -q 'name: kalla-renderer' "$RUNNER_TEMP/k8s.yaml"
           # Each NetworkPolicy once, the Ingress controller's among them.
           awk '/^---$/ { k = "" } /^kind: / { k = $2 } k == "NetworkPolicy" && /^  name: / { print $2 }' "$RUNNER_TEMP/k8s.yaml" \
             | sort | uniq -d | grep . && { echo "a NetworkPolicy is rendered twice"; exit 1; }
-          np "$RUNNER_TEMP/k8s.yaml" ume-rag-ingress-controller | grep -q 'kubernetes.io/metadata.name: ingress-nginx'
+          np "$RUNNER_TEMP/k8s.yaml" kalla-ingress-controller | grep -q 'kubernetes.io/metadata.name: ingress-nginx'
           # The worker's crawl and freshclam reach public addresses only on 80 and 443 (#706): every egress rule has a
           # destination, and the one with 80 or 443 is 0.0.0.0/0 without the link-local range (cloud metadata), among
           # the private ones.
-          for p in ume-rag-worker ume-rag-clamav; do
+          for p in kalla-worker kalla-clamav; do
             np "$RUNNER_TEMP/k8s.yaml" "$p" | awk '
               /^  egress:/ { e = 1; next } e && /^  [a-z]/ { e = 0 } e && /^  - / { i++ }
               e && /- port: (80|443)$/ { web[i] = 1 } e && /^  [- ] to:$/ { to[i] = 1 }
@@ -359,19 +359,19 @@ jobs:
         # deploy/build-release-bundle.sh (§7.2) with placeholder digests: every image of the bundled Compose files is
         # pinned by digest and they render; an unpinned image is refused. release.yml runs it with the pushed digests.
         env:
-          UME_DOMAIN: example.se
-          UME_RAG_GATEWAY_URL: https://llm.example.se
-          UME_RAG_BACKUP_TARGET: local
+          FORS_DOMAIN: example.se
+          KALLA_GATEWAY_URL: https://llm.example.se
+          KALLA_BACKUP_TARGET: local
         run: |
           digest="sha256:$(printf '0%.0s' $(seq 64))"
           for v in API ADMIN WORKER MIGRATIONS PARSER CLAMAV RENDERER POSTGRES; do
-            export "RAG_${v}_IMAGE=ghcr.io/example/ume-rag/${v,,}:0.0.0@$digest"
+            export "RAG_${v}_IMAGE=ghcr.io/example/kalla/${v,,}:0.0.0@$digest"
           done
-          if out="$(RAG_PARSER_IMAGE=ume-rag/parser:latest bash deploy/build-release-bundle.sh 0.0.0 "$RUNNER_TEMP/unpinned" 2>&1)"; then
+          if out="$(KALLA_PARSER_IMAGE=kalla/parser:latest bash deploy/build-release-bundle.sh 0.0.0 "$RUNNER_TEMP/unpinned" 2>&1)"; then
             echo "an unpinned image was accepted"; exit 1
           fi
           echo "$out"
-          grep -q 'RAG_PARSER_IMAGE=ume-rag/parser:latest is not pinned' <<< "$out"
+          grep -q 'KALLA_PARSER_IMAGE=kalla/parser:latest is not pinned' <<< "$out"
           bash deploy/build-release-bundle.sh 0.0.0 "$RUNNER_TEMP/bundle"
           tar -xzf "$RUNNER_TEMP/bundle/ume-rag-0.0.0.tar.gz" -C "$RUNNER_TEMP/bundle"
           b="$RUNNER_TEMP/bundle/ume-rag-0.0.0/deploy"
@@ -390,18 +390,18 @@ jobs:
           echo "$k8s_images"
           if echo "$k8s_images" | grep -vE '@sha256:[0-9a-f]{64}$'; then echo "unpinned Kubernetes images in the bundle"; exit 1; fi
           # The Portainer stack asset: RAG's images pinned to the release.
-          grep -q "RAG_API_IMAGE:-ghcr.io/example/ume-rag/api:0.0.0@$digest" "$RUNNER_TEMP/bundle/compose.portainer.yaml"
+          grep -q "KALLA_API_IMAGE:-ghcr.io/example/kalla/api:0.0.0@$digest" "$RUNNER_TEMP/bundle/compose.portainer.yaml"
       - name: Kubernetes' create-secrets.sh generates with the stacks' bootstrap and keeps its secrets on a re-run
         # Decisions "One deployment bootstrap": create-secrets.sh runs deploy/portainer/bootstrap.sh on the operator's
         # machine. No cluster: --generate-only, twice, then with options that change something.
         run: bash deploy/tests/kubernetes-secrets.sh
       - name: init-deployment.sh writes deploy/.env, and a re-run keeps it
         # Offline in a copy of deploy/: a first run, mode 600, the clamav profile and no sign-in value; a re-run keeps
-        # every line (UME_RAG_SETUP_REOPEN among them); the options and their overlays; the refusals; the host firewall's
+        # every line (KALLA_SETUP_REOPEN among them); the options and their overlays; the refusals; the host firewall's
         # rules and subnets (deploy/tests/compose-init.sh).
         run: bash deploy/tests/compose-init.sh
-      - name: rag-bootstrap in its Compose form keeps its secrets on a re-run
-        # deploy/.env from init-deployment.sh, then rag-bootstrap alone, twice, on throwaway volumes: the gateway's CA and
+      - name: kalla-bootstrap in its Compose form keeps its secrets on a re-run
+        # deploy/.env from init-deployment.sh, then kalla-bootstrap alone, twice, on throwaway volumes: the gateway's CA and
         # keys from host directories, no gateway blocks in the proxy, the setup wizard's address, the overlays' inputs,
         # and escrow-keys.sh and cert-expiry.sh reading the volumes (deploy/tests/compose-bootstrap.sh).
         run: bash deploy/tests/compose-bootstrap.sh
@@ -409,14 +409,14 @@ jobs:
         # Offline: docker compose config over compose.rag.yaml with the hardened, 24 GB and backup overlays and the
         # openwebui profile (P1b item 17).
         run: bash deploy/tests/pilot-stack.sh
-      - name: The Portainer stack's rag-bootstrap keeps its secrets on a re-run
-        # rag-bootstrap alone, twice on the same throwaway volumes (#697): every secret existing data depends on, and every
+      - name: The Portainer stack's kalla-bootstrap keeps its secrets on a re-run
+        # kalla-bootstrap alone, twice on the same throwaway volumes (#697): every secret existing data depends on, and every
         # owner and mode, is unchanged by the second run; the gateway credential keys follow the variable, else the
         # manifest's file.
         run: bash deploy/tests/portainer-rerun.sh
-      - name: The Portainer stack's host names default under UME_DOMAIN
-        # Setup wizard S0: offline, every place a host name is used renders rag., rag-admin. and chat.<domain> from
-        # UME_DOMAIN, each UME_RAG_*_HOST overrides its own, the names alone work as before (never a name ending in a dot),
+      - name: The Portainer stack's host names default under FORS_DOMAIN
+        # Setup wizard S0: offline, every place a host name is used renders rag., kalla-admin. and chat.<domain> from
+        # FORS_DOMAIN, each KALLA_*_HOST overrides its own, the names alone work as before (never a name ending in a dot),
         # and with neither the stack refuses to render, naming both.
         run: bash deploy/tests/portainer-hosts.sh
       - name: The Portainer stack renders with the previous release's variables
@@ -437,7 +437,7 @@ jobs:
             echo "a certificate 30 days from expiry passed"; exit 1
           fi
           echo "$out"
-          grep -q '^warning: postgres/postgres.crt expires .*: run rag-bootstrap within 30 days' <<< "$out"
+          grep -q '^warning: postgres/postgres.crt expires .*: run kalla-bootstrap within 30 days' <<< "$out"
       - name: Deployment scripts pass shellcheck
         run: shellcheck deploy/*.sh deploy/postgres/*.sh deploy/host/*.sh deploy/tests/*.sh deploy/portainer/*.sh deploy/kubernetes/*.sh
       - name: Host units pass systemd-analyze verify

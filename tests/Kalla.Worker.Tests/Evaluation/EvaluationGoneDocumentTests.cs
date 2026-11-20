@@ -16,7 +16,7 @@ namespace Kalla.Worker.Tests.Evaluation;
 [Collection(RagDatabaseGroup3.Name)]
 public sealed class EvaluationGoneDocumentTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-eval-gone-blobs-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-eval-gone-blobs-");
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

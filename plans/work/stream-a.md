@@ -139,9 +139,9 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Read:** engine §7.3, §7.7; identity §4.7, §10; gateway-changes §5.2, §5.7; cost-attribution §4.1, §4.2.
 
 ### [ ] A-35 (#643, code merged; the live check is open) Gateway phases 2 and 3 in the deployment and the runbook (#580, cost-attribution B5–B7, deploy and docs part)
-- **Do:** `Gateway__IntegrationApiUrl` for rag-admin (`UME_RAG_GATEWAY_INTEGRATION_API_URL` in `deploy/.env`; not a
+- **Do:** `Gateway__IntegrationApiUrl` for kalla-admin (`KALLA_GATEWAY_INTEGRATION_API_URL` in `deploy/.env`; not a
   secret; unset: no read-back) in the Compose, Kubernetes and Portainer templates; `production-setup.md`: a gateway
-  admin adds `usage.read` to rag-admin's credential key, and rag-admin reaches the gateway's Admin API at
+  admin adds `usage.read` to kalla-admin's credential key, and kalla-admin reaches the gateway's Admin API at
   `/integration/v1`; `docs/runbook.md`: event 5011 (an older gateway instance during a rolling update; fail closed by
   `Gateway:RequireDelegationEcho`, which stays `true`), an assistant shown unavailable (the key disabled, revoked or
   expired, or a budget used up: fixed by the department in the gateway), worker jobs waiting with

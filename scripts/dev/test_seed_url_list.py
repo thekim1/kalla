@@ -1,7 +1,7 @@
 """Tests for seed_url_list.py that need no database: the connection-string parsing, the localhost-only guard (a
 non-local database is refused before psql runs), the URL checks, the psql input (with the source's piiMode) and the
 --api-key handling (key format, hash, pepper from the environment only, the key printed once). The SQL itself, and
-rag-api accepting the key, are tested against TestPostgres by tests/Kalla.Worker.Tests/Engine/DevSeedScriptTests.cs.
+kalla-api accepting the key, are tested against TestPostgres by tests/Kalla.Worker.Tests/Engine/DevSeedScriptTests.cs.
 Standard library only:
 
     python3 -I -m unittest discover -s scripts/dev -v
@@ -77,7 +77,7 @@ class MainTests(unittest.TestCase):
 
     def test_the_environment_variable_is_checked_too(self) -> None:
         with (
-            mock.patch.dict("os.environ", {"UME_RAG_DEV_DB": "Host=10.1.2.3;Database=ragdb"}),
+            mock.patch.dict("os.environ", {"KALLA_DEV_DB": "Host=10.1.2.3;Database=ragdb"}),
             mock.patch("subprocess.run") as run,
         ):
             code, err = run_main(["--profile", "p", "https://example.org/a"])
@@ -134,16 +134,16 @@ class MainTests(unittest.TestCase):
     def test_socket_mode_runs_psql_in_the_container_as_postgres_without_a_password(self) -> None:
         completed = mock.Mock(returncode=0, stdout="Key,Value\nsource,abc (created)\n", stderr="")
         with (
-            mock.patch.dict(os.environ, {"PGPASSWORD": "leftover", "UME_RAG_DEV_DB": ""}),
+            mock.patch.dict(os.environ, {"PGPASSWORD": "leftover", "KALLA_DEV_DB": ""}),
             mock.patch("subprocess.run", return_value=completed) as run,
             redirect_stdout(io.StringIO()),
         ):
             code = seed_url_list.main(
-                ["--docker", "ume-rag-postgres-1", "--socket", "--profile", "pilot-embedding", "https://example.org/a"]
+                ["--docker", "kalla-postgres-1", "--socket", "--profile", "pilot-embedding", "https://example.org/a"]
             )
         self.assertEqual(0, code)
         command, env = run.call_args.args[0], run.call_args.kwargs["env"]
-        self.assertEqual(["docker", "exec", "-i", "-u", "postgres", "ume-rag-postgres-1", "psql"], command[:7])
+        self.assertEqual(["docker", "exec", "-i", "-u", "postgres", "kalla-postgres-1", "psql"], command[:7])
         self.assertEqual(["-U", "postgres", "-d", "ragdb"], command[-4:])
         self.assertNotIn("-h", command)
         self.assertNotIn("PGPASSWORD", env)
@@ -189,7 +189,7 @@ class ApiKeyTests(unittest.TestCase):
 
     def test_a_new_key_is_printed_once_and_only_its_hash_reaches_psql(self) -> None:
         output = "Key,Value\nclient,c1 (created)\napi_key,k1 dev seed: pilot-public (created)\napi_key_state,created\n"
-        code, out, _, run = self.run_seed(output, {"UME_RAG_DEV_KEY_PEPPER": PEPPER})
+        code, out, _, run = self.run_seed(output, {"KALLA_DEV_KEY_PEPPER": PEPPER})
         self.assertEqual(0, code)
         keys = re.findall(r"kalla-sk-[0-9A-Za-z]{43}", out)
         self.assertEqual(1, len(keys))
@@ -199,13 +199,13 @@ class ApiKeyTests(unittest.TestCase):
         self.assertNotIn(PEPPER, stdin)
         self.assertIn(f"SELECT set_config('ume_seed.key_hash', '{seed_url_list.key_hash(PEPPER, key)}', false);", stdin)
         self.assertIn(f"SELECT set_config('ume_seed.key_prefix', '{key[:15]}', false);", stdin)
-        self.assertNotIn("UME_RAG_DEV_KEY_PEPPER", env)
+        self.assertNotIn("KALLA_DEV_KEY_PEPPER", env)
         self.assertNotIn(PEPPER, " ".join(command))
         self.assertNotIn("api_key_state", out)
 
     def test_an_existing_key_prints_nothing_secret(self) -> None:
         output = "Key,Value\napi_key,k1 dev seed: pilot-public (existing; not printed again)\napi_key_state,existing\n"
-        code, out, _, _ = self.run_seed(output, {"UME_RAG_DEV_KEY_PEPPER": PEPPER})
+        code, out, _, _ = self.run_seed(output, {"KALLA_DEV_KEY_PEPPER": PEPPER})
         self.assertEqual(0, code)
         self.assertNotRegex(out, r"kalla-sk-[0-9A-Za-z]{43}")
         self.assertIn("(existing; not printed again)", out)
@@ -213,7 +213,7 @@ class ApiKeyTests(unittest.TestCase):
     def test_the_pepper_must_be_set_and_long_enough(self) -> None:
         for pepper, message in (("", "needs the AppHost's key pepper"), ("short", "shorter than 32 bytes")):
             with self.subTest(pepper=pepper):
-                code, out, err, run = self.run_seed("", {"UME_RAG_DEV_KEY_PEPPER": pepper})
+                code, out, err, run = self.run_seed("", {"KALLA_DEV_KEY_PEPPER": pepper})
                 self.assertEqual(2, code)
                 self.assertIn(message, err)
                 self.assertEqual("", out)

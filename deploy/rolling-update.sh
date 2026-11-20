@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Updates a stack started with compose.rolling.yaml one slot at a time, so rag-api and the admin UI stay up
+# Updates a stack started with compose.rolling.yaml one slot at a time, so kalla-api and the admin UI stay up
 # (docs/zero-downtime-updates.md, repo-and-deployment §7.3). Run it after setting the new image pins in deploy/.env
 # or unpacking a new release bundle over deploy/ (keep deploy/.env; the certificates and secrets are in the volumes).
 #
-#   ./deploy/rolling-update.sh                  # rag-bootstrap and the migration, then rag-api, rag-api-b, rag-admin,
-#                                               # rag-admin-b, the rest
+#   ./deploy/rolling-update.sh                  # kalla-bootstrap and the migration, then kalla-api, kalla-api-b, kalla-admin,
+#                                               # kalla-admin-b, the rest
 #   ./deploy/rolling-update.sh --pull           # pull the images first
 #   ./deploy/rolling-update.sh --force          # recreate every slot even if its image did not change (new certificates)
-#   ./deploy/rolling-update.sh --with-postgres  # also a new RAG_POSTGRES_IMAGE: restarts the database (an announced
+#   ./deploy/rolling-update.sh --with-postgres  # also a new KALLA_POSTGRES_IMAGE: restarts the database (an announced
 #                                               # outage) and runs ALTER EXTENSION vector UPDATE before migrating
 #
 # Only for releases the upgrade guide marks "Rolling update: yes": the old version keeps running against the new
@@ -18,7 +18,7 @@ set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 pull=0; force=(); with_postgres=0
-settle="${UME_RAG_ROLLING_SETTLE_SECONDS:-15}"
+settle="${KALLA_ROLLING_SETTLE_SECONDS:-15}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --pull) pull=1; shift;;
@@ -32,16 +32,16 @@ done
 # deploy/.env names the files (COMPOSE_FILE, init-deployment.sh --rolling adds compose.rolling.yaml).
 compose=(docker compose --env-file "$here/.env")
 services="$("${compose[@]}" config --services)"
-grep -qx rag-api-b <<<"$services" || {
-  echo "error: no rag-api-b: COMPOSE_FILE in deploy/.env does not list compose.rolling.yaml." >&2
+grep -qx kalla-api-b <<<"$services" || {
+  echo "error: no kalla-api-b: COMPOSE_FILE in deploy/.env does not list compose.rolling.yaml." >&2
   echo "  Re-run ./deploy/init-deployment.sh with --rolling, then: ${compose[*]} up -d --wait" >&2
   exit 1
 }
-pairs=(rag-api:rag-api-b rag-admin:rag-admin-b)
+pairs=(kalla-api:kalla-api-b kalla-admin:kalla-admin-b)
 singles=()
 running="$("${compose[@]}" ps --services --status running)"
 # The ones that run: a single left stopped stays so.
-for s in rag-worker rag-parser rag-clamav rag-renderer; do grep -qx "$s" <<<"$running" && singles+=("$s"); done
+for s in kalla-worker kalla-parser kalla-clamav kalla-renderer; do grep -qx "$s" <<<"$running" && singles+=("$s"); done
 
 health() { # health SERVICE: the container's health status, or "missing"
   local id; id="$("${compose[@]}" ps -q "$1" 2>/dev/null || true)"
@@ -70,29 +70,29 @@ for pair in "${pairs[@]}"; do
 done
 
 if [ "$pull" = 1 ]; then
-  "${compose[@]}" pull rag-bootstrap rag-postgres rag-migrate rag-api rag-api-b rag-admin rag-admin-b "${singles[@]}"
+  "${compose[@]}" pull kalla-bootstrap kalla-postgres kalla-migrate kalla-api kalla-api-b kalla-admin kalla-admin-b "${singles[@]}"
 fi
 
-# The release's bootstrap first: it writes what the new version reads (secrets, certificates, rag-config) and touches
+# The release's bootstrap first: it writes what the new version reads (secrets, certificates, kalla-config) and touches
 # nothing that runs.
-echo "==> rag-bootstrap"
-"${compose[@]}" run --rm --no-deps rag-bootstrap
+echo "==> kalla-bootstrap"
+"${compose[@]}" run --rm --no-deps kalla-bootstrap
 
 # A new Postgres image restarts the database: never rolling (§7.3), so only on request.
-if image_changed rag-postgres; then
+if image_changed kalla-postgres; then
   [ "$with_postgres" = 1 ] || {
-    echo "error: RAG_POSTGRES_IMAGE changed. Replacing rag-postgres restarts the database, a short outage of every service." >&2
+    echo "error: KALLA_POSTGRES_IMAGE changed. Replacing kalla-postgres restarts the database, a short outage of every service." >&2
     echo "  Announce it and run again with --with-postgres (upgrade guide, Superuser steps)." >&2
     exit 1
   }
-  echo "==> Replacing rag-postgres (the database restarts)"
-  "${compose[@]}" up -d --no-deps --wait --wait-timeout 600 rag-postgres
+  echo "==> Replacing kalla-postgres (the database restarts)"
+  "${compose[@]}" up -d --no-deps --wait --wait-timeout 600 kalla-postgres
   echo "==> Updating the vector extension"
-  "${compose[@]}" exec -T rag-postgres psql -X -v ON_ERROR_STOP=1 -U postgres -d ragdb -c 'ALTER EXTENSION vector UPDATE;'
+  "${compose[@]}" exec -T kalla-postgres psql -X -v ON_ERROR_STOP=1 -U postgres -d ragdb -c 'ALTER EXTENSION vector UPDATE;'
 fi
 
 echo "==> Migrating the database"
-"${compose[@]}" run --rm --no-deps rag-migrate
+"${compose[@]}" run --rm --no-deps kalla-migrate
 
 replace() { # replace SERVICE OTHER: recreate SERVICE while OTHER serves
   local svc="$1" other="$2"

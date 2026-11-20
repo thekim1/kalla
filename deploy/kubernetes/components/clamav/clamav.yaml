@@ -1,20 +1,20 @@
-# rag-clamav: clamd on TCP 3310 for rag-worker (plain TCP: networkpolicies.yaml keeps it to the worker). freshclam
+# kalla-clamav: clamd on TCP 3310 for kalla-worker (plain TCP: networkpolicies.yaml keeps it to the worker). freshclam
 # downloads the signatures from database.clamav.net on first start (several minutes) and 4 times a day after.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: rag-clamav
-  labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-clamav}
+  name: kalla-clamav
+  labels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-clamav}
 spec:
   replicas: 1
   revisionHistoryLimit: 5
   # One signature volume (ReadWriteOnce): the old pod releases it before the new one starts.
   strategy: {type: Recreate}
   selector:
-    matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-clamav}
+    matchLabels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-clamav}
   template:
     metadata:
-      labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-clamav}
+      labels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-clamav}
     spec:
       automountServiceAccountToken: false
       enableServiceLinks: false
@@ -25,8 +25,8 @@ spec:
         fsGroup: 1000
         seccompProfile: {type: RuntimeDefault}
       containers:
-        - name: rag-clamav
-          image: ume-rag/clamav:latest
+        - name: kalla-clamav
+          image: kalla/clamav:latest
           ports: [{name: clamd, containerPort: 3310}]
           startupProbe:
             tcpSocket: {port: clamd}
@@ -53,7 +53,7 @@ spec:
             - {name: run, mountPath: /run/clamav}
       volumes:
         - name: db
-          persistentVolumeClaim: {claimName: rag-clamav-db}
+          persistentVolumeClaim: {claimName: kalla-clamav-db}
         - name: tmp
           emptyDir: {sizeLimit: 1Gi}
         - name: run
@@ -62,8 +62,8 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: rag-clamav-db
-  labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-clamav}
+  name: kalla-clamav-db
+  labels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-clamav}
 spec:
   accessModes: [ReadWriteOnce]
   volumeMode: Filesystem
@@ -73,8 +73,8 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: rag-clamav
-  labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-clamav}
+  name: kalla-clamav
+  labels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-clamav}
 spec:
-  selector: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-clamav}
+  selector: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-clamav}
   ports: [{name: clamd, port: 3310, targetPort: clamd}]

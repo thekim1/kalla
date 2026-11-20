@@ -64,7 +64,7 @@ public static class AdminSessionLimit
     /// <summary>How long one sign-in or extension lasts at most.</summary>
     public static readonly TimeSpan Lifetime = TimeSpan.FromHours(8);
 
-    private const string SignedInItem = ".ume-rag.signedIn";
+    private const string SignedInItem = ".kalla.signedIn";
 
     /// <summary>Stamps the sign-in time on a new session and caps its expiry (cookie <c>OnSigningIn</c>).</summary>
     public static void OnSigningIn(CookieSigningInContext context, TimeSpan maxSession, DateTimeOffset now)

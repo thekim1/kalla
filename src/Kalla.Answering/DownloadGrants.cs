@@ -23,7 +23,7 @@ public sealed class DownloadGrantOptions
     /// <summary>1 hour for <c>sensitive</c> (no <c>sensitive</c> client stores history).</summary>
     public TimeSpan SensitiveLifetime { get; init; } = TimeSpan.FromHours(1);
 
-    /// <summary><c>Knowledge:PublicBaseUrl</c>: the origin the staff network reaches <c>rag-api</c> at; null gives a relative link.</summary>
+    /// <summary><c>Knowledge:PublicBaseUrl</c>: the origin the staff network reaches <c>kalla-api</c> at; null gives a relative link.</summary>
     public Uri? PublicBaseUrl { get; init; }
 }
 

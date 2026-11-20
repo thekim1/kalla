@@ -22,8 +22,8 @@ or by hand on the test host. Modelled on the gateway's `benchmarks/compare` (`k6
 
 Chat p95 time to first token in phase 2 ≤ 1.10 × phase 1, no error responses (status, error event, stream without
 `data: [DONE]` or without answer text, connection failures; k6's dropped iterations count too), no Postgres connection
-refusals (`too many clients already`, reserved slots, role limit, or SQLSTATE 53300 in the logs of `rag-postgres`,
-`rag-api`, `rag-admin`, `rag-worker` during the phase), and the background load still running when phase 2 ends.
+refusals (`too many clients already`, reserved slots, role limit, or SQLSTATE 53300 in the logs of `kalla-postgres`,
+`kalla-api`, `kalla-admin`, `kalla-worker` during the phase), and the background load still running when phase 2 ends.
 
 Load: `--rate` 5 streamed messages/s in total for 10 minutes per phase, of which the stream probe sends `--probe-rate`
 1/s (≈ 600 TTFT samples per phase) and k6 the rest. Behind the chat API the deployment's gateway is FakeGateway with
@@ -51,7 +51,7 @@ Once, before the first run:
    `__JitterPercent=30`, `__AnswerWords=200`) on the deployment's `llm` network.
 2. The page copy: `site/take-copy.sh --urls umea-2000.txt --out /srv/r1-site --base-url http://r1-site:8080` (with
    the web team's consent), or the placeholder (`site/build_site.py generate`). Serve it on the deployment's network:
-   `site/serve.sh start /srv/r1-site --network ume-rag_llm`, and set the worker's `Crawl__AllowedPrivateRanges` to that
+   `site/serve.sh start /srv/r1-site --network kalla_llm`, and set the worker's `Crawl__AllowedPrivateRanges` to that
    network's subnet (the egress guard blocks private addresses otherwise).
 3. In the admin: a collection with a crawl source (seed `http://r1-site:8080/`, its sitemap) and an upload source with
    the 50 PDFs of `ocr-batch/` uploaded but not committed; an assistant on the collection and an API key for it.

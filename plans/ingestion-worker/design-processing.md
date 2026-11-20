@@ -538,7 +538,7 @@ Swedish pitfalls (fixtures in §17):
 | Response checks | count equals inputs, in input order; each vector of the profile's dimensions, finite floats (else fatal `embed.bad_vector`); `x-fors-residency` ≤ the profile's ceiling (else fatal `gateway.residency_above_ceiling`, 5003); stored as returned (cosine is scale-invariant) |
 | Usage and cost | every embedding call, preview's included, records `usage.prompt_tokens` and its cost: `x-fors-cost-usd`, or without it an estimate from the mirror's prices, marked as estimated (engine §10.6); the document's sum goes to `RunItems.CostUsd`, the day's to `CollectionDailyUsage` under step `embed` (cost-attribution §5 C3). Cache hits make no call and cost nothing |
 | Canary | on demand only: the worker makes no canary calls of its own. A platform admin runs the check from the admin UI (admin design §4.5 `POST /api/gateway/canary-check`): the admin API embeds each active profile's `CanaryText` at the profile's ceiling and compares it with `EmbeddingProfiles.CanaryEmbedding`, storing `CanaryCheckedAt` and `CanarySimilarity`. Cosine < 0.999 means the gateway alias now serves another model, which would silently mix vector spaces: until a later check passes, the worker refuses the profile for embedding, preview and evaluation (`embed.canary_mismatch`, transient) and the worker's health is `unhealthy`. A profile never checked, or without a recorded canary, is allowed. The admin API records `CanaryEmbedding` after each model sync, for every active profile that has none, at the profile's ceiling and checked for dimensions (the migrator holds no gateway keys); a recorded canary is never replaced. Run the check after any change to the gateway's models (Decisions, "Embedding canary on demand") |
-| Concurrency | P1: fixed `Worker:Concurrency:embed` from configuration. **Later (P2):** AIMD of 6a §18: baseline = lowest per-minute p95 of the last 24 h (floor 200 ms); above 2× baseline halve, else +1 per minute up to `Worker:Concurrency:embed` (deployment, 6a §9.1); and, from the first multi-host deployment, a Redis lease `ume-rag:embed:inflight` caps all workers together at `Embedding:GlobalMaxInFlight` (default 2 × provider replicas), with each instance's AIMD as the fallback when Redis is down |
+| Concurrency | P1: fixed `Worker:Concurrency:embed` from configuration. **Later (P2):** AIMD of 6a §18: baseline = lowest per-minute p95 of the last 24 h (floor 200 ms); above 2× baseline halve, else +1 per minute up to `Worker:Concurrency:embed` (deployment, 6a §9.1); and, from the first multi-host deployment, a Redis lease `kalla:embed:inflight` caps all workers together at `Embedding:GlobalMaxInFlight` (default 2 × provider replicas), with each instance's AIMD as the fallback when Redis is down |
 | Chat protection at the gateway | a knowledge base's calls run as its own gateway key, so its rate and concurrency limits (429 + `Retry-After`, honoured: requeued without an attempt) are separate from an assistant's; the credential key's limits do not apply to acted calls (gateway-changes §5.3), so the worker keeps its own embedding concurrency limit (`Worker:Concurrency:embed`, below) and the gateway is asked for no platform-wide cap (#580). Until the gateway's integration phase 1 the pilot team's key of the profile's level carries the gateway's `MaxConcurrentRequests` cap, so a misconfigured worker cannot starve chat's query embeddings. A separate query route (`x-fors-step: query-embed`) only when the performance pass's §6 trigger fires ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.9, §6) |
 | Bulk loads | **Later (P2):** bulk runs (first crawls, re-embeds) at `Priority` −5 in the night window, forecast from the measured tokens/s, and never above `Settings.Ingestion.bulkEmbedShare` (0.75) of the global cap |
 | Profile guard | a platform admin may edit a profile until a chunk set uses it (admin design §4.5, Decisions "Editable embedding profiles before use"), so the vectors' writes check that the profile still has the model, dimensions and `RequestDimensions` they were embedded with: the chunk-set insert and each cache write run `content.rag_lock_profile_if_unchanged` (owner's rights, the profile row `FOR SHARE` until commit) in their transaction. If it returns false, nothing is written and the document is requeued without an attempt (`embed.profile_changed`) to embed with the new values. The admin's save locks the row `FOR UPDATE`, so the two serialise |
@@ -668,7 +668,7 @@ gateway's `x-fors-cost-usd` or an estimate (engine §10.6), so the real cost sho
   them. An `on-demand` run covers the whole active set, `human` layer first. The result is recorded (to-verify #168);
   hybrid and the decompounder stay only if they beat vector-only on the gold set.
 - **Later (P2):** questions rewritten from flagged chat feedback (plan §7: only the rewritten, personal-data-free
-  question is kept, with the collection's classification); skill test questions run by the skill gate in `rag-admin` as
+  question is kept, with the collection's classification); skill test questions run by the skill gate in `kalla-admin` as
   the tools design specifies.
 - Results are reported per layer, and **reports lead with the gold-set (`human`) results**; the generated layer is a
   regression signal only (weakness review §2).
@@ -725,7 +725,7 @@ public interface IEvaluator
 }
 public sealed record EvaluationSubject(EvaluationKind Kind, Guid CollectionId, Guid? PipelineVersionId,
     JsonElement? CandidateSettings);
-public enum EvaluationKind { PublishReport, Nightly, OnDemand, Answers }  // worker: the first three; rag-admin: Answers (§14.8)
+public enum EvaluationKind { PublishReport, Nightly, OnDemand, Answers }  // worker: the first three; kalla-admin: Answers (§14.8)
 ```
 
 The harness measures retrieval; answers are judged by people. For the go-live gate, `scripts/grading/grading.py` sends
@@ -779,13 +779,13 @@ Removed (simplification pass): parse strategies are not learned automatically (�
 | Publish report, nightly | ≤ 100 queries on the full collection | < 1 min |
 | On-demand settings comparison | 2 × 100 queries | < 1 min |
 | Set generation | ≈ 200k on-prem LLM tokens | model-bound, ≈ 10–20 min |
-| Answer-level run (P2; `rag-admin`) | ≤ 100 answers + judge calls on-prem | model-bound, minutes |
+| Answer-level run (P2; `kalla-admin`) | ≤ 100 answers + judge calls on-prem | model-bound, minutes |
 
 The re-processing itself is forecast by the publish flow (6a §12.2); the `eval` class (concurrency 1, on at most two
 worker instances) runs only generation and measuring. **Recorded cost**: every model call of a retrieval run (query
 embeddings that miss the cache, `query-embed`; rerank variants, `rerank`) carries the evaluation run's id as
 `x-fors-run-id` and is counted under the collection in `CollectionDailyUsage` by step, with the gateway's cost or an
-estimate (engine §10.6; cost-attribution §5 C3). Answer-level runs (P2, `rag-admin`) are an assistant's calls and are
+estimate (engine §10.6; cost-attribution §5 C3). Answer-level runs (P2, `kalla-admin`) are an assistant's calls and are
 counted in `chat."AssistantDailyUsage"` under the client `admin-console` (admin §4.9, §8.6). **Later (P2):** its reads go to the standby when read routing
 exists.
 
@@ -802,7 +802,7 @@ exists.
   **citation precision** (cited chunks support the claims); results per assistant with counts. The `uncited_answer`
   rate from live chat is shown next to them (chat design). At most 100 questions per assistant and night (the
   `human` layer first, then the newest generated questions), and the run records its cost. Run kind `answers`; it
-  runs in **`rag-admin`**, which already runs `Kalla.Answering` for the test panel and holds the gateway keys of
+  runs in **`kalla-admin`**, which already runs `Kalla.Answering` for the test panel and holds the gateway keys of
   every level. The worker runs only retrieval evaluation (through `Kalla.Retrieval`) and references neither
   `Kalla.Answering` nor `Kalla.Tools`.
 
@@ -896,7 +896,7 @@ Moved to [`../archive/design-history/ingestion-processing.md`](../archive/design
   comparison with Postgres `ispell` (simplification pass §3).
 - The evaluation model through the gateway: JSON output mode, and that judge scores at the model's default temperature
   are stable enough for the ≥ 4 filter; run-to-run variance of nightly runs on an unchanged collection (input to any future gate).
-- Cost per assistant of the answer-level nightly run in `rag-admin`.
+- Cost per assistant of the answer-level nightly run in `kalla-admin`.
 - All planning numbers of §14.7 and §16, measured in the R1 test.
 
 ## 22. Deferred or removed (simplification pass)

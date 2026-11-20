@@ -9,11 +9,11 @@ using static Kalla.TestKit.RagDatabase;
 namespace Kalla.IntegrationTests;
 
 /// <summary>
-/// B-25 (#499): how long the search statistics take as <c>ume_rag_api</c> as the corpus grows, against the role's 5 s
+/// B-25 (#499): how long the search statistics take as <c>kalla_api</c> as the corpus grows, against the role's 5 s
 /// <c>statement_timeout</c>. Since B-33 the keyword statistics are a read of the worker's rows (written here per full
-/// collection, as the worker would). Explicit: it loads up to <c>UME_RAG_MEASURE_CHUNKS</c> chunks (default 1,000,000, in
+/// collection, as the worker would). Explicit: it loads up to <c>KALLA_MEASURE_CHUNKS</c> chunks (default 1,000,000, in
 /// collections of 50,000; about 10 minutes and 3–4 GB in the container), so it runs only on request:
-/// <c>UME_RAG_TEST_POSTGRES_TMPFS=1 dotnet test --project tests/Kalla.IntegrationTests -c Release -- --filter-class
+/// <c>KALLA_TEST_POSTGRES_TMPFS=1 dotnet test --project tests/Kalla.IntegrationTests -c Release -- --filter-class
 /// "*StatisticsCostMeasurements" --explicit only --output Detailed</c> (the variable keeps the database in RAM, so the
 /// load does not write gigabytes to disk). The numbers go to the test output and <c>results-b.md</c>.
 /// </summary>
@@ -28,7 +28,7 @@ public sealed class StatisticsCostMeasurements(RagDatabaseFixture database)
     [Fact(Explicit = true)]
     public async Task Search_statistics_against_the_api_role_timeout()
     {
-        var target = int.TryParse(Environment.GetEnvironmentVariable("UME_RAG_MEASURE_CHUNKS"), CultureInfo.InvariantCulture, out var n) ? n : 1_000_000;
+        var target = int.TryParse(Environment.GetEnvironmentVariable("KALLA_MEASURE_CHUNKS"), CultureInfo.InvariantCulture, out var n) ? n : 1_000_000;
         var checkpoints = new[] { 100_000, 250_000, 500_000, 1_000_000, 2_000_000 }.Where(c => c < target).Append(target).ToArray();
         await using var writer = new ContentFixtureWriter(database.Connection(Worker), database.Connection(Admin));
         var profile = await writer.AddEmbeddingProfileAsync(8, Ct);
@@ -94,7 +94,7 @@ public sealed class StatisticsCostMeasurements(RagDatabaseFixture database)
         }
     }
 
-    /// <summary>Three runs as <c>ume_rag_api</c> with the server-side limit lifted, so the true duration shows.</summary>
+    /// <summary>Three runs as <c>kalla_api</c> with the server-side limit lifted, so the true duration shows.</summary>
     private async Task<string> TimeUnlimitedAsync(string sql, object[] parameters)
     {
         await using var connection = new NpgsqlConnection(database.Connection(Api, pooling: false));

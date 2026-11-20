@@ -3,30 +3,30 @@
 # gateway's): the files a Docker host needs to run deploy/compose.rag.yaml and its overlays, with every image default
 # pinned to the released image by digest.
 #
-#   RAG_API_IMAGE=... RAG_ADMIN_IMAGE=... RAG_WORKER_IMAGE=... RAG_MIGRATIONS_IMAGE=... RAG_PARSER_IMAGE=... \
-#   RAG_CLAMAV_IMAGE=... RAG_RENDERER_IMAGE=... RAG_POSTGRES_IMAGE=... deploy/build-release-bundle.sh VERSION OUTPUT_DIR
+#   KALLA_API_IMAGE=... KALLA_ADMIN_IMAGE=... KALLA_WORKER_IMAGE=... KALLA_MIGRATIONS_IMAGE=... KALLA_PARSER_IMAGE=... \
+#   KALLA_CLAMAV_IMAGE=... KALLA_RENDERER_IMAGE=... KALLA_POSTGRES_IMAGE=... deploy/build-release-bundle.sh VERSION OUTPUT_DIR
 #
 # Each RAG_*_IMAGE (the variables of the Portainer stack and of a release's images.env) is a full reference pinned by
-# digest (registry/repo[:tag]@sha256:<64 hex>); an unset or unpinned one fails. Writes OUTPUT_DIR/ume-rag-VERSION.tar.gz:
-# one top-level directory ume-rag-VERSION/ holding deploy/ (the Compose files, the deployment scripts, the bootstrap and
+# digest (registry/repo[:tag]@sha256:<64 hex>); an unset or unpinned one fails. Writes OUTPUT_DIR/kalla-VERSION.tar.gz:
+# one top-level directory kalla-VERSION/ holding deploy/ (the Compose files, the deployment scripts, the bootstrap and
 # the static files compose.rag.yaml names, host/, kubernetes/ and the rest), docs/ (the operator documents) and the
 # files the overlays name relative to deploy/ (images/renderer/seccomp.json, images/clamav/clamd.conf and
 # freshclam.conf), so the documented commands work unchanged.
 #
 # Every ${X_IMAGE:-default} (or ${X_IMAGE:?message}) in the bundled Compose files becomes ${X_IMAGE:-<released image>},
 # so the variables still override the release. The bundle fails when a Compose file names an image variable that is
-# not listed here and whose default is not pinned by digest (OPENWEBUI_IMAGE and RAG_PROXY_IMAGE are pinned in the
+# not listed here and whose default is not pinned by digest (OPENWEBUI_IMAGE and KALLA_PROXY_IMAGE are pinned in the
 # repository), when an image: line has neither a variable nor a digest, or when a listed variable is used by no Compose
 # file.
 set -euo pipefail
 
-usage="usage: build-release-bundle.sh VERSION OUTPUT_DIR (with RAG_API_IMAGE ... RAG_POSTGRES_IMAGE set)"
+usage="usage: build-release-bundle.sh VERSION OUTPUT_DIR (with KALLA_API_IMAGE ... KALLA_POSTGRES_IMAGE set)"
 version="${1:?$usage}"
 out="${2:?$usage}"
 die() { echo "error: $*" >&2; exit 1; }
 
-images=(RAG_API_IMAGE RAG_ADMIN_IMAGE RAG_WORKER_IMAGE RAG_MIGRATIONS_IMAGE RAG_PARSER_IMAGE RAG_CLAMAV_IMAGE
-  RAG_RENDERER_IMAGE RAG_POSTGRES_IMAGE)
+images=(KALLA_API_IMAGE KALLA_ADMIN_IMAGE KALLA_WORKER_IMAGE KALLA_MIGRATIONS_IMAGE KALLA_PARSER_IMAGE KALLA_CLAMAV_IMAGE
+  KALLA_RENDERER_IMAGE KALLA_POSTGRES_IMAGE)
 # A reference pinned by digest; the character set also keeps it safe in the sed replacement below.
 pinned='^[a-z0-9][a-z0-9._/:-]*@sha256:[0-9a-f]{64}$'
 
@@ -39,7 +39,7 @@ done
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/.." && pwd)"
-name="ume-rag-$version"
+name="kalla-$version"
 mkdir -p "$out"
 out="$(cd "$out" && pwd)"
 stage="$(mktemp -d)"
@@ -53,11 +53,11 @@ cp compose.rag.yaml compose.backup.yaml compose.hardened.yaml compose.host-24g.y
   escrow-keys.sh "$dest/"
 # compose.rag.yaml's static files (postgres/, openwebui/, proxy/) and its default for the host directories (empty/);
 # redis/ is P2: copied once it exists.
-for dir in postgres pgbackrest redis proxy otel host kubernetes openwebui keycloak empty; do
+for dir in postgres pgbackrest redis proxy otel host kubernetes openwebui keycloak upgrade empty; do
   [ ! -d "$dir" ] || cp -R "$dir" "$dest/"
 done
-# The bootstrap (rag-bootstrap, and kubernetes/create-secrets.sh) and the integration manifest a gateway on the same
-# host creates Ume.Rag's credential keys from (init-deployment.sh --gateway-secrets-dir), at their paths in the
+# The bootstrap (kalla-bootstrap, and kubernetes/create-secrets.sh) and the integration manifest a gateway on the same
+# host creates Källa's credential keys from (init-deployment.sh --gateway-secrets-dir), at their paths in the
 # repository. The Portainer stack file carries its own copies.
 mkdir -p "$dest/portainer"
 cp portainer/integration-manifest.json portainer/bootstrap.sh "$dest/portainer/"
@@ -104,7 +104,7 @@ if [ -d kubernetes ]; then
   images_block="$(echo "images:"
     for var in "${images[@]}"; do
       ref="${!var}"; repo="${ref%@*}"; repo="${repo%:*}"; digest="${ref##*@}"; svc="${var#RAG_}"; svc="${svc%_IMAGE}"
-      echo "  - {name: ume-rag/${svc,,}, newName: $repo, digest: $digest}"
+      echo "  - {name: kalla/${svc,,}, newName: $repo, digest: $digest}"
     done)"
   for k in kubernetes/base/kustomization.yaml kubernetes/components/*/kustomization.yaml; do
     printf '%s\n' "$images_block" >> "$k"

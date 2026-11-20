@@ -19,8 +19,8 @@ namespace Kalla.AdminApi.Tests;
 
 /// <summary>
 /// M-20 S8 (identity design §19): the setup state offers the gateway's provider address (its context's <c>oidc_authority</c>, feature
-/// <c>oidc-authority</c>) as a suggestion for rag-admin's authority, with the gateway admin's address for the link to its wizard; the
-/// effective sign-in values and their sources do not change by it. rag-admin's context is read from a FakeGateway.
+/// <c>oidc-authority</c>) as a suggestion for kalla-admin's authority, with the gateway admin's address for the link to its wizard; the
+/// effective sign-in values and their sources do not change by it. kalla-admin's context is read from a FakeGateway.
 /// </summary>
 [Collection(AdminDatabaseGroup8.Name)]
 public sealed class SetupGatewaySuggestionTests(AdminDatabaseFixture database) : IAsyncLifetime
@@ -38,7 +38,7 @@ public sealed class SetupGatewaySuggestionTests(AdminDatabaseFixture database) :
 
     /// <summary>
     /// A setup host (signed in by headers on <c>/api</c>) whose context is read from a FakeGateway with <paramref name="oidcAuthority"/>,
-    /// with or without the feature <c>oidc-authority</c>, after one context read; <paramref name="settings"/> are rag-admin's.
+    /// with or without the feature <c>oidc-authority</c>, after one context read; <paramref name="settings"/> are kalla-admin's.
     /// </summary>
     private async Task<(WebApplicationFactory<Program> Host, IAsyncDisposable Gateway)> HostAsync(string? oidcAuthority, bool feature = true,
         params (string Key, string Value)[] settings)
@@ -249,7 +249,7 @@ public sealed class SetupGatewaySuggestionTests(AdminDatabaseFixture database) :
     [Fact]
     public async Task A_gateway_that_does_not_answer_holds_the_state_only_for_the_wait_and_it_answers_without_a_suggestion()
     {
-        // rag-admin started before the gateway answered (no gateway block), and the state's own read hangs.
+        // kalla-admin started before the gateway answered (no gateway block), and the state's own read hangs.
         var time = new FakeTimeProvider(DateTimeOffset.UtcNow);
         var calls = new ContextCalls { HangFrom = 3 };
         var (host, gateway) = await LiveHostAsync(calls, time);

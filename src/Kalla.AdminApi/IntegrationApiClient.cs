@@ -10,7 +10,7 @@ namespace Kalla.AdminApi;
 
 /// <summary>
 /// The gateway's Integration API (gateway phase 3; gateway-changes §5.6; admin design §4.5, §8.6; B-45): an assigned key's
-/// usage per period and step and its budgets, read with rag-admin's credential key (<c>usage.read</c>) from the address
+/// usage per period and step and its budgets, read with kalla-admin's credential key (<c>usage.read</c>) from the address
 /// the gateway's context names (<see cref="GatewayFeatures.IntegrationApiUrl"/>, ending in <c>/integration/v1</c>; M-17
 /// C11). Each answer is cached 5 minutes per key and query (the gateway allows 60 requests a minute per key). Without an
 /// address nothing is asked and the answers are null; a refusal (<c>401</c>, <c>403</c> without the scope, <c>429</c>) or a
@@ -32,7 +32,7 @@ public sealed partial class IntegrationApiClient(IHttpClientFactory clients, IOp
     public bool Configured => Usable(features.IntegrationApiUrl, options.CurrentValue.BaseUrl);
 
     /// <summary>
-    /// An address rag-admin sends its credential key to: absolute and <c>https</c>, or <c>http</c> only while the gateway's own
+    /// An address kalla-admin sends its credential key to: absolute and <c>https</c>, or <c>http</c> only while the gateway's own
     /// <c>Gateway:BaseUrl</c> is <c>http</c> too (development and tests, where the key already travels so). The address comes
     /// from another system's context, so an <c>http</c> typo there must not put the key on the network in clear text.
     /// </summary>

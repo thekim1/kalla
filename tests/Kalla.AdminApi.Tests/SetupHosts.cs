@@ -71,7 +71,7 @@ internal static class SetupHosts
 
     /// <summary>
     /// Puts setup back to a known state: never completed (a first run) or completed and closed, no opening, no sessions or tests, no
-    /// re-open consumed, and no wizard values (rag-admin's or Open WebUI's). A missing settings row is created as rag-migrate's seeder creates it (its actor, the
+    /// re-open consumed, and no wizard values (kalla-admin's or Open WebUI's). A missing settings row is created as kalla-migrate's seeder creates it (its actor, the
     /// defaults, no <c>SetupCompletedAt</c>), then marked completed when asked.
     /// </summary>
     public static async Task ResetAsync(string connection, bool completed)

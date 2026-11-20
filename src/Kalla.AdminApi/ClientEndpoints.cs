@@ -23,13 +23,13 @@ public static class ClientEndpoints
         ArgumentNullException.ThrowIfNull(api);
         var clients = api.MapGroup("/clients").WithTags("Clients");
 
-        // What a platform admin tells the app's owner (admin design §5.9.1): rag-api's public address, when the deployment names it.
+        // What a platform admin tells the app's owner (admin design §5.9.1): kalla-api's public address, when the deployment names it.
         clients.MapGet("/connection", (IOptions<AdminOptions> options) =>
                 new ClientConnectionDto(options.Value.ApiPublicUrl is { Length: > 0 } url && Uri.TryCreate(url, UriKind.Absolute, out var uri)
                     && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp)
                         ? url.TrimEnd('/')
                         : null))
-            .RequireAuthorization(AdminPolicies.Admin).WithName("GetClientConnection").WithSummary("How an app reaches rag-api: its public address, or null when unset");
+            .RequireAuthorization(AdminPolicies.Admin).WithName("GetClientConnection").WithSummary("How an app reaches kalla-api: its public address, or null when unset");
 
         // Pickers show name, kind and level; the clients page also the number of active keys and their last use.
         clients.MapGet("", async (AdminContext admin, CancellationToken ct) =>
@@ -101,7 +101,7 @@ public static class ClientEndpoints
                     var client = await admin.Db.Clients.SingleOrDefaultAsync(c => c.Id == id, attempt) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
                     admin.ExpectVersion(client, request.Version);
                     // The deployment's own client stays what the deployment made it (identity design §4.1, §5.2): its kind and its name,
-                    // by which rag-migrate finds it (#712), are fixed.
+                    // by which kalla-migrate finds it (#712), are fixed.
                     if (client.IsManagedByDeployment && request.Kind != client.Kind)
                     {
                         throw AdminFaults.Field("kind", AdminErrorCodes.ClientManagedByDeployment);
@@ -331,7 +331,7 @@ public static class ClientEndpoints
 public sealed record ClientSummary(Guid Id, string Name, string Kind, string ClassificationCeiling, bool IsEnabled, string? PortalUrl, bool IsManagedByDeployment,
     int ActiveKeys, DateTimeOffset? LastUsedAt);
 
-/// <summary>rag-api's public address for the "How to connect" block (<c>Admin:ApiPublicUrl</c>); null when the deployment names none.</summary>
+/// <summary>kalla-api's public address for the "How to connect" block (<c>Admin:ApiPublicUrl</c>); null when the deployment names none.</summary>
 public sealed record ClientConnectionDto(string? ApiBaseUrl);
 
 /// <summary>A client; <see cref="Assistants"/> are those with a <c>client</c> audience row for it (the drawer's "Used by").</summary>

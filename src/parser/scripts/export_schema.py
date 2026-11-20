@@ -28,7 +28,7 @@ from ume_parser.models import (
 )
 
 OUT = Path(__file__).resolve().parent.parent.parent.parent / "contracts" / "parser" / "v1"
-BASE_ID = "https://ume-rag.local/contracts/parser/v1/"
+BASE_ID = "https://kalla.local/contracts/parser/v1/"
 
 SCHEMAS: dict[str, tuple[type[BaseModel], Literal["validation", "serialization"]]] = {
     "convert-request": (ConvertRequest, "validation"),

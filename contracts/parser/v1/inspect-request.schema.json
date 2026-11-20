@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ume-rag.local/contracts/parser/v1/inspect-request.schema.json",
+  "$id": "https://kalla.local/contracts/parser/v1/inspect-request.schema.json",
   "additionalProperties": false,
   "description": "The optional `options` part of `POST /v1/inspect` (§6.2): what the worker declares, for the mismatch warning.",
   "properties": {

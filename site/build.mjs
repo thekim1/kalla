@@ -2,7 +2,7 @@
 // DOCS rendered as documentation. No framework; one dependency (marked). The gateway's site build (thekim1/llmgateway,
 // site/build.mjs), adapted: its pages, brand and links.
 //
-//   node build.mjs                 build for https://<host>/        (SITE_BASE=/ume-rag-platform/ for GitHub Pages)
+//   node build.mjs                 build for https://<host>/        (SITE_BASE=/kalla-platform/ for GitHub Pages)
 //   node build.mjs --serve         build, then serve dist on http://localhost:4321
 //
 // The build fails on a link to a documentation page or heading that does not exist.
@@ -271,7 +271,7 @@ function startPage() {
 
   <section class="stack-16" aria-labelledby="connect-h">
     <h2 id="connect-h" class="h-m">Connect an application</h2>
-    <p>Applications need an <strong>app key</strong> from the admin UI's <em>Apps and keys</em> and rag-api's <strong>base URL</strong> (<code>https://&lt;rag-api&gt;/v1</code>). Read the key from an environment variable; never store it in code. Ask for an assistant by its slug as the model; <code>GET /v1/models</code> lists the ones the key may use. rag-api publishes its OpenAPI document and an API reference at <code>/scalar</code>.</p>
+    <p>Applications need an <strong>app key</strong> from the admin UI's <em>Apps and keys</em> and kalla-api's <strong>base URL</strong> (<code>https://&lt;kalla-api&gt;/v1</code>). Read the key from an environment variable; never store it in code. Ask for an assistant by its slug as the model; <code>GET /v1/models</code> lists the ones the key may use. kalla-api publishes its OpenAPI document and an API reference at <code>/scalar</code>.</p>
     <p class="note warn">${icon('warning', 'fill warn')}<span>Answers come from the knowledge bases an assistant may search, and only from published versions. Don't add content to a knowledge base that its assistants' users may not read.</span></p>
   </section>
 

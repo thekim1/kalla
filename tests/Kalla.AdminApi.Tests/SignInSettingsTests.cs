@@ -15,7 +15,7 @@ using Kalla.TestKit;
 namespace Kalla.AdminApi.Tests;
 
 /// <summary>
-/// M-20 S1 (identity design §19): rag-admin's sign-in values from the deployment, else <c>Settings.Identity.Oidc</c>, else the
+/// M-20 S1 (identity design §19): kalla-admin's sign-in values from the deployment, else <c>Settings.Identity.Oidc</c>, else the
 /// code's default, each with its source; the wizard's client secret encrypted with Data Protection and never in a response or
 /// the audit log. The fixture's deployment sets <c>Oidc:Authority</c> and <c>Oidc:ClientSecret</c>.
 /// </summary>

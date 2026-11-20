@@ -99,11 +99,11 @@ public sealed class RelatedDocumentsTests
     /// <summary>Altan (ranks 2, 4, 5), Taxa, an uploaded PDF (ranks 1 without a page, 3 on page 7, 6 on page 2), Plank (rank 7).</summary>
     private static RetrievalResult Retrieval() => Result(
         Chunk(5, Altan, "Altan", url: "https://www.umea.se/bygga/altan"),
-        Chunk(3, Taxa, "Taxa 2026", grant: "https://rag-api.umea.local/v1/documents/t/content?grant=g1.k.p.m", page: 7),
+        Chunk(3, Taxa, "Taxa 2026", grant: "https://kalla-api.umea.local/v1/documents/t/content?grant=g1.k.p.m", page: 7),
         Chunk(2, Altan, "Altan", url: "https://www.umea.se/bygga/altan"),
         Chunk(7, Plank, "Plank", url: "https://www.umea.se/bygga/plank", collection: "plank"),
-        Chunk(1, Taxa, "Taxa 2026", grant: "https://rag-api.umea.local/v1/documents/t/content?grant=g1.k.p.m"),
-        Chunk(6, Taxa, "Taxa 2026", grant: "https://rag-api.umea.local/v1/documents/t/content?grant=g1.k.p.m", page: 2),
+        Chunk(1, Taxa, "Taxa 2026", grant: "https://kalla-api.umea.local/v1/documents/t/content?grant=g1.k.p.m"),
+        Chunk(6, Taxa, "Taxa 2026", grant: "https://kalla-api.umea.local/v1/documents/t/content?grant=g1.k.p.m", page: 2),
         Chunk(4, Altan, "Altan", url: "https://www.umea.se/bygga/altan"));
 
     private static PromptSource Source(int number, RetrievalResult retrieval, Guid document)
@@ -120,7 +120,7 @@ public sealed class RelatedDocumentsTests
 
         list.Select(d => (d.DocumentId, d.Rank)).ShouldBe([(Taxa, 1), (Altan, 2), (Plank, 3)]);
         // An upload links by its grant, with #page= of its best-ranked chunk that has a page; a crawled page by its own URL.
-        list[0].Url.ShouldBe("https://rag-api.umea.local/v1/documents/t/content?grant=g1.k.p.m#page=7");
+        list[0].Url.ShouldBe("https://kalla-api.umea.local/v1/documents/t/content?grant=g1.k.p.m#page=7");
         list[0].Title.ShouldBe("Taxa 2026");
         list[1].Url.ShouldBe("https://www.umea.se/bygga/altan");
         (list[2].Title, list[2].Collection).ShouldBe(("Plank", "plank"));
@@ -168,7 +168,7 @@ public sealed class RelatedDocumentsTests
     private static PromptSource Dated(string sourceType, DateTimeOffset? modified, DateTimeOffset? checkedAt)
     {
         var chunk = Chunk(1, Altan, "Altan", url: sourceType == "web" ? "https://www.umea.se/bygga/altan" : null,
-            grant: sourceType == "file" ? "https://rag-api.umea.local/v1/documents/a/content?grant=g1" : null);
+            grant: sourceType == "file" ? "https://kalla-api.umea.local/v1/documents/a/content?grant=g1" : null);
         chunk = chunk with { Citation = chunk.Citation with { Modified = modified, Checked = checkedAt } };
         return new PromptSource(1, chunk.Citation, [chunk]);
     }
@@ -189,7 +189,7 @@ public sealed class RelatedDocumentsTests
     {
         var retrieval = Result(
             Dated("web", null, Crawled).Chunks[0],
-            Chunk(2, Taxa, "Taxa 2026", grant: "https://rag-api.umea.local/v1/documents/t/content?grant=g1.k.p.m") is var taxa
+            Chunk(2, Taxa, "Taxa 2026", grant: "https://kalla-api.umea.local/v1/documents/t/content?grant=g1.k.p.m") is var taxa
                 ? taxa with { Citation = taxa.Citation with { Modified = Stated } } : null!);
         var list = RelatedDocuments.For(ChatOutcome.Answered, retrieval, [], 10);
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Scheduled pgBackRest backup of ragdb (plans/platform/repo-and-deployment.md §7.4), inside the running rag-postgres
+# Scheduled pgBackRest backup of ragdb (plans/platform/repo-and-deployment.md §7.4), inside the running kalla-postgres
 # container (`docker compose exec`, no sidecar), followed by the health metrics of §7.4 rule 5. rag-backup.timer runs it
 # daily with --type auto; rag-backup-status.timer runs --status-only every two minutes.
 #
@@ -13,7 +13,7 @@
 #   --start-fast            an immediate checkpoint instead of a spread one (drills; the timer leaves it off)
 #   --status-only           no backup: refresh the metrics only
 #   --env-file FILE         [deploy/.env] the deployment (its COMPOSE_FILE and project)
-#   --state-dir DIR         [$STATE_DIRECTORY, else /var/lib/ume-rag] where backup.prom and backup-last-run go
+#   --state-dir DIR         [$STATE_DIRECTORY, else /var/lib/kalla] where backup.prom and backup-last-run go
 #
 # Metrics (Prometheus text format in DIR/backup.prom, written atomically; node_exporter's textfile collector or the
 # OpenTelemetry Collector reads it, to verify (§14)). Every value is read from pgBackRest's repository and from
@@ -40,7 +40,7 @@ set -euo pipefail
 umask 027
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-env_file="$here/.env"; state_dir="${STATE_DIRECTORY:-/var/lib/ume-rag}"
+env_file="$here/.env"; state_dir="${STATE_DIRECTORY:-/var/lib/kalla}"
 type=""; start_fast=0; status_only=0
 
 usage() { sed -n '2,38p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
@@ -73,7 +73,7 @@ dc() { docker compose --env-file "$env_file" "$@"; }
 # segment, so an idle server does not look like a failing archive.
 read_status() {
   # shellcheck disable=SC2016 # expanded by the container's shell
-  dc exec -T rag-postgres sh -c '
+  dc exec -T kalla-postgres sh -c '
     info="$(pgbackrest --stanza=ragdb --output=json info 2>/dev/null)" || info="[{\"status\":{\"code\":99}}]"
     exec psql -X -q -A -t -F " " -v ON_ERROR_STOP=1 -U postgres -d ragdb -v info="$info" -f -' <<'SQL'
 WITH s AS (SELECT (:'info'::json) -> 0 AS j),
@@ -139,7 +139,7 @@ EOF
 }
 
 if [ "$status_only" = 1 ]; then
-  status="$(read_status)" || die "could not read the backup status from the rag-postgres container"
+  status="$(read_status)" || die "could not read the backup status from the kalla-postgres container"
   write_metrics "$status"
   exit 0
 fi
@@ -154,7 +154,7 @@ finish() {
 }
 trap finish EXIT
 
-status="$(read_status)" || die "could not read the backup status from the rag-postgres container (is it running?)"
+status="$(read_status)" || die "could not read the backup status from the kalla-postgres container (is it running?)"
 if [ "$type" = auto ]; then
   read -r now _ full _ <<<"$status"
   if [ "$(date +%u)" = 7 ] || [ $((now - full)) -ge $((7 * 86400)) ]; then type="full"; else type="diff"; fi
@@ -163,8 +163,8 @@ fi
 echo "pgBackRest $type backup of stanza ragdb"
 args=(--stanza=ragdb "--type=$type" --log-level-console=info)
 [ "$start_fast" = 1 ] && args+=(--start-fast)
-dc exec -T rag-postgres pgbackrest "${args[@]}" backup
-dc exec -T rag-postgres pgbackrest --stanza=ragdb info
+dc exec -T kalla-postgres pgbackrest "${args[@]}" backup
+dc exec -T kalla-postgres pgbackrest --stanza=ragdb info
 
 echo "1 $(date +%s) $type" > "$state_dir/backup-last-run"
 status="$(read_status)" || die "the backup succeeded but the status could not be read"

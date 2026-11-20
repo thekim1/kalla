@@ -1,13 +1,13 @@
-# rag-api: chat completions (streamed), knowledge, MCP. Stateless (all state in Postgres), so it runs as several replicas.
+# kalla-api: chat completions (streamed), knowledge, MCP. Stateless (all state in Postgres), so it runs as several replicas.
 # A rolling update starts a new pod, waits until it is ready, and only then stops an old one; the old pod first fails
 # its readiness check (Shutdown__DrainSeconds) so it leaves the Service before it stops accepting connections, then
 # finishes the requests it has (long streamed answers) within DOTNET_SHUTDOWNTIMEOUTSECONDS. Two replicas fit the
-# ume_rag_api role's connection limit (26 = 2 x 12, data-model §1.1); more need PgBouncer or a higher limit.
+# kalla_api role's connection limit (26 = 2 x 12, data-model §1.1); more need PgBouncer or a higher limit.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: rag-api
-  labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-api}
+  name: kalla-api
+  labels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-api}
 spec:
   replicas: 2
   revisionHistoryLimit: 5
@@ -16,10 +16,10 @@ spec:
     rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
   minReadySeconds: 5
   selector:
-    matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-api}
+    matchLabels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-api}
   template:
     metadata:
-      labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-api}
+      labels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-api}
     spec:
       automountServiceAccountToken: false
       enableServiceLinks: false
@@ -36,14 +36,14 @@ spec:
           topologyKey: kubernetes.io/hostname
           whenUnsatisfiable: ScheduleAnyway
           labelSelector:
-            matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-api}
+            matchLabels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-api}
       containers:
-        - name: rag-api
-          image: ume-rag/api:latest
+        - name: kalla-api
+          image: kalla/api:latest
           ports: [{name: https, containerPort: 8443}]
           envFrom:
-            - configMapRef: {name: ume-rag-config}
-            - configMapRef: {name: ume-rag-api-config}
+            - configMapRef: {name: kalla-config}
+            - configMapRef: {name: kalla-api-config}
           env:
             - {name: ASPNETCORE_ENVIRONMENT, value: Production}
             - {name: DOTNET_GCHeapHardLimitPercent, value: "0x4B"}
@@ -54,7 +54,7 @@ spec:
             - {name: Kestrel__Endpoints__Https__Certificate__KeyPath, value: /run/certs/api.key}
             - {name: BlobStore__Root, value: /data/blobs/rag}
             - {name: SSL_CERT_FILE, value: /run/certs/ca.pem}
-            - {name: OTEL_SERVICE_NAME, value: rag-api}
+            - {name: OTEL_SERVICE_NAME, value: kalla-api}
             - {name: OTEL_SERVICE_INSTANCE_ID, valueFrom: {fieldRef: {fieldPath: metadata.name}}}
             - {name: Shutdown__DrainSeconds, value: "10"}
             - {name: DOTNET_SHUTDOWNTIMEOUTSECONDS, value: "310"}
@@ -87,32 +87,32 @@ spec:
             - {name: tmp, mountPath: /tmp}
       volumes:
         - name: secrets
-          secret: {secretName: ume-rag-api-secrets, defaultMode: 0440}
+          secret: {secretName: kalla-api-secrets, defaultMode: 0440}
         - name: certs
-          secret: {secretName: ume-rag-api-certs, defaultMode: 0440}
+          secret: {secretName: kalla-api-certs, defaultMode: 0440}
         - name: blob-key
-          secret: {secretName: ume-rag-blob-key, defaultMode: 0440}
+          secret: {secretName: kalla-blob-key, defaultMode: 0440}
         - name: blobs
-          persistentVolumeClaim: {claimName: rag-blobs}
+          persistentVolumeClaim: {claimName: kalla-blobs}
         - name: tmp
           emptyDir: {medium: Memory, sizeLimit: 64Mi}
 ---
-# "rag-api" is also the name in its generated certificate.
+# "kalla-api" is also the name in its generated certificate.
 apiVersion: v1
 kind: Service
 metadata:
-  name: rag-api
-  labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-api}
+  name: kalla-api
+  labels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-api}
 spec:
-  selector: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-api}
+  selector: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-api}
   ports: [{name: https, port: 8443, targetPort: https}]
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: rag-api
-  labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-api}
+  name: kalla-api
+  labels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-api}
 spec:
   minAvailable: 1
   selector:
-    matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-api}
+    matchLabels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-api}

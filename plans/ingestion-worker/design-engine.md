@@ -484,7 +484,7 @@ Fleet-wide shares and caps come in P2 with code that reads them; `config."Settin
 | `fetch` | 8 (frontier limits per host) | `sourceId`, `runId`, `urlHash` (the source's `CrawlFrontier` row) or `uploadId` (the upload slot); `executionId` once known | 6b, then §7 |
 | `parse` | `min(Worker:Concurrency:parse, /v1/info capacity.convert_slots)` | `documentId`, `level`, `executionId`, `pipelineVersionId`, `stage`, `inputKey`, `slice` | §7, §9.5 |
 | `embed` | 4 (fixed in P1; adaptive from P2, §18) | `documentId`, `level`, `executionId`, `pipelineVersionId`, `runId`, `inputKey` | §7, §14 |
-| `eval` | 1, on at most two instances (`Worker:Classes`) | `kind`: `generate-set`, `top-up-set`, `publish-report`, `nightly`, `on-demand` (retrieval evaluation only; the answer-level `answers` run and the P2 skill gate run in `rag-admin`, 6c §14.8) | 6c §13–§14 |
+| `eval` | 1, on at most two instances (`Worker:Classes`) | `kind`: `generate-set`, `top-up-set`, `publish-report`, `nightly`, `on-demand` (retrieval evaluation only; the answer-level `answers` run and the P2 skill gate run in `kalla-admin`, 6c §14.8) | 6c §13–§14 |
 | `attachment` (P2) | 2 | `attachmentId`, `conversationId`, `level` (chat design §15.2) | scan (ClamAV, fail-closed) → sniff/type check → parse → chunk → PII (recorded, not blocking) → embed on-prem → post chunks to the API's internal route; dispatched right after `preview`; never writes `chat` and holds no chat keys |
 
 `Worker:Classes` lists the classes an instance runs as a comma list (`parse,embed`; empty = every class; an unknown

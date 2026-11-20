@@ -15,7 +15,7 @@ namespace Kalla.Api;
 /// </summary>
 public static class ChatEndpoints
 {
-    /// <summary>The chat body limit (§3.2: Open WebUI resends the whole chat); every other rag-api route keeps 16 KB.</summary>
+    /// <summary>The chat body limit (§3.2: Open WebUI resends the whole chat); every other kalla-api route keeps 16 KB.</summary>
     public const long BodyLimit = 2 * 1024 * 1024;
 
     public static IEndpointRouteBuilder MapChat(this IEndpointRouteBuilder app)

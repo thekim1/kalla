@@ -26,7 +26,7 @@ internal sealed record CommandRun(LeasedJob Job, JobResult Result);
 
 /// <summary>
 /// Runs <c>command</c> jobs the way the dispatcher does, without its loop: the admin enqueues the job row, this instance
-/// leases it as <c>ume_rag_worker</c> and <see cref="CommandJobHandler"/> runs it with the handlers <c>AddRagCommands</c>
+/// leases it as <c>kalla_worker</c> and <see cref="CommandJobHandler"/> runs it with the handlers <c>AddRagCommands</c>
 /// registers. <see cref="StealLeaseAsync"/> makes a leased job stale (as a reclaim does), so the fence can be tested.
 /// </summary>
 internal sealed class CommandRunner(RagDatabaseFixture database, Action<IServiceCollection>? services = null) : IAsyncDisposable

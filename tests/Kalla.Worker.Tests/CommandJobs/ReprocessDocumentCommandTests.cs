@@ -20,7 +20,7 @@ public sealed class ReprocessDocumentCommandTests(RagDatabaseFixture database, F
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-reprocess-blobs-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-reprocess-blobs-");
 
     public async ValueTask InitializeAsync() => await database.ResetAsync();
 

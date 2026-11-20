@@ -5,15 +5,15 @@ using Kalla.Worker.Parsing;
 namespace Kalla.ContractTests;
 
 /// <summary>
-/// The parser image named by <c>UME_RAG_TEST_PARSER_IMAGE</c>, started once per test class with the production
+/// The parser image named by <c>KALLA_TEST_PARSER_IMAGE</c>, started once per test class with the production
 /// hardening (read-only root, <c>/tmp</c> as tmpfs, no capabilities, no new privileges). Without the variable nothing
 /// starts and the tests that need it skip. Use an image name with a registry part that has a dot (for example
-/// <c>ume-rag.local/parser:ci</c>): Testcontainers prefixes other names with the Docker Hub mirror CI sets. Shared by every
+/// <c>kalla.local/parser:ci</c>): Testcontainers prefixes other names with the Docker Hub mirror CI sets. Shared by every
 /// test class of <see cref="ParserImageTests"/>, so no two tests use the one conversion slot at the same time.
 /// </summary>
 public sealed class ParserContainer : IAsyncLifetime
 {
-    public const string ImageVariable = "UME_RAG_TEST_PARSER_IMAGE";
+    public const string ImageVariable = "KALLA_TEST_PARSER_IMAGE";
     private const int Port = 8000;
 
     private IContainer? _container;

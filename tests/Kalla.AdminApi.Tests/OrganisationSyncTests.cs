@@ -25,11 +25,11 @@ namespace Kalla.AdminApi.Tests;
 /// <summary>Its own ragdb: the sync deactivates every department the context does not list.</summary>
 public sealed class OrgSyncFixture : RagDatabase, IAsyncLifetime
 {
-    /// <summary>rag-admin's credential key, up to <c>Eu</c>: "Webb – external only" shares no residency with it.</summary>
+    /// <summary>kalla-admin's credential key, up to <c>Eu</c>: "Webb – external only" shares no residency with it.</summary>
     public const string AdminKey = "fake-admin-credential-key-org-0123456789";
 
     /// <summary>
-    /// The FakeGateway with rag-admin's credential key, holding <c>organisation.read</c> unless <paramref name="organisationRead"/>
+    /// The FakeGateway with kalla-admin's credential key, holding <c>organisation.read</c> unless <paramref name="organisationRead"/>
     /// is false; <paramref name="features"/> replaces the gateway's features.
     /// </summary>
     public WebApplicationFactory<FakeGatewayProgram> Gateway(bool organisationRead = true, string[]? features = null) =>

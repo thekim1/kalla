@@ -3,14 +3,14 @@ name: Release
 #   1. verify.yml and parser.yml run in full, beside build (2-3); e2e.yml (called) only when asked, after build: the
 #      repository variable RELEASE_E2E is 'true' for a tag push, or the dry run's input e2e is ticked (Decisions "E2E
 #      optional on release");
-#   2. every image is pushed to ghcr.io/<owner>/ume-rag/<service>:X.Y.Z (and :latest unless X.Y.Z is a pre-release):
+#   2. every image is pushed to ghcr.io/<owner>/kalla/<service>:X.Y.Z (and :latest unless X.Y.Z is a pre-release):
 #      api, admin (with the admin UI), worker and migrations by `dotnet publish -t:PublishContainer`, postgres, clamav,
 #      renderer and parser from their Dockerfiles; an SPDX SBOM per image (Microsoft.Sbom.DotNetTool for the .NET
 #      services, Syft for the other four);
 #   3. deploy/build-release-bundle.sh pins the bundle's Compose defaults and the Portainer stack to those digests;
 #      deploy/tests/release-smoke.sh boots the bundle and runs the smoke test, and deploy/tests/portainer-boot.sh
 #      boots the Portainer stack (the gateway from the release it pins, the profiles clamav, openwebui and proxy;
-#      rag-admin without a client secret, so its setup wizard opens and is checked up to a setup session);
+#      kalla-admin without a client secret, so its setup wizard opens and is checked up to a setup session);
 #   4. once 1-3 are green: :latest moves to the images (not for a pre-release), a GitHub release is created with the
 #      bundle, the Portainer stack, the SBOMs and SHA256SUMS, and a pull request pins deploy/portainer/ to the release's
 #      images (not for a pre-release).
@@ -104,7 +104,7 @@ jobs:
           VERSION: ${{ inputs.portainer_boot }}
         run: |
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "::error::'$VERSION' is not X.Y.Z[-pre]"; exit 1; }
-          prefix="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ume-rag"
+          prefix="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/kalla"
           : > images.env
           for name in api admin worker migrations postgres clamav renderer parser; do
             ref="$prefix/$name:$VERSION"
@@ -118,7 +118,7 @@ jobs:
             grep -qF "\${${var}:-" dist/compose.portainer.yaml || { echo "::error::$var is not used in the stack"; exit 1; }
             sed -i -E "s#\\\$\\{${var}:-[^}]*\\}#\${${var}:-${ref}}#g" dist/compose.portainer.yaml
           done < images.env
-          grep -oE 'ume-rag/[a-z]+:[^@]+@sha256:[0-9a-f]{12}' dist/compose.portainer.yaml | sort -u
+          grep -oE 'kalla/[a-z]+:[^@]+@sha256:[0-9a-f]{12}' dist/compose.portainer.yaml | sort -u
       - name: Boot the Portainer stack
         if: inputs.portainer_upgrade_from == ''
         env:
@@ -175,10 +175,10 @@ jobs:
         run: |
           if [ "$GITHUB_EVENT_NAME" = push ]; then
             version="${GITHUB_REF_NAME#v}"
-            registry_host=ghcr.io; repository="${GITHUB_REPOSITORY_OWNER,,}/ume-rag"
+            registry_host=ghcr.io; repository="${GITHUB_REPOSITORY_OWNER,,}/kalla"
           else
             version="$DRY_RUN_VERSION"
-            registry_host=localhost:5000; repository=ume-rag
+            registry_host=localhost:5000; repository=kalla
           fi
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "::error::'$version' is not X.Y.Z[-pre]"; exit 1; }
           { echo "version=$version"; echo "registry_host=$registry_host"; echo "repository=$repository"; } \
@@ -192,10 +192,10 @@ jobs:
         if: github.event_name != 'push'
         # Both runners share one Docker daemon: remove a registry an earlier, cancelled or failed dry run left behind.
         run: |
-          docker rm -f ume-rag-dryrun-registry >/dev/null 2>&1 || true
+          docker rm -f kalla-dryrun-registry >/dev/null 2>&1 || true
           # Before this step had a cleanup the container was called "registry": remove it only if it runs our image.
           if [ "$(docker inspect -f '{{.Config.Image}}' registry 2>/dev/null)" = "$DRY_RUN_REGISTRY_IMAGE" ]; then docker rm -f registry; fi
-          docker run -d --name ume-rag-dryrun-registry -p 127.0.0.1:5000:5000 "$DRY_RUN_REGISTRY_IMAGE"
+          docker run -d --name kalla-dryrun-registry -p 127.0.0.1:5000:5000 "$DRY_RUN_REGISTRY_IMAGE"
       - name: A tag release reads no shared cache
         # Pull-request jobs run as the same user on these runners and could rewrite the caches in its home (#704,
         # Decisions "CI on the self-hosted runner"). A tag release therefore restores NuGet and npm packages into empty
@@ -227,7 +227,7 @@ jobs:
         # it; releases don't run in parallel), read by each build and replaced after it (mode=max keeps the build
         # stages' layers too), so an unchanged Dockerfile and context rebuild in seconds and push only the new layers.
         # A tag release only writes it (#704): pull-request jobs share the runner user's home, so a release never reads it.
-        run: echo "BUILD_CACHE=$HOME/.cache/ume-rag-release-buildx" >> "$GITHUB_ENV"
+        run: echo "BUILD_CACHE=$HOME/.cache/kalla-release-buildx" >> "$GITHUB_ENV"
       - name: Install Syft
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
@@ -258,7 +258,7 @@ jobs:
         run: |
           mkdir -p sbom
           for entry in api:Api admin:AdminApi worker:Worker migrations:MigrationService; do
-            name="${entry%%:*}"; project="src/Ume.Rag.${entry#*:}"
+            name="${entry%%:*}"; project="src/Kalla.${entry#*:}"
             ui=(); [ "$name" = admin ] && ui=(-p:PublishAdminUi=true)
             dotnet publish "$project" -c Release -t:PublishContainer --os linux --arch x64 --nologo "${ui[@]}" \
               -p:Version="$VERSION" -p:ContainerImageTag="$VERSION" \
@@ -278,11 +278,11 @@ jobs:
               cp "$p/obj/project.assets.json" "$components/$(basename "$p")/obj/"
             done
             dotnet dnx "$SBOM_TOOL" -y -- generate -b "$publish" -bc "$components" -pn "ume-rag-$name" -pv "$VERSION" \
-              -ps "Umea kommun" -nsb https://www.umea.se/ume-rag -V Warning
-            mv "$publish/_manifest/spdx_2.2/manifest.spdx.json" "sbom/ume-rag-$name-$VERSION.spdx.json"
+              -ps "Umea kommun" -nsb https://www.umea.se/kalla -V Warning
+            mv "$publish/_manifest/spdx_2.2/manifest.spdx.json" "sbom/kalla-$name-$VERSION.spdx.json"
             rm -rf "$publish/_manifest"
           done
-      - name: Build and push ume-rag/postgres
+      - name: Build and push kalla/postgres
         id: postgres
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -297,7 +297,7 @@ jobs:
           # A tag release reads no build cache (#704); it still writes one, which only a trusted build does.
           cache-from: ${{ github.event_name != 'push' && format('type=local,src={0}/postgres', env.BUILD_CACHE) || '' }}
           cache-to: type=local,dest=${{ env.BUILD_CACHE }}/postgres-new,mode=max
-      - name: Build and push ume-rag/clamav
+      - name: Build and push kalla/clamav
         id: clamav
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -311,7 +311,7 @@ jobs:
           # A tag release reads no build cache (#704); it still writes one, which only a trusted build does.
           cache-from: ${{ github.event_name != 'push' && format('type=local,src={0}/clamav', env.BUILD_CACHE) || '' }}
           cache-to: type=local,dest=${{ env.BUILD_CACHE }}/clamav-new,mode=max
-      - name: Build and push ume-rag/renderer
+      - name: Build and push kalla/renderer
         id: renderer
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -325,7 +325,7 @@ jobs:
           # A tag release reads no build cache (#704); it still writes one, which only a trusted build does.
           cache-from: ${{ github.event_name != 'push' && format('type=local,src={0}/renderer', env.BUILD_CACHE) || '' }}
           cache-to: type=local,dest=${{ env.BUILD_CACHE }}/renderer-new,mode=max
-      - name: Build and push ume-rag/parser
+      - name: Build and push kalla/parser
         id: parser
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -371,7 +371,7 @@ jobs:
           (
             bash -c 'set -e
               while read -r name ref; do
-                syft scan "registry:$ref" -o "spdx-json=sbom/ume-rag-$name-$VERSION.spdx.json" -q
+                syft scan "registry:$ref" -o "spdx-json=sbom/kalla-$name-$VERSION.spdx.json" -q
               done < "$1/refs"' _ "$syft_dir" > "$syft_dir/log" 2>&1 || rc=$?
             echo "${rc:-0}" > "$syft_dir/exit"
           ) < /dev/null > /dev/null 2>&1 &
@@ -380,7 +380,7 @@ jobs:
           set -a; . ./images.env; set +a
           bash deploy/build-release-bundle.sh "${{ steps.version.outputs.version }}" dist
       - name: Smoke test the bundle
-        # deploy/compose.rag.yaml with the backup overlay; no sudo needed (rag-bootstrap owns the files inside the
+        # deploy/compose.rag.yaml with the backup overlay; no sudo needed (kalla-bootstrap owns the files inside the
         # volumes). --render boots with the renderer, then switches it off, so one boot covers both (#505).
         run: |
           bash deploy/tests/release-smoke.sh "dist/ume-rag-${{ steps.version.outputs.version }}.tar.gz" \
@@ -394,7 +394,7 @@ jobs:
       - name: Upgrade the oldest supported release's Portainer stack
         # docs/portainer.md, "Upgrade": the UPGRADE_FROM stack (its release asset, its variables) is booted, then this
         # release's file is applied over it with nothing added, changed or stopped by hand. From 0.6.0 it skips 0.7.0
-        # and crosses DropMessageParentId, for which rag-migrate must stop the old rag-api and rag-admin itself.
+        # and crosses DropMessageParentId, for which kalla-migrate must stop the old kalla-api and kalla-admin itself.
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -404,7 +404,7 @@ jobs:
           bash scripts/ci/release-asset.sh "v$UPGRADE_FROM" compose.portainer.yaml "dist-from/$UPGRADE_FROM/compose.portainer.yaml"
           bash deploy/tests/portainer-upgrade-boot.sh "dist-from/$UPGRADE_FROM/compose.portainer.yaml" dist/compose.portainer.yaml \
             --from-env "deploy/tests/fixtures/stack-$UPGRADE_FROM.env" \
-            --version "${{ steps.version.outputs.version }}" --expect-fenced ume_rag_api --expect-fenced ume_rag_admin
+            --version "${{ steps.version.outputs.version }}" --expect-fenced kalla_api --expect-fenced kalla_admin
           if [ "$GITHUB_EVENT_NAME" != push ]; then docker logout ghcr.io; fi
       - name: The other images' SBOMs
         # Started above, beside the boot tests; normally done by now.
@@ -427,7 +427,7 @@ jobs:
           if-no-files-found: error
       - name: Remove the dry run's registry
         if: always() && github.event_name != 'push'
-        run: docker rm -f ume-rag-dryrun-registry >/dev/null 2>&1 || true
+        run: docker rm -f kalla-dryrun-registry >/dev/null 2>&1 || true
 
   publish:
     # Only for a pushed tag, once verify, parser, build and (when asked) e2e are green; a dry run ends after build.

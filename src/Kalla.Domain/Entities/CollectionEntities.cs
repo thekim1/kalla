@@ -54,7 +54,7 @@ public sealed class PlatformSettings
     public string IdentityRoleGroups { get; set; } = "{}";
 
     /// <summary>
-    /// <c>Settings.Identity.Oidc</c> (<c>jsonb</c>, identity design §19): rag-admin's sign-in values set in the setup wizard; a
+    /// <c>Settings.Identity.Oidc</c> (<c>jsonb</c>, identity design §19): kalla-admin's sign-in values set in the setup wizard; a
     /// value the deployment's <c>Oidc:*</c> sets wins. The client secret is not in it but in <see cref="IdentityOidcEncryptedClientSecret"/>.
     /// </summary>
     public string IdentityOidc { get; set; } = "{}";
@@ -71,7 +71,7 @@ public sealed class PlatformSettings
     /// </summary>
     public string OpenWebUiOidc { get; set; } = "{}";
 
-    /// <summary>Open WebUI's client secret from the wizard, protected under its own purpose (identity design §19); rag-api unprotects it for Open WebUI only.</summary>
+    /// <summary>Open WebUI's client secret from the wizard, protected under its own purpose (identity design §19); kalla-api unprotects it for Open WebUI only.</summary>
     public string? OpenWebUiOidcEncryptedClientSecret { get; set; }
 
     public DateTimeOffset? OpenWebUiOidcClientSecretSetAt { get; set; }

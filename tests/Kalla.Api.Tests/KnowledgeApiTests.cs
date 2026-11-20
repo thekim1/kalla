@@ -45,7 +45,7 @@ public sealed class KnowledgeApiTests(KnowledgeFixture db) : IClassFixture<Knowl
     [Fact]
     public async Task A_keys_use_is_recorded_as_its_last_use_at_most_every_five_minutes()
     {
-        // Identity §6.2, admin §5.9.1: rag-api writes config."KeyLastUse" beside the request; the admin shows it per key and app.
+        // Identity §6.2, admin §5.9.1: kalla-api writes config."KeyLastUse" beside the request; the admin shows it per key and app.
         await using var api = db.ApiHost();
         await using var context = TestPostgres.Context(db.Connection(RagDatabase.Admin));
         var keyId = await context.Keys.AsNoTracking().Where(k => k.ClientId == db.InternalClient && k.Name == "rag-internal").Select(k => k.Id).SingleAsync(Ct);

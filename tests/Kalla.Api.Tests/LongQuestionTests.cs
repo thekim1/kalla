@@ -11,7 +11,7 @@ namespace Kalla.Api.Tests;
 /// Long questions (chat design §3.2, §5.1, §6.3; Decisions "Long questions condensed into the search query"; M-6), the pure
 /// parts: the two forms of the question and its limit, the long-question condense input, the word-boundary fallback, the
 /// prompt budget, and a multi-line ticket reaching the answer prompt unchanged (golden file in
-/// <c>tests/Kalla.Api.Tests/Golden/prompts</c>; <c>UME_RAG_UPDATE_GOLDEN=1</c> rewrites it).
+/// <c>tests/Kalla.Api.Tests/Golden/prompts</c>; <c>KALLA_UPDATE_GOLDEN=1</c> rewrites it).
 /// </summary>
 public sealed class LongQuestionTests
 {
@@ -130,14 +130,14 @@ public sealed class LongQuestionTests
 
         var actual = Render(prompt);
         var file = Path.Combine(GoldenDirectory, "long-ticket-multiline.txt");
-        if (Environment.GetEnvironmentVariable("UME_RAG_UPDATE_GOLDEN") == "1")
+        if (Environment.GetEnvironmentVariable("KALLA_UPDATE_GOLDEN") == "1")
         {
             Directory.CreateDirectory(GoldenDirectory);
             File.WriteAllText(file, actual);
         }
 
-        File.Exists(file).ShouldBeTrue($"{file} is missing; run with UME_RAG_UPDATE_GOLDEN=1 to write it.");
-        actual.ShouldBe(File.ReadAllText(file).ReplaceLineEndings("\n"), "long-ticket-multiline: run with UME_RAG_UPDATE_GOLDEN=1 to regenerate.");
+        File.Exists(file).ShouldBeTrue($"{file} is missing; run with KALLA_UPDATE_GOLDEN=1 to write it.");
+        actual.ShouldBe(File.ReadAllText(file).ReplaceLineEndings("\n"), "long-ticket-multiline: run with KALLA_UPDATE_GOLDEN=1 to regenerate.");
     }
 
     [Fact]

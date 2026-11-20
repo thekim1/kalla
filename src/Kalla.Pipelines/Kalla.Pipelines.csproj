@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
-    Shared by rag-admin and rag-worker (engine design §3, §4; admin design §2.1): the worker contracts as C# records
+    Shared by kalla-admin and kalla-worker (engine design §3, §4; admin design §2.1): the worker contracts as C# records
     (source settings, pipeline definition and templates, job payloads and results, site profiles) and their exported
     JSON Schemas (contracts/), the pipeline validator, stage keys and settings hashes.
   -->

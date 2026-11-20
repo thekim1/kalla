@@ -24,9 +24,9 @@ using Kalla.TestKit;
 namespace Kalla.Api.Tests;
 
 /// <summary>
-/// M-20 S5 (identity design §19, "Open WebUI", "Stored secrets"): rag-api's internal route that serves Open WebUI's sign-in settings
-/// to the deployment's own Open WebUI client only, the version that follows every value, and rag-api's read-only Data Protection,
-/// which unprotects what rag-admin's registration protected and creates no keys.
+/// M-20 S5 (identity design §19, "Open WebUI", "Stored secrets"): kalla-api's internal route that serves Open WebUI's sign-in settings
+/// to the deployment's own Open WebUI client only, the version that follows every value, and kalla-api's read-only Data Protection,
+/// which unprotects what kalla-admin's registration protected and creates no keys.
 /// </summary>
 public sealed class OpenWebUiSignInTests(KnowledgeFixture db) : IClassFixture<KnowledgeFixture>
 {
@@ -64,7 +64,7 @@ public sealed class OpenWebUiSignInTests(KnowledgeFixture db) : IClassFixture<Kn
         return client;
     }
 
-    /// <summary>A host with only what Data Protection needs, as rag-admin (<paramref name="readOnly"/> false) or rag-api registers it.</summary>
+    /// <summary>A host with only what Data Protection needs, as kalla-admin (<paramref name="readOnly"/> false) or kalla-api registers it.</summary>
     private static IHost DataProtectionHost(string connection, bool readOnly)
     {
         var builder = Microsoft.Extensions.Hosting.Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = "Development" });
@@ -75,7 +75,7 @@ public sealed class OpenWebUiSignInTests(KnowledgeFixture db) : IClassFixture<Kn
         return builder.Build();
     }
 
-    /// <summary>The wizard's values and secret in the settings row, the secret protected by rag-admin's registration.</summary>
+    /// <summary>The wizard's values and secret in the settings row, the secret protected by kalla-admin's registration.</summary>
     private async Task StoreAsync(OpenWebUiOidcValues values, string? secret)
     {
         string? encrypted = null;
@@ -293,7 +293,7 @@ public sealed class OpenWebUiSignInTests(KnowledgeFixture db) : IClassFixture<Kn
     [Fact]
     public async Task Rag_apis_data_protection_reads_what_rag_admins_protected_and_creates_no_keys()
     {
-        // rag-admin's registration protects (and makes the ring's first key); rag-api's, on its own role, unprotects it.
+        // kalla-admin's registration protects (and makes the ring's first key); kalla-api's, on its own role, unprotects it.
         string ciphertext;
         using (var admin = DataProtectionHost(db.Connection(RagDatabase.Admin), readOnly: false))
         {
@@ -310,14 +310,14 @@ public sealed class OpenWebUiSignInTests(KnowledgeFixture db) : IClassFixture<Kn
             api.Services.GetRequiredService<IOptions<KeyManagementOptions>>().Value.AutoGenerateKeys.ShouldBeFalse();
         }
 
-        // The real rag-api registers it read-only too.
+        // The real kalla-api registers it read-only too.
         var (host, _) = Host();
         await using (host)
         {
             host.Services.GetRequiredService<IOptions<KeyManagementOptions>>().Value.AutoGenerateKeys.ShouldBeFalse();
         }
 
-        // On an empty ring rag-api can protect nothing and writes no key.
+        // On an empty ring kalla-api can protect nothing and writes no key.
         await using var empty = new RagDatabase();
         await empty.InitializeAsync();
         using (var api = DataProtectionHost(empty.Connection(RagDatabase.Api), readOnly: true))

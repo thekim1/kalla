@@ -61,7 +61,7 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
     public static readonly DateTimeOffset UploadedAt = new(2026, 2, 3, 9, 0, 0, TimeSpan.Zero);
     public const string KeyPepper = "knowledge-api-test-pepper-0123456789abcdef";
     public const string GrantKey = "knowledge-api-test-grant-key-0123456789abc";
-    public string BlobRoot { get; } = Directory.CreateTempSubdirectory("ume-rag-api-blobs-").FullName;
+    public string BlobRoot { get; } = Directory.CreateTempSubdirectory("kalla-api-blobs-").FullName;
 
     /// <summary>The plain keys of <c>rag-internal</c> and Open WebUI, stored in <c>config."Keys"</c> (the clients have the snapshot's ids).</summary>
     public string InternalKey { get; private set; } = null!;
@@ -185,7 +185,7 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
     }
 
     /// <summary>
-    /// rag-api on this database (api role) with the FakeGateway, the blob root, and <paramref name="snapshot"/> in place of
+    /// kalla-api on this database (api role) with the FakeGateway, the blob root, and <paramref name="snapshot"/> in place of
     /// the snapshot store (keys still come from <c>config."Keys"</c>).
     /// </summary>
     public WebApplicationFactory<Program> ApiHost(PolicySnapshot? snapshot = null, bool confirmed = true) => new WebApplicationFactory<Program>().WithWebHostBuilder(web =>
@@ -227,7 +227,7 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
         var clients = new[]
         {
             new ClientEntry(InternalClient, "rag-internal", ClientKinds.Internal, Classification.Sensitive, false, true),
-            // The deployment's own Open WebUI client (identity §5.2): the one whose users rag-api trusts.
+            // The deployment's own Open WebUI client (identity §5.2): the one whose users kalla-api trusts.
             new ClientEntry(OwuiClient, "Open WebUI", ClientKinds.OpenWebUi, Classification.Internal, true, true, IsManagedByDeployment: true),
             new ClientEntry(IntegrationClient, "Integration", ClientKinds.Integration, Classification.Internal, false, true),
         }.ToDictionary(c => c.Id);

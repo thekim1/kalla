@@ -51,7 +51,7 @@ public sealed class EvaluationReproducibilityTests(RagDatabaseFixture database) 
         ["förskola", "bygglov", "snöröjning", "bibliotek", "parkering", "avfall", "färdtjänst", "simhall", "hemtjänst", "vattenmätare", "skolskjuts", "fritidsgård"];
 
     private readonly EvalGatewayFactory _gateway = new();
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-eval-repro-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-eval-repro-");
     private PlatformSettings? _previous;
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

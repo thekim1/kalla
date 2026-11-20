@@ -16,7 +16,7 @@ public sealed class MaintenanceSweepTests(RagDatabaseFixture database) : IAsyncL
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("ume-rag-purge-");
+    private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("kalla-purge-");
 
     public async ValueTask InitializeAsync() => await database.ResetAsync();
 

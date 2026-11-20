@@ -71,9 +71,9 @@ Moved to [`../archive/design-history/admin.md`](../archive/design-history/admin.
 
 ### 2.2 Hosting, slots and background work
 
-- One slot `rag-admin` in the single-host pilot (one-slot deployment with a short announced maintenance window,
-  simplification pass §1); `rag-admin-b` with the a/b slots of P2. Control zone; sessions in Postgres
-  (`config."AdminSessions"`, owned by `rag-admin`; identity §1.1), so either slot serves any user; no Redis in P1
+- One slot `kalla-admin` in the single-host pilot (one-slot deployment with a short announced maintenance window,
+  simplification pass §1); `kalla-admin-b` with the a/b slots of P2. Control zone; sessions in Postgres
+  (`config."AdminSessions"`, owned by `kalla-admin`; identity §1.1), so either slot serves any user; no Redis in P1
   (simplification pass §14).
 - Networks: `edge` (proxy, inbound only), `data` (Postgres), `llm` (the default route, so also the OIDC authority and,
   from P2, Graph for feature C; repo-and-deployment §6.1; gateway: test panel, model validation, answer-level evaluation, P2 skill gate, the organisation and model syncs), P2 `mcp` (hosted MCP servers:
@@ -100,8 +100,8 @@ Moved to [`../archive/design-history/admin.md`](../archive/design-history/admin.
 
 ### 2.3 BFF, CSP and how the UI is served
 
-- BFF exactly as identity §1, against RAG's own registration `ume-rag-admin`: cookie names `__Host-ume-rag-admin`,
-  `__Host-ume-rag-csrf`, readable `RAG-XSRF-TOKEN` (so `ui/api/client.ts:3` changes only the constant),
+- BFF exactly as identity §1, against RAG's own registration `kalla-admin`: cookie names `__Host-kalla-admin`,
+  `__Host-kalla-csrf`, readable `RAG-XSRF-TOKEN` (so `ui/api/client.ts:3` changes only the constant),
   `/bff/login|logout|user|session/extend`, 401 for `/api` without a session, 403 for missing rights,
   6002/6003/6005/6006 events.
 - Pipeline order copied from `AdminApi/Program.cs:67-98`: security headers with the same CSP string
@@ -122,14 +122,14 @@ Moved to [`../archive/design-history/admin.md`](../archive/design-history/admin.
 
 | To | How | Used for |
 |---|---|---|
-| `config` | EF `RagDbContext`, role `ume_rag_admin` S I U D (data-model §1.2) | all configuration |
+| `config` | EF `RagDbContext`, role `kalla_admin` S I U D (data-model §1.2) | all configuration |
 | `content` | S, plus I on `Jobs`, I U on `EvaluationRuns`, `EvaluationResults` (`answers` and `assistant-tests` runs, P2 skill gate) | documents, runs, reports, evaluation, previews, site profiles, test panel retrieval |
 | `chat` | S, plus **U on `Feedback.ReviewState`** (§13) | feedback page, comment reveal, conversation review |
 | `audit` | S I on `AuditLog`, `ConversationAccess`, `AuthFailures`; S on tool tables (P2 S I on `ToolDefinitionObservations`) | audit list, access log |
-| Blobs | `rag-blobs` rw (uploads; preview outputs read); `internal` blobs unwrapped with the level's master key, `public` blobs are not envelope-encrypted (simplification pass §4) | uploads, preview outputs, PII highlight previews |
+| Blobs | `kalla-blobs` rw (uploads; preview outputs read); `internal` blobs unwrapped with the level's master key, `public` blobs are not envelope-encrypted (simplification pass §4) | uploads, preview outputs, PII highlight previews |
 | `IKeyProvider` | chat master keys (file provider in the pilot), once A1 allows stored content (weakness review §4) | comment and conversation decryption (§8) |
 | Gateway | the admin's credential key `Gateway__Key`, acting as an assistant's or knowledge base's assigned key from phase 2 (identity §4.7); from phase 3 the Integration API with the same key's `usage.read`; the same key's `organisation.read` for the organisation sync (§4.10) | test panel embedding + answer, `/v1/models` validation (§4.6 V8, V39), answer-level evaluation and assistant test questions with the judge, P2 skill gate, cost and budget status, §4.10 |
-| Hosted MCP servers (P2) | in-process `Kalla.Tools`, `client-credentials` with the `ume-rag-tools` certificate (tools §4.6) | discovery, connection test, drift polling, test-panel and skill-gate tool calls |
+| Hosted MCP servers (P2) | in-process `Kalla.Tools`, `client-credentials` with the `kalla-tools` certificate (tools §4.6) | discovery, connection test, drift polling, test-panel and skill-gate tool calls |
 
 ## 3. Roles and permissions
 
@@ -152,7 +152,7 @@ roles add up.
 `Review` and `FeedbackComments` are **not** part of `Admin`. A platform admin who must review is also given
 `rag-reviewer` (visible in the audit actor roles). `rag-reviewer` is granted per department: in P1 as the realm role `rag-reviewer`
 in the shared Keycloak, given to the account or a Keycloak group per department (identity §1.6, §11.2, 2026-10-31);
-from P2 by assigning a group per department (Entra app role assignment on `ume-rag-admin` or
+from P2 by assigning a group per department (Entra app role assignment on `kalla-admin` or
 *Settings → Role groups*, `Settings.Identity.RoleGroups`). The UI mirrors the policies
 with an implied-roles map as the gateway does (`ui/stores/auth.ts:10-15`, `:60-69`), but the API decides.
 
@@ -332,7 +332,7 @@ BEGIN; SET LOCAL lock_timeout = '5s'
   4. SaveChanges → row triggers write ConfigOutbox and bump ConfigVersion (data-model §5)
   5. SELECT "Version" FROM config."ConfigVersion" → v
   6. INSERT audit."AuditLog" (ActorOid…, Action, EntityType, EntityId, Details {before, after}, DepartmentId,
-     ConfigVersion = v, Reason, Classification, Service = 'rag-admin', the container and OTEL service name)
+     ConfigVersion = v, Reason, Classification, Service = 'kalla-admin', the container and OTEL service name)
   7. INSERT content."Jobs" (§4.7) when the action enqueues work + pg_notify('rag_jobs')
 COMMIT  → rag_config and rag_jobs notifications delivered
 ```
@@ -787,7 +787,7 @@ Each rule: what it requires, the problem code(s) it answers with, when it is re-
 
 #### V39 Gateway key
 
-- **Rule:** (cost-attribution §4.2; data-model V39): a set `gatewayKeyId` is a `GatewayKeys` row with `Status` `Active` and `OwnerActive`, of the object's own department; its `AllowedResidencies` reach the object's ceiling; it allows every model the object uses (an assistant: the answer model, the condense model, each linked collection's embedding profile model, the rerank model; a collection: its embedding profile model and the evaluation and judge models). Once the context's `features` contain `act-as-key` the models are checked authoritatively with `GET /v1/models` as the key (`x-fors-on-behalf-of`) at the ceiling: the gateway lists the key's models within its residencies, the admin credential key's and the ceiling (gateway-changes §5.3, §5.5), and the refusal names each missing model; the answer's echo is checked (5011 → `gateway_unavailable`), and a refusal of the key (`403 delegation_not_allowed`, `403 key_disabled`, `403 key_revoked`/`key_expired`, gateway-changes §5.7) is `gateway_key_invalid`. An object without a key gets a warning ("charged to the platform's owner team"); once the context's `features` contain `act-as-key`, an assistant's publish and restore refuse it, and so does a save that clears the key of a published assistant (`gateway_key_required`), since it would then run on rag-api's credential key outside its department's budget. A key with `HasSystemPrompt` is a warning: its team's system prompt would change the assistant's prompts
+- **Rule:** (cost-attribution §4.2; data-model V39): a set `gatewayKeyId` is a `GatewayKeys` row with `Status` `Active` and `OwnerActive`, of the object's own department; its `AllowedResidencies` reach the object's ceiling; it allows every model the object uses (an assistant: the answer model, the condense model, each linked collection's embedding profile model, the rerank model; a collection: its embedding profile model and the evaluation and judge models). Once the context's `features` contain `act-as-key` the models are checked authoritatively with `GET /v1/models` as the key (`x-fors-on-behalf-of`) at the ceiling: the gateway lists the key's models within its residencies, the admin credential key's and the ceiling (gateway-changes §5.3, §5.5), and the refusal names each missing model; the answer's echo is checked (5011 → `gateway_unavailable`), and a refusal of the key (`403 delegation_not_allowed`, `403 key_disabled`, `403 key_revoked`/`key_expired`, gateway-changes §5.7) is `gateway_key_invalid`. An object without a key gets a warning ("charged to the platform's owner team"); once the context's `features` contain `act-as-key`, an assistant's publish and restore refuse it, and so does a save that clears the key of a published assistant (`gateway_key_required`), since it would then run on kalla-api's credential key outside its department's budget. A key with `HasSystemPrompt` is a warning: its team's system prompt would change the assistant's prompts
 - **Code:** `gateway_key_invalid` (unknown, not active, another department), `gateway_key_residency`, `gateway_key_model` (`affected[]` = the models the key's list and the residency cases don't explain), `gateway_key_model_residency` and `gateway_key_embedding_residency` (#720: the key allows the model, but within the ceiling it runs only at residencies the key doesn't allow; params `key`, `model`, `modelResidencies`, `keyResidencies`; the embedding variant names the knowledge base's embedding model, recognised by the mirror's `ModelKind`), `gateway_key_required` (409), `gateway_key_system_prompt` (warning only); `gateway_unavailable` (503)
 - **Re-checked when:** object save (key, level, audience); draft save (warnings on the version's models and links); publish; restore; key sync (a key turned unusable or narrowed: an attention item, §5.5.1)
 - **Source:** cost-attribution §4.2, data-model §2.1
@@ -845,7 +845,7 @@ What the commands do (engine design §9.1, §12):
   `Pipelines.PublishedVersionId`, then enqueue a `reprocess` with `Trigger = rollback`.
 
 Assistant publish, restore and copy enqueue nothing: they are config changes only. Assistant test runs (§7.4) are not
-worker jobs either: like answer-level evaluation and the skill gate they run in `rag-admin` (`AssistantTestRunner`,
+worker jobs either: like answer-level evaluation and the skill gate they run in `kalla-admin` (`AssistantTestRunner`,
 §2.2), which needs `Kalla.Answering` and the gateway keys of every level; the `EvaluationRuns` row is their durable
 state.
 
@@ -875,10 +875,10 @@ answer. Nothing is stored but the **usage**: every model call of a test turn (co
 embedding, rerank, answer, follow-ups) is counted as chat counts it (chat §8.3: tokens, cached input, the gateway's cost
 or an estimate from the mirror's prices, kept apart), in `chat."AssistantDailyUsage"` under the assistant and the
 **`admin-console` client row** (identity §4.1's pilot row, so test traffic stays apart from real users' clients;
-data-model §2.3), upserted by `rag-admin` after the answer with the same per-step deltas and key order as the chat
+data-model §2.3), upserted by `kalla-admin` after the answer with the same per-step deltas and key order as the chat
 writer (chat §12.2), never in `AssistantDailyTotals` (test turns are not chat statistics; cost-attribution §5 C2). A
 failed write is logged and dropped; the test answer is unaffected. Query embeddings use the in-process L1 cache only, keyed with a per-process random HMAC
-key. **Release coupling**: `rag-admin` and `rag-api` are built and deployed from one release (`release.yml`), and the
+key. **Release coupling**: `kalla-admin` and `kalla-api` are built and deployed from one release (`release.yml`), and the
 panel ships in the same P1 release as the chat role, so it never runs a different `Kalla.Answering` than chat does.
 
 | Input | Output (JSON, non-streamed through the chat client; ≤ 60 s by its timeouts) |
@@ -1083,10 +1083,10 @@ since cost may come from the test panel.
 **Deployment notices** (Decisions "Deployment values across releases"; user, 2026-11-16): for a platform admin,
 `GET /api/overview` returns `deploymentNotices`, a list of `{ code, names }`, shown at the top of Home after the secret
 reminders (§5.11) and hideable per browser for that code and those names. The codes: `retired_variables`, the
-deployment variables the stack still sets and this version no longer reads, which rag-admin gets from the bootstrap as
+deployment variables the stack still sets and this version no longer reads, which kalla-admin gets from the bootstrap as
 `Deployment:RetiredVariables` (a comma-separated list; only names of capital letters, digits and `_` are kept, at most
 50). The notice names them, says they have no effect and that the person who runs the deployment removes them, with
-`rag-bootstrap`'s log and the upgrade guide saying what replaced each. A setting that a person must choose after an
+`kalla-bootstrap`'s log and the upgrade guide saying what replaced each. A setting that a person must choose after an
 upgrade adds a code here (or a card as the embedding profile's). They are not the attention items below.
 
 **Attention items are P2** (user, 2026-11-07, M-3): P1's Home shows the setup checklists and sync health; the
@@ -1510,8 +1510,8 @@ Platform index). The list shows name, kind (its label), information class, enabl
    `toolPolicy` is not shown (P2): the server's default stays. `allowedOrigins` waits for `widget`.
 3. **First key**: "Create a key now" (on by default) with the key's name (default "<client name> key"). Created with
    the client in one transaction. The result shows the secret once with a copy button and the client's id with a copy
-   button; for `open-webui` also the two stack lines `UME_RAG_OPENWEBUI_API_KEY=<secret>` and
-   `UME_RAG_OPENWEBUI_CLIENT_ID=<id>` with one copy button, and the sentence that Open WebUI picks them up when the
+   button; for `open-webui` also the two stack lines `KALLA_OPENWEBUI_API_KEY=<secret>` and
+   `KALLA_OPENWEBUI_CLIENT_ID=<id>` with one copy button, and the sentence that Open WebUI picks them up when the
    stack is updated.
 
 **A client's drawer** has the facts (id with copy, kind, created/updated), the edit form of step 2 (the kind is fixed
@@ -1567,7 +1567,7 @@ Client, audience rows, key and their audit rows are one transaction.
 | `open-webui` | a sentence: the deployment connects Open WebUI by itself (identity design §5.2, M-17 C4). The kind is not offered in Add app ("Set up by the deployment"); the deployment's own client is marked "Managed by the deployment" in the list and the drawer, which hide New key, Rotate, Show key and Revoke for it (the API refuses them with `client_managed_by_deployment`); its settings and assistants are edited as any app's |
 
 The client id is under "Details", not in the main path. Without
-`apiBaseUrl` the address row says "Ask the platform team for rag-api's address".
+`apiBaseUrl` the address row says "Ask the platform team for kalla-api's address".
 
 **An app's drawer** gains **How to connect** (the same block, the key shown through *Show key*) and replaces *Used by*
 with the checklist of step 3 and a **Save** of its own. The list and the drawer show when each key was **last used**
@@ -1597,8 +1597,8 @@ no form asks for a typed GUID.
   assistant that changed. Answers `ClientDto`.
 - `ClientDto.assistants` items add `slug` and `classification`.
 - `GET /api/clients/connection` answers `{ apiBaseUrl: string | null }` from the deployment knob `Admin:ApiPublicUrl`.
-  The deployment templates give rag-admin the value rag-api already gets as `Knowledge:PublicBaseUrl`
-  (`UME_RAG_API_PUBLIC_URL`, or its default from the host once the proposal's C1 is in): no new variable to fill in.
+  The deployment templates give kalla-admin the value kalla-api already gets as `Knowledge:PublicBaseUrl`
+  (`KALLA_API_PUBLIC_URL`, or its default from the host once the proposal's C1 is in): no new variable to fill in.
 - `KeyDto` adds `lastUsedAt` (from `KeyLastUse`, data-model §2.1); `ClientSummary` adds `lastUsedAt`, the latest of its
   keys.
 
@@ -1638,7 +1638,7 @@ Site profiles and Data protection are lists (a row opens its form in a drawer, a
 index. **Role groups** (`GET/PUT /api/settings/identity`, M-17 C10) has one list field per role (one group per line):
 platform admin, department admin, pipeline editor, reviewer, editor, viewer. A group must be a `rag-` name or an Entra
 object id; groups are trimmed and de-duplicated case-insensitively, and a role without groups isn't stored. The hints say
-that a role in the sign-in token counts too, that the deployment's break-glass group (`UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN`)
+that a role in the sign-in token counts too, that the deployment's break-glass group (`KALLA_OIDC_GROUPS_PLATFORM_ADMIN`)
 always applies, and that a change applies at each user's next sign-in (identity §2.5, Decisions "Role groups as a setting").
 
 A section's form is built in two steps:
@@ -1655,11 +1655,11 @@ A section's form is built in two steps:
 `/setup`, outside the signed-in shell, before step 1 of §5.4. The rules it shows are identity §19. Texts are in
 `labels.ts` and `messages.ts`. While setup is closed the page says so and links to sign-in.
 
-1. **Setup code.** One field; where to find the code (the rag-admin container's output, with the command per deploy
+1. **Setup code.** One field; where to find the code (the kalla-admin container's output, with the command per deploy
    form). A wrong code and the attempt limit have their own messages.
-2. **Addresses.** The redirect URIs to register at the provider (sign-in and sign-out callback, as rag-admin builds
-   them for the address the wizard is opened at), each with a copy button, and what rag-admin's own configuration says
-   of the deployment (the gateway's address, the public API address, the break-glass platform-admin groups). rag-admin
+2. **Addresses.** The redirect URIs to register at the provider (sign-in and sign-out callback, as kalla-admin builds
+   them for the address the wizard is opened at), each with a copy button, and what kalla-admin's own configuration says
+   of the deployment (the gateway's address, the public API address, the break-glass platform-admin groups). kalla-admin
    has no list of the other host names, so there is no per-host test here.
 3. **Sign-in.** Provider address, client id, client secret, an optional expiry date of the secret; *Advanced* holds
    the token-shape values with a preset for Keycloak and for Entra ID. A value set by the deployment is locked with
@@ -1682,7 +1682,7 @@ A section's form is built in two steps:
    (no automatic navigation), then the *Get started* checklist (§5.5.1).
 
 The sign-in page offers **Set up sign-in** while setup is open (and no *Sign in* while sign-in isn't configured), and
-says to restart rag-admin when setup has ended without a sign-in. The setup window's end shows from step 2 on. Built
+says to restart kalla-admin when setup has ended without a sign-in. The setup window's end shows from step 2 on. Built
 in M-20 S4 (#769); the Open WebUI step follows S5.
 
 Home shows platform admins a notice 30 days before a client secret's expiry date, with the re-open steps; each notice can be hidden per browser (#773).
@@ -1853,7 +1853,7 @@ Removed (simplification pass): no gate, so no overrides (§16).
   measured against the same questions; copying an assistant copies its set.
 - **When**: after every publish and restore (on the new published version), and on demand with **Run test questions** on
   the draft or the published version. One run per assistant at a time; an assistant without questions gets no run.
-- **How**: `AssistantTestRunner` in `rag-admin` (§2.2) runs each question once through `Kalla.Answering` exactly as
+- **How**: `AssistantTestRunner` in `kalla-admin` (§2.2) runs each question once through `Kalla.Answering` exactly as
   the test panel does (principal `admin-console`, the target version's definition, residency at the assistant's level,
   temperature as configured, `x-fors-step: assistant-test`), then:
   - **expected document**: cited or not (deterministic, from the answer's citations);
@@ -1961,7 +1961,7 @@ gateway's cost and the estimated cost (calls without a gateway cost, priced from
   C11; sent to only over `https`), the
   assistant's and knowledge base's *Cost* cards show the gateway's figures for the object's key next to these:
   `GET /api/gateway/keys/{id}/usage` `?from=&to=&granularity=day|month` (Read, the key's department in scope) reads
-  `/integration/v1/usage?groupBy=step&keyId=` with `rag-admin`'s credential key (`usage.read`; gateway-changes §5.6)
+  `/integration/v1/usage?groupBy=step&keyId=` with `kalla-admin`'s credential key (`usage.read`; gateway-changes §5.6)
   and returns per period and step `requests`, `successfulRequests`, `inputTokens`, `cachedInputTokens`,
   `outputTokens`, `costUsd`, cached 5 minutes per key and query (the gateway allows 60 requests a minute per key), at
   most 366 days (else 400 `period_too_long`); and the budget status (`GET /api/gateway/keys/{id}/budget`, §4.5). The

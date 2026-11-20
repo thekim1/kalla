@@ -7,7 +7,7 @@ using Kalla.Infrastructure.Persistence;
 namespace Kalla.MigrationService;
 
 /// <summary>
-/// The admin test panel's client (identity design §4.1; admin design §4.9; Decisions "Deploy configuration", #712): rag-migrate
+/// The admin test panel's client (identity design §4.1; admin design §4.9; Decisions "Deploy configuration", #712): kalla-migrate
 /// makes sure, on every run and in every deployment, that the <c>internal</c> client <see cref="Client.AdminConsoleName"/> marked
 /// <see cref="Client.IsManagedByDeployment"/> exists (found by kind and name; the name is not editable), insert-if-absent with
 /// ceiling <c>sensitive</c> and no history. The panel runs in the admin process and needs no key, so the client keeps none: a key made on

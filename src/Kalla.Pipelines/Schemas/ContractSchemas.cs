@@ -11,7 +11,7 @@ namespace Kalla.Pipelines.Schemas;
 /// <summary>One exported contract: its file under <c>contracts/</c> and the record it is generated from.</summary>
 public sealed record ContractSchema(string Path, Type Type, string Title)
 {
-    public string Id => $"https://ume-rag.local/contracts/{Path}";
+    public string Id => $"https://kalla.local/contracts/{Path}";
 
     public JsonObject Export() => ContractSchemaExporter.Export(Type, Id, Title);
 }
@@ -20,7 +20,7 @@ public sealed record ContractSchema(string Path, Type Type, string Title)
 /// The worker contracts of P1a (P1 README §3 item 4, hand-off J3) and P1b (P1b README §3 item 2, hand-off L1; additive to
 /// J3). The records are the source; each file in
 /// <c>contracts/</c> is the record's export, and <c>WorkerContractTests</c> fails when a file and its record differ
-/// (<c>UME_RAG_UPDATE_CONTRACTS=1</c> rewrites them).
+/// (<c>KALLA_UPDATE_CONTRACTS=1</c> rewrites them).
 /// </summary>
 public static class ContractSchemas
 {

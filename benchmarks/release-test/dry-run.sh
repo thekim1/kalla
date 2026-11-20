@@ -46,7 +46,7 @@ trap cleanup EXIT
 
 echo "== building FakeGateway"
 dotnet build "$root/src/Kalla.FakeGateway" -c Release --nologo -v quiet -o "$work/fake"
-head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n' | sed 's/^/ume-rag-dry-run-/' > "$work/key"
+head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n' | sed 's/^/kalla-dry-run-/' > "$work/key"
 
 echo "== starting FakeGateway on 127.0.0.1:$port (FirstTokenMs=400, TokenIntervalMs=25, JitterPercent=30, 200 words)"
 FakeGateway__Keys__Eu="$(cat "$work/key")" \

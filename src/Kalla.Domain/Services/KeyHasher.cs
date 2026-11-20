@@ -10,7 +10,7 @@ public sealed record GeneratedKey(string PlainText, string Prefix, string Hash, 
 /// Generates and verifies keys, adapted from the gateway's <c>VirtualKeyHasher</c> (identity design §6.1). Format:
 /// <c>kalla-sk-</c> (secret) or <c>kalla-pk-</c> (public widget key) + 43 base62 chars (~256 bits). Stored as
 /// HMAC-SHA256(pepper, key) with Källa's own pepper, so a database leak alone cannot authenticate and neither system
-/// accepts the other's keys. Keys issued before the rename to Källa (<c>ume-rag-sk-</c>, <c>ume-rag-pk-</c>) stay valid: the
+/// accepts the other's keys. Keys issued before the rename to Källa (<c>kalla-sk-</c>, <c>kalla-pk-</c>) stay valid: the
 /// prefix only labels the kind, and the hash is the whole key's (Decisions "Product names").
 /// </summary>
 public sealed class KeyHasher
@@ -19,8 +19,8 @@ public sealed class KeyHasher
     public const string PublicPrefix = "kalla-pk-";
 
     /// <summary>The prefixes of keys issued before the rename, still accepted (never issued).</summary>
-    public const string LegacySecretPrefix = "ume-rag-sk-";
-    public const string LegacyPublicPrefix = "ume-rag-pk-";
+    public const string LegacySecretPrefix = "kalla-sk-";
+    public const string LegacyPublicPrefix = "kalla-pk-";
 
     private const string Base62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     private const int RandomChars = 43;

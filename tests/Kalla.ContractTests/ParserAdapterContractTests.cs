@@ -11,7 +11,7 @@ namespace Kalla.ContractTests;
 /// The processing stages' parser adapters against the parser image (processing design §2, §10, §17): <c>detect</c>'s
 /// inspector plans a real PDF, the NER client reports readiness and finds names, and the NER name targets of §17
 /// (recall ≥ 0.85, precision ≥ 0.80 at <c>Settings.NerMinScore</c> 0.80) on <c>tests/fixtures/pii/ner-names.jsonl</c>.
-/// Skips unless <c>UME_RAG_TEST_PARSER_IMAGE</c> is set.
+/// Skips unless <c>KALLA_TEST_PARSER_IMAGE</c> is set.
 /// </summary>
 [Collection(ParserImageTests.Name)]
 public sealed class ParserAdapterContractTests(ParserContainer parser)

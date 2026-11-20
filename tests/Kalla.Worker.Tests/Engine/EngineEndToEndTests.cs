@@ -19,7 +19,7 @@ public sealed class EngineEndToEndTests(RagDatabaseFixture database, FakeGateway
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-engine-blobs-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-engine-blobs-");
 
     public async ValueTask InitializeAsync() => await database.ResetAsync();
 

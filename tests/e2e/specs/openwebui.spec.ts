@@ -3,11 +3,11 @@ import { randomBytes } from 'node:crypto'
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { apiUrl, devClientKey, eventually, fixtureSiteUrl, visibleSoon } from '../helpers'
 
-// Open WebUI at the pinned tag against rag-api (to-verify 47, 50, 134 and 165; chat design §3.1, §4.2–§4.3, §9.3, §11.4):
+// Open WebUI at the pinned tag against kalla-api (to-verify 47, 50, 134 and 165; chat design §3.1, §4.2–§4.3, §9.3, §11.4):
 // the assistant's description in the model selector, citation chips and their links, Open WebUI's message ids on every
-// completion and regeneration, no task request (title, tags, follow-ups) reaching a model, and Stop closing rag-api's
+// completion and regeneration, no task request (title, tags, follow-ups) reaching a model, and Stop closing kalla-api's
 // stream. Runs on the E2E stack after the pilot journey, which publishes the assistants it chats with; the stack's Open
-// WebUI has local accounts, so the spec signs up one of its own. rag-api's record is read from its database through the
+// WebUI has local accounts, so the spec signs up one of its own. kalla-api's record is read from its database through the
 // Postgres container (its password stays inside the container). Stop needs an answer that streams for several seconds:
 // start the stack with FakeGateway__Latency__TokenIntervalMs=80 and FakeGateway__Latency__AnswerWords=150 (about 12 s).
 
@@ -20,7 +20,7 @@ const defaultCapabilities = { builtin_tools: false }
 type RagModel = { id: string; name: string; info?: { meta?: { description?: string } } }
 type OwuiMessage = { id: string; role: string; parentId: string | null; done?: boolean; content: string }
 
-/** rag-api's database, as `psql -At` rows split on `|`, run in the stack's Postgres container (the AppHost's `postgres-…`). */
+/** kalla-api's database, as `psql -At` rows split on `|`, run in the stack's Postgres container (the AppHost's `postgres-…`). */
 function ragSql(sql: string): string[][] {
   const container = execFileSync('docker', ['ps', '--filter', 'name=^postgres-', '--filter', 'label=com.microsoft.developer.usvc-dev.build', '--format', '{{.Names}}'],
     { encoding: 'utf8' }).trim().split('\n')[0]
@@ -38,7 +38,7 @@ function clientCounters(): { turns: number; answerCalls: number } {
   return { turns: Number(turns), answerCalls: Number(answerCalls) }
 }
 
-/** rag-api's messages of an Open WebUI chat: role, Open WebUI's message id and outcome. */
+/** kalla-api's messages of an Open WebUI chat: role, Open WebUI's message id and outcome. */
 function ragMessages(chatId: string): { role: string; external: string; outcome: string }[] {
   expect(chatId).toMatch(/^[0-9a-f-]{36}$/)
   return ragSql(`
@@ -100,14 +100,14 @@ test.beforeAll(async ({ request }) => {
   const listed = (await models.json()).data as RagModel[]
   // The dev seed's Demo-assistent (DemoSeeder) answers from uploads; the checks below need the pilot's, which cites the fixture website.
   const pilot = listed.filter(m => m.id !== 'demo-assistent')
-  expect(pilot.length, 'rag-api lists the pilot\'s assistant to the dev client: run the pilot project first').toBeGreaterThan(0)
+  expect(pilot.length, 'kalla-api lists the pilot\'s assistant to the dev client: run the pilot project first').toBeGreaterThan(0)
   assistant = pilot[0]
   token = await signUp(request)
 })
 
 test('165: the assistant\'s info.meta.description survives the model merge and shows in the model selector', async ({ page, request }) => {
   const description = assistant.info?.meta?.description
-  expect(description, 'rag-api sends info.meta.description (chat design §3.1)').toBeTruthy()
+  expect(description, 'kalla-api sends info.meta.description (chat design §3.1)').toBeTruthy()
 
   // Open WebUI's merged model list: our description as sent, and the capabilities exactly the default metadata's.
   const response = await request.get(`${openWebUiUrl}/api/models`, { headers: { Authorization: `Bearer ${token}` } })
@@ -200,12 +200,12 @@ test('47, 50, 134: citation chips and links, message ids on every completion and
   expect(owuiAnswers).toHaveLength(3)
   expect(owuiQuestions).toHaveLength(2)
 
-  // rag-api's record of the chat, once the cancelled turn is written (the writer flushes in the background).
-  await eventually(async () => ragMessages(chatId).some(m => m.external === stopped.id && m.outcome !== ''), 'rag-api records the stopped turn', 60_000)
+  // kalla-api's record of the chat, once the cancelled turn is written (the writer flushes in the background).
+  await eventually(async () => ragMessages(chatId).some(m => m.external === stopped.id && m.outcome !== ''), 'kalla-api records the stopped turn', 60_000)
   const rag = ragMessages(chatId)
-  console.log(`50/47: rag-api messages: ${JSON.stringify(rag)}`)
+  console.log(`50/47: kalla-api messages: ${JSON.stringify(rag)}`)
 
-  await test.step('50: {{MESSAGE_ID}} reached rag-api on both completions and the regeneration', async () => {
+  await test.step('50: {{MESSAGE_ID}} reached kalla-api on both completions and the regeneration', async () => {
     const ragAnswers = rag.filter(m => m.role === 'assistant')
     expect(ragAnswers.map(m => m.external).sort()).toEqual(owuiAnswers.map(m => m.id).sort())
     // {{USER_MESSAGE_ID}} too, and the regeneration's user message is not stored twice (chat design §11.4).
@@ -213,11 +213,11 @@ test('47, 50, 134: citation chips and links, message ids on every completion and
     expect(ragQuestions.map(m => m.external).sort()).toEqual(owuiQuestions.map(m => m.id).sort())
   })
 
-  await test.step('47: Stop closed the stream to rag-api, which recorded the turn as cancelled', async () => {
+  await test.step('47: Stop closed the stream to kalla-api, which recorded the turn as cancelled', async () => {
     expect(rag.find(m => m.external === stopped.id)!.outcome).toBe('cancelled')
   })
 
-  await test.step('134: rag-api received three turns and made three answer calls, so no task request reached a model', async () => {
+  await test.step('134: kalla-api received three turns and made three answer calls, so no task request reached a model', async () => {
     const after = clientCounters()
     console.log(`134: turns ${before.turns} → ${after.turns}, answer calls ${before.answerCalls} → ${after.answerCalls}`)
     expect(after.turns - before.turns).toBe(3)

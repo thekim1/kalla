@@ -7,7 +7,7 @@ using Kalla.TestKit;
 namespace Kalla.Api.Tests;
 
 /// <summary>
-/// The gateway's address is a secret (AGENTS.md; issue #232): rag-api, rag-admin and the migration service do not log
+/// The gateway's address is a secret (AGENTS.md; issue #232): kalla-api, kalla-admin and the migration service do not log
 /// HttpClient requests at Information, and outgoing spans carry no host, port or query.
 /// </summary>
 public sealed class GatewayAddressTelemetryTests

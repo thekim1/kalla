@@ -13,7 +13,7 @@ namespace Kalla.Worker.Tests;
 /// database (Parse and Describe, nothing runs): it must prepare, and the result columns of each statement that returns rows
 /// (name and Postgres type, in order) must equal <c>sql-shapes.json</c> next to this file, the shapes the readers were
 /// written against. A changed shape fails here; check the statement's reader, then regenerate the file with
-/// <c>UME_RAG_UPDATE_CONTRACTS=1</c> and commit it.
+/// <c>KALLA_UPDATE_CONTRACTS=1</c> and commit it.
 /// </summary>
 [Collection(RagDatabaseGroup1.Name)]
 public sealed class SqlSchemaContractTests(RagDatabaseFixture database)
@@ -65,13 +65,13 @@ public sealed class SqlSchemaContractTests(RagDatabaseFixture database)
 
         failures.ShouldBeEmpty();
         var json = Render(shapes);
-        if (Environment.GetEnvironmentVariable("UME_RAG_UPDATE_CONTRACTS") == "1")
+        if (Environment.GetEnvironmentVariable("KALLA_UPDATE_CONTRACTS") == "1")
         {
             await File.WriteAllTextAsync(ShapesFile, json, Ct);
         }
 
         (await File.ReadAllTextAsync(ShapesFile, Ct)).ReplaceLineEndings("\n").ShouldBe(json,
-            "A statement's result columns changed: check its reader, then run with UME_RAG_UPDATE_CONTRACTS=1 to regenerate.");
+            "A statement's result columns changed: check its reader, then run with KALLA_UPDATE_CONTRACTS=1 to regenerate.");
     }
 
     /// <summary>The result columns (<c>name type</c>) of <paramref name="sql"/>, described without running it.</summary>

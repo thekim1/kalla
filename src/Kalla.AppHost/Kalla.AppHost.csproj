@@ -2,7 +2,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <AspireUseCliBundle>true</AspireUseCliBundle>
-    <UserSecretsId>ume-rag-apphost-dev</UserSecretsId>
+    <UserSecretsId>kalla-apphost-dev</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting.Docker" />

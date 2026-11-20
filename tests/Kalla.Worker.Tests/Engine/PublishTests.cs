@@ -27,7 +27,7 @@ public sealed class PublishTests(RagDatabaseFixture database, FakeGatewayFactory
     // The eval class stays off, so the publish reports stay queued where the tests can count them.
     private static readonly Dictionary<string, string?> NoEval = new() { ["Worker:Classes"] = "preview,command,sync,fetch,parse,embed" };
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-publish-blobs-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-publish-blobs-");
 
     // Unique per test run: the embedding cache and the database are shared.
     private readonly string _tag = Guid.NewGuid().ToString("N");

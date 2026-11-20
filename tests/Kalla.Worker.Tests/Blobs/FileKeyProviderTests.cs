@@ -8,7 +8,7 @@ public sealed class FileKeyProviderTests : IDisposable
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private readonly DirectoryInfo _keys = Directory.CreateTempSubdirectory("ume-rag-keys-unit-");
+    private readonly DirectoryInfo _keys = Directory.CreateTempSubdirectory("kalla-keys-unit-");
 
     public void Dispose() => _keys.Delete(recursive: true);
 

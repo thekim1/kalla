@@ -26,7 +26,7 @@ namespace Kalla.Api.Tests;
 public sealed class DownloadIntegrityTests(KnowledgeFixture db) : IClassFixture<KnowledgeFixture>, IDisposable
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
-    private readonly string _root = Directory.CreateTempSubdirectory("ume-rag-integrity-").FullName;
+    private readonly string _root = Directory.CreateTempSubdirectory("kalla-integrity-").FullName;
 
     public void Dispose() => Directory.Delete(_root, recursive: true);
 

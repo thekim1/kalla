@@ -32,7 +32,7 @@ public sealed class EngineCrawlTests(RagDatabaseFixture database, FakeGatewayFac
     private static readonly string LongText = string.Concat(Enumerable.Repeat(
         "Bygglov krävs för nya byggnader, tillbyggnader och vissa ändringar av fasaden. Handläggaren granskar ritningar och situationsplan. ", 40));
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-engine-blobs-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-engine-blobs-");
     private readonly ConcurrentDictionary<string, int> _hits = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, int> _status = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, bool> _softMissing = new(StringComparer.Ordinal);

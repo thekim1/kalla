@@ -23,7 +23,7 @@ namespace Kalla.AdminApi.Tests;
 /// <summary>A ragdb with the production roles for the admin API's database tests (one per admin-db-N collection).</summary>
 public sealed class AdminDatabaseFixture : RagDatabase, IAsyncLifetime
 {
-    /// <summary>The admin API on this database as <c>ume_rag_admin</c>, with a placeholder identity provider.</summary>
+    /// <summary>The admin API on this database as <c>kalla_admin</c>, with a placeholder identity provider.</summary>
     public WebApplicationFactory<Program> Factory() => new WebApplicationFactory<Program>().WithWebHostBuilder(web =>
     {
         web.UseEnvironment("Development");
@@ -180,7 +180,7 @@ public sealed class AdminDatabaseGroup8 : ICollectionFixture<AdminDatabaseFixtur
 /// <summary>
 /// Server-side admin sessions (signing out ends every copy of the cookie) and the absolute session limit. Copied from the
 /// gateway's <c>AdminSessionTests</c>; the store is <see cref="PostgresAdminSessionStore"/> on <c>config."AdminSessions"</c>
-/// as <c>ume_rag_admin</c> instead of the gateway's in-memory one (to-verify #163).
+/// as <c>kalla_admin</c> instead of the gateway's in-memory one (to-verify #163).
 /// </summary>
 [Collection(AdminDatabaseGroup2.Name)]
 public sealed class AdminSessionTests(AdminDatabaseFixture database)

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ume-rag.local/contracts/jobs/v1/command.clear-pii-flag.result.schema.json",
+  "$id": "https://kalla.local/contracts/jobs/v1/command.clear-pii-flag.result.schema.json",
   "title": "clear-pii-flag command result",
   "type": "object",
   "properties": {

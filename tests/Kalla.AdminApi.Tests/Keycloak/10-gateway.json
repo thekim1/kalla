@@ -1,5 +1,5 @@
 {
-  "realm": "ume",
+  "realm": "$(env:FORS_KEYCLOAK_REALM)",
   "enabled": true,
   "displayName": "Stand-in for the gateway's realm/10-gateway.json (RealmAdditionsTests)",
   "sslRequired": "external",
@@ -161,7 +161,7 @@
   },
   "clients": [
     {
-      "clientId": "ume-admin",
+      "clientId": "fors-admin",
       "name": "Stand-in for the gateway's admin client",
       "enabled": true,
       "protocol": "openid-connect",
@@ -225,7 +225,7 @@
   ],
   "scopeMappings": [
     {
-      "client": "ume-admin",
+      "client": "fors-admin",
       "roles": [
         "gateway-admin",
         "department-admin",

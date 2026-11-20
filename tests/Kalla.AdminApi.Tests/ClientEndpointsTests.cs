@@ -24,7 +24,7 @@ namespace Kalla.AdminApi.Tests;
 /// The clients page's API (admin design §5.9): an Open WebUI client's feedback retention (chat design §13.3, #343), no chat
 /// history at <c>sensitive</c> as a field error, a client created with its first key in one transaction, the list's active keys
 /// and the client's assistants; §5.9.1: the assistants a client offers set with it and from its side, the keys' last use, and
-/// rag-api's address for "How to connect"; §4.5: a changed ceiling or history re-checks the assistants the client offers (#700), with
+/// kalla-api's address for "How to connect"; §4.5: a changed ceiling or history re-checks the assistants the client offers (#700), with
 /// the gateway's lists fetched once per save and outside the config version lock (§4.4, #696).
 /// </summary>
 [Collection(AdminDatabaseGroup7.Name)]
@@ -141,7 +141,7 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database, ClientEn
         {
             var stored = await db.Keys.AsNoTracking().SingleAsync(k => k.ClientId == clientId, Ct);
             stored.Id.ShouldBe(keyId);
-            new KeyHasher(Encoding.UTF8.GetBytes(Pepper)).Verify(secret, stored.KeyHash).ShouldBeTrue(); // what rag-api checks
+            new KeyHasher(Encoding.UTF8.GetBytes(Pepper)).Verify(secret, stored.KeyHash).ShouldBeTrue(); // what kalla-api checks
             stored.EncryptedSecret.ShouldNotBeNull();
 
             // Two audit entries of the one write: the client's and the key's (with the team's department), never the secret.
@@ -380,7 +380,7 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database, ClientEn
     [Fact]
     public async Task The_deployments_own_client_shows_as_managed_and_its_keys_and_kind_are_not_changed_here()
     {
-        // Identity §5.2, M-17 C4: rag-migrate keeps the deployment's Open WebUI client and its one key. Its settings can be
+        // Identity §5.2, M-17 C4: kalla-migrate keeps the deployment's Open WebUI client and its one key. Its settings can be
         // edited; its kind and name, and making, changing, rotating or revoking its keys, are refused with client_managed_by_deployment.
         var code = "M" + Random.Shared.Next(100_000, 999_999);
         Guid clientId, keyId;
@@ -425,7 +425,7 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database, ClientEn
         await Refused(await admin.PostAsJsonAsync($"/api/keys/{keyId}/rotate", new { mode = "RevokeImmediately" }, Ct));
         await Refused(await admin.PostAsync($"/api/keys/{keyId}/revoke", null, Ct));
 
-        // Its settings are the admin's; its kind and its name, by which rag-migrate finds it (#712), are the deployment's.
+        // Its settings are the admin's; its kind and its name, by which kalla-migrate finds it (#712), are the deployment's.
         var name = client.GetProperty("name").GetString()!;
         var edited = await Ok(await admin.PutAsJsonAsync($"/api/clients/{clientId}", new
         {
@@ -446,7 +446,7 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database, ClientEn
         kind.GetProperty("errorCodes").GetProperty("kind")[0].GetProperty("code").GetString().ShouldBe(AdminErrorCodes.ClientManagedByDeployment.Code);
     }
 
-    private const string AdminKey = "fake-eu-key-client-checks-0123456"; // rag-admin's credential key
+    private const string AdminKey = "fake-eu-key-client-checks-0123456"; // kalla-admin's credential key
     private const string Listed = "fors/chat-eu"; // the FakeGateway serves it at Eu
 
     /// <summary>

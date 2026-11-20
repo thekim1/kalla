@@ -43,7 +43,7 @@ public sealed class HnswIndexHealthTests(RagDatabaseFixture database) : IAsyncLi
     {
         await database.ResetAsync();
         // The worker role's MAINTAIN on content."Chunks" (data-model §1.2), which the rebuild needs.
-        await Sql.ExecuteAsync(database.Connection(null), """GRANT MAINTAIN ON content."Chunks" TO ume_rag_worker""");
+        await Sql.ExecuteAsync(database.Connection(null), """GRANT MAINTAIN ON content."Chunks" TO kalla_worker""");
         _writer = new ContentFixtureWriter(database.Connection(RagDatabase.Worker), database.Connection(RagDatabase.Admin));
         _dataSource = RetrievalDataSource.Create(database.Connection(RagDatabase.Worker));
         await using var db = TestPostgres.Context(database.Connection(null));
@@ -257,8 +257,8 @@ public sealed class HnswIndexHealthTests(RagDatabaseFixture database) : IAsyncLi
     [Fact]
     public void The_rebuild_connection_is_ragdb_maintenance_else_ragdb_and_unpooled()
     {
-        const string ragdb = "Host=db;Database=ragdb;Username=ume_rag_worker;Application Name=pooled";
-        const string maintenance = "Host=db-direct;Database=ragdb;Username=ume_rag_worker;Application Name=maintenance";
+        const string ragdb = "Host=db;Database=ragdb;Username=kalla_worker;Application Name=pooled";
+        const string maintenance = "Host=db-direct;Database=ragdb;Username=kalla_worker;Application Name=maintenance";
 
         var both = new NpgsqlConnectionStringBuilder(HnswIndexHealth.ConnectionString(Configuration(ragdb, maintenance)));
         both.Host.ShouldBe("db-direct");
@@ -390,7 +390,7 @@ public sealed class HnswIndexHealthTests(RagDatabaseFixture database) : IAsyncLi
             SELECT concat_ws('|', "Actor", "Action", "EntityType", "Service", "Details" ->> 'index', "Details" ->> 'trigger', "Details" ->> 'recallAfter')
             FROM audit."AuditLog" WHERE "EntityId" = $1
             """, profile.ToString("D"));
-        audit.ShouldBe($"system:worker|hnsw-reindex|embeddingprofile|rag-worker|{HnswIndexHealth.IndexName(profile)}|nightly|1");
+        audit.ShouldBe($"system:worker|hnsw-reindex|embeddingprofile|kalla-worker|{HnswIndexHealth.IndexName(profile)}|nightly|1");
     }
 
     [Fact]

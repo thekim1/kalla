@@ -437,9 +437,9 @@ public sealed class SetupEndpointsTests(AdminDatabaseFixture database)
 
         // The bootstrap's list: each name once, and only what can be a variable's name.
         await using var factory = database.HeaderFactory().WithWebHostBuilder(web =>
-            web.UseSetting(SetupEndpoints.RetiredVariablesKey, "UME_RAG_CLAMAV_MODE, UME_RAG_EMBEDDING_MODEL,,UME_RAG_CLAMAV_MODE,<b>x</b>,lower_case"));
+            web.UseSetting(SetupEndpoints.RetiredVariablesKey, "KALLA_CLAMAV_MODE, KALLA_EMBEDDING_MODEL,,KALLA_CLAMAV_MODE,<b>x</b>,lower_case"));
         using var platformAdmin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
-        (await NoticesAsync(platformAdmin)).ShouldBe([[DeploymentNoticeCodes.RetiredVariables, "UME_RAG_CLAMAV_MODE", "UME_RAG_EMBEDDING_MODEL"]]);
+        (await NoticesAsync(platformAdmin)).ShouldBe([[DeploymentNoticeCodes.RetiredVariables, "KALLA_CLAMAV_MODE", "KALLA_EMBEDDING_MODEL"]]);
         // Only for a platform admin.
         using var departmentAdmin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, "1000");
         (await NoticesAsync(departmentAdmin)).ShouldBeEmpty();
@@ -456,7 +456,7 @@ public sealed class SetupEndpointsTests(AdminDatabaseFixture database)
             .Select(e => (e.GetProperty("which").GetString()!, DateOnly.Parse(e.GetProperty("expiresOn").GetString()!, System.Globalization.CultureInfo.InvariantCulture))),
     ];
 
-    /// <summary>Stores a wizard client secret for rag-admin and for Open WebUI with the given expiry dates, as setup's <c>complete</c> stores them.</summary>
+    /// <summary>Stores a wizard client secret for kalla-admin and for Open WebUI with the given expiry dates, as setup's <c>complete</c> stores them.</summary>
     private static async Task StoreSecretsAsync(string connection, SettingsSecretProtector protector, DateOnly adminExpires, DateOnly chatExpires)
     {
         var identity = new OidcWizardValues { ClientSecretExpiresOn = adminExpires }.ToJson();

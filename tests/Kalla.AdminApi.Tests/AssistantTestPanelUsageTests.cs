@@ -28,7 +28,7 @@ namespace Kalla.AdminApi.Tests;
 [Collection(AdminDatabaseGroup4.Name)]
 public sealed class AssistantTestPanelUsageTests(AdminDatabaseFixture database)
 {
-    private const string AdminKey = "sk-ume-eu-panel-0000000000000000"; // rag-admin's credential key
+    private const string AdminKey = "sk-ume-eu-panel-0000000000000000"; // kalla-admin's credential key
     private static readonly string[] PanelSteps = ["condense", "condense-long", "query-embed", "rerank", "chat-answer"];
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -175,7 +175,7 @@ public sealed class AssistantTestPanelUsageTests(AdminDatabaseFixture database)
         web.UseSetting("FakeGateway:CredentialKeys:admin:Key", AdminKey);
     });
 
-    /// <summary>The <c>admin-console</c> row of identity §4.1 (as rag-migrate adds it, managed by the deployment), inserted once for the group.</summary>
+    /// <summary>The <c>admin-console</c> row of identity §4.1 (as kalla-migrate adds it, managed by the deployment), inserted once for the group.</summary>
     private static async Task<Guid> AdminConsoleAsync(Infrastructure.Persistence.RagDbContext db)
     {
         var id = await db.Clients.AsNoTracking().Where(c => c.Kind == ClientKinds.Internal && c.Name == AdminTestPanel.ClientName && c.IsManagedByDeployment)

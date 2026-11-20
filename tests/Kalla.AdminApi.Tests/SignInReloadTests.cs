@@ -24,7 +24,7 @@ using Kalla.TestKit;
 namespace Kalla.AdminApi.Tests;
 
 /// <summary>
-/// M-20 S2 (identity design §19, "Effective sign-in values" and "Reload"): rag-admin's OpenID Connect options come from the
+/// M-20 S2 (identity design §19, "Effective sign-in values" and "Reload"): kalla-admin's OpenID Connect options come from the
 /// effective sign-in values and are rebuilt at the next sign-in when they change, in the settings row or in the deployment; it
 /// starts without an authority and refuses a sign-in then. The placeholder provider's metadata follows the authority
 /// (<see cref="AdminDatabaseFixture.StaticConfiguration"/>), so a challenge's address names the authority it was built with.

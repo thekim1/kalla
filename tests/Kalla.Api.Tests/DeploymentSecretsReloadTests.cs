@@ -13,7 +13,7 @@ namespace Kalla.Api.Tests;
 /// </summary>
 public sealed class DeploymentSecretsReloadTests : IDisposable
 {
-    private readonly DirectoryInfo _secrets = Directory.CreateTempSubdirectory("ume-rag-secrets-");
+    private readonly DirectoryInfo _secrets = Directory.CreateTempSubdirectory("kalla-secrets-");
 
     [Fact]
     public async Task A_key_file_added_changed_and_removed_after_the_start_reaches_the_options_monitor()
@@ -40,8 +40,8 @@ public sealed class DeploymentSecretsReloadTests : IDisposable
     [Fact]
     public async Task The_feedback_key_written_into_the_extra_directory_by_rename_reaches_the_options_and_wins()
     {
-        // M-17 C6: rag-openwebui-setup writes ignore.<key>.tmp and renames it; the directory is optional and its keys win.
-        var extra = Directory.CreateTempSubdirectory("ume-rag-feedback-");
+        // M-17 C6: kalla-openwebui-setup writes ignore.<key>.tmp and renames it; the directory is optional and its keys win.
+        var extra = Directory.CreateTempSubdirectory("kalla-feedback-");
         try
         {
             await File.WriteAllTextAsync(Path.Join(_secrets.FullName, "OpenWebUi__AdminApiKey"), "old-key", TestContext.Current.CancellationToken);
@@ -68,8 +68,8 @@ public sealed class DeploymentSecretsReloadTests : IDisposable
     [Fact]
     public async Task The_extra_directory_yields_only_the_feedback_key_and_cannot_override_other_configuration()
     {
-        // #689 review: another uid owns the directory, so a file there must not rewrite rag-api's own settings.
-        var extra = Directory.CreateTempSubdirectory("ume-rag-feedback-");
+        // #689 review: another uid owns the directory, so a file there must not rewrite kalla-api's own settings.
+        var extra = Directory.CreateTempSubdirectory("kalla-feedback-");
         try
         {
             await File.WriteAllTextAsync(Path.Join(_secrets.FullName, "Gateway__Key"), "own-key", TestContext.Current.CancellationToken);

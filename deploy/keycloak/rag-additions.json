@@ -1,5 +1,5 @@
 {
-  "realm": "ume",
+  "realm": "$(env:FORS_KEYCLOAK_REALM)",
   "roles": {
     "realm": [
       {
@@ -29,26 +29,26 @@
   },
   "clients": [
     {
-      "clientId": "ume-rag-admin",
-      "name": "Ume.Rag admin (rag-admin BFF)",
+      "clientId": "kalla-admin",
+      "name": "Ume.Rag admin (kalla-admin BFF)",
       "description": "The admin UI and admin API (identity design 11.2). Redirect URIs: the pilot host (the local AppHost ones are in rag-additions.local.json, for test realms only).",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
-      "secret": "$(env:UME_RAG_OIDC_CLIENT_SECRET)",
+      "secret": "$(env:KALLA_OIDC_CLIENT_SECRET)",
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "fullScopeAllowed": false,
       "redirectUris": [
-        "https://$(env:UME_RAG_ADMIN_PUBLIC_HOST)/signin-oidc"
+        "https://$(env:KALLA_ADMIN_PUBLIC_HOST)/signin-oidc"
       ],
       "webOrigins": [
-        "https://$(env:UME_RAG_ADMIN_PUBLIC_HOST)"
+        "https://$(env:KALLA_ADMIN_PUBLIC_HOST)"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "https://$(env:UME_RAG_ADMIN_PUBLIC_HOST)/signout-callback-oidc"
+        "post.logout.redirect.uris": "https://$(env:KALLA_ADMIN_PUBLIC_HOST)/signout-callback-oidc"
       },
       "protocolMappers": [
         {
@@ -113,21 +113,21 @@
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
-      "secret": "$(env:UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET)",
+      "secret": "$(env:KALLA_OPENWEBUI_OIDC_CLIENT_SECRET)",
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "fullScopeAllowed": false,
       "redirectUris": [
-        "https://$(env:UME_RAG_OPENWEBUI_HOST)/oauth/oidc/login/callback"
+        "https://$(env:KALLA_OPENWEBUI_HOST)/oauth/oidc/login/callback"
       ],
       "webOrigins": [
-        "https://$(env:UME_RAG_OPENWEBUI_HOST)"
+        "https://$(env:KALLA_OPENWEBUI_HOST)"
       ]
     },
     {
-      "clientId": "ume-rag-api",
+      "clientId": "kalla-api",
       "name": "Ume.Rag API (audience)",
       "description": "The audience of RAG API tokens (RagApi:Audience, identity design 7.1). No flow of its own: P1 chat goes through Open WebUI with a key and a user JWT.",
       "enabled": true,
@@ -144,7 +144,7 @@
   ],
   "scopeMappings": [
     {
-      "client": "ume-rag-admin",
+      "client": "kalla-admin",
       "roles": [
         "rag-platform-admin",
         "rag-department-admin",

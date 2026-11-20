@@ -13,7 +13,7 @@ namespace Kalla.ContractTests.Blobs;
 /// </summary>
 public sealed class FileSystemBlobStoreTests : BlobStoreContractTests, IDisposable
 {
-    private readonly string _root = Directory.CreateTempSubdirectory("ume-rag-blobs-").FullName;
+    private readonly string _root = Directory.CreateTempSubdirectory("kalla-blobs-").FullName;
     private readonly FileSystemBlobStore _store;
 
     public FileSystemBlobStoreTests() => _store = Create(_root);
@@ -72,7 +72,7 @@ public sealed class FileSystemBlobStoreTests : BlobStoreContractTests, IDisposab
     public async Task A_symbolic_link_below_the_root_is_refused()
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "Symbolic links need privileges on Windows.");
-        var outside = Directory.CreateTempSubdirectory("ume-rag-outside-").FullName;
+        var outside = Directory.CreateTempSubdirectory("kalla-outside-").FullName;
         try
         {
             await File.WriteAllBytesAsync(Path.Join(outside, "secret"), [42], Ct);

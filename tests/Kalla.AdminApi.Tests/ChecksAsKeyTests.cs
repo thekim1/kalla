@@ -343,7 +343,7 @@ public sealed class ChecksAsKeyTests(AdminDatabaseFixture database, ChecksAsKeyT
     [Fact]
     public async Task A_published_assistants_key_cannot_be_cleared_once_the_gateway_acts_as_keys()
     {
-        // #618 review: clearing the key would put the live assistant on rag-api's credential key, outside its department's budget.
+        // #618 review: clearing the key would put the live assistant on kalla-api's credential key, outside its department's budget.
         var seed = await SeedAsync();
         var factory = await SharedAsync();
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);

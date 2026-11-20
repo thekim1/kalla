@@ -27,7 +27,7 @@ public sealed class ParseSliceTests(RagDatabaseFixture database, FakeGatewayFact
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-parse-slices-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-parse-slices-");
     private readonly byte[] _pdf = Encoding.ASCII.GetBytes("%PDF-1.7\n% " + Guid.NewGuid().ToString("N") + "\n%%EOF\n");
 
     public async ValueTask InitializeAsync() => await database.ResetAsync();

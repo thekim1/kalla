@@ -130,7 +130,7 @@ public sealed class AdminContractTests
     private static readonly string ErrorCodesFile = TestPostgres.RepositoryFile(Path.Combine("contracts", "admin", "v1", "error-codes.json"));
 
     /// <summary>
-    /// The export, generated from <see cref="AdminErrorCodes"/>. With <c>UME_RAG_UPDATE_CONTRACTS=1</c> the test writes the
+    /// The export, generated from <see cref="AdminErrorCodes"/>. With <c>KALLA_UPDATE_CONTRACTS=1</c> the test writes the
     /// file instead of comparing; commit the result.
     /// </summary>
     [Fact]
@@ -141,12 +141,12 @@ public sealed class AdminContractTests
             version = 1,
             codes = AdminErrorCodes.All.Select(c => new { code = c.Code, status = c.Status, message = c.Message }),
         }, Indented) + "\n";
-        if (Environment.GetEnvironmentVariable("UME_RAG_UPDATE_CONTRACTS") == "1")
+        if (Environment.GetEnvironmentVariable("KALLA_UPDATE_CONTRACTS") == "1")
         {
             File.WriteAllText(ErrorCodesFile, json);
         }
 
-        File.ReadAllText(ErrorCodesFile).ReplaceLineEndings("\n").ShouldBe(json, "Run with UME_RAG_UPDATE_CONTRACTS=1 to regenerate.");
+        File.ReadAllText(ErrorCodesFile).ReplaceLineEndings("\n").ShouldBe(json, "Run with KALLA_UPDATE_CONTRACTS=1 to regenerate.");
     }
 
     [Fact]

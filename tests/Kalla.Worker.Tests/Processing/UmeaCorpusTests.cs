@@ -21,7 +21,7 @@ namespace Kalla.Worker.Tests.Processing;
 /// The umea.se regression corpus (connectors design §5.6, §18; processing design §17; P1 README §3 item 8): ≈ 20 pages
 /// saved once from www.umea.se (<c>tests/fixtures/umea/MANIFEST.csv</c>: URL, fetch time, SHA-256, sitemap <c>lastmod</c>)
 /// extracted with the hand-checked umea.se profile (<c>contracts/site-profiles/v1/www.umea.se.profile.json</c>). Each page's
-/// extraction is a golden in <c>tests/fixtures/umea/golden/</c> (<c>UME_RAG_UPDATE_GOLDENS=1</c> rewrites them; read the
+/// extraction is a golden in <c>tests/fixtures/umea/golden/</c> (<c>KALLA_UPDATE_GOLDENS=1</c> rewrites them; read the
 /// diff by hand). The acceptance page (simplification pass §13.2) is checked against its hand-written main text.
 /// </summary>
 public sealed class UmeaCorpusTests

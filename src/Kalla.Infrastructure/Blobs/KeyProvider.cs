@@ -109,7 +109,7 @@ public sealed partial class FileKeyProvider(IOptions<KeyProviderOptions> options
         return Task.FromResult(dataKey);
     }
 
-    private static byte[] Context(string keyName, string version) => Encoding.UTF8.GetBytes($"ume-rag-wrap:{keyName}:{version}");
+    private static byte[] Context(string keyName, string version) => Encoding.UTF8.GetBytes($"kalla-wrap:{keyName}:{version}");
 
     private byte[] MasterKey(string keyName)
     {

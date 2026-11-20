@@ -83,7 +83,7 @@ public sealed class OpenWebUiUserJwtTests(KnowledgeFixture db) : IClassFixture<K
         Check(Jwt(new { sub = "u-123", role = "user", iss = "open-webui", iat = Now.ToUnixTimeSeconds(), exp = long.MaxValue })).Refusal.ShouldBe("user_jwt_invalid");
     }
 
-    /// <summary>rag-api with the fixture's Open WebUI client the deployment's own (<paramref name="managed"/>) or one made by hand.</summary>
+    /// <summary>kalla-api with the fixture's Open WebUI client the deployment's own (<paramref name="managed"/>) or one made by hand.</summary>
     private WebApplicationFactory<Program> Host(bool managed)
     {
         var snapshot = db.Snapshot();

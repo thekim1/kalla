@@ -73,7 +73,7 @@ namespace Kalla.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_SetupTests", x => x.Id);
-                    table.CheckConstraint("CK_SetupTests_Target", "\"Target\" IN ('rag-admin')");
+                    table.CheckConstraint("CK_SetupTests_Target", "\"Target\" IN ('kalla-admin')");
                     table.ForeignKey(
                         name: "FK_SetupTests_SetupSessions_SessionId",
                         column: x => x.SessionId,

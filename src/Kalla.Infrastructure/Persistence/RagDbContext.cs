@@ -150,7 +150,7 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
                 t.HasCheckConstraint("CK_Clients_History", "NOT \"StoresHistory\" OR \"ClassificationCeiling\" <> 'sensitive'");
                 t.HasCheckConstraint("CK_Clients_Mcp", "\"Kind\" <> 'mcp-client' OR \"ClassificationCeiling\" <> 'sensitive'");
             });
-            // One deployment-managed client per kind and name (identity design §4.1, §5.2; #712): the ones rag-migrate keeps, found by both.
+            // One deployment-managed client per kind and name (identity design §4.1, §5.2; #712): the ones kalla-migrate keeps, found by both.
             e.HasIndex(x => new { x.Kind, x.Name }).IsUnique().HasDatabaseName("IX_Clients_Managed").HasFilter("\"IsManagedByDeployment\"");
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.Name).HasMaxLength(200);

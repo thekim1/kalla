@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Kalla.Infrastructure.Persistence.Migrations
 {
     /// <summary>
-    /// Nothing ever wrote or read the column (#792; chat design §11.4). The previous rag-api and rag-admin still map it,
+    /// Nothing ever wrote or read the column (#792; chat design §11.4). The previous kalla-api and kalla-admin still map it,
     /// so the migration stops both until their new version starts (data-model §10).
     /// </summary>
     [StopsServices(ServiceRoles.Api, ServiceRoles.Admin)]

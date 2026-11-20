@@ -64,7 +64,7 @@ public sealed partial class PoolerSafeSqlTests
     [InlineData("SET statement_timeout = '5s'", "session SET")]
     [InlineData("SET SESSION search_path TO content", "session SET")]
     [InlineData("BEGIN; set hnsw.ef_search = 200", "session SET")]
-    [InlineData("\n    SET ROLE ume_rag_admin", "session SET")]
+    [InlineData("\n    SET ROLE kalla_admin", "session SET")]
     [InlineData("SELECT set_config('app.user', $1, false)", "session set_config")]
     [InlineData("SELECT pg_advisory_lock(42)", "session advisory lock")]
     [InlineData("SELECT pg_try_advisory_lock_shared(1, 2)", "session advisory lock")]
@@ -82,7 +82,7 @@ public sealed partial class PoolerSafeSqlTests
     [InlineData("UPDATE content.\"Jobs\" j\n    SET \"State\" = 'running'")]
     [InlineData("UPDATE content.\"Jobs\" SET \"State\" = 'queued'")]
     [InlineData("LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$")]
-    [InlineData("ALTER ROLE ume_rag_worker IN DATABASE ragdb SET statement_timeout = '60s'")]
+    [InlineData("ALTER ROLE kalla_worker IN DATABASE ragdb SET statement_timeout = '60s'")]
     [InlineData("CREATE TEMP TABLE t (id int) ON COMMIT DROP")]
     [InlineData("SELECT pg_notify('rag_jobs', $1)")]
     public void Allowed_forms_pass(string sql) => Findings(sql).ShouldBeEmpty();

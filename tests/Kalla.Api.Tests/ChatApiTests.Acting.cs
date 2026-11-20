@@ -15,7 +15,7 @@ namespace Kalla.Api.Tests;
 /// <summary>
 /// B-42 (#580, gateway phase 2; identity §4.7, cost-attribution §4.1): every model call of a chat turn (condense, query
 /// embedding, rerank, answer, follow-ups) runs as the assistant's gateway key, and the FakeGateway records it under that key;
-/// an assistant without a key runs as rag-api's credential key; a missing echo ends the turn before a byte reaches the client.
+/// an assistant without a key runs as kalla-api's credential key; a missing echo ends the turn before a byte reaches the client.
 /// </summary>
 public sealed partial class ChatApiTests
 {

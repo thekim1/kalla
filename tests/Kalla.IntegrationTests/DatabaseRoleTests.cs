@@ -40,7 +40,7 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
         string[] ingestionContent = [.. IngestionContentTables.Select(t => "content." + t)];
 
         // Serving (P1 item 3, data-model §1.2): the api reads published versions only through the view; the worker reads
-        // no assistant table whole (column grants below); the admin also writes evaluation runs and results (answer-level runs in rag-admin).
+        // no assistant table whole (column grants below); the admin also writes evaluation runs and results (answer-level runs in kalla-admin).
         string[] servingConfig = ["config.Assistants", "config.AssistantVersions", "config.AssistantAudiences", "config.GatewayModels"];
         string[] apiServingConfig = ["config.Assistants", "config.AssistantAudiences", "config.PublishedAssistantVersions", "config.GatewayModels"];
         string[] evaluationWrites = ["content.EvaluationRuns", "content.EvaluationResults"];
@@ -272,7 +272,7 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
         var superuser = database.Connection(null);
         (await Sql.ScalarAsync<string>(superuser, "SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = 'ragdb'")).ShouldBe(Migrator);
         (await Sql.ScalarAsync<long>(superuser, $"""
-            SELECT count(*) FROM pg_roles WHERE rolname LIKE 'ume_rag_%' AND (rolsuper OR rolcreaterole OR rolcreatedb)
+            SELECT count(*) FROM pg_roles WHERE rolname LIKE 'kalla_%' AND (rolsuper OR rolcreaterole OR rolcreatedb)
             """)).ShouldBe(0);
         (await Sql.ScalarAsync<string>(superuser, "SELECT extversion FROM pg_extension WHERE extname = 'vector'")).ShouldNotBeNull();
         foreach (var schema in new[] { "config", "content", "chat", "audit", "public" })
@@ -321,8 +321,8 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
     public async Task The_ddl_role_cannot_change_the_service_roles_caps()
     {
         // So init.sql (bootstrap superuser) sets them, not app-roles.sql (run as the DDL role): see the PR's design deviation.
-        await Sql.ShouldBeDeniedAsync(database.Connection(Migrator), "ALTER ROLE ume_rag_api CONNECTION LIMIT 100");
-        await Sql.ShouldBeDeniedAsync(database.Connection(Migrator), "ALTER ROLE ume_rag_api IN DATABASE ragdb SET statement_timeout = 0");
+        await Sql.ShouldBeDeniedAsync(database.Connection(Migrator), "ALTER ROLE kalla_api CONNECTION LIMIT 100");
+        await Sql.ShouldBeDeniedAsync(database.Connection(Migrator), "ALTER ROLE kalla_api IN DATABASE ragdb SET statement_timeout = 0");
     }
 
     [Fact]

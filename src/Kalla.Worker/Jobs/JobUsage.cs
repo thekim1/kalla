@@ -43,7 +43,7 @@ public interface IGatewayModelPrices
 /// <summary>
 /// <see cref="IGatewayModelPrices"/> over <c>config."GatewayModels"</c> (read grant, data-model §1.2): one read of every
 /// model's prices serves the estimates for <see cref="CacheFor"/>, so an estimated call takes no pool connection of its own,
-/// as rag-api prices from its config snapshot (<see cref="Domain.Access.PolicySnapshot.ModelPrices"/>). A mirror sync
+/// as kalla-api prices from its config snapshot (<see cref="Domain.Access.PolicySnapshot.ModelPrices"/>). A mirror sync
 /// shows in the estimates within that time.
 /// </summary>
 public sealed class PostgresGatewayModelPrices(JobDatabase database, TimeProvider time) : IGatewayModelPrices

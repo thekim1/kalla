@@ -10,7 +10,7 @@ public sealed class PreviewBlobsTests : IDisposable
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("ume-rag-preview-unit-");
+    private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("kalla-preview-unit-");
     private readonly FileSystemBlobStore _live;
 
     public PreviewBlobsTests() => _live = new FileSystemBlobStore(Options.Create(new BlobStoreOptions { Root = _root.FullName }), TimeProvider.System);

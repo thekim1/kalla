@@ -19,15 +19,15 @@ namespace Kalla.Worker.Tests.Evaluation;
 /// of <c>tests/evaluation/smoke</c> as the <c>human</c> layer of the smoke collection (seeded by <see cref="SmokeSet"/> under
 /// its fixed ids, FakeGateway embeddings, <see cref="SmokeSet.RetrievalSettings"/>). For every question the worker's
 /// evaluator (<see cref="EvaluationStore"/> and <see cref="RetrievalEvaluator"/>, variant <c>hybrid</c>, k = 10, no filters)
-/// and <c>POST /v1/retrieve</c> on rag-api in process (an <c>internal</c> client's key, top 10, <c>expand: none</c>, hybrid)
+/// and <c>POST /v1/retrieve</c> on kalla-api in process (an <c>internal</c> client's key, top 10, <c>expand: none</c>, hybrid)
 /// return the same chunk ids in the same order. The embeddings are deterministic, so a difference is wiring (settings,
 /// scope, normalisation, diversity). The design places it in <c>Kalla.Api.Tests</c> (stream B's); it lives here because
-/// this project references both the worker and rag-api.
+/// this project references both the worker and kalla-api.
 /// </summary>
 [Collection(RagDatabaseGroup2.Name)]
 public sealed class EvaluatorApiContractTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-eval-contract-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-eval-contract-");
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

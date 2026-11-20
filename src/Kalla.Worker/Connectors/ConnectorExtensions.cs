@@ -58,7 +58,7 @@ public static class ConnectorExtensions
         builder.Services.TryAddSingleton(sp => new CrawlHttpClient(sp.GetRequiredService<IEgressGuard>()));
         builder.Services.TryAddSingleton<HttpFetcher>();
         builder.Services.TryAddSingleton<RobotsCache>();
-        // The renderer (connectors design §8): one connection to rag-renderer per worker, its slots, cache and per-page fetch.
+        // The renderer (connectors design §8): one connection to kalla-renderer per worker, its slots, cache and per-page fetch.
         builder.Services.TryAddSingleton<HostBudget>();
         builder.Services.TryAddSingleton<RenderMetrics>();
         builder.Services.TryAddSingleton<RenderBlocklist>();

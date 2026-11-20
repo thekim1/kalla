@@ -100,7 +100,7 @@ public sealed class KeyEndpointsTests(AdminDatabaseFixture database)
         await using (var db = TestPostgres.Context(database.Connection(null)))
         {
             var stored = await db.Keys.AsNoTracking().SingleAsync(k => k.Id == id, Ct);
-            new KeyHasher(Encoding.UTF8.GetBytes(Pepper)).Verify(secret, stored.KeyHash).ShouldBeTrue(); // what rag-api checks
+            new KeyHasher(Encoding.UTF8.GetBytes(Pepper)).Verify(secret, stored.KeyHash).ShouldBeTrue(); // what kalla-api checks
             stored.EncryptedSecret.ShouldNotBeNull();
             stored.EncryptedSecret.ShouldNotContain(secret[11..]);
             stored.Scopes.CollectionIds.ShouldBe([mine]);

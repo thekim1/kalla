@@ -9,8 +9,8 @@ namespace Kalla.MigrationService;
 
 /// <summary>
 /// The deployment's own Open WebUI client (identity design §5.2; M-17 C4, Decisions "Deploy configuration"): the deployment
-/// generates an <c>kalla-sk-</c> key (<c>rag-bootstrap</c> in the Portainer stack, <c>init-deployment.sh</c> with Compose,
-/// the AppHost's dev key) and gives it to Open WebUI and, as <c>OpenWebUi:ApiKey</c>, to rag-migrate. This makes sure, on every
+/// generates an <c>kalla-sk-</c> key (<c>kalla-bootstrap</c> in the Portainer stack, <c>init-deployment.sh</c> with Compose,
+/// the AppHost's dev key) and gives it to Open WebUI and, as <c>OpenWebUi:ApiKey</c>, to kalla-migrate. This makes sure, on every
 /// run, that the <c>open-webui</c> client marked <see cref="Client.IsManagedByDeployment"/> under its name exists (found by kind and
 /// name, #712; the name is not editable) and that exactly that key is active on it; any other key of it is revoked (a new key from
 /// the deployment is its rotation). The deployment has one Open WebUI client: a managed one under another name (a development

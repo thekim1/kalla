@@ -4,7 +4,7 @@ using Kalla.TestKit;
 
 namespace Kalla.Api.Tests;
 
-/// <summary>Every service answers the probes and /version (P0 checklist #4); rag-api now needs its database and keys to start.</summary>
+/// <summary>Every service answers the probes and /version (P0 checklist #4); kalla-api now needs its database and keys to start.</summary>
 public sealed class HealthEndpointTests(KnowledgeFixture db) : IClassFixture<KnowledgeFixture>
 {
     [Theory]
@@ -22,7 +22,7 @@ public sealed class HealthEndpointTests(KnowledgeFixture db) : IClassFixture<Kno
     }
 
     /// <summary>
-    /// /version has the camelCase shape of every other service and the gateway, not rag-api's snake_case API naming (#497).
+    /// /version has the camelCase shape of every other service and the gateway, not kalla-api's snake_case API naming (#497).
     /// </summary>
     [Fact]
     public async Task Version_is_camel_case_like_every_service()

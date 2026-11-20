@@ -7,7 +7,7 @@ of it in the admin UI. This page explains each one and how a request is checked.
 
 ## Departments own the content
 
-Departments and their teams come from the AI gateway's organisation. rag-admin reads them every 5 minutes, and
+Departments and their teams come from the AI gateway's organisation. kalla-admin reads them every 5 minutes, and
 *Organisation → Fetch now* reads them at once. Every knowledge base and every assistant belongs to one department,
 with an optional owner team. A department's admins see and change only their own department's objects, and an object
 of another department answers *not found*, as if it did not exist. Platform admins see every department.
@@ -148,9 +148,9 @@ answer) and, when configured, telemetry to your collector.
 
 | Where | Docker volume | What |
 |---|---|---|
-| **PostgreSQL** (`rag-postgres`, with pgvector) | `rag-postgres-data` | Four schemas. `config`: knowledge bases, sources, assistants, apps and keys (as hashes), settings. `content`: each document's metadata, its chunks with their text, search vectors and embeddings, runs, the job queue and the test questions. `chat`: conversation records and statistics. `audit`: the audit log. |
-| **File store** (a directory, `/data/blobs/rag` in the containers) | `rag-blobs` | `raw/`: pages and files as fetched. `parse/` and `stages/`: the parser's and the pipeline's outputs. `uploads/`: uploaded files. `quarantine/`: files the virus scan stopped. Short-lived previews and temporary files. |
-| **Open WebUI** (optional) | `rag-openwebui-data` | Open WebUI's own database, with its copies of the chats (below). |
+| **PostgreSQL** (`kalla-postgres`, with pgvector) | `kalla-postgres-data` | Four schemas. `config`: knowledge bases, sources, assistants, apps and keys (as hashes), settings. `content`: each document's metadata, its chunks with their text, search vectors and embeddings, runs, the job queue and the test questions. `chat`: conversation records and statistics. `audit`: the audit log. |
+| **File store** (a directory, `/data/blobs/rag` in the containers) | `kalla-blobs` | `raw/`: pages and files as fetched. `parse/` and `stages/`: the parser's and the pipeline's outputs. `uploads/`: uploaded files. `quarantine/`: files the virus scan stopped. Short-lived previews and temporary files. |
+| **Open WebUI** (optional) | `kalla-openwebui-data` | Open WebUI's own database, with its copies of the chats (below). |
 
 **How it is protected.**
 - The volumes must be on an encrypted disk ([production setup](production-setup.md)).
@@ -204,10 +204,10 @@ and no backup script includes them, so Open WebUI's own settings decide how long
 
 | What | Where | Kept |
 |---|---|---|
-| **Service logs** (rag-api, rag-admin, rag-worker and the others) | JSON on each container's standard output: `docker compose logs <service>`. With `UME_OTEL_ENDPOINT` set, also sent with metrics and traces to your OpenTelemetry collector ([production setup](production-setup.md), *Telemetry*); traces are sampled, a tenth of the requests by default. | As Docker's log driver keeps them on the host (set rotation in `/etc/docker/daemon.json`), or as the collector's backend keeps them |
+| **Service logs** (kalla-api, kalla-admin, kalla-worker and the others) | JSON on each container's standard output: `docker compose logs <service>`. With `FORS_OTEL_ENDPOINT` set, also sent with metrics and traces to your OpenTelemetry collector ([production setup](production-setup.md), *Telemetry*); traces are sampled, a tenth of the requests by default. | As Docker's log driver keeps them on the host (set rotation in `/etc/docker/daemon.json`), or as the collector's backend keeps them |
 | **Security events** (refused keys and sign-ins, access denials, malware and personal-data findings, admin changes) | Log records under the category `Kalla.Security`, which the collector sends on to the SIEM ([security events](security-events.md)) | As the SIEM keeps them |
 | **Audit log** (every change made in the admin UI or the admin API, with who made it and the values before and after) | The database, schema `audit`; *Audit log* in the admin UI | 2 years by default (`Settings.AuditRetentionDays`, at least 90 days) |
-| **Backup metrics** | Prometheus text files in `/var/lib/ume-rag/` on the host | Overwritten at each run |
+| **Backup metrics** | Prometheus text files in `/var/lib/kalla/` on the host | Overwritten at each run |
 
 No log, event or audit entry ever holds key material, tokens, passwords, questions, answers, document text, e-mail
 addresses or display names. They name things by id instead: the key's id and prefix, the app's id, the user's id in

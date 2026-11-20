@@ -36,7 +36,7 @@ public sealed class ChatCoreTests
     [Fact]
     public void The_parsed_request_outlives_its_disposed_document()
     {
-        // #712: rag-api disposes the body's JsonDocument right after parsing, so nothing parsed may point into it.
+        // #712: kalla-api disposes the body's JsonDocument right after parsing, so nothing parsed may point into it.
         ParsedChat parsed;
         using (var document = JsonDocument.Parse("""
             {"model":"bygg","stream":true,"kalla":{"related_documents":2,"follow_ups":1},

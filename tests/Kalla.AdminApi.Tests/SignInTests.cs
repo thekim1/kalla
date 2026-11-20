@@ -154,7 +154,7 @@ public sealed class BffTests(AdminDatabaseFixture database)
     [InlineData("true", true)]
     public async Task The_user_document_says_whether_the_deployment_runs_Open_WebUI(string? enabled, bool expected)
     {
-        // OpenWebUi:Enabled, which the openwebui profile sets on rag-admin; without it the admin UI leaves Open WebUI out.
+        // OpenWebUi:Enabled, which the openwebui profile sets on kalla-admin; without it the admin UI leaves Open WebUI out.
         await using var factory = enabled is null
             ? database.HeaderFactory()
             : database.HeaderFactory().WithWebHostBuilder(web => web.UseSetting(Infrastructure.Security.OpenWebUiSignIn.EnabledKey, enabled));
@@ -166,7 +166,7 @@ public sealed class BffTests(AdminDatabaseFixture database)
     }
 
     /// <summary>
-    /// The user document's <c>organisationName</c> with rag-admin's context read from a FakeGateway whose admin console names
+    /// The user document's <c>organisationName</c> with kalla-admin's context read from a FakeGateway whose admin console names
     /// <paramref name="organisationName"/> (M-17 C12), with or without the feature <c>organisation-name</c>.
     /// </summary>
     private async Task<JsonElement> OrganisationNameFromContextAsync(string organisationName, bool feature = true)

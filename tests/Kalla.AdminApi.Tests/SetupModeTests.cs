@@ -290,7 +290,7 @@ public sealed partial class SetupModeTests(AdminDatabaseFixture database) : IAsy
     [Fact]
     public async Task A_missing_settings_row_keeps_setup_closed_says_so_and_is_not_created()
     {
-        // rag-migrate seeds the row, so the first run is a row without SetupCompletedAt; a missing row is a fault and stays closed.
+        // kalla-migrate seeds the row, so the first run is a row without SetupCompletedAt; a missing row is a fault and stays closed.
         await using (var db = TestPostgres.Context(Admin))
         {
             await db.Settings.ExecuteDeleteAsync(Ct);

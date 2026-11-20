@@ -147,7 +147,7 @@ public sealed class IndexWriterWriteOnceTests(RagDatabaseFixture database) : IAs
     }
 
     /// <summary>
-    /// The done-when measurement (#501): a re-crawl that changes every one of 200 documents (<c>UME_RAG_MEASURE_DOCUMENTS</c>)
+    /// The done-when measurement (#501): a re-crawl that changes every one of 200 documents (<c>KALLA_MEASURE_DOCUMENTS</c>)
     /// of 20 chunks, alternately through rule 2 (invisible, then swapped) and rule 2a, twice each. WAL bytes are cluster-wide, so
     /// run it alone: <c>dotnet test --project tests/Kalla.Worker.Tests -- --filter-method "*Rewrite_cost*" --explicit only
     /// --output Detailed</c>.
@@ -155,7 +155,7 @@ public sealed class IndexWriterWriteOnceTests(RagDatabaseFixture database) : IAs
     [Fact(Explicit = true)]
     public async Task Rewrite_cost_of_a_recrawl_through_rule_2_and_rule_2a()
     {
-        var documents = int.TryParse(Environment.GetEnvironmentVariable("UME_RAG_MEASURE_DOCUMENTS"), out var n) ? n : 200;
+        var documents = int.TryParse(Environment.GetEnvironmentVariable("KALLA_MEASURE_DOCUMENTS"), out var n) ? n : 200;
         const int chunksPerDocument = 20;
         var seed = await EngineKit.SeedUrlListAsync(database, [], Classification.Public);
         var output = TestContext.Current.TestOutputHelper!;

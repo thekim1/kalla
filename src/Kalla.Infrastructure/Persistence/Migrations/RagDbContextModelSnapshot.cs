@@ -3596,7 +3596,7 @@ namespace Kalla.Infrastructure.Persistence.Migrations
 
                     b.ToTable("SetupTests", "config", t =>
                         {
-                            t.HasCheckConstraint("CK_SetupTests_Target", "\"Target\" IN ('rag-admin', 'open-webui')");
+                            t.HasCheckConstraint("CK_SetupTests_Target", "\"Target\" IN ('kalla-admin', 'open-webui')");
                         });
                 });
 

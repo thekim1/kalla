@@ -570,7 +570,7 @@ Models baked (sizes approximate, *to verify* at P0):
 | Garble bigram table | built in-repo from public Swedish/English text | ≈ 50 KB | own |
 
 **Licence inventory**: `src/parser/LICENSES.md` replaces `MODELS.md` and ships in the image at
-`/usr/share/doc/ume-rag-parser/LICENSES.md`. `scripts/licences.py` writes it inside the image's `test-env` stage (the
+`/usr/share/doc/kalla-parser/LICENSES.md`. `scripts/licences.py` writes it inside the image's `test-env` stage (the
 runtime venv plus the dev group; the `test` stage runs pytest on top of it) from the installed `dist-info` metadata of
 the runtime packages (nothing imported; the SPDX `License-Expression` where a package gives one, else its trove
 classifiers), the Debian `copyright` files of installed packages, and the model table above. The file is checked in;
@@ -696,7 +696,7 @@ manifest and scan fixture text for personnummer patterns other than Skatteverket
 | Malicious | zip bomb inside a DOCX; nested-zip "42"-style; PNG with 60 000 × 60 000 dimensions; PDF with `/OpenAction` JavaScript; PDF with an embedded file; PDF with a cyclic xref and deep object nesting; DOCX and ODT with an XXE entity to `file:///etc/passwd` (assert no `root:` in any output); macro-enabled `.docm` (refused) |
 
 Real internal documents used for the OCR acceptance check and benchmarks stay on the test host in an access-limited,
-encrypted directory (`/srv/ume-rag-bench/`), are never committed, and are reported as aggregate metrics only.
+encrypted directory (`/srv/kalla-bench/`), are never committed, and are reported as aggregate metrics only.
 
 ### 15.4 Robustness and fuzzing
 

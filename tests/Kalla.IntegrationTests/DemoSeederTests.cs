@@ -16,7 +16,7 @@ using static Kalla.TestKit.RagDatabase;
 namespace Kalla.IntegrationTests;
 
 /// <summary>
-/// The dev stack's demo content (repo-and-deployment §4.4, #873): on a database without collections rag-migrate creates the
+/// The dev stack's demo content (repo-and-deployment §4.4, #873): on a database without collections kalla-migrate creates the
 /// fake catalog's department, the public example collection with an upload source of the smoke documents (blobs, manifest
 /// and the upload sync, as the admin's commit), and the published Demo-assistent offered to the dev client. A later start
 /// adds the 30 smoke questions once the worker has indexed every expected document; after that it writes nothing. Its own
@@ -27,7 +27,7 @@ public sealed class DemoSeederTests(RagDatabaseFixture database) : IClassFixture
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
     private static string Smoke => Path.GetDirectoryName(TestPostgres.RepositoryFile(Path.Combine("tests", "evaluation", "smoke", "questions.json")))!;
 
-    private readonly DirectoryInfo _blobRoot = Directory.CreateTempSubdirectory("ume-rag-demo-seed-");
+    private readonly DirectoryInfo _blobRoot = Directory.CreateTempSubdirectory("kalla-demo-seed-");
 
     public void Dispose() => _blobRoot.Delete(recursive: true);
 

@@ -6,7 +6,7 @@ using Kalla.TestKit;
 namespace Kalla.AdminApi.Tests;
 
 /// <summary>
-/// The gateway's address is a secret (AGENTS.md, #232, #265): every named HttpClient of rag-admin, called against a refused
+/// The gateway's address is a secret (AGENTS.md, #232, #265): every named HttpClient of kalla-admin, called against a refused
 /// address, leaves no log line with the host, at any level, including Polly's retry telemetry of the standard resilience
 /// handler.
 /// </summary>
@@ -15,7 +15,7 @@ public sealed class ClientAddressLoggingTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    /// <summary>rag-admin's named clients that reach the gateway.</summary>
+    /// <summary>kalla-admin's named clients that reach the gateway.</summary>
     public static TheoryData<string> Clients => new()
     {
         Infrastructure.Gateway.GatewayApi.HttpClientName, Answering.GatewayQueryEmbedder.HttpClientName,

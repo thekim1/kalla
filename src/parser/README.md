@@ -57,8 +57,8 @@ run during the build with no network (`RUN --network=none`), and a failing test 
 job (`.github/workflows/parser.yml`) does the same.
 
 ```bash
-docker build --target test -t ume-rag/parser:test .
-docker run --rm --network none ume-rag/parser:test   # runs them again
+docker build --target test -t kalla/parser:test .
+docker run --rm --network none kalla/parser:test   # runs them again
 ```
 
 ## Measuring
@@ -81,8 +81,8 @@ uv run python -m scripts.compare_paths --urls pdfs.txt --url http://localhost:80
 cases in `tests/fixtures/parser/cases.json`, and compares with the goldens:
 
 ```bash
-docker build -t ume-rag.local/parser:ci .
-UME_RAG_TEST_PARSER_IMAGE=ume-rag.local/parser:ci dotnet test --project ../../tests/Kalla.ContractTests
+docker build -t kalla.local/parser:ci .
+KALLA_TEST_PARSER_IMAGE=kalla.local/parser:ci dotnet test --project ../../tests/Kalla.ContractTests
 ```
 
 The fixtures are synthetic (`MANIFEST.csv`): change them in `scripts/make_fixtures.py` and rerun it. When a
@@ -90,15 +90,15 @@ conversion changes on purpose (a Docling bump, a fast-path change), update the g
 review the diff:
 
 ```bash
-docker run --rm -p 8000:8000 ume-rag.local/parser:ci
+docker run --rm -p 8000:8000 kalla.local/parser:ci
 uv run python -m scripts.update_goldens --url http://localhost:8000
 ```
 
 ## Image
 
 ```bash
-docker build --build-arg REVISION="$(git rev-parse HEAD)" -t ume-rag/parser:dev .
-docker run --rm -p 8000:8000 ume-rag/parser:dev
+docker build --build-arg REVISION="$(git rev-parse HEAD)" -t kalla/parser:dev .
+docker run --rm -p 8000:8000 kalla/parser:dev
 curl -s localhost:8000/health/ready
 ```
 
@@ -136,7 +136,7 @@ export PARSER_MODELS_DIR="$PWD/.models"
 | `NER_PERSON_LABELS` | `PER,PRS` | model labels counted as `person` (mixed labels with them are `person_ambiguous`) |
 | `NER_RECYCLE_REQUESTS` | 5000 | `ner-0` is restarted after this many requests |
 | `NER_IDLE_STOP_S` | 900 | `ner-0` starts on the first `/v1/ner` (answered `not_ready` while it warms) and stops after this long without one; 0 = warm from start |
-| `UME_HEALTHCHECK_URL` | own listener | URL the health check probes |
+| `FORS_HEALTHCHECK_URL` | own listener | URL the health check probes |
 
 ## Updating pins
 

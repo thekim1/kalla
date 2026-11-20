@@ -6,7 +6,7 @@ namespace Kalla.IntegrationTests;
 
 /// <summary>
 /// Pooler-safe SQL (performance pass §3.1, §8; data-model §1.1): the services' SQL keeps no session state, so a
-/// transaction-mode PgBouncer can be put in front of <c>ume_rag_api</c> and <c>ume_rag_worker</c> later without code
+/// transaction-mode PgBouncer can be put in front of <c>kalla_api</c> and <c>kalla_worker</c> later without code
 /// changes. Scans every string literal in <c>src/**/*.cs</c> for the forms PgBouncer's transaction mode does not support.
 /// Migrations and the migration service connect directly (never pooled) and are not scanned.
 /// </summary>
@@ -87,7 +87,7 @@ public sealed partial class PoolerSafeSqlTests
     [InlineData("select 1; set search_path = config")]
     [InlineData("SET SESSION lock_timeout = '1s'")]
     [InlineData("SET search_path TO config, public")]
-    [InlineData("set role ume_rag_admin")]
+    [InlineData("set role kalla_admin")]
     [InlineData("SET TIME ZONE 'UTC'")]
     [InlineData("SET \"app.user\" = 'x'")]
     [InlineData("SELECT set_config('app.user', $1, false)")]

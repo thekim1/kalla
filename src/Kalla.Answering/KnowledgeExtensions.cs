@@ -23,7 +23,7 @@ public sealed class KnowledgeOptions
     /// <summary>Lifetime of a download grant for <c>public</c> and <c>internal</c> (§4.6); <c>sensitive</c> is 1 hour.</summary>
     public TimeSpan DownloadGrantLifetime { get; set; } = TimeSpan.FromDays(7);
 
-    /// <summary>The origin citation download links use (the staff-network address of <c>rag-api</c>); unset: relative links.</summary>
+    /// <summary>The origin citation download links use (the staff-network address of <c>kalla-api</c>); unset: relative links.</summary>
     public Uri? PublicBaseUrl { get; set; }
 
     /// <summary>Content downloads per minute per client address (§3.5); in process per instance in P1.</summary>

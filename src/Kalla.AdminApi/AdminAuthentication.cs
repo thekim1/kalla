@@ -345,8 +345,8 @@ public static partial class AdminAuthentication
 /// </summary>
 public static class AdminCookies
 {
-    public const string Session = "__Host-ume-rag-admin";
-    public const string Antiforgery = "__Host-ume-rag-csrf";
+    public const string Session = "__Host-kalla-admin";
+    public const string Antiforgery = "__Host-kalla-csrf";
 
     /// <summary>The readable antiforgery token; the admin UI's fetch helper sends it back as <c>X-XSRF-TOKEN</c>.</summary>
     public const string XsrfToken = "RAG-XSRF-TOKEN";

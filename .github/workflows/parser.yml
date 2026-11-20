@@ -113,7 +113,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/docker-config"
           echo "DOCKER_CONFIG=$RUNNER_TEMP/docker-config" >> "$GITHUB_ENV"
       - name: Build the image's test target (runs the tests without network)
-        run: docker build --target test -t ume-rag.local/parser-test:ci src/parser
+        run: docker build --target test -t kalla.local/parser-test:ci src/parser
       - name: Disk left
         if: always()
         run: df -h / | tail -1
@@ -139,11 +139,11 @@ jobs:
       - name: Build the parser image
         # Straight into the Docker daemon that Testcontainers uses, from the runner's local layer cache (see parser-image).
         # The name has a registry part with a dot, so Testcontainers does not prefix it with the Docker Hub mirror below.
-        run: docker build -t ume-rag.local/parser:ci --build-arg REVISION=${{ github.sha }} src/parser
+        run: docker build -t kalla.local/parser:ci --build-arg REVISION=${{ github.sha }} src/parser
       - name: Contract tests
         env:
           TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io/
-          UME_RAG_TEST_PARSER_IMAGE: ume-rag.local/parser:ci
+          KALLA_TEST_PARSER_IMAGE: kalla.local/parser:ci
         run: |
           df -h / | tail -1
           dotnet test --project tests/Kalla.ContractTests/Kalla.ContractTests.csproj -c Release

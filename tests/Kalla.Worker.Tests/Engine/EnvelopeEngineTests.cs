@@ -13,7 +13,7 @@ namespace Kalla.Worker.Tests.Engine;
 [Collection(RagDatabaseGroup4.Name)]
 public sealed class EnvelopeEngineTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-envelope-engine-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-envelope-engine-");
 
     public async ValueTask InitializeAsync() => await database.ResetAsync();
 

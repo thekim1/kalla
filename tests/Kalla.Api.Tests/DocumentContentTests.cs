@@ -12,7 +12,7 @@ namespace Kalla.Api.Tests;
 public sealed class DocumentContentTests : IDisposable
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
-    private readonly string _root = Directory.CreateTempSubdirectory("ume-rag-content-").FullName;
+    private readonly string _root = Directory.CreateTempSubdirectory("kalla-content-").FullName;
     private readonly Guid _document = Guid.Parse("0192aaaa-0000-7000-8000-000000000001");
 
     public void Dispose() => Directory.Delete(_root, recursive: true);

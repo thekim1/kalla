@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 # Generates the certificates and secrets of a Kubernetes installation and creates (or updates) its Kubernetes secrets
 # (docs/kubernetes.md). The files come from deploy/portainer/bootstrap.sh, the same script that the Compose and
-# Portainer stacks run as rag-bootstrap (Decisions "One deployment bootstrap"), run here on your machine into
+# Portainer stacks run as kalla-bootstrap (Decisions "One deployment bootstrap"), run here on your machine into
 # deploy/certs and deploy/secrets. Safe to run again: existing secrets are never overwritten, service certificates are
 # re-issued within 30 days of their expiry, and a value left out keeps what the directories hold.
 #
-#   ./deploy/kubernetes/create-secrets.sh --namespace ume-rag --domain example.se \
-#       --gateway-credential-key-file api=rag-api.key --gateway-credential-key-file admin=rag-admin.key \
-#       --gateway-credential-key-file worker=rag-worker.key \
-#       --datastores --backup-target s3://s3.example.se/ume-rag --backup-s3-credentials-file s3.cred [--renderer]
+#   ./deploy/kubernetes/create-secrets.sh --namespace kalla --domain example.se \
+#       --gateway-credential-key-file api=kalla-api.key --gateway-credential-key-file admin=kalla-admin.key \
+#       --gateway-credential-key-file worker=kalla-worker.key \
+#       --datastores --backup-target s3://s3.example.se/kalla --backup-s3-credentials-file s3.cred [--renderer]
 #
 #   --namespace NS     namespace of the overlay (created if missing)
-#   --domain DOMAIN    the base domain: rag-api's and rag-admin's host names default to rag.DOMAIN and rag-admin.DOMAIN
+#   --domain DOMAIN    the base domain: kalla-api's and kalla-admin's host names default to rag.DOMAIN and kalla-admin.DOMAIN
 #   --api-host HOST, --admin-host HOST
-#                      the public host names when they are not the domain's defaults (the admin's defaults to rag-api's
+#                      the public host names when they are not the domain's defaults (the admin's defaults to kalla-api's
 #                      without --domain); they go into the two services' certificates
 #   --gateway-credential-key-file SERVICE=FILE
 #                      SERVICE's credential key of the gateway integration Ume.Rag (api, admin or worker; repeat the
@@ -42,10 +42,10 @@
 #   --generate-only    write the files and create no Kubernetes secret (needs no kubectl)
 #
 # Secrets: ume-rag-<service>-secrets (files the app reads as settings, e.g. ConnectionStrings__ragdb, the gateway
-# credential key Gateway__Key of api, admin and worker, rag-admin's setup secret Setup__Secret and, when sign-in is
+# credential key Gateway__Key of api, admin and worker, kalla-admin's setup secret Setup__Secret and, when sign-in is
 # declared instead of set in the setup wizard, its client secret Oidc__ClientSecret) and
 # ume-rag-<service>-certs (TLS certificate, the CAs it trusts, Data Protection certificate) for api, admin, worker and
-# migrations, ume-rag-parser-certs, and ume-rag-blob-key (the blob master key). The connection strings point at the
+# migrations, kalla-parser-certs, and kalla-blob-key (the blob master key). The connection strings point at the
 # host "postgres" (--postgres-host for your own database) and are written again on every run from
 # <secrets dir>/postgres/<role>_password.
 set -euo pipefail
@@ -91,7 +91,7 @@ command -v openssl >/dev/null || die "openssl is required"
 [ "$generate_only" = 1 ] || [ -n "$ns" ] || die "--namespace is required"
 if [ -n "$domain" ]; then
   [[ "$domain" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || die "--domain takes a domain name such as example.se: $domain"
-  api_host="${api_host:-rag.$domain}"; admin_host="${admin_host:-rag-admin.$domain}"
+  api_host="${api_host:-rag.$domain}"; admin_host="${admin_host:-kalla-admin.$domain}"
 fi
 [ -n "$api_host" ] || die "--domain or --api-host is required (the host names go into the services' certificates)"
 case "$oidc_refuse_guests" in ""|true|false) ;; *) die "--oidc-refuse-guests must be true or false";; esac
@@ -120,7 +120,7 @@ if [ -n "$api_cert" ]; then
 fi
 
 # --- Values that follow a variable in the bootstrap: an option's file, else what the directories already hold --------
-# (rag-bootstrap removes such a file when its variable is empty, which is right for a stack and wrong for a re-run here.)
+# (kalla-bootstrap removes such a file when its variable is empty, which is right for a stack and wrong for a re-run here.)
 held() { [ ! -r "$1" ] || tr -d '\r\n' < "$1"; }
 declare -A key=()
 for svc in api admin worker; do key[$svc]="$(held "$secrets/$svc/Gateway__Key")"; done
@@ -143,20 +143,20 @@ fi
 profiles=""; [ "$renderer" = 0 ] || profiles="render"
 
 # The bootstrap's own closing lines are about a stack (its variables, its guide), so they are shown only when it fails.
-if ! env UME_RAG_BOOTSTRAP_CERTS="$certs" UME_RAG_BOOTSTRAP_SECRETS="$secrets" UME_RAG_BOOTSTRAP_CONF="" \
-    UME_RAG_BOOTSTRAP_OWN=no UME_RAG_BOOTSTRAP_GATEWAY_CERTS="$work/none" UME_RAG_BOOTSTRAP_GATEWAY_CA=optional \
-    UME_RAG_BOOTSTRAP_TRUST="$work/trust" UME_RAG_BOOTSTRAP_PKI="$work/pki" \
-    UME_RAG_BOOTSTRAP_INTEGRATION_SECRETS="$work/none" UME_RAG_POSTGRES_HOST="$postgres_host" \
-    UME_DOMAIN="$domain" UME_RAG_API_HOST="$api_host" UME_RAG_ADMIN_HOST="$admin_host" COMPOSE_PROFILES="$profiles" \
-    UME_RAG_API_GATEWAY_KEY="${key[api]}" UME_RAG_ADMIN_GATEWAY_KEY="${key[admin]}" \
-    UME_RAG_WORKER_GATEWAY_KEY="${key[worker]}" UME_RAG_OIDC_CLIENT_SECRET="$oidc_secret" \
-    UME_RAG_OIDC_REFUSE_GUESTS="$oidc_refuse_guests" UME_RAG_BACKUP_TARGET="$backup_target" \
-    UME_RAG_BACKUP_S3_KEY="$s3_key" UME_RAG_BACKUP_S3_KEY_SECRET="$s3_key_secret" UME_RAG_BACKUP_S3_REGION="$s3_region" \
+if ! env KALLA_BOOTSTRAP_CERTS="$certs" KALLA_BOOTSTRAP_SECRETS="$secrets" KALLA_BOOTSTRAP_CONF="" \
+    KALLA_BOOTSTRAP_OWN=no KALLA_BOOTSTRAP_GATEWAY_CERTS="$work/none" KALLA_BOOTSTRAP_GATEWAY_CA=optional \
+    KALLA_BOOTSTRAP_TRUST="$work/trust" KALLA_BOOTSTRAP_PKI="$work/pki" \
+    KALLA_BOOTSTRAP_INTEGRATION_SECRETS="$work/none" KALLA_POSTGRES_HOST="$postgres_host" \
+    FORS_DOMAIN="$domain" KALLA_API_HOST="$api_host" KALLA_ADMIN_HOST="$admin_host" COMPOSE_PROFILES="$profiles" \
+    KALLA_API_GATEWAY_KEY="${key[api]}" KALLA_ADMIN_GATEWAY_KEY="${key[admin]}" \
+    KALLA_WORKER_GATEWAY_KEY="${key[worker]}" KALLA_OIDC_CLIENT_SECRET="$oidc_secret" \
+    KALLA_OIDC_REFUSE_GUESTS="$oidc_refuse_guests" KALLA_BACKUP_TARGET="$backup_target" \
+    KALLA_BACKUP_S3_KEY="$s3_key" KALLA_BACKUP_S3_KEY_SECRET="$s3_key_secret" KALLA_BACKUP_S3_REGION="$s3_region" \
     sh "$bootstrap" > "$work/bootstrap.log" 2>&1; then
   cat "$work/bootstrap.log" >&2
   die "generating the certificates and secrets failed (above)"
 fi
-grep 'issuing certificate' "$work/bootstrap.log" | sed 's/^rag-bootstrap: //' || true
+grep 'issuing certificate' "$work/bootstrap.log" | sed 's/^kalla-bootstrap: //' || true
 echo "Certificates in $certs, secrets in $secrets"
 if [ "$datastores" = 1 ] && [ ! -r "$secrets/pgbackrest/repo.conf" ]; then
   die "--datastores needs a pgBackRest repository: pass --backup-target s3://ENDPOINT/BUCKET[/PATH] or local"
@@ -178,19 +178,19 @@ if [ "$generate_only" = 0 ]; then
     secret "ume-rag-$svc-secrets" "$secrets/$svc"
     secret "ume-rag-$svc-certs" "$certs/$svc"
   done
-  # ClamAv__Mode is the stack's (it follows a Compose profile); here the mode is the overlay's ume-rag-worker-config.
-  secret ume-rag-worker-secrets "$secrets/worker" ClamAv__Mode
+  # ClamAv__Mode is the stack's (it follows a Compose profile); here the mode is the overlay's kalla-worker-config.
+  secret kalla-worker-secrets "$secrets/worker" ClamAv__Mode
   if [ "$renderer" = 1 ]; then
-    printf 'UME_RAG_RENDER_WS_PATH=%s\n' "$(tr -d '\r\n' < "$secrets/renderer/ws-path")" > "$work/renderer.env"
-    apply ume-rag-renderer-env --from-env-file="$work/renderer.env"
+    printf 'KALLA_RENDER_WS_PATH=%s\n' "$(tr -d '\r\n' < "$secrets/renderer/ws-path")" > "$work/renderer.env"
+    apply kalla-renderer-env --from-env-file="$work/renderer.env"
   fi
-  secret ume-rag-worker-certs "$certs/worker"
-  secret ume-rag-parser-certs "$certs/parser"
-  apply ume-rag-blob-key --from-file="$secrets/keys/rag-blob-internal"
+  secret kalla-worker-certs "$certs/worker"
+  secret kalla-parser-certs "$certs/parser"
+  apply kalla-blob-key --from-file="$secrets/keys/rag-blob-internal"
   if [ "$datastores" = 1 ]; then
-    secret ume-rag-postgres-secrets "$secrets/postgres"
-    secret ume-rag-postgres-certs "$certs/postgres"
-    apply ume-rag-pgbackrest --from-file="$secrets/pgbackrest/repo.conf"
+    secret kalla-postgres-secrets "$secrets/postgres"
+    secret kalla-postgres-certs "$certs/postgres"
+    apply kalla-pgbackrest --from-file="$secrets/pgbackrest/repo.conf"
   fi
 fi
 
@@ -203,6 +203,6 @@ echo "  deploy/escrow-keys.sh --secrets-dir $secrets --certs-dir $certs /media/<
 echo "Keep $certs/ca.key offline between runs that issue a certificate."
 if [ ! -s "$secrets/admin/Oidc__ClientSecret" ]; then
   echo "Sign-in: no client secret here, so after deploy.sh set it up in the setup wizard: the setup code is in"
-  echo "kubectl -n ${ns:-<namespace>} logs deploy/rag-admin (either pod), the wizard at https://${admin_host:-$api_host}/setup"
+  echo "kubectl -n ${ns:-<namespace>} logs deploy/kalla-admin (either pod), the wizard at https://${admin_host:-$api_host}/setup"
   echo "(docs/kubernetes.md)."
 fi

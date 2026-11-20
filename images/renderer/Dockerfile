@@ -1,7 +1,7 @@
-# ume-rag/renderer: Playwright's launch-server with Chromium, nothing else (repo-and-deployment §5.4, connectors design
+# kalla/renderer: Playwright's launch-server with Chromium, nothing else (repo-and-deployment §5.4, connectors design
 # §8.3; checked in the A-9 spike, results-a row 29). The worker drives it over WebSocket and fetches every request the
 # page makes itself; the container sits only on the internal render network. Contract and run options: README.md.
-#   docker build -t ume-rag/renderer:dev images/renderer
+#   docker build -t kalla/renderer:dev images/renderer
 # Test: images/renderer/test.sh.
 
 # Playwright 1.64.1 on Ubuntu 24.04 (built 2026-11-01), the same exact version as the worker's Microsoft.Playwright
@@ -49,7 +49,7 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
 # Last on purpose (see images/clamav/Dockerfile): only the labels read these values.
 ARG VERSION=dev
 ARG REVISION=unknown
-LABEL org.opencontainers.image.source="https://github.com/thekim1/ume-rag-platform" \
+LABEL org.opencontainers.image.source="https://github.com/thekim1/kalla" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}" \
-      org.opencontainers.image.title="ume-rag/renderer"
+      org.opencontainers.image.title="kalla/renderer"

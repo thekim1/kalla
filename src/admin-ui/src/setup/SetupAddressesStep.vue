@@ -4,7 +4,7 @@ import DetailRow from '@/components/ui/DetailRow.vue'
 import CopyValue from '@/platform/CopyValue.vue'
 import { SETUP_WIZARD } from '@/utils/labels'
 
-// Step 2 (admin design §5.11): the redirect URIs to register at the provider, and what rag-admin knows the deployment set.
+// Step 2 (admin design §5.11): the redirect URIs to register at the provider, and what kalla-admin knows the deployment set.
 defineProps<{ state: SetupState }>()
 const L = SETUP_WIZARD.addresses
 </script>

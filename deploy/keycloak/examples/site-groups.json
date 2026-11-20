@@ -1,8 +1,8 @@
 {
-  "realm": "ume",
+  "realm": "$(env:FORS_KEYCLOAK_REALM)",
   "groups": [
     {
-      "name": "ume-admins",
+      "name": "fors-admins",
       "realmRoles": ["gateway-admin", "rag-platform-admin"]
     },
     {
@@ -10,7 +10,7 @@
       "realmRoles": ["department-admin", "rag-department-admin"]
     },
     {
-      "name": "ume-viewers",
+      "name": "fors-viewers",
       "realmRoles": ["viewer", "rag-viewer"]
     }
   ]

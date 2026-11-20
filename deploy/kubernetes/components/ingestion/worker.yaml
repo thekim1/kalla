@@ -1,21 +1,21 @@
-# rag-worker: one replica, replaced stop-then-start (strategy Recreate): two at once would exceed the ume_rag_worker
+# kalla-worker: one replica, replaced stop-then-start (strategy Recreate): two at once would exceed the kalla_worker
 # role's connection limit, and its job leases make the pause harmless (repo-and-deployment §7.3). Running jobs get
 # Worker:StopGraceSeconds (90 s) to finish, then are released. Its egress is the crawl: keep the destinations in your
 # egress firewall or proxy (NetworkPolicy cannot filter by host name).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: rag-worker
-  labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-worker}
+  name: kalla-worker
+  labels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-worker}
 spec:
   replicas: 1
   revisionHistoryLimit: 5
   strategy: {type: Recreate}
   selector:
-    matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-worker}
+    matchLabels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-worker}
   template:
     metadata:
-      labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-worker}
+      labels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-worker}
     spec:
       automountServiceAccountToken: false
       enableServiceLinks: false
@@ -26,7 +26,7 @@ spec:
         runAsGroup: 1654
         fsGroup: 1654
         seccompProfile: {type: RuntimeDefault}
-      # The blob container's directory, as in rag-admin (the volume's root must be writable by group 1654).
+      # The blob container's directory, as in kalla-admin (the volume's root must be writable by group 1654).
       initContainers:
         - name: blobs-init
           image: docker.io/library/alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
@@ -41,12 +41,12 @@ spec:
           volumeMounts:
             - {name: blobs, mountPath: /data/blobs}
       containers:
-        - name: rag-worker
-          image: ume-rag/worker:latest
+        - name: kalla-worker
+          image: kalla/worker:latest
           ports: [{name: https, containerPort: 8443}]
           envFrom:
-            - configMapRef: {name: ume-rag-config}
-            - configMapRef: {name: ume-rag-worker-config}
+            - configMapRef: {name: kalla-config}
+            - configMapRef: {name: kalla-worker-config}
           env:
             - {name: ASPNETCORE_ENVIRONMENT, value: Production}
             - {name: DOTNET_GCHeapHardLimitPercent, value: "0x4B"}
@@ -58,7 +58,7 @@ spec:
             # Fetched bodies spool to disk, not memory (Compose: /data/blobs/spool).
             - {name: TMPDIR, value: /spool}
             - {name: SSL_CERT_FILE, value: /run/certs/ca.pem}
-            - {name: OTEL_SERVICE_NAME, value: rag-worker}
+            - {name: OTEL_SERVICE_NAME, value: kalla-worker}
           startupProbe:
             httpGet: {path: /health/live, port: https, scheme: HTTPS}
             periodSeconds: 2
@@ -88,13 +88,13 @@ spec:
             - {name: tmp, mountPath: /tmp}
       volumes:
         - name: secrets
-          secret: {secretName: ume-rag-worker-secrets, defaultMode: 0440}
+          secret: {secretName: kalla-worker-secrets, defaultMode: 0440}
         - name: certs
-          secret: {secretName: ume-rag-worker-certs, defaultMode: 0440}
+          secret: {secretName: kalla-worker-certs, defaultMode: 0440}
         - name: blob-key
-          secret: {secretName: ume-rag-blob-key, defaultMode: 0440}
+          secret: {secretName: kalla-blob-key, defaultMode: 0440}
         - name: blobs
-          persistentVolumeClaim: {claimName: rag-blobs}
+          persistentVolumeClaim: {claimName: kalla-blobs}
         # 32 fetches (Worker:Concurrency:fetch) of up to 50 MB each.
         - name: spool
           emptyDir: {sizeLimit: 4Gi}

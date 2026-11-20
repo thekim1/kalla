@@ -27,7 +27,7 @@
 #   --warmup SECONDS       unrecorded warm-up before phase 1 [30]
 #   --deploy-env FILE      the deployment's deploy/.env: enables the Postgres refusal check (postgres and service
 #                          logs) and CPU per container (Docker API)
-#   --app-container NAME   the Compose service whose CPU per message is reported [rag-api]
+#   --app-container NAME   the Compose service whose CPU per message is reported [kalla-api]
 #   --ingest-cmd CMD       r1 phase 2 background load, run with bash -c: starts the crawl and the OCR batch and exits
 #                          when they are finished (ingest.sh); exiting before phase 2 ends fails R1
 #   --fake-latency F,T,J,W the FakeGateway latency profile behind the target (FirstTokenMs, TokenIntervalMs,
@@ -47,7 +47,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 K6_IMAGE="${K6_IMAGE:-grafana/k6:1.3.0@sha256:3ddc8b1a33a2c3d8edc6e99b6a762ae36cba08788463458f5e6a7703e14eb77d}"
 
 mode=r1; base_url=""; model=""; request=""; key_file=""; headers=(); ca_file=""; rate=5; probe_rate=1; duration=600
-warmup=30; deploy_env=""; app_container=rag-api; ingest_cmd=""; fake_latency=400,25,30,200; max_ratio=1.10; out=""
+warmup=30; deploy_env=""; app_container=kalla-api; ingest_cmd=""; fake_latency=400,25,30,200; max_ratio=1.10; out=""
 dry_run=0; k6_base_url=""
 usage() { sed -n '2,42p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 while [ $# -gt 0 ]; do
@@ -110,7 +110,7 @@ dc() { docker compose --env-file "$deploy_env" "$@"; }
 # Cumulative CPU time (ns) of the deployment's main containers, from the Docker API (as the gateway's lib.sh).
 cpu_snapshot() {
   local service id
-  for service in "$app_container" rag-worker rag-parser rag-postgres; do
+  for service in "$app_container" kalla-worker kalla-parser kalla-postgres; do
     id="$(dc ps -q "$service" 2>/dev/null || true)"
     [ -n "$id" ] || continue
     printf '%s ' "$service"
@@ -133,7 +133,7 @@ write_refusals() { # since out-file
   if [ -z "$deploy_env" ]; then
     echo '{"checked": false}' > "$2"; return
   fi
-  dc logs --no-color --since "$1" rag-postgres rag-api rag-admin rag-worker 2>&1 |
+  dc logs --no-color --since "$1" kalla-postgres kalla-api kalla-admin kalla-worker 2>&1 |
     { grep -E 'too many clients already|remaining connection slots are reserved|too many connections for role|53300' || true; } |
     python3 -c '
 import json, sys

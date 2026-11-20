@@ -1,8 +1,8 @@
 # Updates without downtime
 
-By default Ume Rag runs one instance of each service, and an update stops `rag-api` and `rag-admin`, migrates the
+By default Ume Rag runs one instance of each service, and an update stops `kalla-api` and `kalla-admin`, migrates the
 database and starts the new version: a minute or two in which Open WebUI, MCP clients and the admin UI get errors. If
-they must keep working through an update, run two instances of `rag-api` and `rag-admin` behind the reverse proxy and
+they must keep working through an update, run two instances of `kalla-api` and `kalla-admin` behind the reverse proxy and
 replace them one at a time. It is opt-in, as in the gateway (whose
 [guide](https://github.com/thekim1/fors/blob/main/docs/zero-downtime-updates.md) this follows): nothing changes
 for an installation that does not ask for it. The design is [`repo-and-deployment.md`](../plans/platform/repo-and-deployment.md) §7.3.
@@ -47,11 +47,11 @@ is lost). Ingestion pauses for that minute; questions and the admin UI do not.
 
 ## Docker Compose
 
-The overlay `deploy/compose.rolling.yaml` adds `rag-api-b` and `rag-admin-b` with the same image and settings, on the
+The overlay `deploy/compose.rolling.yaml` adds `kalla-api-b` and `kalla-admin-b` with the same image and settings, on the
 next host ports up (8544 and 9544 by default). A reverse proxy of your own lists both ports of each service: something has to
-choose the instance, so clients that reach rag-api without the proxy cannot use this. The stack's own TLS proxy (the
+choose the instance, so clients that reach kalla-api without the proxy cannot use this. The stack's own TLS proxy (the
 profile `proxy`) knows one slot of each, so it cannot be used for this. The database roles' connection
-limits already have room for both slots (`ume_rag_api` 26 for 2 × 12, `ume_rag_admin` 12 for 2 × 5). The two slots add
+limits already have room for both slots (`kalla_api` 26 for 2 × 12, `kalla_admin` 12 for 2 × 5). The two slots add
 1.5 GB to the memory limits: on the 16 GB host profile check the headroom (production setup, *Sizing*).
 
 ### Set it up
@@ -65,8 +65,8 @@ dc up -d --wait
 ```
 
 `--proxy-address` matters only with `--hardened`, where the host firewall admits only that address to the published
-ports; without it the ports are open to whoever reaches the host (they bind `0.0.0.0` unless `UME_RAG_API_BIND` and
-`UME_RAG_ADMIN_BIND` say otherwise).
+ports; without it the ports are open to whoever reaches the host (they bind `0.0.0.0` unless `KALLA_API_BIND` and
+`KALLA_ADMIN_BIND` say otherwise).
 
 Existing installation: re-run `init-deployment.sh` with only `--rolling` (it keeps every other line of `deploy/.env`;
 the certificates and secrets are in the volumes), restart the firewall where it is installed
@@ -75,18 +75,18 @@ the certificates and secrets are in the volumes), restart the firewall where it 
 **nginx** (`deploy/proxy/nginx.conf.example`: fill in its placeholders and enable the lines marked `#rolling`):
 
 ```nginx
-upstream ume_rag_api {
+upstream kalla_api {
     server docker-host:8543;
     server docker-host:8544;
     keepalive 32;
 }
-upstream ume_rag_admin {
+upstream kalla_admin {
     server docker-host:9543;
     server docker-host:9544;
 }
 ```
 
-and in the rag-api and admin `location`s:
+and in the kalla-api and admin `location`s:
 
 ```nginx
 proxy_next_upstream error timeout non_idempotent;
@@ -101,12 +101,12 @@ and then failed is never repeated. The upload location (`PUT /api/upload-batches
 buffered, so a failed upload is retried by the admin UI.
 
 **Nginx Proxy Manager:** a proxy host has one upstream. Put the `upstream` blocks in a custom configuration
-(`/data/nginx/custom/http_top.conf`) and point the proxy host's *Advanced* tab at them (`proxy_pass https://ume_rag_api;`).
+(`/data/nginx/custom/http_top.conf`) and point the proxy host's *Advanced* tab at them (`proxy_pass https://kalla_api;`).
 
 **F5, HAProxy or another load balancer with health monitors:** add both ports to the pool and monitor
 `GET /health/ready` over HTTPS (expect 200). Let it resend a request when the connection fails before a response (F5:
 *Reselect Tries*; HAProxy: `retry-on conn-failure empty-response` with `option redispatch`). Set the drain time above
-the monitor interval times the failures before a member is marked down, for example `UME_RAG_DRAIN_SECONDS=15` with a
+the monitor interval times the failures before a member is marked down, for example `KALLA_DRAIN_SECONDS=15` with a
 5-second interval and 2 failures.
 
 ### Update
@@ -118,16 +118,16 @@ Read the [upgrade guide](upgrade-guide.md) for the release, take the backup of i
 ./deploy/rolling-update.sh            # --pull to pull the images first
 ```
 
-It checks that all four slots are healthy, runs `rag-bootstrap` and `rag-migrate`, then replaces `rag-api`, `rag-api-b`, `rag-admin` and
-`rag-admin-b` one after the other. It waits until each new slot is healthy, plus `UME_RAG_ROLLING_SETTLE_SECONDS` (15)
+It checks that all four slots are healthy, runs `kalla-bootstrap` and `kalla-migrate`, then replaces `kalla-api`, `kalla-api-b`, `kalla-admin` and
+`kalla-admin-b` one after the other. It waits until each new slot is healthy, plus `KALLA_ROLLING_SETTLE_SECONDS` (15)
 so the proxy takes it back into rotation, before stopping the next, and refuses to stop a slot while its partner is
 unhealthy. Then it updates the worker (stop, then start), the parser, ClamAV and the renderer (the last two where their
 profiles are on), each only if it changed.
-A slot whose image did not change is left alone; `--force` recreates it anyway, for example after `rag-bootstrap` has
+A slot whose image did not change is left alone; `--force` recreates it anyway, for example after `kalla-bootstrap` has
 re-issued its certificate.
 
-A new `RAG_POSTGRES_IMAGE` restarts the database, which is never rolling: the script stops with an error unless you pass
-`--with-postgres`, which replaces `rag-postgres` (a short outage of every service; announce it), runs
+A new `KALLA_POSTGRES_IMAGE` restarts the database, which is never rolling: the script stops with an error unless you pass
+`--with-postgres`, which replaces `kalla-postgres` (a short outage of every service; announce it), runs
 `ALTER EXTENSION vector UPDATE` and then continues as above. Other superuser steps the release lists still run by hand
 first (upgrade guide, *Superuser steps*).
 
@@ -137,33 +137,33 @@ In `deploy/.env`, read by `compose.rolling.yaml`:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `UME_RAG_API_B_PORT`, `UME_RAG_ADMIN_B_PORT` | 8544, 9544 | Host ports of the second slots (bound to `UME_RAG_API_BIND` / `UME_RAG_ADMIN_BIND`) |
-| `UME_RAG_DRAIN_SECONDS` | 5 | Seconds a stopping slot keeps answering with `Connection: close` (`Shutdown__DrainSeconds`) |
-| `UME_RAG_SHUTDOWN_TIMEOUT_SECONDS` | 300 | Longest time a stopping rag-api finishes its requests, drain included (rag-admin: 60) |
-| `UME_RAG_ROLLING_SETTLE_SECONDS` | 15 | Pause after each slot is healthy (environment variable for `rolling-update.sh`) |
+| `KALLA_API_B_PORT`, `KALLA_ADMIN_B_PORT` | 8544, 9544 | Host ports of the second slots (bound to `KALLA_API_BIND` / `KALLA_ADMIN_BIND`) |
+| `KALLA_DRAIN_SECONDS` | 5 | Seconds a stopping slot keeps answering with `Connection: close` (`Shutdown__DrainSeconds`) |
+| `KALLA_SHUTDOWN_TIMEOUT_SECONDS` | 300 | Longest time a stopping kalla-api finishes its requests, drain included (kalla-admin: 60) |
+| `KALLA_ROLLING_SETTLE_SECONDS` | 15 | Pause after each slot is healthy (environment variable for `rolling-update.sh`) |
 
 `Shutdown__DrainSeconds` (0–300, default 0) is a setting of every service, so it also works outside these files.
 
 ## What is still interrupted
 
 - **Ingestion** pauses while the worker restarts (about a minute); queued and running jobs resume.
-- **Requests longer than the shutdown timeout** (300 s for rag-api) are cut off. Raise `UME_RAG_SHUTDOWN_TIMEOUT_SECONDS`
+- **Requests longer than the shutdown timeout** (300 s for kalla-api) are cut off. Raise `KALLA_SHUTDOWN_TIMEOUT_SECONDS`
   (and `stop_grace_period` in `compose.rolling.yaml`) if you have longer ones.
 - **Postgres** is a single instance: a new image is a short outage (`--with-postgres`).
 - **Releases marked "Rolling update: no"** (0.5.0, 0.6.0 and 0.8.0 so far) can't be rolled: with two slots, stop the
   services the release's entry in the [upgrade guide](upgrade-guide.md) names before its migration. (On one slot
-  `rag-migrate` does that itself from 0.8.0.)
+  `kalla-migrate` does that itself from 0.8.0.)
 - **The single-instance installation's first rolling update** stops instances that had no drain configured; a few POSTs
   can fail at that moment, later updates do not have this.
 
 ## Tested
 
 `deploy/tests/compose-rolling-e2e.sh` builds nothing: it runs against images you have (`compose.rag.yaml`'s pinned
-images, or others through `RAG_API_IMAGE`, `RAG_ADMIN_IMAGE`, `RAG_MIGRATIONS_IMAGE` and `RAG_POSTGRES_IMAGE`, such as
-`ume-rag/*:latest` built locally). It starts `compose.rag.yaml` + `compose.rolling.yaml` with the `deploy/.env` that
+images, or others through `KALLA_API_IMAGE`, `KALLA_ADMIN_IMAGE`, `KALLA_MIGRATIONS_IMAGE` and `KALLA_POSTGRES_IMAGE`, such as
+`kalla/*:latest` built locally). It starts `compose.rag.yaml` + `compose.rolling.yaml` with the `deploy/.env` that
 `init-deployment.sh --rolling` writes, puts nginx with `deploy/proxy/nginx.conf.example` (both slots of each service)
-in front, replaces every slot with `rolling-update.sh --force` while clients send POST and GET requests to rag-api and
-load the admin UI, and fails on a single lost request. The proxy runs on the stack's `rag-edge` network and reaches the
+in front, replaces every slot with `rolling-update.sh --force` while clients send POST and GET requests to kalla-api and
+load the admin UI, and fails on a single lost request. The proxy runs on the stack's `kalla-edge` network and reaches the
 slots by name: Docker Desktop's port forwarder accepts connections to a restarting container's published port and then
 resets them, which a Linux host does not do.
 

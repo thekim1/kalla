@@ -7,7 +7,7 @@ namespace Kalla.Api.Tests;
 /// <summary>
 /// General knowledge per assistant (chat design §6.2, §7.3, §10.4; P1b item 40): the prompt of every level, with and
 /// without sources, against golden prompt files in <c>tests/Kalla.Api.Tests/Golden/prompts</c>. With
-/// <c>UME_RAG_UPDATE_GOLDEN=1</c> the test writes the files instead of comparing; review the diff and commit it.
+/// <c>KALLA_UPDATE_GOLDEN=1</c> the test writes the files instead of comparing; review the diff and commit it.
 /// </summary>
 public sealed class GeneralKnowledgePromptTests
 {
@@ -50,14 +50,14 @@ public sealed class GeneralKnowledgePromptTests
     {
         var actual = Prompt(level, kind);
         var file = Path.Combine(GoldenDirectory, name + ".txt");
-        if (Environment.GetEnvironmentVariable("UME_RAG_UPDATE_GOLDEN") == "1")
+        if (Environment.GetEnvironmentVariable("KALLA_UPDATE_GOLDEN") == "1")
         {
             Directory.CreateDirectory(GoldenDirectory);
             File.WriteAllText(file, actual);
         }
 
-        File.Exists(file).ShouldBeTrue($"{file} is missing; run with UME_RAG_UPDATE_GOLDEN=1 to write it.");
-        actual.ShouldBe(File.ReadAllText(file).ReplaceLineEndings("\n"), $"{name}: run with UME_RAG_UPDATE_GOLDEN=1 to regenerate.");
+        File.Exists(file).ShouldBeTrue($"{file} is missing; run with KALLA_UPDATE_GOLDEN=1 to write it.");
+        actual.ShouldBe(File.ReadAllText(file).ReplaceLineEndings("\n"), $"{name}: run with KALLA_UPDATE_GOLDEN=1 to regenerate.");
     }
 
     /// <summary>The turn shapes the level cases leave out: degraded with an expanded section, history and English; Swedish always.</summary>
@@ -87,14 +87,14 @@ public sealed class GeneralKnowledgePromptTests
     {
         var actual = TurnPrompt(name);
         var file = Path.Combine(GoldenDirectory, name + ".txt");
-        if (Environment.GetEnvironmentVariable("UME_RAG_UPDATE_GOLDEN") == "1")
+        if (Environment.GetEnvironmentVariable("KALLA_UPDATE_GOLDEN") == "1")
         {
             Directory.CreateDirectory(GoldenDirectory);
             File.WriteAllText(file, actual);
         }
 
-        File.Exists(file).ShouldBeTrue($"{file} is missing; run with UME_RAG_UPDATE_GOLDEN=1 to write it.");
-        actual.ShouldBe(File.ReadAllText(file).ReplaceLineEndings("\n"), $"{name}: run with UME_RAG_UPDATE_GOLDEN=1 to regenerate.");
+        File.Exists(file).ShouldBeTrue($"{file} is missing; run with KALLA_UPDATE_GOLDEN=1 to write it.");
+        actual.ShouldBe(File.ReadAllText(file).ReplaceLineEndings("\n"), $"{name}: run with KALLA_UPDATE_GOLDEN=1 to regenerate.");
     }
 
     [Fact]

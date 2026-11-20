@@ -231,13 +231,13 @@ public sealed class DispatcherTests(RagDatabaseFixture database) : IAsyncLifetim
                    """SELECT count(*) FROM content."Jobs" WHERE "State" IN ('queued','running')""") > 0)
         {
             peak = Math.Max(peak, await Sql.ScalarAsync<long>(database.Connection(null),
-                "SELECT count(*) FROM pg_stat_activity WHERE usename = 'ume_rag_worker'"));
+                "SELECT count(*) FROM pg_stat_activity WHERE usename = 'kalla_worker'"));
             watch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(60));
             await Task.Delay(20, Ct);
         }
 
         (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM content."Jobs" WHERE "State" = 'succeeded'""")).ShouldBe(200);
-        var cap = await Sql.ScalarAsync<int>(database.Connection(null), "SELECT rolconnlimit FROM pg_roles WHERE rolname = 'ume_rag_worker'");
+        var cap = await Sql.ScalarAsync<int>(database.Connection(null), "SELECT rolconnlimit FROM pg_roles WHERE rolname = 'kalla_worker'");
         cap.ShouldBe(12);
         peak.ShouldBeLessThanOrEqualTo(WorkerExtensions.DefaultMaxPoolSize + 1);
         peak.ShouldBeGreaterThanOrEqualTo(WorkerExtensions.DefaultMaxPoolSize / 2, "the load should have used the pool");

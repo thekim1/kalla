@@ -13,7 +13,7 @@ namespace Kalla.AdminApi;
 /// V8 (admin design §4.6, identity §4.7, gateway-changes §13.4): a model is servable at a ceiling when the mirror knows it
 /// with a residency within the ceiling, and the gateway's <c>/v1/models</c> called with that level's key and ceiling lists
 /// it. Called on assistant publish and on a level or audience save (item 14); P1 sends no <c>x-fors-on-behalf-of</c>.
-/// The ceiling is lowered to rag-admin's credential key's residencies first, as chat lowers it (#237, M-17 C9).
+/// The ceiling is lowered to kalla-admin's credential key's residencies first, as chat lowers it (#237, M-17 C9).
 /// </summary>
 /// <remarks>
 /// Scoped, so one request asks the gateway once per ceiling and key (#696): every list it gets, or the failure, is kept for the
@@ -223,7 +223,7 @@ public sealed class GatewayModelCheck(RagDbContext db, GatewayApi gateway, Gatew
 
 /// <summary>
 /// Which mirror models the platform's key may use (#447, admin design §4.5): the gateway's <c>/v1/models</c> at a ceiling
-/// (lowered to rag-admin's credential key's residencies), cached 5 minutes per ceiling. Null when the gateway could not be asked (no key
+/// (lowered to kalla-admin's credential key's residencies), cached 5 minutes per ceiling. Null when the gateway could not be asked (no key
 /// for the level, unreachable, refused); a failure is not cached, so the next picker load asks again.
 /// </summary>
 public sealed class GatewayModelAvailability(GatewayApi gateway, IOptions<GatewayOptions> options, GatewayCeiling serviceCeiling, TimeProvider time,

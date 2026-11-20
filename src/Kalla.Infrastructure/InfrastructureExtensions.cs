@@ -30,7 +30,7 @@ public static class InfrastructureExtensions
     /// change, so a key written by a deployment's bootstrap (a Portainer stack update) applies without a restart where the
     /// code reads it through <c>IOptionsMonitor</c>: the gateway credential key and the Open WebUI feedback key.
     /// <c>Security:ExtraSecretsDirectory</c> is a second such directory that another job writes, so that job never sees
-    /// this service's own secrets: rag-api's Open WebUI feedback key from <c>rag-openwebui-setup</c> (M-17 C6). It is
+    /// this service's own secrets: kalla-api's Open WebUI feedback key from <c>kalla-openwebui-setup</c> (M-17 C6). It is
     /// optional, and it yields only <see cref="ExtraSecretKeys"/>: another uid owns it, so any other file there (a
     /// <c>Gateway__BaseUrl</c>, say) is ignored rather than overriding this service's configuration (#689 review).
     /// </summary>
@@ -67,8 +67,8 @@ public static class InfrastructureExtensions
     /// <c>Pgvector.Vector</c> and write embeddings with binary <c>COPY</c>; the <c>vector</c> columns stay out of the EF model. EF Core on top of it with
     /// Aspire's enrichment (context pooling, retries, health check, tracing). Production refuses the superuser and
     /// anything but <c>VerifyFull</c> TLS, as the gateway's <c>AddGatewayDatabase</c>. <paramref name="configure"/> adds a
-    /// service's own data source settings to that one pool (rag-api: auto-prepare for the retrieval statements, knowledge §6.6).
-    /// <paramref name="admitAtStart"/> (rag-api, rag-admin, rag-worker; not the migration service) puts the
+    /// service's own data source settings to that one pool (kalla-api: auto-prepare for the retrieval statements, knowledge §6.6).
+    /// <paramref name="admitAtStart"/> (kalla-api, kalla-admin, kalla-worker; not the migration service) puts the
     /// <see cref="SchemaAdmissionService"/> before every other hosted service, so a version the schema has moved past
     /// stops before anything else touches the database (data-model §10).
     /// </summary>
@@ -201,8 +201,8 @@ public static class InfrastructureExtensions
     /// <c>AddGatewaySecurity</c>): admin sessions and revealable key secrets. Production protects the key ring at rest with a
     /// certificate (<c>DataProtection:CertificatePath</c>); without one it is stored unencrypted (local development only).
     /// <paramref name="readOnly"/>: the same ring and certificate with key generation off, for a service that only unprotects
-    /// (rag-api, Open WebUI's stored client secret; identity design §19, "Stored secrets"); its database role reads the key table
-    /// only, and rag-admin creates and rotates the keys.
+    /// (kalla-api, Open WebUI's stored client secret; identity design §19, "Stored secrets"); its database role reads the key table
+    /// only, and kalla-admin creates and rotates the keys.
     /// </summary>
     public static IHostApplicationBuilder AddRagDataProtection(this IHostApplicationBuilder builder, bool readOnly = false)
     {

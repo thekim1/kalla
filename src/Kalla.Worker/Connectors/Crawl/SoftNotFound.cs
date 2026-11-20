@@ -25,11 +25,11 @@ public static partial class SoftNotFound
     public const string Reason = "http.soft_404";
 
     /// <summary>The probe path's suffix after the random letters: names us in the site's logs.</summary>
-    public const string ProbeSuffix = "-ume-rag-404";
+    public const string ProbeSuffix = "-kalla-404";
 
     private const int ProbeLetters = 12;
 
-    /// <summary><c>/{12 random letters}-ume-rag-404</c> on the origin of <paramref name="url"/>.</summary>
+    /// <summary><c>/{12 random letters}-kalla-404</c> on the origin of <paramref name="url"/>.</summary>
     public static Uri ProbeUrl(Uri url)
     {
         ArgumentNullException.ThrowIfNull(url);

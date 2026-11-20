@@ -3,11 +3,11 @@ using Kalla.TestKit;
 namespace Kalla.AdminApi.Tests;
 
 /// <summary>
-/// The schema contract of rag-admin's raw SQL (B-34, #510): its EF <c>SqlQuery</c>/<c>ExecuteSql</c> statements (the
+/// The schema contract of kalla-admin's raw SQL (B-34, #510): its EF <c>SqlQuery</c>/<c>ExecuteSql</c> statements (the
 /// interpolated format strings, holes as parameters) and any SQL constant or literal of <c>Kalla.AdminApi</c> must prepare
 /// against the migrated database, and the result columns of each that returns rows must equal <c>sql-shapes.json</c> next
 /// to this file: <c>SqlQuery&lt;T&gt;</c> maps columns by name (<c>"Value"</c> for a scalar), so a renamed column fails
-/// here, not at run time. rag-admin's shared stores (<c>Kalla.Infrastructure</c>) are in rag-api's contract.
+/// here, not at run time. kalla-admin's shared stores (<c>Kalla.Infrastructure</c>) are in kalla-api's contract.
 /// </summary>
 public sealed class SqlSchemaContractTests(SqlContractDatabase database) : IClassFixture<SqlContractDatabase>
 {
@@ -30,7 +30,7 @@ public sealed class SqlSchemaContractTests(SqlContractDatabase database) : IClas
         described.Failures.ShouldBeEmpty();
         var (expected, actual) = await SqlContract.CompareAsync(ShapesFile, described.Shapes, Ct);
         expected.ShouldBe(actual,
-            "A statement's result columns changed: check its reader, then run with UME_RAG_UPDATE_CONTRACTS=1 to regenerate.");
+            "A statement's result columns changed: check its reader, then run with KALLA_UPDATE_CONTRACTS=1 to regenerate.");
     }
 }
 

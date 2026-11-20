@@ -685,14 +685,14 @@ public static class HotPathMeasurements
     // ---------------------------------------------------------------- 7: config snapshot reload
 
     /// <summary>
-    /// to-verify #164 (data-model §5, §14): rag-api's whole-snapshot reload (<see cref="PolicySnapshotStore.LoadAsync"/>, as
-    /// <c>ume_rag_api</c>) with N published assistant versions whose instructions are 20 KB each (three collection links, two
+    /// to-verify #164 (data-model §5, §14): kalla-api's whole-snapshot reload (<see cref="PolicySnapshotStore.LoadAsync"/>, as
+    /// <c>kalla_api</c>) with N published assistant versions whose instructions are 20 KB each (three collection links, two
     /// audiences per assistant). 50 reloads after 5 warm-ups; allocated bytes per reload over all threads, and the instruction
     /// text one snapshot keeps alive. The design moves to reloading by outbox EntityId when a reload takes more than 50 ms.
     /// </summary>
     private static async Task SnapshotAsync()
     {
-        Console.WriteLine("## 7 Config snapshot reload (PolicySnapshotStore.LoadAsync as ume_rag_api), 20 KB instructions per published version");
+        Console.WriteLine("## 7 Config snapshot reload (PolicySnapshotStore.LoadAsync as kalla_api), 20 KB instructions per published version");
         Console.WriteLine("| published assistants | instructions MB in the database | reload p50 ms | p95 ms | max ms | allocated MB per reload | instructions held by the snapshot MB (UTF-16) |");
         Console.WriteLine("|---:|---:|---:|---:|---:|---:|---:|");
         var database = new RagDatabase();

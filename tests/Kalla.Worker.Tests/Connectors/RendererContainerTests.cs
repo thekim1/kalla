@@ -18,17 +18,17 @@ using Kalla.Worker.Connectors.Render;
 namespace Kalla.Worker.Tests.Connectors;
 
 /// <summary>
-/// The image named by <c>UME_RAG_TEST_RENDERER_IMAGE</c> (built from <c>images/renderer</c>), run as Compose runs it (user
+/// The image named by <c>KALLA_TEST_RENDERER_IMAGE</c> (built from <c>images/renderer</c>), run as Compose runs it (user
 /// 10002, read-only root, <c>/tmp</c> as tmpfs, no capabilities, no new privileges, <c>images/renderer/seccomp.json</c>,
 /// an init process) with a secret WebSocket path, on a network of its own (10.215.0.0/24) that holds nothing else: the
 /// fixture site is this process's loopback, which the browser cannot reach, so every request it makes has to come through
 /// the worker. Without the variable nothing starts and the tests skip. Use a name with a registry part that has a dot (for
-/// example <c>ume-rag.local/renderer:ci</c>), or one that exists locally: Testcontainers prefixes other names with the
+/// example <c>kalla.local/renderer:ci</c>), or one that exists locally: Testcontainers prefixes other names with the
 /// Docker Hub mirror CI sets.
 /// </summary>
 public sealed class RendererContainer : IAsyncLifetime
 {
-    public const string ImageVariable = "UME_RAG_TEST_RENDERER_IMAGE";
+    public const string ImageVariable = "KALLA_TEST_RENDERER_IMAGE";
     public const string Subnet = "10.215.0.0/24";
     private const int Port = 3000;
 
@@ -53,14 +53,14 @@ public sealed class RendererContainer : IAsyncLifetime
 
         var seccomp = await File.ReadAllTextAsync(Path.Join(Processing.Fixtures.Root, "images", "renderer", "seccomp.json"), TestContext.Current.CancellationToken);
         _network = new NetworkBuilder()
-            .WithName("ume-rag-render-test-" + Guid.NewGuid().ToString("N")[..8])
+            .WithName("kalla-render-test-" + Guid.NewGuid().ToString("N")[..8])
             .WithCreateParameterModifier(parameters => parameters.IPAM = new IPAM { Config = [new IPAMConfig { Subnet = Subnet }] })
             .Build();
         await _network.CreateAsync(TestContext.Current.CancellationToken);
         _container = new ContainerBuilder(image)
             .WithNetwork(_network)
             .WithPortBinding(Port, true)
-            .WithEnvironment("UME_RAG_RENDER_WS_PATH", WsPath)
+            .WithEnvironment("KALLA_RENDER_WS_PATH", WsPath)
             .WithTmpfsMount("/tmp")
             .WithCreateParameterModifier(parameters =>
             {
@@ -92,7 +92,7 @@ public sealed class RendererContainer : IAsyncLifetime
 }
 
 /// <summary>
-/// A fixture SPA rendered by the real <c>rag-renderer</c> through the worker (connectors design §8.3, A-11 done-when): the
+/// A fixture SPA rendered by the real <c>kalla-renderer</c> through the worker (connectors design §8.3, A-11 done-when): the
 /// page's script, its data API and its cookie come through the worker's guard, a request to a private address is refused
 /// with <c>Purpose = Render</c>, images are not fetched, and the API's text is in the stored raw HTML without scripts.
 /// </summary>

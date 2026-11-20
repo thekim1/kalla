@@ -98,7 +98,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   test_assistant_unavailable: '{reason}',
   test_budget_exceeded: '{reason}',
   sign_in_not_configured: 'Sign-in is not set up yet. Contact the platform team.',
-  setup_code_invalid: 'The setup code is not right. Check it in the output of the rag-admin container and try again.',
+  setup_code_invalid: 'The setup code is not right. Check it in the output of the kalla-admin container and try again.',
   setup_attempts_exhausted: 'Too many setup code attempts. Wait a minute and try again.',
   setup_session_required: 'Enter the setup code first.',
   setup_test_refused: 'The test sign-in could not start ({reason}).',
@@ -436,27 +436,27 @@ export const SETUP_TEST_MESSAGES: Record<string, string> = {
   authority_invalid:
     'The provider address is not valid. Enter the full https address of the provider, without a query or #, for example https://login.example.org/realms/ume.',
   authority_unreachable:
-    'rag-admin could not reach the provider address. Check the address, and that rag-admin can reach the provider through the network and any proxy. On a Docker Compose host with the host firewall, rag-admin reaches only the provider the deployment names: run init-deployment.sh again with --oidc-authority and this address, then the host firewall.',
-  tls: 'rag-admin does not trust the provider’s certificate. Add the provider’s certificate authority to rag-admin’s trusted certificates, or check the address.',
+    'kalla-admin could not reach the provider address. Check the address, and that kalla-admin can reach the provider through the network and any proxy. On a Docker Compose host with the host firewall, kalla-admin reaches only the provider the deployment names: run init-deployment.sh again with --oidc-authority and this address, then the host firewall.',
+  tls: 'kalla-admin does not trust the provider’s certificate. Add the provider’s certificate authority to kalla-admin’s trusted certificates, or check the address.',
   redirected:
-    'The provider address answered with a redirect, and rag-admin follows none. Enter the address the provider names as its issuer, exactly.',
+    'The provider address answered with a redirect, and kalla-admin follows none. Enter the address the provider names as its issuer, exactly.',
   not_discovery:
     'The provider address does not lead to a sign-in discovery document. Check the address: for Keycloak it ends with /realms/ and the realm, for Entra ID with /v2.0.',
   issuer_mismatch:
     'The provider names itself with another address (its issuer). Enter exactly the issuer address the provider names, including any trailing slash.',
-  insecure_endpoint: 'The provider lists an address that is not https, and rag-admin signs in over https only. Fix the provider’s public address.',
+  insecure_endpoint: 'The provider lists an address that is not https, and kalla-admin signs in over https only. Fix the provider’s public address.',
   par_required:
-    'The provider requires pushed authorization requests, which rag-admin does not make. Turn that requirement off for this client at the provider.',
-  keys_unavailable: 'rag-admin could not fetch the provider’s signing keys. Check that the provider publishes its keys and that rag-admin can reach them.',
+    'The provider requires pushed authorization requests, which kalla-admin does not make. Turn that requirement off for this client at the provider.',
+  keys_unavailable: 'kalla-admin could not fetch the provider’s signing keys. Check that the provider publishes its keys and that kalla-admin can reach them.',
   stored_secret_unreadable: 'The stored client secret can no longer be read. Type the client secret again.',
   provider_error:
     'The provider sent you back with an error instead of signing you in. Check that the redirect URI is registered for this client, that the client is enabled and that you may use it. Then test again.',
-  token_refused: 'The provider refused rag-admin’s sign-in request. Most often the client secret or the client ID is wrong. Check both and test again.',
+  token_refused: 'The provider refused kalla-admin’s sign-in request. Most often the client secret or the client ID is wrong. Check both and test again.',
   token_endpoint_unreachable:
-    'rag-admin could not reach the provider’s token address. Check that rag-admin can reach the provider through the network and any proxy.',
+    'kalla-admin could not reach the provider’s token address. Check that kalla-admin can reach the provider through the network and any proxy.',
   id_token_missing: 'The provider sent no ID token. Check that the client is an OpenID Connect client that allows the openid scope.',
   id_token_invalid:
-    'The provider’s ID token did not pass the checks of its signature, issuer, audience (the client ID) or lifetime. Check the client ID, and that the clocks of rag-admin and the provider are right.',
+    'The provider’s ID token did not pass the checks of its signature, issuer, audience (the client ID) or lifetime. Check the client ID, and that the clocks of kalla-admin and the provider are right.',
   nonce_mismatch: 'The provider’s answer did not belong to this test. Test again.',
   secret_required:
     'You changed the provider address or the client ID, so the stored client secret is not sent to it. Type the client secret of this client.',
@@ -501,7 +501,7 @@ export function setupCompleteMessage(reason: string): string {
  */
 export const OPENWEBUI_CHECK_MESSAGES: Record<string, string> = {
   redirected:
-    'The provider address answered with a redirect, and rag-admin follows none. Enter the discovery document’s address exactly: the issuer followed by /.well-known/openid-configuration.',
+    'The provider address answered with a redirect, and kalla-admin follows none. Enter the discovery document’s address exactly: the issuer followed by /.well-known/openid-configuration.',
   not_discovery:
     'The provider address does not lead to a sign-in discovery document. Check the address: it ends with /.well-known/openid-configuration.',
   issuer_mismatch:

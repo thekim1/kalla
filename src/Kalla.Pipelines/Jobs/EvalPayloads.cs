@@ -6,7 +6,7 @@ namespace Kalla.Pipelines.Jobs;
 
 /// <summary>
 /// The <c>eval</c> kinds the worker runs (engine design §9.1; processing design §13, §14): retrieval evaluation and set
-/// generation only. The answer-level <c>answers</c> run is P2 and runs in <c>rag-admin</c> (processing design §14.8).
+/// generation only. The answer-level <c>answers</c> run is P2 and runs in <c>kalla-admin</c> (processing design §14.8).
 /// </summary>
 public static class EvalKinds
 {

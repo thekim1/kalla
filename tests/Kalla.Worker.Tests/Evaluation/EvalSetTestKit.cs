@@ -128,7 +128,7 @@ public sealed class EvalGatewayFactory : WebApplicationFactory<fakegateway::Prog
 }
 
 /// <summary>
-/// The set generator as <c>AddRagEvalSets</c> registers it, as <c>ume_rag_worker</c>, with the embedding client and both
+/// The set generator as <c>AddRagEvalSets</c> registers it, as <c>kalla_worker</c>, with the embedding client and both
 /// gateway clients on <see cref="EvalGatewayFactory"/>. Jobs are enqueued as the admin and leased as this instance, as the
 /// dispatcher would, and run directly.
 /// </summary>

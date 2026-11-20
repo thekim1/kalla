@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: rag-renderer
-  labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-renderer}
+  name: kalla-renderer
+  labels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-renderer}
 spec:
   replicas: 1
   revisionHistoryLimit: 5
   selector:
-    matchLabels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-renderer}
+    matchLabels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-renderer}
   template:
     metadata:
-      labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-renderer}
+      labels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-renderer}
     spec:
       automountServiceAccountToken: false
       enableServiceLinks: false
@@ -21,14 +21,14 @@ spec:
         runAsUser: 10002
         runAsGroup: 10002
         fsGroup: 10002
-        seccompProfile: {type: Localhost, localhostProfile: ume-rag/renderer.json}
+        seccompProfile: {type: Localhost, localhostProfile: kalla/renderer.json}
       containers:
-        - name: rag-renderer
-          image: ume-rag/renderer:latest
+        - name: kalla-renderer
+          image: kalla/renderer:latest
           ports: [{name: ws, containerPort: 3000}]
-          # UME_RAG_RENDER_WS_PATH, from deploy/secrets/renderer.env (create-secrets.sh --renderer).
+          # KALLA_RENDER_WS_PATH, from deploy/secrets/renderer.env (create-secrets.sh --renderer).
           envFrom:
-            - secretRef: {name: ume-rag-renderer-env}
+            - secretRef: {name: kalla-renderer-env}
           startupProbe:
             tcpSocket: {port: ws}
             periodSeconds: 2
@@ -56,8 +56,8 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: rag-renderer
-  labels: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-renderer}
+  name: kalla-renderer
+  labels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-renderer}
 spec:
-  selector: {app.kubernetes.io/name: ume-rag, app.kubernetes.io/component: rag-renderer}
+  selector: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: kalla-renderer}
   ports: [{name: ws, port: 3000, targetPort: ws}]

@@ -27,7 +27,7 @@ public sealed class AdminParseRuleEngineTests(RagDatabaseFixture database, FakeG
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-parse-rules-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-parse-rules-");
     private readonly string _marker = Guid.NewGuid().ToString("N");
 
     public async ValueTask InitializeAsync() => await database.ResetAsync();

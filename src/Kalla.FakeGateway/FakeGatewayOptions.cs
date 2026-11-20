@@ -163,7 +163,7 @@ public sealed class FakeCredentialKey
 
     public string? Name { get; set; }
 
-    /// <summary><c>organisation.read</c> (rag-admin's: every department and team in the context), later <c>usage.read</c>.</summary>
+    /// <summary><c>organisation.read</c> (kalla-admin's: every department and team in the context), later <c>usage.read</c>.</summary>
     public List<string> Scopes { get; set; } = [];
 }
 

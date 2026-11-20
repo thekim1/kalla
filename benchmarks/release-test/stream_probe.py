@@ -193,7 +193,7 @@ def stats_ms(values_s: list[float]) -> dict:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--base-url", required=True, help="the chat API, e.g. https://rag-api.example.se")
+    parser.add_argument("--base-url", required=True, help="the chat API, e.g. https://kalla-api.example.se")
     parser.add_argument("--model", required=True, help="the assistant slug (or a FakeGateway model in a dry run)")
     parser.add_argument("--request", required=True, type=Path, help="a request file of requests/")
     parser.add_argument("--rate", required=True, type=float, help="requests per second (open model)")

@@ -19,7 +19,7 @@ using FakeGatewayProgram = fakegateway::Program;
 namespace Kalla.AdminApi.Tests;
 
 /// <summary>
-/// B-45 (gateway phase 3; gateway-changes §5.6; admin design §4.5, §8.6): rag-admin reads a key's usage per step and its budgets
+/// B-45 (gateway phase 3; gateway-changes §5.6; admin design §4.5, §8.6): kalla-admin reads a key's usage per step and its budgets
 /// from the gateway's Integration API with its credential key (<c>usage.read</c>), cached 5 minutes per key and query, at the
 /// address its gateway context names (<c>integration_api_url</c>, M-17 C11); without one the routes answer null without a
 /// call; a refusal is null with its reason on the status.
@@ -51,7 +51,7 @@ public sealed class IntegrationReadbackTests(AdminDatabaseFixture database)
         web.UseSetting("FakeGateway:AssignedKeys:0:Budgets:0:Spent", "1000");
     });
 
-    /// <summary>rag-admin with its context read once from <paramref name="gateway"/>, which names the Integration API's address (M-17 C11).</summary>
+    /// <summary>kalla-admin with its context read once from <paramref name="gateway"/>, which names the Integration API's address (M-17 C11).</summary>
     private async Task<WebApplicationFactory<Program>> AdminAsync(WebApplicationFactory<FakeGatewayProgram> gateway, HttpMessageHandler? integration = null)
     {
         var factory = database.HeaderFactory().WithWebHostBuilder(web =>
@@ -102,7 +102,7 @@ public sealed class IntegrationReadbackTests(AdminDatabaseFixture database)
         return code;
     }
 
-    /// <summary>A chat answer on the fake as <see cref="Chatbot"/> through rag-api's credential key, with <paramref name="step"/>.</summary>
+    /// <summary>A chat answer on the fake as <see cref="Chatbot"/> through kalla-api's credential key, with <paramref name="step"/>.</summary>
     private static async Task ChatAsync(WebApplicationFactory<FakeGatewayProgram> gateway, string step)
     {
         using var client = gateway.CreateClient();

@@ -26,8 +26,8 @@ namespace Kalla.Worker.Tests.Evaluation;
 internal sealed record RetrievedChunk(Guid ChunkId, Guid DocumentId);
 
 /// <summary>
-/// The smoke set (<see cref="SmokeSet"/>, knowledge design §16.3–§16.4) against rag-api in process on the test database:
-/// the collection published with <see cref="SmokeSet.RetrievalSettings"/>, clients and keys in <c>config</c>, and rag-api
+/// The smoke set (<see cref="SmokeSet"/>, knowledge design §16.3–§16.4) against kalla-api in process on the test database:
+/// the collection published with <see cref="SmokeSet.RetrievalSettings"/>, clients and keys in <c>config</c>, and kalla-api
 /// reading its policy snapshot from the database as deployed (no fixed snapshot), with the FakeGateway for query
 /// embeddings and chat.
 /// </summary>
@@ -98,7 +98,7 @@ internal static class EvaluationSmokeKit
     }
 
     /// <summary>
-    /// rag-api with <paramref name="roles"/> on the test database as <c>ume_rag_api</c>, with its real key store and policy
+    /// kalla-api with <paramref name="roles"/> on the test database as <c>kalla_api</c>, with its real key store and policy
     /// snapshot, the FakeGateway for query embeddings and chat answers, and no chat rate limit (30 questions from one caller).
     /// </summary>
     public static WebApplicationFactory<api::Program> ApiHost(RagDatabaseFixture database, FakeGatewayFactory gateway, DirectoryInfo blobs,
@@ -131,7 +131,7 @@ internal static class EvaluationSmokeKit
         var waited = Stopwatch.StartNew();
         while (!snapshots.IsConfirmed)
         {
-            waited.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(15), "rag-api confirms its first snapshot");
+            waited.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(15), "kalla-api confirms its first snapshot");
             await Task.Delay(50, Ct);
         }
 

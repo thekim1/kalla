@@ -300,13 +300,13 @@ affected.
 
 | Env (`deploy/.env`) | Setting | Default | Service |
 |---|---|---|---|
-| `UME_OIDC_TENANT_ID` | `Oidc:TenantId` | – | admin API |
-| `UME_OIDC_REFUSE_GUESTS` | `Oidc:RefuseGuests` | `true` | admin API |
-| `UME_DATA_TENANT_ID` | `DataApi:TenantId` | `${UME_OIDC_TENANT_ID:-}` | Data API |
-| `UME_DATA_REFUSE_GUESTS` | `DataApi:RefuseGuests` | `${UME_OIDC_REFUSE_GUESTS:-true}` | Data API |
+| `FORS_OIDC_TENANT_ID` | `Oidc:TenantId` | – | admin API |
+| `FORS_OIDC_REFUSE_GUESTS` | `Oidc:RefuseGuests` | `true` | admin API |
+| `FORS_DATA_TENANT_ID` | `DataApi:TenantId` | `${FORS_OIDC_TENANT_ID:-}` | Data API |
+| `FORS_DATA_REFUSE_GUESTS` | `DataApi:RefuseGuests` | `${FORS_OIDC_REFUSE_GUESTS:-true}` | Data API |
 
 Added to `deploy/compose.prod.yaml` (admin API block `:136-146`, Data API block `:181-184`; the nested default follows
-`DataApi__Authority: ${UME_DATA_AUTHORITY:-${UME_OIDC_AUTHORITY}}` at `:181`), `deploy/compose.portainer.template.yaml`
+`DataApi__Authority: ${FORS_DATA_AUTHORITY:-${FORS_OIDC_AUTHORITY}}` at `:181`), `deploy/compose.portainer.template.yaml`
 (`:196-206`, `:241-244`) and the generated `compose.portainer.yaml`, the comment block in `deploy/init-deployment.sh`
 (`:270-274`), and `deploy/kubernetes/example/kustomization.yaml` (commented examples).
 
@@ -320,7 +320,7 @@ Added to `deploy/compose.prod.yaml` (admin API block `:136-146`, Data API block 
 | Member groups CRUD, validation limits, gateway-admin only for edit, department admin reads, audit before/after | `AdminApi.Tests/AdminApiTests.cs` |
 | Data API: `memberGroups`, team `code`; token with wrong `tid` or guest claims → 401 + 3003; keys unaffected | `DataApi.Tests/DataApiTests.cs` |
 | Migration adds the column with default on a populated database | `IntegrationTests/MigrationServiceTests.cs` |
-| Keycloak user `group-member` (no department attribute, group `IFO-medarbetare` = member group of 3000 *Individ- och familjeomsorgen*, `MigrationService/DevSeeder.cs:73`) sees department 3000 and `departmentSources` `group` | e2e Playwright (`tests/e2e/specs/journeys.spec.ts`), realm `dev/keycloak/ume-realm.json` gains the group, the user and a *Group Membership* mapper (claim `groups`, full path off) |
+| Keycloak user `group-member` (no department attribute, group `IFO-medarbetare` = member group of 3000 *Individ- och familjeomsorgen*, `MigrationService/DevSeeder.cs:73`) sees department 3000 and `departmentSources` `group` | e2e Playwright (`tests/e2e/specs/journeys.spec.ts`), realm `dev/keycloak/fors-realm.json` gains the group, the user and a *Group Membership* mapper (claim `groups`, full path off) |
 | Organisation drawer: member groups field, accessibility | e2e `accessibility.spec.ts`, `OrganisationView.spec.ts` (Vitest) |
 
 ### 4.10 Alignment with the identity design
@@ -354,7 +354,7 @@ key, and the order of Ume.Rag's work, are in [`../platform/cost-attribution.md`]
 
 - The gateway holds an **integration** *Ume.Rag*, made by gateway admins, with an owner team. Its keys have one of two
   roles:
-  - **Credential keys**: one per Ume.Rag service (`rag-api`, `rag-admin`, `rag-worker`), in the owner team, with a
+  - **Credential keys**: one per Ume.Rag service (`kalla-api`, `kalla-admin`, `kalla-worker`), in the owner team, with a
     secret, `AllowedIpRanges`, an expiry and rotation. Their settings, scopes included, are changed by gateway admins
     only. A call without `x-fors-on-behalf-of` runs as the credential key itself and is charged to the owner team
     (the syncs, the canary, model checks without a key, and every call of an object without a key).
@@ -438,7 +438,7 @@ sends no `x-fors-on-behalf-of` (phase 2 items wait on it, `work/main.md` M-12).
   `/v1/chat/completions`, or after the last event of a stream without one (phase 2; `features` `stream-cost`;
   `GatewayRequestHandler.cs:445-521`). The figure is the one the usage record gets, from the provider's token counts
   when the stream reports them (Ume.Rag sends `stream_options.include_usage`), else from the gateway's estimate. An
-  aborted or broken stream has none, and the gateway's usage record stays the record. rag-api reads the comment and
+  aborted or broken stream has none, and the gateway's usage record stays the record. kalla-api reads the comment and
   never forwards it to its own clients (chat §8.3). Run metadata: §7.1. Read-back: §5.6.
 
 ### 5.5 Discovery: `GET /v1/fors/context` and `GET /v1/models`
@@ -455,7 +455,7 @@ neither is accounted as a model request. The admin's sync is admin §4.10.
   `has_system_prompt`, `usable`: false when the presenting credential key shares no residency with it). Revoked keys
   are not listed; disabled and expired ones are, with their `status`. Without a scope, `departments` and `teams` are
   those of the assigned keys plus the owner team; with **`organisation.read`** (feature `organisation`; gateway admins
-  set it on `rag-admin`'s credential key only) they are every department and team, inactive ones included with
+  set it on `kalla-admin`'s credential key only) they are every department and team, inactive ones included with
   `is_active: false`, and each department with its `member_groups` (feature `member-groups`, #85). The `ETag` changes
   when a department or team changes.
 - **`GET /v1/models`** gains under `kalla` (phase 1): `kind`, `residencies` (an alias) or `residency` (a model),
@@ -475,7 +475,7 @@ v0.10.2, M-17 C11), authenticated with
 `Authorization: Bearer` and a credential key of an active integration that carries the scope `usage.read`: `401` for
 any other key or none, `403` without the scope (gateway v0.10.0,
 `src/Fors.AdminApi/Integrations/IntegrationApiEndpoints.cs`, `IntegrationApiService.cs`). Only
-`rag-admin`'s credential key gets the scope, so the keys that serve chat can read nothing. The key's status, expiry
+`kalla-admin`'s credential key gets the scope, so the keys that serve chat can read nothing. The key's status, expiry
 and address list apply as on the gateway; its own rate limit per key, `Admin:IntegrationRequestsPerMinute` (60,
 `429` beyond it); every read is the gateway's security event 2006 `admin.data.read`. Errors are problem details; names
 are camelCase. Read-only: keys and budgets are never created through it; they are made in the gateway by the people
@@ -608,10 +608,10 @@ counters (gateway `docs/integrations.md`).
 
 | Setting | Env | Feature | Default |
 |---|---|---|---|
-| `Oidc:TenantId` | `UME_OIDC_TENANT_ID` | C | – |
-| `Oidc:RefuseGuests` | `UME_OIDC_REFUSE_GUESTS` | C | `true` |
-| `DataApi:TenantId` | `UME_DATA_TENANT_ID` | C | `UME_OIDC_TENANT_ID` |
-| `DataApi:RefuseGuests` | `UME_DATA_REFUSE_GUESTS` | C | `UME_OIDC_REFUSE_GUESTS` |
+| `Oidc:TenantId` | `FORS_OIDC_TENANT_ID` | C | – |
+| `Oidc:RefuseGuests` | `FORS_OIDC_REFUSE_GUESTS` | C | `true` |
+| `DataApi:TenantId` | `FORS_DATA_TENANT_ID` | C | `FORS_OIDC_TENANT_ID` |
+| `DataApi:RefuseGuests` | `FORS_DATA_REFUSE_GUESTS` | C | `FORS_OIDC_REFUSE_GUESTS` |
 
 B needs no settings: the ceiling is per request and `RequireMaxResidency` per key. Feature A's settings (e.g.
 `Gateway:AdminUrl` for `admin_url`) are the gateway's own. The run-header length limit (100) is a constant,
@@ -721,8 +721,8 @@ ceiling; `x-fors-residency` now documented; key flag `RequireMaxResidency`; Fake
 `fake-embed-<n>` (development only). Nothing changes for clients that send no ceiling.
 
 **Release 2.** *Rolling update: yes* (rules above). *Check before upgrading*: guests are now refused at sign-in by
-default (`acct = 1` or a foreign `idp`): set `UME_OIDC_REFUSE_GUESTS=false` to keep admitting them; set
-`UME_OIDC_TENANT_ID` on Entra. *Opt in*: member groups on *Organisation* (the IdP must emit them in the group claim).
+default (`acct = 1` or a foreign `idp`): set `FORS_OIDC_REFUSE_GUESTS=false` to keep admitting them; set
+`FORS_OIDC_TENANT_ID` on Entra. *Opt in*: member groups on *Organisation* (the IdP must emit them in the group claim).
 New `/bff/user` field, Data API `memberGroups`, team `code`, events 2008/3003. The integration phases have their own
 upgrade-guide entries (gateway `docs/integrations.md`).
 
@@ -733,7 +733,7 @@ contract and the integration contract of §5 (built against the gateway's publis
 
 **P1a, before release 1** (Decisions "P1a plan answers", "Interim gateway for P1a"): Ume.Rag calls the gateway as it
 is (v0.8.5), on an interim **test/dev gateway instance** on a fixed host (HTTPS, public certificate) with EU-hosted
-embedding and chat models; it is the interim J10, and the same host's Keycloak holds the shared realm `kalla` (J11).
+embedding and chat models; it is the interim J10, and the same host's Keycloak holds the shared realm `fors` (J11).
 Address and keys live only in user secrets or `deploy/.env` and secret files, never in the repository. Everything is
 EU-hosted until on-prem hardware exists (register M2): the pilot embedding profile is `text-embedding-3-large` at 1024
 dimensions, requested with `dimensions`. Ume.Rag already behaves as for release 1: every call carries
@@ -760,10 +760,10 @@ dimensions, requested with `dimensions`. Ume.Rag already behaves as for release 
 
 **With the gateway's integration phases** (§5; cost-attribution §6 orders Ume.Rag's work):
 
-- **Phase 1:** a gateway admin makes the integration *Ume.Rag* and one credential key per service (`rag-api`,
-  `rag-admin`, `rag-worker`) in its owner team, each with `AllowedIpRanges` and `RequireMaxResidency = true`; the
+- **Phase 1:** a gateway admin makes the integration *Ume.Rag* and one credential key per service (`kalla-api`,
+  `kalla-admin`, `kalla-worker`) in its owner team, each with `AllowedIpRanges` and `RequireMaxResidency = true`; the
   worker's has `AllowedResidencies = [OnPrem, Eu]` (an upper bound on every key it acts as, #84, §5.3);
-  `rag-admin`'s holds the scope `organisation.read`. They replace the per-level keys, which are revoked. Every call still carries `x-fors-max-residency`; calls
+  `kalla-admin`'s holds the scope `organisation.read`. They replace the per-level keys, which are revoked. Every call still carries `x-fors-max-residency`; calls
   run as the credential key and are charged to the owner team. The admin syncs the gateway's features, the assigned
   keys, the models and (with `organisation.read`) every department and team with its member groups from
   `GET /v1/fors/context` and `GET /v1/models` (admin §4.10); the Data API key is revoked.
@@ -771,7 +771,7 @@ dimensions, requested with `dimensions`. Ume.Rag already behaves as for release 
 - **Phase 2** (`features` `act-as-key`): every call of an assistant or knowledge base with a key sends
   `x-fors-on-behalf-of: <key id>` and checks the echo (identity §4.7); streamed calls ask for the stream cost; saves
   check models with `GET /v1/models` as the object's key (admin §4.6 V8, V39); publishing an assistant needs a key.
-- **Phase 3:** `rag-admin`'s credential key gets `usage.read`; the admin shows the gateway's cost and budget status
+- **Phase 3:** `kalla-admin`'s credential key gets `usage.read`; the admin shows the gateway's cost and budget status
   per assistant and knowledge base (§5.6).
 - Member groups (v0.10.0, feature `member-groups`): `OrgSync` takes `member_groups` from the context's departments.
   Tenant and guest refusal (`TenantId`/`RefuseGuests`) is not built in the gateway yet.

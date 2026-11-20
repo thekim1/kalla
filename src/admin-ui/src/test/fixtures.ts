@@ -70,11 +70,11 @@ export function collectionUser(overrides: Partial<CollectionUser> = {}): Collect
   }
 }
 
-/** rag-admin's sign-in values of `GET /bff/setup/state`, all defaults (a first run); override per value. */
+/** kalla-admin's sign-in values of `GET /bff/setup/state`, all defaults (a first run); override per value. */
 export function signInSettings(overrides: Partial<SignInSettings> = {}): SignInSettings {
   return {
     authority: { value: null, source: 'default' },
-    clientId: { value: 'ume-rag-admin', source: 'default' },
+    clientId: { value: 'kalla-admin', source: 'default' },
     clientSecret: { set: false, source: 'default', setAt: null, expiresOn: null, unreadable: false },
     roleClaim: { value: 'roles', source: 'default' },
     departmentClaim: { value: 'departmentCodes', source: 'default' },
@@ -99,7 +99,7 @@ export function wizardValues(overrides: Partial<OidcWizardValues> = {}): OidcWiz
 /** A passed test by a platform admin of the provider https://idp.example.org/realms/ume. */
 export function setupTest(overrides: Partial<SetupTest> = {}): SetupTest {
   return {
-    testId: 't1', target: 'rag-admin', status: 'passed', reason: null, startedAt: '2026-11-15T10:00:00Z', expiresAt: '2026-11-15T10:10:00Z',
+    testId: 't1', target: 'kalla-admin', status: 'passed', reason: null, startedAt: '2026-11-15T10:00:00Z', expiresAt: '2026-11-15T10:10:00Z',
     values: wizardValues({ authority: 'https://idp.example.org/realms/ume' }), clientSecret: 'typed',
     result: {
       subject: 'sub-1', name: 'Anna Andersson', roles: ['rag-platform-admin'], groups: ['rag-admins'], groupCount: 1, departmentCodes: ['1000'], teamCodes: [],
@@ -147,7 +147,7 @@ export function setupState(overrides: Partial<SetupState> = {}, now: number = Da
     endsAt: new Date(now + 50 * 60_000).toISOString(),
     sessionExpiresAt: new Date(now + 25 * 60_000).toISOString(),
     signIn: signInSettings(),
-    redirectUris: { signIn: 'https://rag-admin.example.org/signin-oidc', signOutCallback: 'https://rag-admin.example.org/signout-callback-oidc' },
+    redirectUris: { signIn: 'https://kalla-admin.example.org/signin-oidc', signOutCallback: 'https://kalla-admin.example.org/signout-callback-oidc' },
     deployment: { gatewayBaseUrl: 'https://gateway.example.org', apiPublicUrl: null, platformAdminGroups: [] },
     gateway: null,
     latestTest: null,

@@ -21,7 +21,7 @@ public sealed class OpenWebUiOptions
 
     /// <summary>
     /// The feedback service account's API key (<c>OpenWebUi__AdminApiKey</c>), minted by the deployment's
-    /// <c>rag-openwebui-setup</c> job into <c>Security:ExtraSecretsDirectory</c> (<c>deploy/openwebui/feedback-key-setup.py</c>).
+    /// <c>kalla-openwebui-setup</c> job into <c>Security:ExtraSecretsDirectory</c> (<c>deploy/openwebui/feedback-key-setup.py</c>).
     /// </summary>
     public string? AdminApiKey { get; set; }
 

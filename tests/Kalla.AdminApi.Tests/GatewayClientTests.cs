@@ -24,7 +24,7 @@ namespace Kalla.AdminApi.Tests;
 /// </summary>
 public sealed class GatewayClientFixture : RagDatabase, IAsyncLifetime
 {
-    /// <summary>rag-admin's credential key (identity design §4.7): one key at every ceiling up to its maximum.</summary>
+    /// <summary>kalla-admin's credential key (identity design §4.7): one key at every ceiling up to its maximum.</summary>
     public const string AdminKey = "fake-admin-credential-key-gw-0123456789";
 
     public Guid ProfileId { get; } = Guid.CreateVersion7();
@@ -41,7 +41,7 @@ public sealed class GatewayClientFixture : RagDatabase, IAsyncLifetime
         await db.SaveChangesAsync();
     }
 
-    /// <summary>The FakeGateway with rag-admin's credential key.</summary>
+    /// <summary>The FakeGateway with kalla-admin's credential key.</summary>
     public WebApplicationFactory<FakeGatewayProgram> Gateway() => new WebApplicationFactory<FakeGatewayProgram>().WithWebHostBuilder(web =>
     {
         web.UseEnvironment("Development");

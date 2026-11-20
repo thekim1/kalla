@@ -42,7 +42,7 @@ jobs:
       - name: Build
         working-directory: site
         env:
-          SITE_BASE: /ume-rag-platform/
+          SITE_BASE: /kalla-platform/
         run: |
           npm ci
           npm audit --audit-level=low

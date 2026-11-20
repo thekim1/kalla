@@ -85,7 +85,7 @@ public sealed class SignInClientSecret(string source, string? value, DateTimeOff
 }
 
 /// <summary>
-/// rag-admin's sign-in values as they apply now (identity design §19), with the settings <see cref="Version"/> they were read at
+/// kalla-admin's sign-in values as they apply now (identity design §19), with the settings <see cref="Version"/> they were read at
 /// (<c>0</c> while no settings row exists) and <see cref="SetupCompletedAt"/> from the same row.
 /// </summary>
 public sealed record EffectiveSignIn(
@@ -101,7 +101,7 @@ public sealed record EffectiveSignIn(
 }
 
 /// <summary>
-/// rag-admin's sign-in values (identity design §19): each from the deployment (<c>Oidc:*</c> in the raw configuration, where an
+/// kalla-admin's sign-in values (identity design §19): each from the deployment (<c>Oidc:*</c> in the raw configuration, where an
 /// empty value is unset; the bound options cannot tell a default from a set value), else from <c>Settings.Identity.Oidc.*</c>,
 /// else the code's default. Configuration is read at each call, so a reloaded secret file applies; the settings row too, so every
 /// replica sees a save at once. <c>Oidc:RoleGroups</c> stays a deployment value outside this (identity design §2.5).
@@ -172,7 +172,7 @@ public sealed class SignInSettings(RagDbContext db, IConfiguration configuration
     }
 
     /// <summary>
-    /// Whether the deployment declares rag-admin's sign-in: an authority and a client secret in the raw configuration (the client id
+    /// Whether the deployment declares kalla-admin's sign-in: an authority and a client secret in the raw configuration (the client id
     /// has a code default, so it alone cannot say). Such a deployment counts as setup completed (identity design §19, "Setup state").
     /// </summary>
     public static bool DeclaresSignIn(IConfiguration configuration)
@@ -238,7 +238,7 @@ public sealed class SignInSettings(RagDbContext db, IConfiguration configuration
             : stored.ExtraScopes is { } wizardScopes ? new(wizardScopes, SignInValueSources.Wizard)
             : new(Defaults.ExtraScopes, SignInValueSources.Default);
 
-        // As the options binder reads it: a value that is not a boolean fails here as it fails rag-admin's start.
+        // As the options binder reads it: a value that is not a boolean fails here as it fails kalla-admin's start.
         SignInValue<bool> refuseGuests = Deployed(oidc, nameof(OidcOptions.RefuseGuests)) is not null
             ? new(oidc.GetValue<bool>(nameof(OidcOptions.RefuseGuests)), SignInValueSources.Deployment)
             : stored.RefuseGuests is { } wizardRefuses ? new(wizardRefuses, SignInValueSources.Wizard)

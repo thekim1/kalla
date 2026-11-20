@@ -7,7 +7,7 @@ name: Perf
 #              the full crawl of the page copy plus the OCR batch; the pass rule fails the job.
 #   overhead   (test host): Open WebUI-shaped requests, report only.
 # The test-host jobs run on the self-hosted runner of repo-and-deployment §12 item 4 (P1b hand-off L11), named by the
-# repository variable UME_RAG_TEST_HOST_RUNNER (a JSON list of labels, e.g. ["self-hosted","ume-rag-test-host"]) and
+# repository variable KALLA_TEST_HOST_RUNNER (a JSON list of labels, e.g. ["self-hosted","kalla-test-host"]) and
 # protected by the environment test-host. Until it exists they are skipped with a notice, and the same harness runs by
 # hand on the host (the stopgap). Weekly (Monday) the schedule runs the dry run and, with the runner, R1; before each
 # release, dispatch mode r1.
@@ -68,8 +68,8 @@ jobs:
           if-no-files-found: warn
 
   test-host:
-    if: vars.UME_RAG_TEST_HOST_RUNNER != '' && (github.event_name == 'schedule' || inputs.mode == 'r1' || inputs.mode == 'overhead')
-    runs-on: ${{ fromJSON(vars.UME_RAG_TEST_HOST_RUNNER || '["self-hosted","linux","x64"]') }}
+    if: vars.KALLA_TEST_HOST_RUNNER != '' && (github.event_name == 'schedule' || inputs.mode == 'r1' || inputs.mode == 'overhead')
+    runs-on: ${{ fromJSON(vars.KALLA_TEST_HOST_RUNNER || '["self-hosted","linux","x64"]') }}
     environment: test-host
     timeout-minutes: 180
     env:
@@ -77,21 +77,21 @@ jobs:
       DURATION: ${{ inputs.duration || 600 }}
       # The deployment under test (deploy/.env of the test host's bundle, gateway = FakeGateway with the R1 profile),
       # the chat API as the runner reaches it, and the assistant the requests go to.
-      DEPLOY_ENV: ${{ vars.UME_RAG_TEST_HOST_DEPLOY_ENV }}
-      BASE_URL: ${{ vars.UME_RAG_R1_BASE_URL }}
-      MODEL: ${{ vars.UME_RAG_R1_MODEL }}
+      DEPLOY_ENV: ${{ vars.KALLA_TEST_HOST_DEPLOY_ENV }}
+      BASE_URL: ${{ vars.KALLA_R1_BASE_URL }}
+      MODEL: ${{ vars.KALLA_R1_MODEL }}
       # Phase 2: the crawl source pointing at the page copy, the upload source and its staged OCR batch, the Docker
       # network the copy is served on, and the real copy's folder on the host (empty: the generated placeholder).
-      CRAWL_SOURCE: ${{ vars.UME_RAG_R1_CRAWL_SOURCE }}
-      UPLOAD_SOURCE: ${{ vars.UME_RAG_R1_UPLOAD_SOURCE }}
-      UPLOAD_BATCH: ${{ vars.UME_RAG_R1_UPLOAD_BATCH }}
-      SITE_NETWORK: ${{ vars.UME_RAG_R1_SITE_NETWORK || 'ume-rag_llm' }}
-      SITE_DIR: ${{ vars.UME_RAG_R1_SITE_DIR }}
+      CRAWL_SOURCE: ${{ vars.KALLA_R1_CRAWL_SOURCE }}
+      UPLOAD_SOURCE: ${{ vars.KALLA_R1_UPLOAD_SOURCE }}
+      UPLOAD_BATCH: ${{ vars.KALLA_R1_UPLOAD_BATCH }}
+      SITE_NETWORK: ${{ vars.KALLA_R1_SITE_NETWORK || 'kalla_llm' }}
+      SITE_DIR: ${{ vars.KALLA_R1_SITE_DIR }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Key file
         env:
-          API_KEY: ${{ secrets.UME_RAG_R1_API_KEY }}
+          API_KEY: ${{ secrets.KALLA_R1_API_KEY }}
         run: |
           umask 077
           printf '%s' "$API_KEY" > "$RUNNER_TEMP/r1-key"
@@ -106,8 +106,8 @@ jobs:
           bash benchmarks/release-test/site/serve.sh start "$site" --network "$SITE_NETWORK"
       - name: Run
         run: |
-          # The internal CA from the deployment's rag-certs volume, through rag-bootstrap's container (it has it at /certs).
-          docker compose --env-file "$DEPLOY_ENV" run --rm --no-deps -T --entrypoint cat rag-bootstrap /certs/ca.pem > "$RUNNER_TEMP/rag-ca.pem"
+          # The internal CA from the deployment's kalla-certs volume, through kalla-bootstrap's container (it has it at /certs).
+          docker compose --env-file "$DEPLOY_ENV" run --rm --no-deps -T --entrypoint cat kalla-bootstrap /certs/ca.pem > "$RUNNER_TEMP/rag-ca.pem"
           args=(--mode "$MODE" --base-url "$BASE_URL" --model "$MODEL" --key-file "$RUNNER_TEMP/r1-key"
                 --ca-file "$RUNNER_TEMP/rag-ca.pem" --duration "$DURATION" --deploy-env "$DEPLOY_ENV" --out "$RUNNER_TEMP/perf")
           if [ "$MODE" = r1 ]; then
@@ -132,10 +132,10 @@ jobs:
           if-no-files-found: warn
 
   test-host-missing:
-    if: vars.UME_RAG_TEST_HOST_RUNNER == '' && (inputs.mode == 'r1' || inputs.mode == 'overhead')
+    if: vars.KALLA_TEST_HOST_RUNNER == '' && (inputs.mode == 'r1' || inputs.mode == 'overhead')
     runs-on: [self-hosted, linux, x64]
     steps:
       - name: No test-host runner yet
         run: |
-          echo "::notice::No self-hosted test-host runner is configured (repository variable UME_RAG_TEST_HOST_RUNNER," \
+          echo "::notice::No self-hosted test-host runner is configured (repository variable KALLA_TEST_HOST_RUNNER," \
             "P1b hand-off L11). Run benchmarks/release-test/run.sh on the test host by hand (README there)."

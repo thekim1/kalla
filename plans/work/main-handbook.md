@@ -38,7 +38,7 @@ learned, not every session (the session's state is in [`../../HANDOVER.md`](../.
 ## Local stack (this machine)
 
 - **State at handover:** the dev AppHost is **stopped**. No ClamAV container exists any more (the "persistent" one
-  was gone before session 31 started; its signatures are still in the volume `ume-rag-clamav-db`). Migrations through
+  was gone before session 31 started; its signatures are still in the volume `kalla-clamav-db`). Migrations through
   `AnswerLengthFromModel` are applied on the dev database; the next start applies the rest (`KeywordStatistics`,
   `UploadScannedAt`, `GatewayKeys`, `GatewayModelLimitsSource`, `DailyUsage`, `ObjectGatewayKeys`,
   `DailyTotalsWithoutCost`). After `UploadScannedAt` every existing upload row has `ScannedAt` null: run the
@@ -52,8 +52,8 @@ learned, not every session (the session's state is in [`../../HANDOVER.md`](../.
 - Start: `export Seed__Enabled=false; aspire start --apphost src/Kalla.AppHost/Kalla.AppHost.csproj
   --non-interactive` (Docker up: `docker info`). Stop: **`aspire stop --all --non-interactive`**. Restart one service:
   `aspire resource worker restart --apphost … --non-interactive`.
-- **E2E locally without pwsh:** `aspire stop --all`; `docker volume rm ume-rag-e2e-postgres`; export
-  `DevelopmentVolumes__Postgres=ume-rag-e2e-postgres Seed__Enabled=true FakeGateway__Enabled=true E2E__Enabled=true`;
+- **E2E locally without pwsh:** `aspire stop --all`; `docker volume rm kalla-e2e-postgres`; export
+  `DevelopmentVolumes__Postgres=kalla-e2e-postgres Seed__Enabled=true FakeGateway__Enabled=true E2E__Enabled=true`;
   `aspire start --apphost src/Kalla.AppHost/Kalla.AppHost.csproj --non-interactive`; `aspire wait admin-ui
   --apphost …`; in `tests/e2e`: `npm ci`, `npx playwright install chromium`, `npx playwright test` (9 tests, ~10 min).
 - Aspire CLI: `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on PATH).
@@ -77,17 +77,17 @@ learned, not every session (the session's state is in [`../../HANDOVER.md`](../.
     sync is off locally, so the embedding profile's model shows "Not among the gateway's models" (expected).
   - **Embedding profile:** `pilot-embedding`, in use, unchanged (a **Test** call was made, no save).
 - **Scripting uploads through the admin API:** upload slots are numbered from 1 (`PUT /api/upload-batches/{id}/files/1`), and the commit takes the slot numbers (`{"files": [1, 2, …]}`); an empty commit answers `upload_batch_too_large` (1 to 100 files). A published assistant needs a description, a contact and a gateway key (V39) whose residencies reach the collection's embedding model too. `aspire stop --all` returns before the persistent containers have stopped: wait a few seconds before `docker volume rm`. `dotnet dev-certs https --export-path x.pem --format Pem --no-password` also writes `x.key` (the dev certificate's private key): delete it afterwards.
-- **Admin API scripting:** `~/ume-rag-tools/` (outside the repo, no secrets in it): `admin.py` (BFF login from the
+- **Admin API scripting:** `~/kalla-tools/` (outside the repo, no secrets in it): `admin.py` (BFF login from the
   AppHost user secret, XSRF; `python3 -I admin.py GET /api/assistants`, or `import admin; admin.call(m, path, body)`;
   raw uploads through `admin.req` with `X-XSRF-TOKEN` and `X-File-Name`), `pf.py '<preflight JSON>'`, `runwait.py
   <sourceId> [start]`, `chat.py <n> <label> <out.json> [gap s]`. Run them from that folder.
 - Feedback importer: every minute, user secret `Parameters:openwebui-admin-api-key`. Logins:
-  `~/ume-rag-demo-login.txt` (mode 600; port 7410). Draft gold sets: `~/ume-rag-gold-draft-*.csv`, `plans/gold-set/`.
+  `~/kalla-demo-login.txt` (mode 600; port 7410). Draft gold sets: `~/kalla-gold-draft-*.csv`, `plans/gold-set/`.
 - Postgres: `docker exec -e PGPASSWORD="$(docker exec <postgres-…> printenv POSTGRES_PASSWORD)" <postgres-…> psql -h
   localhost -U postgres -d ragdb` (schemas `config`, `content`, `chat`).
-- Local images: `ume-rag/renderer:ci` (also `ume-rag.local/renderer:ci`; the container test uses
-  `UME_RAG_TEST_RENDERER_IMAGE=ume-rag.local/renderer:ci`), `ume-rag.local/clamav:dev`, `ume-rag.local/parser:ci`
-  (pre-#526), `ume-rag.local/postgres:ci`.
+- Local images: `kalla/renderer:ci` (also `kalla.local/renderer:ci`; the container test uses
+  `KALLA_TEST_RENDERER_IMAGE=kalla.local/renderer:ci`), `kalla.local/clamav:dev`, `kalla.local/parser:ci`
+  (pre-#526), `kalla.local/postgres:ci`.
 - `~/git/llmgateway`'s working tree is still at v0.9.0; `origin` is fetched through **v0.10.0** (tag). Read the
   gateway with `git show v0.10.0:<path>`, or pull first. Where its docs and its code differ, follow the code.
 - Worktrees: none besides the main clone (the agents' worktrees and the `../rag-*` ones were removed).
@@ -148,8 +148,8 @@ main session needs:
     workflow that pulls from ghcr.io sets its own `DOCKER_CONFIG`.
   - **Run `e2e.yml` at least once between releases.** It hadn't run from 2026-11-08 to 11-15 and seven UI changes had
     drifted from the pilot spec, which took nine CI rounds to clear; the accessibility spec found real target-size bugs.
-  - An inline (`content:`) config can't go into a `read_only` service: copy the file into `rag-config` from the
-    bootstrap instead (as `rag-proxy`, `rag-openwebui-setup`).
+  - An inline (`content:`) config can't go into a `read_only` service: copy the file into `kalla-config` from the
+    bootstrap instead (as `kalla-proxy`, `kalla-openwebui-setup`).
   - **Test a stack-file or boot-test fix with the boot-only run, not a dry run** (#752, session 39):
     `gh workflow run release.yml --ref <branch> -f portainer_boot=X.Y.Z` boots `<branch>`'s stack against X.Y.Z's
     images on ghcr.io in about 2 minutes (a failed tag run has already pushed its images). 0.6.0's `--wait` fix went
@@ -198,8 +198,8 @@ main session needs:
   the next free number. Cite stable IDs (V39, a rule's name) where one exists.
 - **AdminApi.Tests database classes** go into one of `AdminDatabaseGroup1`..`4`, the shortest by measured time
   (#648); the per-project test times are in the `backend` job log's *Test run summary*.
-- **UI checks on realistic data** (session 37): copy the dev volume (`ume-rag-m1-postgres`) to a throwaway one with
-  `docker run --rm -v ume-rag-m1-postgres:/from:ro -v <copy>:/to alpine cp -a /from/. /to/`, start the FakeGateway stack
+- **UI checks on realistic data** (session 37): copy the dev volume (`kalla-m1-postgres`) to a throwaway one with
+  `docker run --rm -v kalla-m1-postgres:/from:ro -v <copy>:/to alpine cp -a /from/. /to/`, start the FakeGateway stack
   on it (*Local stack*), and remove it afterwards. The Playwright MCP browser rejects the dev certificate: drive a Node
   script with `tests/e2e/node_modules/playwright` and `ignoreHTTPSErrors: true`, reading the login password from the
   user secret inside the script, never on a command line.
@@ -226,7 +226,7 @@ main session needs:
   alone and 66 s beside three others; two processes side by side took 148 s. The collections of one process wait for
   one another (not CPU, thread pool, `fsync` or GC), so CI runs the project as five processes
   (`scripts/ci/backend-tests.sh`). Measure with the test executable itself: `-xml <file>` gives every test's time,
-  `-class`/`-class-` pick the classes; `UME_RAG_TEST_POSTGRES_TMPFS=1` doesn't start with the `:ci` Postgres image.
+  `-class`/`-class-` pick the classes; `KALLA_TEST_POSTGRES_TMPFS=1` doesn't start with the `:ci` Postgres image.
 
 - **Shell tests that pass here and fail on the runner** (session 46, twice): `join` and `sort` pair names by the
   locale's collation (one that ignores punctuation took `secrets/.openwebui-jwt-secret` and
@@ -248,9 +248,9 @@ main session needs:
   changes go on a `main-session/` branch; a design line that belongs to a code change goes into that pull request.
 - **SQL in `src/Kalla.Infrastructure/` uses positional parameters** (`$1`), also in new non-EF code: the API's SQL
   contract prepares every string constant there and reads `@name` as a column (session 47; run
-  `tests/Kalla.Api.Tests` `SqlSchemaContractTests`, regenerate with `UME_RAG_UPDATE_CONTRACTS=1`).
+  `tests/Kalla.Api.Tests` `SqlSchemaContractTests`, regenerate with `KALLA_UPDATE_CONTRACTS=1`).
 - **The runners have no `gh`:** a workflow step downloads a release asset with `scripts/ci/release-asset.sh`.
-- **A boot test's fixture is the earlier release's own example file with real-looking values:** 0.5.1's rag-admin
+- **A boot test's fixture is the earlier release's own example file with real-looking values:** 0.5.1's kalla-admin
   refuses a platform-admin group that doesn't start with `rag-` and restarts for ever (session 47).
 - **Six pull requests at once fill both runners for an hour** (session 47): open the small ones first, and dispatch a
   dry run only after the pull request's own checks are done.

@@ -25,21 +25,21 @@ internal sealed class PresetCrawlPolicy(IEnumerable<string> hosts, string preset
 }
 
 /// <summary>The probe's knobs, from the environment (defaults in brackets).</summary>
-/// <param name="Pages">Pages per host (<c>UME_RAG_SCALE_PAGES</c>, 20).</param>
-/// <param name="Latency">Each request's latency at the site (<c>UME_RAG_SCALE_LATENCY_MS</c>, 50).</param>
-/// <param name="RenderTime">Each page's render on the fake renderer (<c>UME_RAG_SCALE_RENDER_MS</c>, 1500).</param>
-/// <param name="FetchLanes"><c>Worker:Concurrency:fetch</c> (<c>UME_RAG_SCALE_FETCH</c>, the default 8).</param>
-/// <param name="RenderSlots"><c>Render:MaxConcurrent</c> (<c>UME_RAG_SCALE_RENDER_MAX</c>, the default 2).</param>
-/// <param name="MaxHosts">Scenarios with more hosts are skipped (<c>UME_RAG_SCALE_MAX_HOSTS</c>, none).</param>
+/// <param name="Pages">Pages per host (<c>KALLA_SCALE_PAGES</c>, 20).</param>
+/// <param name="Latency">Each request's latency at the site (<c>KALLA_SCALE_LATENCY_MS</c>, 50).</param>
+/// <param name="RenderTime">Each page's render on the fake renderer (<c>KALLA_SCALE_RENDER_MS</c>, 1500).</param>
+/// <param name="FetchLanes"><c>Worker:Concurrency:fetch</c> (<c>KALLA_SCALE_FETCH</c>, the default 8).</param>
+/// <param name="RenderSlots"><c>Render:MaxConcurrent</c> (<c>KALLA_SCALE_RENDER_MAX</c>, the default 2).</param>
+/// <param name="MaxHosts">Scenarios with more hosts are skipped (<c>KALLA_SCALE_MAX_HOSTS</c>, none).</param>
 internal sealed record ProbeKnobs(int Pages, TimeSpan Latency, TimeSpan RenderTime, int FetchLanes, int RenderSlots, int MaxHosts)
 {
     public static ProbeKnobs FromEnvironment() => new(
-        Read("UME_RAG_SCALE_PAGES", 20),
-        TimeSpan.FromMilliseconds(Read("UME_RAG_SCALE_LATENCY_MS", 50)),
-        TimeSpan.FromMilliseconds(Read("UME_RAG_SCALE_RENDER_MS", 1500)),
-        Read("UME_RAG_SCALE_FETCH", JobClassPolicy.For(JobClasses.Fetch).DefaultConcurrency),
-        Read("UME_RAG_SCALE_RENDER_MAX", new RenderOptions().MaxConcurrent),
-        Read("UME_RAG_SCALE_MAX_HOSTS", int.MaxValue));
+        Read("KALLA_SCALE_PAGES", 20),
+        TimeSpan.FromMilliseconds(Read("KALLA_SCALE_LATENCY_MS", 50)),
+        TimeSpan.FromMilliseconds(Read("KALLA_SCALE_RENDER_MS", 1500)),
+        Read("KALLA_SCALE_FETCH", JobClassPolicy.For(JobClasses.Fetch).DefaultConcurrency),
+        Read("KALLA_SCALE_RENDER_MAX", new RenderOptions().MaxConcurrent),
+        Read("KALLA_SCALE_MAX_HOSTS", int.MaxValue));
 
     private static int Read(string name, int fallback) =>
         int.TryParse(Environment.GetEnvironmentVariable(name), NumberStyles.None, CultureInfo.InvariantCulture, out var value) && value > 0 ? value : fallback;
@@ -182,7 +182,7 @@ public sealed class CrawlConcurrencyProbeTests(RagDatabaseFixture database, Fake
     public const string Category = "Scale";
 
     /// <summary>The environment variable that turns the probe on.</summary>
-    public const string Switch = "UME_RAG_SCALE";
+    public const string Switch = "KALLA_SCALE";
 
     private static readonly Lock ReportLock = new();
     private static bool _reportStarted;
@@ -210,7 +210,7 @@ public sealed class CrawlConcurrencyProbeTests(RagDatabaseFixture database, Fake
     {
         Assert.SkipWhen(Environment.GetEnvironmentVariable(Switch) != "1", $"{Switch}=1 runs the crawl concurrency probe (A-18).");
         var knobs = ProbeKnobs.FromEnvironment();
-        Assert.SkipWhen(hosts > knobs.MaxHosts, $"UME_RAG_SCALE_MAX_HOSTS is {knobs.MaxHosts}.");
+        Assert.SkipWhen(hosts > knobs.MaxHosts, $"KALLA_SCALE_MAX_HOSTS is {knobs.MaxHosts}.");
         await database.ResetAsync();
 
         await using var site = await ScaleSite.StartAsync(hosts, knobs.Pages, knobs.Latency);
@@ -236,7 +236,7 @@ public sealed class CrawlConcurrencyProbeTests(RagDatabaseFixture database, Fake
                 return FakeRenderer.Page(site.PageAt(request.Url));
             },
         };
-        var blobs = Directory.CreateTempSubdirectory("ume-rag-scale-blobs-");
+        var blobs = Directory.CreateTempSubdirectory("kalla-scale-blobs-");
         try
         {
             await using var worker = await EngineKit.StartWorkerAsync(database, site.Site, gateway, blobs, settings: Settings(knobs), services: s =>

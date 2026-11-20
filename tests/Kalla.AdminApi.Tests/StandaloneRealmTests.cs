@@ -19,10 +19,10 @@ public sealed class StandaloneRealmFixture : IAsyncLifetime
             [Path.Combine("deploy", "keycloak", "rag-additions.json")],
             new Dictionary<string, string>
             {
-                ["UME_RAG_ADMIN_PUBLIC_HOST"] = "rag-admin.example.invalid",
-                ["UME_RAG_OPENWEBUI_HOST"] = "chat.example.invalid",
-                ["UME_RAG_OIDC_CLIENT_SECRET"] = TestSecrets.RandomHex(),
-                ["UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET"] = TestSecrets.RandomHex(),
+                ["KALLA_ADMIN_PUBLIC_HOST"] = "kalla-admin.example.invalid",
+                ["KALLA_OPENWEBUI_HOST"] = "chat.example.invalid",
+                ["KALLA_OIDC_CLIENT_SECRET"] = TestSecrets.RandomHex(),
+                ["KALLA_OPENWEBUI_OIDC_CLIENT_SECRET"] = TestSecrets.RandomHex(),
             });
     }
 
@@ -66,7 +66,7 @@ public sealed class StandaloneRealmTests(StandaloneRealmFixture keycloak) : ICla
         var password = TestSecrets.RandomHex(16);
         var user = await keycloak.Import.CreateUserAsync("rag-admin-user", password, ["rag-platform-admin"],
             new() { ["departmentCodes"] = ["1000"], ["teamCodes"] = ["T1"] });
-        using (var token = await RealmImport.ExampleTokenAsync(admin, "ume-rag-admin", user))
+        using (var token = await RealmImport.ExampleTokenAsync(admin, "kalla-admin", user))
         {
             Strings(token.RootElement.GetProperty("roles")).ShouldBe(["rag-platform-admin"]);
             Strings(token.RootElement.GetProperty("departmentCodes")).ShouldBe(["1000"]);

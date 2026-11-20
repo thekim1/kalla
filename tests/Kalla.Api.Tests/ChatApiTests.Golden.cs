@@ -18,7 +18,7 @@ namespace Kalla.Api.Tests;
 /// streamed answer with citations (also as Open WebUI), a degraded answer (caveat before cited text), a general-knowledge answer with caveat and links, a fixed text,
 /// a refusal before the first byte and an upstream failure mid-stream, against golden files in
 /// <c>tests/Kalla.Api.Tests/Golden/chat</c>. Ids, <c>created</c>, request ids and the conversation id are masked. With
-/// <c>UME_RAG_UPDATE_GOLDEN=1</c> the files are rewritten.
+/// <c>KALLA_UPDATE_GOLDEN=1</c> the files are rewritten.
 /// </summary>
 public sealed partial class ChatApiTests
 {
@@ -83,7 +83,7 @@ public sealed partial class ChatApiTests
 
     /// <summary>
     /// One request against <see cref="WireHost"/> compared with its golden file; the request carries <paramref name="kalla"/> only
-    /// when given, so the files without it pin today's bytes. <paramref name="update"/> lets <c>UME_RAG_UPDATE_GOLDEN=1</c> write the file.
+    /// when given, so the files without it pin today's bytes. <paramref name="update"/> lets <c>KALLA_UPDATE_GOLDEN=1</c> write the file.
     /// </summary>
     private async Task WireMatchesAsync(string name, bool stream, bool usage, bool openWebUi, string question, string? level, Upstream upstream, JsonElement? kalla,
         bool update, bool condenseModel = false)
@@ -116,14 +116,14 @@ public sealed partial class ChatApiTests
         var actual = Mask(wire.ToString());
 
         var file = Path.Combine(ChatGoldenDirectory, name + ".txt");
-        if (update && Environment.GetEnvironmentVariable("UME_RAG_UPDATE_GOLDEN") == "1")
+        if (update && Environment.GetEnvironmentVariable("KALLA_UPDATE_GOLDEN") == "1")
         {
             Directory.CreateDirectory(ChatGoldenDirectory);
             await File.WriteAllTextAsync(file, actual, Ct);
         }
 
-        File.Exists(file).ShouldBeTrue($"{file} is missing; run with UME_RAG_UPDATE_GOLDEN=1 to write it.");
-        actual.ShouldBe((await File.ReadAllTextAsync(file, Ct)).ReplaceLineEndings("\n"), $"{name}: run with UME_RAG_UPDATE_GOLDEN=1 to regenerate.");
+        File.Exists(file).ShouldBeTrue($"{file} is missing; run with KALLA_UPDATE_GOLDEN=1 to write it.");
+        actual.ShouldBe((await File.ReadAllTextAsync(file, Ct)).ReplaceLineEndings("\n"), $"{name}: run with KALLA_UPDATE_GOLDEN=1 to regenerate.");
     }
 
     /// <summary>Open WebUI's user headers (a signed user JWT and a chat id) on a client of a <see cref="WireHost"/> with <c>openWebUi</c>.</summary>

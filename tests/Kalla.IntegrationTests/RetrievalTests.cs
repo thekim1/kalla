@@ -11,7 +11,7 @@ namespace Kalla.IntegrationTests;
 
 /// <summary>
 /// The search core on Postgres (knowledge design §16.2; to-verify #4, #7, #19): statements K, V and H+D as
-/// <c>ume_rag_api</c> over chunks written by <see cref="ContentFixtureWriter"/>; every variant runs and is auto-prepared
+/// <c>kalla_api</c> over chunks written by <see cref="ContentFixtureWriter"/>; every variant runs and is auto-prepared
 /// once per connection; generic plans use the partial GIN, the per-profile HNSW and the <c>CollectionId</c> B-tree as
 /// designed; Swedish compounds and inflections; defence in depth; the statement time limit.
 /// </summary>

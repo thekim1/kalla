@@ -16,7 +16,7 @@ namespace Kalla.Worker.Tests.Engine;
 [Collection(RagDatabaseGroup4.Name)]
 public sealed class ChunkContentKindEngineTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-content-kind-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-content-kind-");
     private readonly string _marker = Guid.NewGuid().ToString("N");
 
     public async ValueTask InitializeAsync() => await database.ResetAsync();

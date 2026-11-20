@@ -13,7 +13,7 @@ namespace Kalla.Retrieval;
 /// </para>
 /// <para>
 /// Also the keyword stop list (§6.2, §20; Decisions "Keyword stop list before the pilot crawl"): the frequent lexemes
-/// per collection from <c>content."KeywordStatistics"</c>, which the worker keeps (A-29; rag-api runs no <c>ts_stat</c>,
+/// per collection from <c>content."KeywordStatistics"</c>, which the worker keeps (A-29; kalla-api runs no <c>ts_stat</c>,
 /// #499 step 2), read with the same interval. A stale list is refreshed in the background while searches use the
 /// previous one; only the first search waits for it, unless
 /// <see cref="WarmAsync"/> read them at start. A failed read keeps the previous statistics until the next interval; with

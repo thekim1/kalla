@@ -2,29 +2,29 @@
   "realm": "ume",
   "clients": [
     {
-      "clientId": "ume-rag-admin",
+      "clientId": "kalla-admin",
       "redirectUris": [
-        "https://$(env:UME_RAG_ADMIN_PUBLIC_HOST)/signin-oidc",
+        "https://$(env:KALLA_ADMIN_PUBLIC_HOST)/signin-oidc",
         "https://localhost:5174/signin-oidc",
         "https://localhost:7402/signin-oidc"
       ],
       "webOrigins": [
-        "https://$(env:UME_RAG_ADMIN_PUBLIC_HOST)",
+        "https://$(env:KALLA_ADMIN_PUBLIC_HOST)",
         "https://localhost:5174",
         "https://localhost:7402"
       ],
       "attributes": {
-        "post.logout.redirect.uris": "https://$(env:UME_RAG_ADMIN_PUBLIC_HOST)/signout-callback-oidc##https://localhost:5174/##https://localhost:5174/signout-callback-oidc##https://localhost:7402/##https://localhost:7402/signout-callback-oidc"
+        "post.logout.redirect.uris": "https://$(env:KALLA_ADMIN_PUBLIC_HOST)/signout-callback-oidc##https://localhost:5174/##https://localhost:5174/signout-callback-oidc##https://localhost:7402/##https://localhost:7402/signout-callback-oidc"
       }
     },
     {
       "clientId": "open-webui",
       "redirectUris": [
-        "https://$(env:UME_RAG_OPENWEBUI_HOST)/oauth/oidc/login/callback",
+        "https://$(env:KALLA_OPENWEBUI_HOST)/oauth/oidc/login/callback",
         "http://localhost:8080/oauth/oidc/login/callback"
       ],
       "webOrigins": [
-        "https://$(env:UME_RAG_OPENWEBUI_HOST)",
+        "https://$(env:KALLA_OPENWEBUI_HOST)",
         "http://localhost:8080"
       ]
     }

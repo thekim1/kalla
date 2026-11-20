@@ -3,8 +3,8 @@
 State of the Ume.Rag work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`).
 **Last release `v0.8.0`** (2026-11-19, the deploy simplification; tag on #856's merge commit `faa001dd`, on the
 gateway's `v0.11.0`). `main` after it has a release's worth of work (*State*). The user's VM runs 0.5.0. Two
-machines work on it: `~/research/rag` (the user's, where session 49 ran) and `~/git/ume-rag-platform` (`thekim1`'s,
-stream b and often stream a). Branch `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (HTTPS
+machines work on it: `~/research/rag` (the user's, where session 49 ran) and `~/git/kalla-platform` (`thekim1`'s,
+stream b and often stream a). Branch `main`, remote `origin` = https://github.com/thekim1/kalla (HTTPS
 through `gh auth git-credential`, handbook *Environment notes*).
 
 ## What this is
@@ -110,7 +110,7 @@ waits on anything but the user. In order:
 - **Flaky under load** (session 47): with many pull requests' checks on the two runners, `backend` failed with tests
   the change didn't touch (`ChatApiTests`, `RenderTests.The_real_renderer_…`); run alone they pass.
 - **`gh pr edit` fails** on this repository with GitHub's *Projects (classic) is being deprecated* error and changes
-  nothing; edit a pull request's body with `gh api -X PATCH repos/thekim1/ume-rag-platform/pulls/<n> -F body=@file`.
+  nothing; edit a pull request's body with `gh api -X PATCH repos/thekim1/kalla/pulls/<n> -F body=@file`.
 - **The demo seed's slug in a test:** `openwebui.spec.ts` leaves out the assistant named `demo-assistent` (#882); a
   change of `DemoSeeder`'s slug brings its old failure back.
 
@@ -129,7 +129,7 @@ On `~/research/rag`, as the main session, beside `thekim1`'s machine building st
   stanza, `escrow-keys.sh` with `--verify`. Not run: a provider and models, so nothing from the embedding profile
   on; `deploy/host/install.sh` and the hardening (no root). Not the guide as written: Ume.Rag's images were built
   from the `v0.8.0` tag (no ghcr login; the bundle's `RAG_*_IMAGE` variables took them), root-only steps ran in
-  containers, both projects got a host entry and Ume.Rag's networks explicit subnets. Found: **#865** (rag-admin did
+  containers, both projects got a host entry and Ume.Rag's networks explicit subnets. Found: **#865** (kalla-admin did
   not start without a domain or a gateway admin address; fixed in #867, tested in #872), **#874**, and the
   gateway's **#112** and **#113**.
 - **How easy the setup is** (asked by the user; read in both repositories): Portainer is close to one typed value;
@@ -157,11 +157,11 @@ On `~/research/rag`, as the main session, beside `thekim1`'s machine building st
   rendering.
 - **The manifest default needs Compose 2.24.7 or later:** an older one cuts a default that contains `}` at the first
   one, without an error, also when the variable is set. Portainer pins a later one from 2.21 (read, not run).
-- **A stack without `UME_INTEGRATION_MANIFEST`** (0.5.x style, keys issued by hand) gets the default from 0.7.0: three
+- **A stack without `FORS_INTEGRATION_MANIFEST`** (0.5.x style, keys issued by hand) gets the default from 0.7.0: three
   unused credential keys unless the variable is set empty first (`docs/portainer.md`, *Upgrade from 0.6.0*).
 - **The boot test shows no Open WebUI with OIDC** (no provider anywhere, so it starts without sign-in); `e2e.yml`
   shows it (accepted by the user).
-- **A hardened Compose host's firewall** lets rag-admin reach only the provider of `--oidc-authority`; without it
+- **A hardened Compose host's firewall** lets kalla-admin reach only the provider of `--oidc-authority`; without it
   the wizard's test can't reach a provider there. `init-deployment.sh --hardened` asks for it in an interactive run,
   and its closing lines say when it is missing. A host without the hardening has no such limit.
 - **The Compose quick start (`docs/compose-quick-start.md`) was run once, by hand, not as written** (*What session
@@ -170,7 +170,7 @@ On `~/research/rag`, as the main session, beside `thekim1`'s machine building st
   smoke test boots `compose.rag.yaml` with the backup overlay against the fake gateway (since #872 also in the
   host-only form).
 - **The gateway's Data API does not follow its wizard:** a gateway whose sign-in is set there sets
-  `UME_DATA_AUTHORITY` for access tokens. On Kubernetes a gateway that declares `Oidc__Authority` must set
+  `FORS_DATA_AUTHORITY` for access tokens. On Kubernetes a gateway that declares `Oidc__Authority` must set
   `Gateway__OidcAuthority` too (documented).
 - `GET /internal/openwebui/sign-in` is closed at the Portainer proxy; in Compose only the managed client's key opens
   it.
@@ -206,7 +206,7 @@ On `~/research/rag`, as the main session, beside `thekim1`'s machine building st
   Seed__Enabled=false Parser__Mode=off Render__Mode=off OpenWebUi__Enabled=false ClamAv__Mode=off
   DevelopmentVolumes__Postgres=<a throwaway name> Setup__Try=true`, `aspire start …`, `aspire wait admin-ui`; the code
   is in `aspire logs adminapi | grep 'Setup code:'`; the provider is `https://localhost:7411/realms/ume`, the clients
-  `ume-rag-admin` and `open-webui-dev` (secrets: the AppHost parameters `oidc-client-secret`,
+  `kalla-admin` and `open-webui-dev` (secrets: the AppHost parameters `oidc-client-secret`,
   `openwebui-client-secret`), the user `rag-platform-admin`. Afterwards `aspire stop --all`, wait, `docker volume rm`.
   Or run the spec: `tests/e2e/README.md`. On a FakeGateway stack the sign-in step shows the note that the gateway's
   sign-in is not set up yet (the fake announces the feature with no address).
@@ -219,14 +219,14 @@ On `~/research/rag`, as the main session, beside `thekim1`'s machine building st
 
 ## State
 
-- **Release:** `v0.8.0` published 2026-11-19 ([run 44609831965](https://github.com/thekim1/ume-rag-platform/actions/runs/44609831965)),
+- **Release:** `v0.8.0` published 2026-11-19 ([run 44609831965](https://github.com/thekim1/kalla/actions/runs/44609831965)),
   tag at `faa001dd`; `deploy/portainer/` on `main` pins its images (#863). Migrations `DropMessageParentId` (stops
-  the old rag-api and rag-admin) and `ContinueRuns` (additive); *Rolling update: no*.
-- **What a deployer types in Portainer:** 1 value since 0.7.0 (`UME_DOMAIN`, no secret).
+  the old kalla-api and kalla-admin) and `ContinueRuns` (additive); *Rolling update: no*.
+- **What a deployer types in Portainer:** 1 value since 0.7.0 (`FORS_DOMAIN`, no secret).
 - **On `main` after `faa001dd`, unreleased** (notes in `changes/`, 13 files): source dates on citations (B-47) and
   the escalation hand-off `kalla.escalation` (B-48), with the unavailable text's links (B-49); delete a knowledge
   base, a source (B-50, A-36: the worker's `delete-source` and the nightly purge) and an assistant (B-51), names
-  free at once; the dev seed's demo knowledge base and *Demo-assistent* (#877); rag-admin starting without a domain
+  free at once; the dev seed's demo knowledge base and *Demo-assistent* (#877); kalla-admin starting without a domain
   (#865); the Geist fonts (#871); the wildcard guidance. Also the website (GitHub Pages, #868, #870). **Migrations
   since the release are not listed here:** B-50 and B-51 change the slug indexes and add `Assistants.DeletedAt`;
   read them at the release preparation for the *Rolling update* line.
@@ -240,7 +240,7 @@ On `~/research/rag`, as the main session, beside `thekim1`'s machine building st
   where a pin is repeated.
 - **The user's machine (`~/research/rag`):** the main clone on `main` and `~/research/rag-small` (the second
   checkout, on whatever branch was last worked on); no other worktree. Docker works without sudo (the `docker`
-  group); there is no sudo. Volumes `ume-rag-m1-postgres`, `ume-rag-openwebui-data` and `ume-rag-clamav-db` are the
+  group); there is no sudo. Volumes `kalla-m1-postgres`, `kalla-openwebui-data` and `kalla-clamav-db` are the
   dev data and are kept. The quick start's test installation is torn down; the gateway's 0.11.0 images stay in the
   local Docker. **Docker's default address pools are full there** (about 25 unused networks of other projects): a
   new Compose project needs explicit subnets, or a `docker network prune` by the user. The machine's name is upper
@@ -250,7 +250,7 @@ On `~/research/rag`, as the main session, beside `thekim1`'s machine building st
   -pyflakes=`); `shellcheck` and `pwsh` are not; `grep` is ugrep (handbook, *Environment notes*). Playwright's
   Chromium and Firefox are in `~/.cache/ms-playwright`; Edge needs sudo to install. The Aspire CLI is at
   `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on PATH).
-- **`thekim1`'s machine (`~/git/ume-rag-platform`):** no extra worktrees; Docker is not in its WSL distro, so stack
+- **`thekim1`'s machine (`~/git/kalla-platform`):** no extra worktrees; Docker is not in its WSL distro, so stack
   and image tests run only in CI there; `shellcheck` and `actionlint` are not installed.
 - **The gateway on the user's machine:** `gh` as `ume-nichlas` can push to both repositories; merges and releases
   in the gateway are the user's. Worktrees `~/git/llmgateway` (on `feat/98-99-domain-and-context-authority`),

@@ -34,7 +34,7 @@ public sealed class ContentMaintenance(JobDatabase database)
     public const string RetentionAuditEntityType = "content";
 
     /// <summary>The writing service in <c>audit."AuditLog"</c>.</summary>
-    public const string AuditService = "rag-worker";
+    public const string AuditService = "kalla-worker";
 
     /// <summary>Advisory lock key of the job cleanup, one batch at a time across instances.</summary>
     private const long CleanupLockKey = 0x5241_4730_0002;

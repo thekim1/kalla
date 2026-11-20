@@ -4,14 +4,14 @@
 #   benchmarks/release-test/site/serve.sh start DIR [--port N] [--network NAME]
 #   benchmarks/release-test/site/serve.sh stop
 #
-# start: container ume-rag-r1-site on 127.0.0.1:PORT [8088]. --network also attaches it to a Docker network (on the
-# test host the deployment's non-internal llm network, so rag-worker reaches it by the name r1-site; the worker's
+# start: container kalla-r1-site on 127.0.0.1:PORT [8088]. --network also attaches it to a Docker network (on the
+# test host the deployment's non-internal llm network, so kalla-worker reaches it by the name r1-site; the worker's
 # egress guard then needs Crawl__AllowedPrivateRanges to include that network's subnet). Exit 0 once it answers.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # nginx 1.30.6 (stable), alpine; multi-arch index digest from Docker Hub.
 NGINX_IMAGE="${NGINX_IMAGE:-nginx:1.30.6-alpine@sha256:0e52bd054126cdc040b1276c0af347aeb02a41b9cfe305d6094767ac30e97949}"
-name=ume-rag-r1-site
+name=kalla-r1-site
 
 case "${1:-}" in
   start)

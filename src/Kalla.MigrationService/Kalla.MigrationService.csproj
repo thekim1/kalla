@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Worker">
   <PropertyGroup>
-    <UserSecretsId>ume-rag-migrations</UserSecretsId>
-    <ContainerRepository>ume-rag/migrations</ContainerRepository>
+    <UserSecretsId>kalla-migrations</UserSecretsId>
+    <ContainerRepository>kalla/migrations</ContainerRepository>
     <KallaServiceContainer>true</KallaServiceContainer>
   </PropertyGroup>
   <ItemGroup>

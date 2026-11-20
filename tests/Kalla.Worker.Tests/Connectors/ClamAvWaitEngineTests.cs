@@ -22,7 +22,7 @@ public sealed class ClamAvWaitEngineTests(RagDatabaseFixture database, FakeGatew
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-clamav-wait-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-clamav-wait-");
 
     public async ValueTask InitializeAsync() => await database.ResetAsync();
 

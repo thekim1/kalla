@@ -109,7 +109,7 @@ public static class AssistantEndpoints
                     assistant.UpdatedAt = admin.Now;
                     assistant.UpdatedBy = admin.Actor;
                     // V39: once the gateway acts as keys, a published assistant's key cannot be cleared: it would then run on
-                    // rag-api's credential key, outside its department's budget (#618 review).
+                    // kalla-api's credential key, outside its department's budget (#618 review).
                     if (keyChanged && assistant.GatewayKeyId is null && assistant.PublishedVersionId is not null && models.ActsAsKeys)
                     {
                         Refuse([new(AdminErrorCodes.GatewayKeyRequired, null, [])]);

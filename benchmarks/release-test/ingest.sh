@@ -38,7 +38,7 @@ for id in "$crawl" ${upload:+"$upload"} ${batch:+"$batch"}; do
   [[ "$id" =~ $uuid_re ]] || { echo "error: '$id' is not a lower-case uuid" >&2; exit 1; }
 done
 
-sql() { docker compose --env-file "$deploy_env" exec -T rag-postgres psql -X -q -A -t -v ON_ERROR_STOP=1 -U postgres -d ragdb "$@"; }
+sql() { docker compose --env-file "$deploy_env" exec -T kalla-postgres psql -X -q -A -t -v ON_ERROR_STOP=1 -U postgres -d ragdb "$@"; }
 
 # UUID v7 (data-model §2) on Postgres 17, which has no uuidv7(): the millisecond time over a random v4, version bits 7.
 enqueue() { # source-id trigger dedup-key [batch-id]

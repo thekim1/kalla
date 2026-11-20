@@ -32,9 +32,9 @@ namespace Kalla.AdminApi.Tests;
 [Collection(AdminDatabaseGroup2.Name)]
 public sealed class PilotSetupTests(AdminDatabaseFixture database) : IDisposable
 {
-    private const string AdminKey = "fake-eu-key-pilot-setup-0123456789"; // rag-admin\'s credential key
+    private const string AdminKey = "fake-eu-key-pilot-setup-0123456789"; // kalla-admin\'s credential key
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
-    private readonly string _root = Directory.CreateTempSubdirectory("ume-rag-pilot-").FullName;
+    private readonly string _root = Directory.CreateTempSubdirectory("kalla-pilot-").FullName;
 
     public void Dispose() => Directory.Delete(_root, recursive: true);
 

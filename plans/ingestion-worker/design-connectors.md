@@ -301,7 +301,7 @@ only the headers are read).
 | Off-site | a link to a non-scope host is admitted **only** if an `include` pattern names that host explicitly; it is fetched as a **leaf** (its links are never followed). Otherwise counted in the report, not fetched (answered 13) |
 | Depth | link distance from a seed; default `maxDepth` 10 (answered 12); a redirect does not add depth |
 | Pages | default `maxPages` 10,000 (answered 12), at most 1,000,000 (the source schema's own maximum; `Settings.Crawl` has no platform cap key), counted as **admitted claims** per run (`CrawlRuns.Admitted`), seeds included. Reaching it: no more admissions, run `degraded` `crawl.limit_pages`, traversal partial → no deletions. umea.se has ≈ 14,100 HTML and PDF sitemap URLs, so a whole-site source needs `maxPages` ≥ 20,000 (the preflight warns when the sitemaps alone exceed `maxPages`); the first pilot crawl covers one section (Kommun och politik) with `maxPages` 2,000 (Decisions "Pilot set-up inputs, P1a item 20") |
-| Municipal host | host name matches `Settings.Crawl.MunicipalHosts` (platform-admin list, e.g. `umea.se`, `*.umea.se`; audited). Decides rate (§6.3) and `noindex` handling. Separate from the **address** allow-list `UME_RAG_CRAWL_ALLOW` (§7), which only lifts the private-range block: an internal municipal host on 10.x must be in both |
+| Municipal host | host name matches `Settings.Crawl.MunicipalHosts` (platform-admin list, e.g. `umea.se`, `*.umea.se`; audited). Decides rate (§6.3) and `noindex` handling. Separate from the **address** allow-list `KALLA_CRAWL_ALLOW` (§7), which only lifts the private-range block: an internal municipal host on 10.x must be in both |
 | `noindex` / `nofollow` | meta robots and `X-Robots-Tag` (also the `UmeaKommunBot:`-prefixed form; `none` = both). **External host**: `noindex` → `skipped` `robots.noindex` (links still followed unless `nofollow`); `nofollow` → no links taken from that page. **Municipal host**: both ignored, recorded as facts (answered 11). `rel="nofollow"` on single links is a ranking hint and ignored everywhere |
 | Content types | links to types outside the pipeline's formats are not admitted (`.zip`, `.exe` never fetched). **Images and video are excluded by default** (site profile `excludedTypes`, §5.6; their alt text and captions come from the pages; umea.se lists ≈ 8,900 images and 233 videos). Archives and macro-enabled files fetched anyway end `unsupported` (Z1); legacy Office, RTF and email end `unsupported` `http.format_deferred` in P1 (§9.2) |
 
@@ -318,7 +318,7 @@ counter with an example pattern in the report.
 | Calendars | a path or query value parses as a date/year outside [now − 5 y, now + 2 y], or > 100 date-like URLs under one path prefix | not admitted (`trap.calendar`) |
 | Session ids | removed by normalisation (§3.1 rule 7–8); > 20 URLs whose only difference is one unknown parameter → that parameter is reported as a candidate for `ignoreQueryParams` (and proposed to the site profile, §5.6) | report |
 | Soft-404 / duplicate fan-out | ≥ 20 URLs in a run with the same content hash | their links are expanded once per content hash (a page already expanded adds nothing new) |
-| Soft-404 pages (Crawlee review, 2026-11-07) | once per host and run, a request to a random non-existent path (`/{12 random letters}-ume-rag-404`); when it answers 200, the normalised main text's hash is the host's soft-404 fingerprint | a page with that fingerprint ends `failed` `http.soft_404` (counts like a 404 toward the persistent-failure rule of §13.1, never an instant deletion), so a "page not found" served with 200 never replaces a document's good content |
+| Soft-404 pages (Crawlee review, 2026-11-07) | once per host and run, a request to a random non-existent path (`/{12 random letters}-kalla-404`); when it answers 200, the normalised main text's hash is the host's soft-404 fingerprint | a page with that fingerprint ends `failed` `http.soft_404` (counts like a 404 toward the persistent-failure rule of §13.1, never an instant deletion), so a "page not found" served with 200 never replaces a document's good content |
 | Challenge pages | known markers of bot challenges and WAF blocks (Cloudflare challenge/turnstile, Incapsula, a `cf-mitigated` header) on a 200 or 403 | `Transient` `http.challenge`, counting an attempt (a URL list has no per-run pause): the last good content stays, the host backs off as on a 429 (§6.4); repeated in a run, the host is paused and the run says why; out of attempts, the item ends `failed http.challenge`, content kept. Never an attempt to get past the challenge |
 | Default excludes in the `website` template form | `**/sok?*`, `**/search?*`, `**?*sort=*`, `**?*print=*`, `**/login*`, `**/logout*` | editable |
 
@@ -613,7 +613,7 @@ instances. The pilot runs one `fetch` instance, and the connection cap is an **i
 slot pacing bounds in-flight requests as well. A refused slot requeues the job at `now + interval` without an attempt
 (`rate_limited`). Platform admins may block hosts and override a host's budget (`Settings.Crawl.HostOverrides`).
 **Later (P2, first multi-host deployment):** the cap moves to a Redis in-flight lease per host (the gateway's
-`RedisStores.cs` sorted-set pattern; key `ume-rag:crawl:inflight:{hostMac}`, `hostMac` = HMAC of the host with
+`RedisStores.cs` sorted-set pattern; key `kalla:crawl:inflight:{hostMac}`, `hostMac` = HMAC of the host with
 `Security__CrawlKeyPepper`; lease 60 s); a refused lease requeues the job `rate_limited`. With Redis down each
 instance allows ⌈`MaxConnections` ÷ k⌉, k = live `fetch` instances (heartbeat < 45 s).
 
@@ -689,10 +689,10 @@ public enum EgressPurpose { Fetch, Robots, Sitemap, Preflight, Preview, Render }
 | Any-address rule | if **any** resolved address is blocked, the host is refused (round-robin rebinding cannot win by luck) |
 | Blocked IPv4 | `0.0.0.0/8`, `10/8`, `100.64/10`, `127/8`, `169.254/16`, `172.16/12` (covers our compose subnets), `192.0.0/24`, `192.0.2/24`, `192.88.99/24`, `192.168/16`, `198.18/15`, `198.51.100/24`, `203.0.113/24`, `224/4`, `240/4` |
 | Blocked IPv6 | `::/128`, `::1`, `fc00::/7`, `fe80::/10`, `ff00::/8`, `2001:db8::/32`, `100::/64`; addresses that **embed** IPv4 (`::ffff:0:0/96`, `::/96`, `64:ff9b::/96`, `64:ff9b:1::/48`, 6to4 `2002::/16`, Teredo `2001::/32`) are judged by the embedded address (Open WebUI `_embedded_ipv4`, `owui/retrieval/web/utils.py:73-93`): `::ffff:0:0/96` as its IPv4 address, NAT64 `64:ff9b::/96`, 6to4 and Teredo by the embedded one. Stricter still: an IPv6 address outside global unicast `2000::/3` (and outside NAT64 `64:ff9b::/96`) is blocked whole (`reserved`); local-use NAT64 `64:ff9b:1::/48` and IPv4-compatible `::/96` are blocked whole too, because where an IPv4 address would sit in them is not fixed. IPv4 is tried first; the `crawl` network may have no IPv6 at all (*to verify*, §22) |
-| Allowed exceptions | CIDRs in `Crawl:AllowedPrivateRanges`, set from the same `UME_RAG_CRAWL_ALLOW` that feeds the host firewall (`init-deployment.sh --crawl-allow`, repo-and-deployment §7.1); nothing else can lift the block |
+| Allowed exceptions | CIDRs in `Crawl:AllowedPrivateRanges`, set from the same `KALLA_CRAWL_ALLOW` that feeds the host firewall (`init-deployment.sh --crawl-allow`, repo-and-deployment §7.1); nothing else can lift the block |
 | URL rules | `http`/`https`; ports 80 and 443 (`Settings.Crawl.AllowedPorts` may add e.g. 8443); no userinfo; IP-literal hosts only if global or allow-listed; IDN hosts checked in A-label form after UTS 46 mapping, so homograph spellings resolve to the same rules. Numeric IPv4 host spellings (decimal `2130706433`, octal `0177.0.0.1`, hex `0x7f.1`, which `IPAddress.TryParse` reads) are canonicalised to dotted quads (§3.1 rule 2) before the guard judges them (to-verify #27) |
 | Redirects | manual; ≤ 5 hops; each hop through `CheckUrl` + `ResolveAsync` + scope + robots (§3.2) |
-| Firewall | the `crawl` network drops RFC 1918, link-local, loopback and the host's addresses except the allow-list (repo-and-deployment §6.1; `deploy/host/docker-user-firewall.sh`); the guard is the first layer and decides the outcome text. Every host that runs `fetch` gets the same `crawl` network, firewall script and `UME_RAG_CRAWL_ALLOW` |
+| Firewall | the `crawl` network drops RFC 1918, link-local, loopback and the host's addresses except the allow-list (repo-and-deployment §6.1; `deploy/host/docker-user-firewall.sh`); the guard is the first layer and decides the outcome text. Every host that runs `fetch` gets the same `crawl` network, firewall script and `KALLA_CRAWL_ALLOW` |
 | Canary | at startup in Production the worker opens a raw socket (bypassing the guard) to `169.254.169.254:80` and to a private address outside the allow-list; a successful connect means the firewall is missing: critical log, health `degraded`, crawling disabled until fixed. It runs in every worker instance that runs `fetch`, so each host's firewall is checked. Not built yet |
 | Event 5101 `rag.egress.blocked` | Warning; at most once a minute per (source, reason) with `Count`. Attributes: `Reason` (`private_address`, `embedded_address`, `scheme`, `port`, `userinfo`, `blocked_host`, `redirect_downgrade`), `AddressClass` (`loopback`, `rfc1918`, `link_local`, `cgnat`, `ula`, `multicast`, `reserved`), `Purpose`, `SourceId`, `RunId`, `Classification`, `HostHash` (HMAC); the host name itself only for `public` sources |
 
@@ -753,7 +753,7 @@ engine, a hosted service for anti-bot sites) can sit behind `IRenderer` later.
 Checked in the spike (A-9, results-a row 29, 2026-11-07; Playwright 1.64.1, Chromium 156).
 
 - **Process:** the worker drives the browser with Playwright .NET (`BrowserType.ConnectAsync`) over WebSocket to
-  `rag-renderer`, which runs only Playwright's `launch-server` with Chromium, its sandbox on (repo-and-deployment
+  `kalla-renderer`, which runs only Playwright's `launch-server` with Chromium, its sandbox on (repo-and-deployment
   §5.4). `Render:Endpoint` includes a **secret path** (`wsPath`): the server's version check accepts any client and a
   page's own WebSocket could otherwise reach the port. The NuGet and the server are the same exact version (the server
   itself checks only major.minor, so the pin is ours). One shared browser, a fresh context per page, a warm pool of
@@ -768,7 +768,7 @@ Checked in the spike (A-9, results-a row 29, 2026-11-07; Playwright 1.64.1, Chro
   answered inside Playwright and never reach the worker, so the worker applies its own **method policy**: `GET` and
   `HEAD` anywhere in scope of the guard, `POST` only to the page's own host (no public-suffix list), every other
   method refused (204). A request the guard or robots.txt refuses is aborted, as is a failed fetch.
-- **Fails closed:** `rag-renderer` sits only on the internal `render` network (no route out, no external DNS: Docker's
+- **Fails closed:** `kalla-renderer` sits only on the internal `render` network (no route out, no external DNS: Docker's
   resolver answers but resolves nothing outside), so anything the route misses fails. Service workers blocked;
   **`RouteWebSocketAsync` is mandatory** and closes every WebSocket; WebRTC disabled (it otherwise puts mDNS and IGMP
   on the bridge); the host's `INPUT` rule rejects the `render` subnet (the bridge gateway is reachable at the IP
@@ -1148,7 +1148,7 @@ held documents and the exempt removals of config changes.
 
 | Topic | Design |
 |---|---|
-| Auth | app-only certificate credential of `rag-ingestion` with `Sites.Selected`; per-site `read` grants made by admins (identity plan §3 answered 2); Graph through the egress guard on an allow-listed host set (`graph.microsoft.com`, `login.microsoftonline.com`) |
+| Auth | app-only certificate credential of `kalla-ingestion` with `Sites.Selected`; per-site `read` grants made by admins (identity plan §3 answered 2); Graph through the egress guard on an allow-listed host set (`graph.microsoft.com`, `login.microsoftonline.com`) |
 | Preflight | token; `GET /sites/{id}`; list drives; download one file; `GET /drives/{id}/root/delta?token=latest`; create and delete a test subscription; each failure with remediation text and the PowerShell/Graph call for the grant (Onyx capability checks, `../../platforms/onyx.md:112-115`); the first sync is held until it passes |
 | Identity | `sharepoint:<driveId>:<itemId>`; title, path, URL and `lastModifiedDateTime` as facts |
 | Delta | per drive, the stored **`@odata.deltaLink`** in `ConnectorCheckpoints` (`state`), `nextLink` checkpointed per page. No timestamp tokens or `lastModified` windows: Onyx's timestamp token (`onyx/connectors/microsoft_utils/drive_delta.py:210-221`) missed copied files (#13583) |

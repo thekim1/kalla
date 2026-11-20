@@ -36,7 +36,7 @@ public sealed class ChunkDateEngineTests(RagDatabaseFixture database, FakeGatewa
     private static readonly string LongText = string.Concat(Enumerable.Repeat(
         "Bygglov krävs för nya byggnader och ändringar av fasaden. Handläggaren granskar ritningar och planer. ", 40));
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-chunk-dates-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-chunk-dates-");
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

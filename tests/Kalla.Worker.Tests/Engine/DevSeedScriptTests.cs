@@ -29,7 +29,7 @@ namespace Kalla.Worker.Tests.Engine;
 /// P1a item 18's dev seed (<c>scripts/dev/seed-url-list.sql</c>, run by <c>seed_url_list.py</c>): the same SQL file, with
 /// its parameters as session settings, yields a public URL-list source on the platform url-list pipeline that a worker with
 /// the FakeGateway syncs into live chunks from the test site; a re-run finds what it created; the config triggers bump the
-/// config version. The source's <c>piiMode</c> is <c>report</c> unless <c>ume_seed.pii_mode</c> says <c>hold</c>. With a key (<c>--api-key</c>), rag-api in process accepts the key for <c>/v1/retrieve</c> on the seeded
+/// config version. The source's <c>piiMode</c> is <c>report</c> unless <c>ume_seed.pii_mode</c> says <c>hold</c>. With a key (<c>--api-key</c>), kalla-api in process accepts the key for <c>/v1/retrieve</c> on the seeded
 /// collection. The localhost-only guard, the key generation and the pepper handling are the Python script's
 /// (<c>scripts/dev/test_seed_url_list.py</c>).
 /// </summary>
@@ -41,7 +41,7 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-devseed-blobs-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-devseed-blobs-");
 
     public async ValueTask InitializeAsync() => await database.ResetAsync();
 
@@ -180,7 +180,7 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
         var settings = WithKey(Settings([site.Url("/p/a"), site.Url("/p/b")]), Hasher(KeyPepper).Generate(), out var key);
         await using var api = ApiHost();
         var snapshots = api.Services.GetRequiredService<IPolicySnapshotSource>();
-        await WaitAsync(() => snapshots.IsConfirmed, "rag-api confirms its first snapshot");
+        await WaitAsync(() => snapshots.IsConfirmed, "kalla-api confirms its first snapshot");
         var versionBefore = await ConfigVersionAsync();
 
         var first = await SeedAsync(settings);
@@ -200,7 +200,7 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
         try
         {
             // The config version reaches the running api: its snapshot holds the new client.
-            await WaitAsync(() => snapshots.Current.Version >= version, "rag-api applies the seeded config version");
+            await WaitAsync(() => snapshots.Current.Version >= version, "kalla-api applies the seeded config version");
             snapshots.Current.Clients[clientId].Kind.ShouldBe(ClientKinds.Internal);
 
             var found = (await api.Services.GetRequiredService<KeyStore>().FindAsync(key.PlainText, Ct)).ShouldNotBeNull();
@@ -395,7 +395,7 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
         return settings;
     }
 
-    /// <summary>rag-api (knowledge role) on the test database as <c>ume_rag_api</c>, with its real key store and snapshot, and the FakeGateway.</summary>
+    /// <summary>kalla-api (knowledge role) on the test database as <c>kalla_api</c>, with its real key store and snapshot, and the FakeGateway.</summary>
     private WebApplicationFactory<api::Program> ApiHost() => new WebApplicationFactory<api::Program>().WithWebHostBuilder(web =>
     {
         web.UseEnvironment("Development");

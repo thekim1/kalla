@@ -93,14 +93,14 @@ public sealed class GatewayFeatures
 
     /// <summary>
     /// The gateway's Integration API base address, ending in <c>/integration/v1</c> (the context's
-    /// <c>gateway.integration_api_url</c>, feature <see cref="IntegrationApiUrlFeature"/>; M-17 C11): rag-admin's cost and
+    /// <c>gateway.integration_api_url</c>, feature <see cref="IntegrationApiUrlFeature"/>; M-17 C11): kalla-admin's cost and
     /// budget read-back. Null when the gateway has none set, lacks the feature, or before the first context answer.
     /// </summary>
     public string? IntegrationApiUrl => _integrationApiUrl;
 
     /// <summary>
     /// The address of the sign-in provider the gateway's admin console uses (the context's <c>gateway.oidc_authority</c>, feature
-    /// <see cref="OidcAuthorityFeature"/>; identity design §19), trimmed: the setup wizard's suggestion for rag-admin's own
+    /// <see cref="OidcAuthorityFeature"/>; identity design §19), trimmed: the setup wizard's suggestion for kalla-admin's own
     /// authority, never a sign-in value by itself. Null when the gateway has none, lacks the feature, sends something that is not
     /// an absolute <c>https</c> address without user information (<see cref="ValidOidcAuthority"/>), or before the first context answer.
     /// </summary>

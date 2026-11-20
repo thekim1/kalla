@@ -27,7 +27,7 @@ public sealed class ChunkSetSaltTests(RagDatabaseFixture database, FakeGatewayFa
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-chunk-set-salt-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-chunk-set-salt-");
     private readonly string _marker = Guid.NewGuid().ToString("N");
 
     public async ValueTask InitializeAsync() => await database.ResetAsync();

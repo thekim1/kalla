@@ -29,7 +29,7 @@ public sealed class PreviewParseRuleTests(RagDatabaseFixture database, FakeGatew
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-preview-rules-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-preview-rules-");
     private readonly string _marker = Guid.NewGuid().ToString("N");
 
     public async ValueTask InitializeAsync() => await database.ResetAsync();

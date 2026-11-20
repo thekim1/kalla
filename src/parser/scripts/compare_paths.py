@@ -31,7 +31,7 @@ from scripts.parser_http import HttpParser, Parser, ParserHttpError
 
 MAX_BYTES = 50 * 1024 * 1024
 RANGE_PAGES = 20
-USER_AGENT = "ume-rag-compare-paths/1 (Umeå kommun RAG platform; parser evaluation)"
+USER_AGENT = "kalla-compare-paths/1 (Umeå kommun RAG platform; parser evaluation)"
 AGREE = 0.98
 DISAGREE = 0.90
 

@@ -11,7 +11,7 @@ namespace Kalla.Worker.Connectors.Http;
 public sealed class FetchedBody : IAsyncDisposable
 {
     private const int BufferSize = 81920;
-    private const string Prefix = "ume-rag-fetch-";
+    private const string Prefix = "kalla-fetch-";
 
     /// <summary>A spool file this old belongs to no running fetch (a fetch job's lease is 2 minutes).</summary>
     public static readonly TimeSpan StaleAfter = TimeSpan.FromHours(1);

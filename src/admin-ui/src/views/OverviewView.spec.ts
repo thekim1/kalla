@@ -249,7 +249,7 @@ describe('Home: Live, Health and Get started (admin design §5.5.1)', () => {
 describe('Home: the reminder before a client secret expires (admin design §5.11)', () => {
   const L = OVERVIEW.secretExpiry
   const entries: Overview['secretExpiry'] = [
-    { which: 'rag-admin', expiresOn: '2026-12-01' },
+    { which: 'kalla-admin', expiresOn: '2026-12-01' },
     { which: 'open-webui', expiresOn: '2026-11-12' },
   ]
   beforeEach(() => {
@@ -291,7 +291,7 @@ describe('Home: the reminder before a client secret expires (admin design §5.11
     await flushPromises()
     await wrapper.get('[data-test=secret-expiry-rag-admin] [data-test=secret-expiry-hide]').trigger('click')
     expect(wrapper.find('[data-test=secret-expiry-rag-admin]').exists()).toBe(false)
-    expect(JSON.parse(window.localStorage.getItem('ume-home-hidden-secret-expiry')!)).toEqual(['rag-admin:2026-12-01'])
+    expect(JSON.parse(window.localStorage.getItem('ume-home-hidden-secret-expiry')!)).toEqual(['kalla-admin:2026-12-01'])
     wrapper.unmount()
 
     wrapper = mount(OverviewView, { global: { stubs: { RouterLink: LinkStub } } })
@@ -300,7 +300,7 @@ describe('Home: the reminder before a client secret expires (admin design §5.11
     expect(wrapper.find('[data-test=secret-expiry-open-webui]').exists()).toBe(true)
     wrapper.unmount()
 
-    overview.mockResolvedValue(overviewOf({ secretExpiry: [{ which: 'rag-admin', expiresOn: '2026-12-10' }] }))
+    overview.mockResolvedValue(overviewOf({ secretExpiry: [{ which: 'kalla-admin', expiresOn: '2026-12-10' }] }))
     wrapper = mount(OverviewView, { global: { stubs: { RouterLink: LinkStub } } })
     await flushPromises()
     expect(wrapper.find('[data-test=secret-expiry-rag-admin]').exists()).toBe(true)
@@ -317,7 +317,7 @@ describe('Home: the reminder before a client secret expires (admin design §5.11
 
 describe('Home: the deployment notices (admin design §5.5.1)', () => {
   const L = OVERVIEW.deployment
-  const notices: Overview['deploymentNotices'] = [{ code: 'retired_variables', names: ['UME_RAG_CLAMAV_MODE', 'UME_RAG_EMBEDDING_MODEL'] }]
+  const notices: Overview['deploymentNotices'] = [{ code: 'retired_variables', names: ['KALLA_CLAMAV_MODE', 'KALLA_EMBEDDING_MODEL'] }]
   afterEach(() => window.localStorage.clear())
   const platformAdmin = () => signIn({ roles: ['rag-platform-admin'], departmentCodes: [], departmentSources: [] })
   const mountHome = () => mount(OverviewView, { global: { stubs: { RouterLink: LinkStub } } })
@@ -329,7 +329,7 @@ describe('Home: the deployment notices (admin design §5.5.1)', () => {
     await flushPromises()
     const notice = wrapper.get('[data-test=deployment-notice-retired_variables]')
     expect(notice.get('[data-test=deployment-notice-title]').text()).toBe(L.retired_variables.title(2))
-    expect(notice.findAll('[data-test=deployment-notice-names] li').map((li) => li.text())).toEqual(['UME_RAG_CLAMAV_MODE', 'UME_RAG_EMBEDDING_MODEL'])
+    expect(notice.findAll('[data-test=deployment-notice-names] li').map((li) => li.text())).toEqual(['KALLA_CLAMAV_MODE', 'KALLA_EMBEDDING_MODEL'])
     expect(notice.text()).toContain(L.retired_variables.text)
     expect(wrapper.html().indexOf('data-test="deployment-notices"')).toBeLessThan(wrapper.html().indexOf('data-test="needs-profile"'))
   })
@@ -352,10 +352,10 @@ describe('Home: the deployment notices (admin design §5.5.1)', () => {
     expect(wrapper.find('[data-test=deployment-notices]').exists()).toBe(false)
     wrapper.unmount()
 
-    overview.mockResolvedValue(overviewOf({ deploymentNotices: [{ code: 'retired_variables', names: ['UME_ORGANISATION_NAME'] }] }))
+    overview.mockResolvedValue(overviewOf({ deploymentNotices: [{ code: 'retired_variables', names: ['FORS_ORGANISATION_NAME'] }] }))
     wrapper = mountHome()
     await flushPromises()
-    expect(wrapper.get('[data-test=deployment-notice-names]').text()).toBe('UME_ORGANISATION_NAME')
+    expect(wrapper.get('[data-test=deployment-notice-names]').text()).toBe('FORS_ORGANISATION_NAME')
   })
 
   it('shows nothing for a code it has no text for, and nothing to anyone but a platform admin', async () => {

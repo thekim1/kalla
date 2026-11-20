@@ -44,7 +44,7 @@ public sealed class AuditLogEntry
     /// <summary>When the row was written (database transaction start, set by Postgres).</summary>
     public DateTimeOffset RecordedAt { get; set; }
 
-    /// <summary>The writing service: <c>rag-admin</c>, <c>rag-api</c>, <c>rag-worker</c>, <c>rag-migrate</c>.</summary>
+    /// <summary>The writing service: <c>kalla-admin</c>, <c>kalla-api</c>, <c>kalla-worker</c>, <c>kalla-migrate</c>.</summary>
     public string? Service { get; set; }
 
     /// <summary>The reason an admin gave (required for some actions, e.g. clearing a personal-data flag).</summary>

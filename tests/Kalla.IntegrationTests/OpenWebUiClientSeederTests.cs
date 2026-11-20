@@ -9,7 +9,7 @@ using static Kalla.TestKit.RagDatabase;
 namespace Kalla.IntegrationTests;
 
 /// <summary>
-/// The deployment's own Open WebUI client (identity design §5.2; M-17 C4): rag-migrate makes it from the key the deployment
+/// The deployment's own Open WebUI client (identity design §5.2; M-17 C4): kalla-migrate makes it from the key the deployment
 /// generated, keeps exactly that key active on it, writes nothing when nothing changed, and takes over an Open WebUI client
 /// that already holds the key; under another name it replaces the managed one. Its own database: the managed rows are unique per
 /// kind and name.

@@ -318,7 +318,7 @@ public static class AdminErrorCodes
     public static AdminErrorCode TestBudgetExceeded { get; } = new("test_budget_exceeded", 402, "{reason}");
 
     /// <summary>
-    /// A sign-in challenge while rag-admin has no usable identity provider (identity design §19): no effective authority, an
+    /// A sign-in challenge while kalla-admin has no usable identity provider (identity design §19): no effective authority, an
     /// invalid one, or a stored client secret it cannot read. <c>/bff/user</c> reports the same as <c>signIn.configured</c>.
     /// </summary>
     public static AdminErrorCode SignInNotConfigured { get; } = new("sign_in_not_configured", 409, "Sign-in is not set up yet.");
@@ -344,7 +344,7 @@ public static class AdminErrorCodes
     /// <summary>
     /// Saving needs the session's latest test, passed, by a platform admin, with exactly the submitted values; <c>{reason}</c> is
     /// <c>unknown_test</c>, <c>not_latest</c>, <c>not_passed</c>, <c>not_platform_admin</c> or <c>values_changed</c>. Saving Open WebUI's
-    /// values also needs the session's latest rag-admin test passed by a platform admin: else <c>admin_test_required</c>.
+    /// values also needs the session's latest kalla-admin test passed by a platform admin: else <c>admin_test_required</c>.
     /// </summary>
     public static AdminErrorCode SetupTestRequired { get; } = new("setup_test_required", 409,
         "Saving needs a passed test sign-in by a platform admin with exactly these values ({reason}).");

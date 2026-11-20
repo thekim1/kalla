@@ -16,7 +16,7 @@ namespace Kalla.AdminApi;
 /// The setup API (identity design §19, "Setup API"), anonymous, under <c>/bff/setup</c>: 404 while setup is closed
 /// (<see cref="SetupGateMiddleware"/>), the BFF's antiforgery on every POST, the per-address rate limit. <c>POST session</c> takes the
 /// setup code; <c>GET state</c>, <c>POST test</c> and <c>POST complete</c> need the setup session it gives. <c>test</c> and
-/// <c>complete</c> take a <c>target</c>: <c>rag-admin</c> (the default) or <c>open-webui</c>. Only <c>complete</c> writes
+/// <c>complete</c> take a <c>target</c>: <c>kalla-admin</c> (the default) or <c>open-webui</c>. Only <c>complete</c> writes
 /// <c>Settings.Identity.Oidc</c> and <c>Settings.OpenWebUi.Oidc</c>; no route of an admin session does (the provider's display name
 /// excepted, <c>PUT /api/settings/openwebui</c>).
 /// </summary>
@@ -100,7 +100,7 @@ public static class SetupModeEndpoints
             IConfiguration configuration, ILoggerFactory loggers, IServiceProvider services, CancellationToken ct) =>
         {
             var current = SetupSessionFilter.SessionOf(http);
-            // Open WebUI's values are saved by a session whose latest rag-admin test passed as a platform admin; that person is the actor.
+            // Open WebUI's values are saved by a session whose latest kalla-admin test passed as a platform admin; that person is the actor.
             var (adminTest, result) = await AdminTestAsync(admin.Db, current, ct);
             if (request.TargetOrDefault == SetupTargets.OpenWebUi)
             {
@@ -160,10 +160,10 @@ public static class SetupModeEndpoints
     }
 
     /// <summary>
-    /// <c>complete</c> for Open WebUI: needs <paramref name="admin"/>, the person of the session's latest rag-admin test that passed as
+    /// <c>complete</c> for Open WebUI: needs <paramref name="admin"/>, the person of the session's latest kalla-admin test that passed as
     /// a platform admin (else <c>admin_test_required</c>), and the session's latest Open WebUI test, passed, with exactly the submitted
     /// values. Saves <c>Settings.OpenWebUi.Oidc.*</c> and the typed secret (what the deployment sets is not stored) and leaves setup
-    /// open: only rag-admin's <c>complete</c> closes it.
+    /// open: only kalla-admin's <c>complete</c> closes it.
     /// </summary>
     private static async Task<SetupOpenWebUiSavedDto> CompleteOpenWebUiAsync(SetupCompleteRequest request, HttpContext http, SetupTestResult? adminPerson,
         SetupOpenWebUiTest tests, OpenWebUiSignInSettings settings, AdminContext admin, IConfiguration configuration, ILoggerFactory loggers, CancellationToken ct)
@@ -198,7 +198,7 @@ public static class SetupModeEndpoints
         return new SetupOpenWebUiSavedDto(await settings.ShowAsync(await tests.SessionAuthorityAsync(current, ct), ct), verified);
     }
 
-    /// <summary>The session's latest rag-admin test and its person (null while it has none or it did not finish).</summary>
+    /// <summary>The session's latest kalla-admin test and its person (null while it has none or it did not finish).</summary>
     private static async Task<(SetupTest? Test, SetupTestResult? Result)> AdminTestAsync(Kalla.Infrastructure.Persistence.RagDbContext db, SetupSession session,
         CancellationToken ct)
     {
@@ -275,7 +275,7 @@ public sealed record SetupCodeRequest : AdminRequest
 }
 
 /// <summary>
-/// Candidate sign-in values for <c>POST /bff/setup/test</c> of a <see cref="Target"/>: <c>rag-admin</c> (the default) takes
+/// Candidate sign-in values for <c>POST /bff/setup/test</c> of a <see cref="Target"/>: <c>kalla-admin</c> (the default) takes
 /// <see cref="OidcWizardValues"/>'s members, <c>open-webui</c> <see cref="ProviderUrl"/>, <see cref="ClientId"/>,
 /// <see cref="ClientSecret"/>, <see cref="ProviderName"/> and <see cref="ClientSecretExpiresOn"/>; a member of the other target is
 /// refused. <see cref="ClientSecret"/>: null tests with the wizard's stored secret, empty tests without one, a value tests with it; a
@@ -283,7 +283,7 @@ public sealed record SetupCodeRequest : AdminRequest
 /// </summary>
 public record SetupValuesRequest : AdminRequest, IValidatableObject
 {
-    /// <summary>A <see cref="SetupTargets"/> value; null is <c>rag-admin</c>.</summary>
+    /// <summary>A <see cref="SetupTargets"/> value; null is <c>kalla-admin</c>.</summary>
     [MaxLength(20)]
     public string? Target { get; init; }
 
@@ -326,7 +326,7 @@ public record SetupValuesRequest : AdminRequest, IValidatableObject
 
     public DateOnly? ClientSecretExpiresOn { get; init; }
 
-    /// <summary>The target, <c>rag-admin</c> when none is given.</summary>
+    /// <summary>The target, <c>kalla-admin</c> when none is given.</summary>
     public string TargetOrDefault => Target ?? SetupTargets.RagAdmin;
 
     public OidcWizardValues ToWizardValues() => new()
@@ -391,12 +391,12 @@ public sealed record SetupCompletedDto(string SignInUrl);
 /// <summary>The redirect URIs to register at the provider, as the OpenID Connect handler builds them for this request's address.</summary>
 public sealed record SetupRedirectUris(string SignIn, string SignOutCallback);
 
-/// <summary>What rag-admin's own configuration says of the deployment (admin design §5.11 step 5, as far as rag-admin knows it).</summary>
+/// <summary>What kalla-admin's own configuration says of the deployment (admin design §5.11 step 5, as far as kalla-admin knows it).</summary>
 public sealed record SetupDeploymentFacts(string? GatewayBaseUrl, string? ApiPublicUrl, IReadOnlyList<string> PlatformAdminGroups);
 
 /// <summary>
 /// What the gateway's context says of its own sign-in (identity design §19, M-20 S8): <see cref="SuggestedAuthority"/> is the
-/// gateway's provider address (<see cref="GatewayFeatures.OidcAuthority"/>), which the wizard offers for rag-admin's authority while
+/// gateway's provider address (<see cref="GatewayFeatures.OidcAuthority"/>), which the wizard offers for kalla-admin's authority while
 /// neither the deployment nor the wizard sets one; it is a suggestion only, never a sign-in value, and nothing uses it until a person
 /// tests and saves it as a typed value. Null when the gateway has no address. <see cref="AdminUrl"/> is the gateway admin console's
 /// address for the link to its own wizard (<see cref="OrganisationSync.AdminUrl"/>: the context's <c>admin_url</c>, else
@@ -409,8 +409,8 @@ public sealed record SetupGatewaySignIn(string? SuggestedAuthority, string? Admi
 
     /// <summary>
     /// Reads the gateway's context again before the state is built while it would suggest no address but one would be used: the
-    /// gateway's own wizard may have saved one since the last read (the deployer finishes it first, M-20 S8), or rag-admin started
-    /// before the gateway answered. Not while the deployment or the wizard sets rag-admin's authority, as the suggestion is unused
+    /// gateway's own wizard may have saved one since the last read (the deployer finishes it first, M-20 S8), or kalla-admin started
+    /// before the gateway answered. Not while the deployment or the wizard sets kalla-admin's authority, as the suggestion is unused
     /// then. Bounded by <see cref="ContextWait"/> and <see cref="GatewayContextReader.RefreshInterval"/>; a failed read changes nothing.
     /// </summary>
     public static async Task RefreshAsync(GatewayFeatures gateway, GatewayContextReader context, EffectiveSignIn signIn, CancellationToken ct)
@@ -434,7 +434,7 @@ public sealed record SetupGatewaySignIn(string? SuggestedAuthority, string? Admi
 }
 
 /// <summary>
-/// <c>GET /bff/setup/state</c>: rag-admin's sign-in, the gateway's sign-in as a suggestion (null for a gateway without the feature),
+/// <c>GET /bff/setup/state</c>: kalla-admin's sign-in, the gateway's sign-in as a suggestion (null for a gateway without the feature),
 /// its latest test, and Open WebUI's block.
 /// </summary>
 public sealed record SetupStateDto(

@@ -11,7 +11,7 @@ namespace Kalla.ContractTests;
 /// <see cref="ParserClient"/> converts every fixture of tests/fixtures/parser/cases.json against the parser image,
 /// inspects the inspect cases and asks <c>/v1/ner</c> for names; responses are validated against contracts/parser/v1/,
 /// deserialised strictly (unknown members fail, so drift in either direction shows) and compared with the goldens. Tests
-/// that need the image skip unless UME_RAG_TEST_PARSER_IMAGE is set.
+/// that need the image skip unless KALLA_TEST_PARSER_IMAGE is set.
 /// </summary>
 [Collection(ParserImageTests.Name)]
 public sealed class ParserContractTests(ParserContainer parser)

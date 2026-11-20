@@ -130,7 +130,7 @@ export const SIGN_IN = {
   setupOpen: 'Sign-in can be set up now. You need the setup code from the deployment.',
   setUp: 'Set up sign-in',
   /** Sign-in is not set up and setup is closed: only the deployer can open it again. */
-  notConfigured: 'Sign-in is not set up, and the setup window has ended. Restart rag-admin to get a new setup code.',
+  notConfigured: 'Sign-in is not set up, and the setup window has ended. Restart kalla-admin to get a new setup code.',
 } as const
 
 /** The setup wizard at /setup (admin design §5.11, identity design §19). */
@@ -147,7 +147,7 @@ export const SETUP_WIZARD = {
   /** The setup window and the setup session, in local time and as minutes left. */
   windowEnds: (time: string, minutes: number) => `The setup window ends at ${time} (in ${minutes} min).`,
   sessionEnded: 'Your setup session has ended. Enter the setup code again. The values you typed are kept, but not the client secret.',
-  windowEnded: 'The setup window has ended. Restart rag-admin (first run), or set a new UME_RAG_SETUP_REOPEN value, to get a new setup code.',
+  windowEnded: 'The setup window has ended. Restart kalla-admin (first run), or set a new KALLA_SETUP_REOPEN value, to get a new setup code.',
   closed: {
     title: 'Setup is closed',
     body: 'Sign-in is set up already, or the setup window has ended.',
@@ -158,11 +158,11 @@ export const SETUP_WIZARD = {
   code: {
     label: 'Setup code',
     hint: 'Upper or lower case, with or without dashes.',
-    where: 'rag-admin writes the code to its output when setup opens. The code works for one hour. Find it here:',
+    where: 'kalla-admin writes the code to its output when setup opens. The code works for one hour. Find it here:',
     places: [
-      { form: 'Portainer', how: 'the log of the rag-admin container' },
-      { form: 'Docker Compose', how: 'docker compose logs rag-admin', command: true },
-      { form: 'Kubernetes', how: 'kubectl logs deploy/rag-admin', command: true },
+      { form: 'Portainer', how: 'the log of the kalla-admin container' },
+      { form: 'Docker Compose', how: 'docker compose logs kalla-admin', command: true },
+      { form: 'Kubernetes', how: 'kubectl logs deploy/kalla-admin', command: true },
     ],
     submit: 'Continue',
     required: 'Enter the setup code.',
@@ -249,7 +249,7 @@ export const SETUP_WIZARD = {
     redirectUri: 'Open WebUI’s redirect URI',
     copyRedirectUri: 'Copy Open WebUI’s redirect URI',
     noRedirectUri:
-      'rag-admin does not know the chat’s public address (OpenWebUi:PublicUrl), so it cannot name the redirect URI. It is the chat’s public address followed by /oauth/oidc/login/callback.',
+      'kalla-admin does not know the chat’s public address (OpenWebUi:PublicUrl), so it cannot name the redirect URI. It is the chat’s public address followed by /oauth/oidc/login/callback.',
     providerUrl: 'Provider address (discovery document)',
     providerUrlHint: 'The address of the provider’s discovery document, for example https://login.example.org/realms/ume/.well-known/openid-configuration.',
     followsSignIn: (value: string) => `Follows the sign-in provider: leave empty for ${value}.`,
@@ -259,7 +259,7 @@ export const SETUP_WIZARD = {
     providerNameHint: 'The label on Open WebUI’s sign-in button.',
     secretRemoved: 'The check runs without a secret, and saving removes the stored one.',
     check: 'Check',
-    checkHint: 'rag-admin fetches the provider’s discovery document and asks its token address whether it accepts this client. Nobody signs in.',
+    checkHint: 'kalla-admin fetches the provider’s discovery document and asks its token address whether it accepts this client. Nobody signs in.',
     toSignIn: 'Go to Sign-in',
     save: 'Save',
     saveNeeds: 'Save needs a check that found the discovery document and was not refused, with the values as they are now.',
@@ -425,13 +425,13 @@ export const OVERVIEW = {
   showHidden: (n: number) => `Show ${n} hidden`,
   /** The reminder before a client secret stored by the setup wizard expires (admin design §5.11), for platform admins. */
   secretExpiry: {
-    clients: { 'rag-admin': 'the admin UI', 'open-webui': 'Open WebUI' },
+    clients: { 'kalla-admin': 'the admin UI', 'open-webui': 'Open WebUI' },
     expires: (client: string, date: string, days: number) =>
       `The sign-in client secret of ${client} expires on ${date} (${days === 0 ? 'today' : days === 1 ? 'in 1 day' : `in ${days} days`}).`,
     expired: (client: string, date: string, days: number) =>
       `The sign-in client secret of ${client} expired on ${date} (${days === 1 ? '1 day ago' : `${days} days ago`}).`,
     steps:
-      'Create a new secret for the client at the identity provider. Then ask the person who runs the deployment to open setup again: they set a new UME_RAG_SETUP_REOPEN value and read the setup code from rag-admin’s output. Enter the new secret in the setup wizard.',
+      'Create a new secret for the client at the identity provider. Then ask the person who runs the deployment to open setup again: they set a new KALLA_SETUP_REOPEN value and read the setup code from kalla-admin’s output. Enter the new secret in the setup wizard.',
     hide: 'Hide',
     hideFor: (client: string) => `Hide the reminder for ${client}`,
   },
@@ -441,7 +441,7 @@ export const OVERVIEW = {
       title: (n: number) =>
         n === 1 ? 'The deployment sets a variable that this version no longer reads' : `The deployment sets ${n} variables that this version no longer reads`,
       text:
-        'They have no effect, so nothing is wrong. Ask the person who runs the deployment to remove them from its variables: the rag-bootstrap log and the upgrade guide say what replaced each.',
+        'They have no effect, so nothing is wrong. Ask the person who runs the deployment to remove them from its variables: the kalla-bootstrap log and the upgrade guide say what replaced each.',
       hideFor: 'Hide the notice about variables that are no longer read',
     },
     hide: 'Hide',
@@ -1211,7 +1211,7 @@ export const PLATFORM = {
     noFeatures: 'None',
     /** The Integration API read-back (#654, admin design §4.5, §8.6): cost and budgets from the AI gateway. */
     readback: 'Cost and budgets from the AI gateway',
-    readbackOff: 'Off: the gateway names no Integration API address (its UME_INTEGRATION_API_URL), so cost cards show the platform’s own figures only.',
+    readbackOff: 'Off: the gateway names no Integration API address (its FORS_INTEGRATION_API_URL), so cost cards show the platform’s own figures only.',
     readbackOn: 'On: no refusal since the admin service started.',
     readbackFailed: (reason: string, status: number | null, at: string) => `Not read at ${at}: ${reason}${status ? ` (HTTP ${status})` : ''}.`,
     readbackReasons: {
@@ -1319,7 +1319,7 @@ export const PLATFORM_CLIENTS = {
   connect: {
     title: 'How to connect',
     address: 'API address',
-    noAddress: 'Ask the platform team for rag-api’s address.',
+    noAddress: 'Ask the platform team for kalla-api’s address.',
     key: 'Key',
     keyHeader: 'Sent as the header Authorization: Bearer <key>.',
     noKey: 'No key was made. Add one under Keys when you open the app.',
@@ -2084,7 +2084,7 @@ export const FEEDBACK = {
   version: (n: number) => `version ${n}`,
   caption: 'Feedback, newest first',
   empty: 'No feedback yet. It arrives when users give a thumbs up or down in Open WebUI.',
-  /** Without Open WebUI, ratings arrive only through rag-api's feedback endpoint (chat design §3.5). */
+  /** Without Open WebUI, ratings arrive only through kalla-api's feedback endpoint (chat design §3.5). */
   emptyApi: 'No feedback yet. It arrives when an app sends a thumbs up or down to the API (POST /v1/feedback).',
   mark: 'Mark as handled',
   reopen: 'Open again',

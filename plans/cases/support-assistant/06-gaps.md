@@ -23,7 +23,7 @@ M-8; issue #424). Their sections keep only what was asked and what was built.
 | SA-4 | Tickets longer than 2,000 characters as the question | M | main session, M-6 | **done**, #431 |
 | SA-5 | Per-user identity for a non-Open WebUI client (delegated tokens) | L | b + main | no: a shared key is accepted for the pilot (user, 2026-11-06) |
 | SA-6 | A rate limit that fits a shared application key | S | main session, M-5 | **done**, #430 |
-| SA-7 | Key IP allow-list not enforced in rag-api (#424) | S | main session, #424 | **done**, #432 |
+| SA-7 | Key IP allow-list not enforced in kalla-api (#424) | S | main session, #424 | **done**, #432 |
 | SA-8 | Crawling an intranet that needs a login | L | a + main | no: the intranet is readable without a login (user, 2026-11-06) |
 | SA-9 | Scripted upload API (service credential on the upload routes) | M | b | no |
 | SA-10 | Git/Markdown or file-share connector | M–L | a + main | no: **after the pilot**, when the Markdown moves to a Git repository (user, 2026-11-06) |
@@ -70,12 +70,12 @@ M-8; issue #424). Their sections keep only what was asked and what was built.
 
 ## SA-5 Per-user identity for the app
 
-- **Missing.** rag-api authenticates keys and Open WebUI's user JWT only (`src/Kalla.Api/KnowledgeCallers.cs:41-95`,
+- **Missing.** kalla-api authenticates keys and Open WebUI's user JWT only (`src/Kalla.Api/KnowledgeCallers.cs:41-95`,
   `src/Kalla.Api/ChatCallers.cs:16-48`); the OAuth token path (identity §7, `own-client` delegated tokens) is not
   built (identity §7.1). An `integration` key is one subject for all users.
 - **Why.** Per-person rate limits, audit, feedback ownership, department or group audiences, and later stored
   conversations per person.
-- **Sketch.** Build identity §7 as designed (JWT bearer on realm `kalla`, audience `ume-rag-api`, client by `azp`, scope
+- **Sketch.** Build identity §7 as designed (JWT bearer on realm `fors`, audience `kalla-api`, client by `azp`, scope
   `Chat.Use`); the app exchanges or forwards the user's token (OBO later, identity §9). Realm additions for the app's
   client scopes.
 - **Size L.** Designed for P2; pulling it forward is a roadmap call, not a new decision.
@@ -94,7 +94,7 @@ M-8; issue #424). Their sections keep only what was asked and what was built.
 - **Asked.** A platform bug against identity §6.3 step 4: `Keys.AllowedIpRanges` was saved but not checked, so a
   leaked app key worked from anywhere.
 - **Done** in #432: `KeyChecks.Refusal` refuses an address outside the ranges with 403 `address_not_allowed`
-  (`src/Kalla.Domain/Services/KeyChecks.cs:38`, `src/Kalla.Api/KnowledgeCallers.cs:64-71`), and rag-api takes the
+  (`src/Kalla.Domain/Services/KeyChecks.cs:38`, `src/Kalla.Api/KnowledgeCallers.cs:64-71`), and kalla-api takes the
   client address from `X-Forwarded-For` when the connection comes from `Settings.TrustedProxies`
   (`src/Kalla.Api/ClientAddressMiddleware.cs`). The operator sets the trusted proxies
   ([`05-frontend-integration.md`](05-frontend-integration.md) §2).

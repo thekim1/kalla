@@ -2,7 +2,7 @@
   <!--
     The parser contract (parser/v1): the worker's parser client against the parser image, the committed schemas in
     contracts/parser/v1/ and the goldens in tests/fixtures/parser/golden/. Tests that need the image skip unless
-    UME_RAG_TEST_PARSER_IMAGE names it; CI's contract job sets it.
+    KALLA_TEST_PARSER_IMAGE names it; CI's contract job sets it.
     The IBlobStore contract (data-model §9) in Blobs/: an abstract test class the file system store runs here and the S3
     store reuses in P1 (to-verify #114); it needs no container.
     The worker contracts (P1a item 4, J3) in WorkerContractTests: contracts/{sources,pipeline,jobs,site-profiles}/ are

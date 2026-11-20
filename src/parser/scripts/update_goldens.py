@@ -5,7 +5,7 @@ without `timings`, `build` and the per-page `ms`, which change from run to run. 
 results with these: kinds, levels, pages and table shapes exactly, text by similarity. Run it only in a PR that
 changes the conversion (a Docling bump, a fast-path change), and review the diff.
 
-    docker run --rm -p 8000:8000 ume-rag/parser:dev
+    docker run --rm -p 8000:8000 kalla/parser:dev
     uv run python -m scripts.update_goldens --url http://localhost:8000
 
 Standard library only (with `scripts/parser_http.py`).

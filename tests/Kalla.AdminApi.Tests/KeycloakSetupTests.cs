@@ -84,8 +84,8 @@ public sealed partial class KeycloakSignInTests
     /// M-20 S5: the Open WebUI test's verdict on the client at a real Keycloak (the realm's <c>open-webui-dev</c>). A token request with
     /// a made-up code answers 400 <c>invalid_grant</c> for the right secret, 401 <c>unauthorized_client</c> for a wrong secret (Keycloak
     /// 26.8's code, not RFC 6749's <c>invalid_client</c>) and 401 <c>invalid_client</c> for an unknown client: the test refuses on a 401.
-    /// As on a first run, rag-admin's authority is only tested, not saved: the provider address is left empty and follows the session's
-    /// passed rag-admin test.
+    /// As on a first run, kalla-admin's authority is only tested, not saved: the provider address is left empty and follows the session's
+    /// passed kalla-admin test.
     /// </summary>
     [Fact]
     public async Task Open_WebUIs_setup_test_at_keycloak_accepts_the_right_secret_and_refuses_a_wrong_one()

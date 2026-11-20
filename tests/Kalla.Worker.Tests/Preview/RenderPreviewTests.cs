@@ -37,7 +37,7 @@ public sealed class RenderPreviewTests(RagDatabaseFixture database, FakeGatewayF
     private const string Shell =
         "<!doctype html><html lang=\"sv\"><head><title>Bygglov</title><script src=\"/app.js\"></script></head><body><main><div id=\"app\">Laddar</div></main></body></html>";
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-render-preview-blobs-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-render-preview-blobs-");
     private readonly FakeRenderer _renderer = new();
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

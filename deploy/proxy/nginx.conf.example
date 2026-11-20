@@ -6,25 +6,25 @@
 # Restrict the published ports to this proxy: init-deployment.sh --proxy-address (the host firewall) or a network firewall.
 
 # WebSocket upgrade (Open WebUI's live connection); other requests keep the pooled keep-alive connection.
-map $http_upgrade $ume_rag_connection { default upgrade; '' ''; }
+map $http_upgrade $kalla_connection { default upgrade; '' ''; }
 
-# With compose.rolling.yaml (init-deployment.sh --rolling) rag-api and rag-admin have a second slot; nginx sends
+# With compose.rolling.yaml (init-deployment.sh --rolling) kalla-api and kalla-admin have a second slot; nginx sends
 # requests to both and retries on the other when one fails while it is replaced (proxy_next_upstream below).
 # See docs/zero-downtime-updates.md.
-upstream ume_rag_api {
+upstream kalla_api {
     server @UPSTREAM@:@API_PORT@;
     #rolling server @UPSTREAM@:@API_B_PORT@;
     keepalive 32;
 }
-upstream ume_rag_admin {
+upstream kalla_admin {
     server @UPSTREAM@:@ADMIN_PORT@;
     #rolling server @UPSTREAM@:@ADMIN_B_PORT@;
 }
-#owui upstream ume_rag_openwebui {
+#owui upstream kalla_openwebui {
 #owui     server @UPSTREAM@:@OPENWEBUI_PORT@;
 #owui }
 
-# rag-api: chat completions (streamed), knowledge, MCP, the OpenAI-compatible model list.
+# kalla-api: chat completions (streamed), knowledge, MCP, the OpenAI-compatible model list.
 server {
     listen 443 ssl;
     http2 on;
@@ -32,14 +32,14 @@ server {
     # ssl_certificate     /etc/ssl/@API_HOST@.crt;
     # ssl_certificate_key /etc/ssl/@API_HOST@.key;
 
-    client_max_body_size 2m;           # questions and chat history (rag-api's chat route takes up to 2 MB); never files
+    client_max_body_size 2m;           # questions and chat history (kalla-api's chat route takes up to 2 MB); never files
     location / {
-        proxy_pass https://ume_rag_api;
+        proxy_pass https://kalla_api;
         proxy_http_version 1.1;
         proxy_set_header Connection '';
         proxy_set_header Host $host;
         # The client's address, for key IP allow-lists and security events. List this proxy under the trusted proxies
-        # (admin UI, Settings, Network), or rag-api ignores the header.
+        # (admin UI, Settings, Network), or kalla-api ignores the header.
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_buffering off;           # stream answer tokens as they arrive (SSE)
         proxy_read_timeout 600s;       # long answers
@@ -51,13 +51,13 @@ server {
         proxy_next_upstream_timeout 10s;
         proxy_next_upstream_tries 2;
         proxy_connect_timeout 5s;
-        # The listener presents the internal CA's certificate. To verify it, copy ca.pem out of the rag-certs volume to the proxy (docs/production-setup.md, step 5) and enable:
-        # proxy_ssl_verify on; proxy_ssl_trusted_certificate /etc/ssl/ume-rag-internal-ca.pem;
-        # proxy_ssl_name rag-api;
+        # The listener presents the internal CA's certificate. To verify it, copy ca.pem out of the kalla-certs volume to the proxy (docs/production-setup.md, step 5) and enable:
+        # proxy_ssl_verify on; proxy_ssl_trusted_certificate /etc/ssl/kalla-internal-ca.pem;
+        # proxy_ssl_name kalla-api;
     }
 }
 
-# rag-admin: the admin UI and its API (BFF).
+# kalla-admin: the admin UI and its API (BFF).
 server {
     listen 443 ssl;
     http2 on;
@@ -67,22 +67,22 @@ server {
 
     client_max_body_size 1m;
     location / {
-        proxy_pass https://ume_rag_admin;
+        proxy_pass https://kalla_admin;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_next_upstream error timeout non_idempotent;  # as for rag-api
+        proxy_next_upstream error timeout non_idempotent;  # as for kalla-api
         proxy_next_upstream_timeout 10s;
         proxy_next_upstream_tries 2;
         proxy_connect_timeout 5s;
-        # proxy_ssl_verify on; proxy_ssl_trusted_certificate /etc/ssl/ume-rag-internal-ca.pem;
-        # proxy_ssl_name rag-admin;
+        # proxy_ssl_verify on; proxy_ssl_trusted_certificate /etc/ssl/kalla-internal-ca.pem;
+        # proxy_ssl_name kalla-admin;
     }
     # Uploads (admin design §2.2): one file per request, up to 60 MB, passed straight through (no proxy temp files).
     location ~ ^/api/upload-batches/[0-9a-fA-F-]+/files/[0-9]+$ {
         client_max_body_size 60m;
         proxy_request_buffering off;
-        proxy_pass https://ume_rag_admin;
+        proxy_pass https://kalla_admin;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -100,12 +100,12 @@ server {
 #owui     # ssl_certificate     /etc/ssl/@OPENWEBUI_HOST@.crt;
 #owui     # ssl_certificate_key /etc/ssl/@OPENWEBUI_HOST@.key;
 #owui
-#owui     client_max_body_size 2m;           # the whole conversation goes to rag-api (2 MB); file uploads are off
+#owui     client_max_body_size 2m;           # the whole conversation goes to kalla-api (2 MB); file uploads are off
 #owui     location / {
-#owui         proxy_pass http://ume_rag_openwebui;
+#owui         proxy_pass http://kalla_openwebui;
 #owui         proxy_http_version 1.1;
 #owui         proxy_set_header Upgrade $http_upgrade;  # its live connection (WebSocket)
-#owui         proxy_set_header Connection $ume_rag_connection;
+#owui         proxy_set_header Connection $kalla_connection;
 #owui         proxy_set_header Host $host;
 #owui         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 #owui         proxy_set_header X-Forwarded-Proto https;

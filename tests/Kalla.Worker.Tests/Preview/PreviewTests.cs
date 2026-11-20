@@ -37,7 +37,7 @@ public sealed class PreviewTests(RagDatabaseFixture database, FakeGatewayFactory
     /// <summary>Tables a preview may change (engine design §11, §19) and the instance heartbeat, which moves every second.</summary>
     private static readonly string[] Unwatched = ["Jobs", "CrawlHosts", "WorkerInstances"];
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-preview-blobs-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-preview-blobs-");
 
     public async ValueTask InitializeAsync() => await database.ResetAsync();
 

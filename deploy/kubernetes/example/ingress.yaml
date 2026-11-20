@@ -1,13 +1,13 @@
-# Public entry for rag-api and the admin UI. The pods speak HTTPS (certificates from create-secrets.sh), so the
+# Public entry for kalla-api and the admin UI. The pods speak HTTPS (certificates from create-secrets.sh), so the
 # controller must connect to them with TLS. The annotations are for ingress-nginx; for other controllers set the
 # equivalent (Traefik: a ServersTransport; Gateway API: an HTTPRoute with a BackendTLSPolicy). Pass the Host header
 # through unchanged (the admin UI builds its sign-in redirect from it) and do not buffer: streamed answers must reach
 # clients as they are produced. List the controller's pod network under the trusted proxies (admin UI, Settings,
-# Network), so rag-api reads the client address from X-Forwarded-For.
+# Network), so kalla-api reads the client address from X-Forwarded-For.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: rag-api
+  name: kalla-api
   annotations:
     nginx.ingress.kubernetes.io/backend-protocol: HTTPS
     nginx.ingress.kubernetes.io/proxy-body-size: 2m   # the chat route takes up to 2 MB of history
@@ -18,20 +18,20 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts: [rag.example.se]             # change
-      secretName: ume-rag-api-public-tls  # your certificate (or cert-manager's)
+      secretName: kalla-api-public-tls  # your certificate (or cert-manager's)
   rules:
     - host: rag.example.se                # change
       http:
         paths:
           - path: /
             pathType: Prefix
-            backend: {service: {name: rag-api, port: {name: https}}}
+            backend: {service: {name: kalla-api, port: {name: https}}}
 ---
 # Uploads are up to 60 MB, one file per request, passed straight through (admin design §2.2).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: rag-admin
+  name: kalla-admin
   annotations:
     nginx.ingress.kubernetes.io/backend-protocol: HTTPS
     nginx.ingress.kubernetes.io/proxy-body-size: 60m
@@ -41,12 +41,12 @@ metadata:
 spec:
   ingressClassName: nginx
   tls:
-    - hosts: [rag-admin.example.se]       # change
-      secretName: ume-rag-admin-public-tls
+    - hosts: [kalla-admin.example.se]       # change
+      secretName: kalla-admin-public-tls
   rules:
-    - host: rag-admin.example.se          # change
+    - host: kalla-admin.example.se          # change
       http:
         paths:
           - path: /
             pathType: Prefix
-            backend: {service: {name: rag-admin, port: {name: https}}}
+            backend: {service: {name: kalla-admin, port: {name: https}}}

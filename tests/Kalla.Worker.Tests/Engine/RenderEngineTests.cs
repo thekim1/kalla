@@ -28,7 +28,7 @@ public sealed class RenderEngineTests(RagDatabaseFixture database, FakeGatewayFa
         ["Render:Endpoint"] = RenderTestKit.Options().Endpoint,
     };
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-render-blobs-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-render-blobs-");
     private readonly string _tag = Guid.NewGuid().ToString("N");
     private readonly FakeRenderer _renderer = new();
 

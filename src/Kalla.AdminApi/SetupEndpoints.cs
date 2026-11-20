@@ -12,7 +12,7 @@ namespace Kalla.AdminApi;
 /// published assistants over the last 7 days (Live), the runs, queue and syncs (Health), and the collections whose
 /// checklist is not done yet (the attention items join it in P2); for a platform admin also the client secrets stored by the
 /// setup wizard that expire within <see cref="SecretExpiryDays"/> days (§5.11) and the deployment notices (§5.5.1): the
-/// retired variables the deployment still sets, which the bootstrap hands rag-admin as <see cref="RetiredVariablesKey"/>.
+/// retired variables the deployment still sets, which the bootstrap hands kalla-admin as <see cref="RetiredVariablesKey"/>.
 /// </summary>
 public static class SetupEndpoints
 {
@@ -148,7 +148,7 @@ public static class SetupEndpoints
     }
 
     /// <summary>
-    /// The reminder before a client secret expires (admin design §5.11), for a platform admin only: rag-admin's and Open WebUI's
+    /// The reminder before a client secret expires (admin design §5.11), for a platform admin only: kalla-admin's and Open WebUI's
     /// client secrets stored by the setup wizard whose expiry date is at most <see cref="SecretExpiryDays"/> days after today
     /// (Europe/Stockholm), expired ones included. A deployment's secret has no date here (the readers show one only while the
     /// wizard's secret applies), and Open WebUI's counts only while the deployment runs it (its secret is renewed in its wizard step).

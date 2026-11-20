@@ -6,7 +6,7 @@ import TextField from '@/components/ui/TextField.vue'
 import { SETUP_WIZARD } from '@/utils/labels'
 import type { SecretFields } from './setupValues'
 
-// A client secret in the setup wizard, rag-admin's and Open WebUI's alike (identity design §19): never prefilled; left empty it
+// A client secret in the setup wizard, kalla-admin's and Open WebUI's alike (identity design §19): never prefilled; left empty it
 // keeps the stored one, "Remove the secret" tests without one (a public client), a typed one replaces it; a deployment's secret
 // locks the field. The optional expiry date belongs to a secret kept by the wizard.
 const props = defineProps<{

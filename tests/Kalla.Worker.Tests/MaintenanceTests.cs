@@ -6,7 +6,7 @@ using Kalla.Worker.Jobs;
 
 namespace Kalla.Worker.Tests;
 
-/// <summary><c>Worker:Maintenance</c> (data-model §4.4, §8): run-item partitions and terminal-job cleanup, as <c>ume_rag_worker</c>.</summary>
+/// <summary><c>Worker:Maintenance</c> (data-model §4.4, §8): run-item partitions and terminal-job cleanup, as <c>kalla_worker</c>.</summary>
 [Collection(RagDatabaseGroup3.Name)]
 public sealed class MaintenanceTests(RagDatabaseFixture database) : IAsyncLifetime
 {

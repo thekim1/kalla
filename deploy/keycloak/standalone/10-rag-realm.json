@@ -1,7 +1,7 @@
 {
   "realm": "ume",
   "enabled": true,
-  "displayName": "$(env:UME_RAG_REALM_DISPLAY_NAME:-Ume.Rag)",
+  "displayName": "$(env:KALLA_REALM_DISPLAY_NAME:-Ume.Rag)",
   "sslRequired": "external",
   "registrationAllowed": false,
   "resetPasswordAllowed": false,

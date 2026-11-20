@@ -1,6 +1,6 @@
-# pgBackRest repository settings for one deployment, which rag-bootstrap writes to pgbackrest/repo.conf in the
-# rag-secrets volume from UME_RAG_BACKUP_TARGET; compose.backup.yaml mounts it read-only at /etc/pgbackrest/conf.d/ in
-# rag-postgres only (repo-and-deployment §6.3, §7.4).
+# pgBackRest repository settings for one deployment, which kalla-bootstrap writes to pgbackrest/repo.conf in the
+# kalla-secrets volume from KALLA_BACKUP_TARGET; compose.backup.yaml mounts it read-only at /etc/pgbackrest/conf.d/ in
+# kalla-postgres only (repo-and-deployment §6.3, §7.4).
 # It holds the repository passphrase, which is escrowed by escrow-keys.sh; keep the file mode 0640, readable by uid 999.
 # Use one of the two repository kinds below. The backup target is chosen with IT (to-verify #145).
 
@@ -15,7 +15,7 @@ repo1-path=/var/lib/pgbackrest
 
 # S3-compatible object store reached over the backup network.
 # repo1-type=s3
-# repo1-path=/ume-rag
+# repo1-path=/kalla
 # repo1-s3-endpoint=<host>
 # repo1-s3-bucket=<bucket>
 # repo1-s3-region=<region>

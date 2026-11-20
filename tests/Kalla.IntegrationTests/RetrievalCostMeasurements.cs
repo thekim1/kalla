@@ -94,14 +94,14 @@ public sealed class RetrievalCostMeasurements(RagDatabaseFixture database)
         var scope = new SearchScope(profile, 8, [new CollectionInScope(collection, RetrievalSettings.Default)], ["public"], RetrievalPlatformSettings.Default);
         var output = TestContext.Current.TestOutputHelper!;
 
-        // The stop list's statistics: the worker computes them with ts_stat (A-29, timed here), rag-api reads its rows
+        // The stop list's statistics: the worker computes them with ts_stat (A-29, timed here), kalla-api reads its rows
         // every 10 minutes in the background (B-33).
         var statistics = Stopwatch.StartNew();
         await writer.RefreshKeywordStatisticsAsync(collection, Ct);
         output.WriteLine($"#5 stop-list statistics over 100,000 chunks (the worker's ts_stat): {statistics.Elapsed.TotalMilliseconds:F0} ms");
         statistics.Restart();
         var lexemes = await index.KeywordStatisticsAsync(Ct);
-        output.WriteLine($"#5 stop-list statistics read by rag-api: {statistics.Elapsed.TotalMilliseconds:F0} ms, {lexemes.Count} lexemes at ≥ 10 %");
+        output.WriteLine($"#5 stop-list statistics read by kalla-api: {statistics.Elapsed.TotalMilliseconds:F0} ms, {lexemes.Count} lexemes at ≥ 10 %");
         using var sizes = new ScopeSizeCache(index, new FakeTimeProvider());
         var stop = await sizes.StopLexemesAsync(scope, Ct);
         output.WriteLine($"#5 stop list (> 30 %): {string.Join(", ", stop)}");

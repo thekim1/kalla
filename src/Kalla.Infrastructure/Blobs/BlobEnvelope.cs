@@ -7,7 +7,7 @@ namespace Kalla.Infrastructure.Blobs;
 /// Envelope encryption of blobs (data-model §7 "Blobs"): a level whose policy names a blob master key
 /// (<see cref="IBlobKeyPolicy"/>; <c>internal</c>: <c>rag-blob-internal</c>) stores its blobs as <c>URB2</c>
 /// (<see cref="Urb2"/>) under a fresh data key wrapped into the blob's header; <c>public</c> blobs are stored as they are.
-/// rag-api's citation download (<c>GET /v1/documents/{id}/content</c>, knowledge design §3.5) reads through
+/// kalla-api's citation download (<c>GET /v1/documents/{id}/content</c>, knowledge design §3.5) reads through
 /// <see cref="OpenReadAsync"/>; the worker reaches it through <see cref="EnvelopeBlobStore"/>.
 /// </summary>
 public interface IBlobEnvelope

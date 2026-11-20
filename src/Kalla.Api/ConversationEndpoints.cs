@@ -149,7 +149,7 @@ public static class ConversationEndpoints
                 {
                     await using var audit = new NpgsqlCommand("""
                         INSERT INTO audit."AuditLog" ("Timestamp", "RecordedAt", "Actor", "Action", "EntityType", "EntityId", "Service", "Classification", "RequestId")
-                        VALUES (now(), now(), $1, 'conversation.delete', 'conversation', $2, 'rag-api', $3, $4)
+                        VALUES (now(), now(), $1, 'conversation.delete', 'conversation', $2, 'kalla-api', $3, $4)
                         """, connection, transaction)
                     {
                         Parameters = { new() { Value = who.SubjectId }, new() { Value = conversationId.ToString("D") }, new() { Value = level }, new() { Value = http.TraceIdentifier } },

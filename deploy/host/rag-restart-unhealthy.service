@@ -1,5 +1,5 @@
 [Unit]
-Description=Ume Rag: restart containers labelled ume-rag.restart-unhealthy=true that are unhealthy
+Description=Ume Rag: restart containers labelled kalla.restart-unhealthy=true that are unhealthy
 Documentation=file:@DEPLOY_DIR@/host/README.md
 Requires=docker.service
 After=docker.service

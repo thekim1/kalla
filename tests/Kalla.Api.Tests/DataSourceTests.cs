@@ -7,7 +7,7 @@ using Kalla.Retrieval.Postgres;
 namespace Kalla.Api.Tests;
 
 /// <summary>
-/// rag-api has one connection pool (data-model §1.1, knowledge §6.6; B-21): EF, the config monitor and retrieval share the
+/// kalla-api has one connection pool (data-model §1.1, knowledge §6.6; B-21): EF, the config monitor and retrieval share the
 /// <c>ragdb</c> data source, so <c>Retrieval:MaxConcurrentSearches</c> = ⌊(pool − 3) ÷ 2⌋ holds for the whole process.
 /// </summary>
 public sealed class DataSourceTests(KnowledgeFixture db) : IClassFixture<KnowledgeFixture>

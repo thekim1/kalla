@@ -159,7 +159,7 @@ jobs:
           version="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest" | jq -r '.tag_name | ltrimstr("v")')"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::no latest release found ('$version')"; exit 1; }
-          prefix="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ume-rag"
+          prefix="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/kalla"
           grype db update
           reports=()
           for name in api admin worker migrations postgres clamav renderer parser; do

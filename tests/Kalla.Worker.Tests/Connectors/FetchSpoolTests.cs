@@ -8,9 +8,9 @@ public sealed class FetchSpoolTests
     [Fact]
     public void Prepare_spool_deletes_stale_fetch_files_and_keeps_fresh_ones()
     {
-        var stale = Path.Combine(Path.GetTempPath(), $"ume-rag-fetch-{Guid.NewGuid():N}");
-        var fresh = Path.Combine(Path.GetTempPath(), $"ume-rag-fetch-{Guid.NewGuid():N}");
-        var other = Path.Combine(Path.GetTempPath(), $"not-ume-rag-{Guid.NewGuid():N}");
+        var stale = Path.Combine(Path.GetTempPath(), $"kalla-fetch-{Guid.NewGuid():N}");
+        var fresh = Path.Combine(Path.GetTempPath(), $"kalla-fetch-{Guid.NewGuid():N}");
+        var other = Path.Combine(Path.GetTempPath(), $"not-kalla-{Guid.NewGuid():N}");
         try
         {
             foreach (var path in new[] { stale, fresh, other })

@@ -26,7 +26,7 @@ namespace Kalla.AdminApi.Tests;
 [Collection(AdminDatabaseGroup2.Name)]
 public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
 {
-    private const string AdminKey = "sk-ume-eu-panel-0000000000000000"; // rag-admin\'s credential key
+    private const string AdminKey = "sk-ume-eu-panel-0000000000000000"; // kalla-admin\'s credential key
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     /// <summary>The rerank calls the panel sent (B-16), on the rerankers' gateway client.</summary>

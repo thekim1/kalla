@@ -30,7 +30,7 @@ public sealed class PiiModeEngineTests(RagDatabaseFixture database, FakeGatewayF
         "Johan Berglund, 070-344 55 66", "Sara Ek, 070-355 66 77",
     ];
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-pii-mode-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-pii-mode-");
     private readonly CapturingLoggerProvider _logs = new();
     // Letters only (hex digits mapped to g–p): the marker can never read as a phone number or personnummer.
     private readonly string _marker = string.Concat(Guid.NewGuid().ToString("N").Select(c => char.IsAsciiDigit(c) ? (char)('g' + (c - '0')) : c));

@@ -851,7 +851,7 @@ public sealed class SetupTestSignInTests(AdminDatabaseFixture database) : IAsync
         Events(logs, 6012).Single().Message.ShouldContain("person-1");
         logs.Text.ShouldNotContain(TypedSecret);
 
-        // Closed: every setup route answers 404; rag-admin's sign-in now has the saved values.
+        // Closed: every setup route answers 404; kalla-admin's sign-in now has the saved values.
         (await session.GetAsync("/bff/setup/state", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await CompleteAsync(session, latestAdmin)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         using var user = JsonDocument.Parse(await session.GetStringAsync("/bff/user", Ct));

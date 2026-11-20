@@ -23,7 +23,7 @@
 -- publishes (PipelineTemplateSeeder). The config triggers bump config."ConfigVersion" and write the outbox for every
 -- row; the version row is locked first, as an admin config write does (ConfigWrites), so the change is one version.
 --
--- With a key, what rag-api's knowledge routes check (KnowledgeCallers, AccessPolicy steps 1-9, KeyChecks): an internal client
+-- With a key, what kalla-api's knowledge routes check (KnowledgeCallers, AccessPolicy steps 1-9, KeyChecks): an internal client
 -- (Knowledge:OpenToClientKinds; the internal kind reaches any live collection directly, there is no link row in P1), ceiling
 -- public, no history store; a secret key of it scoped to the collection (Keys.Scopes), enabled, expiring after 30 days; and
 -- the public level's DataProtectionPolicies row, without which every public collection is refused (fail closed). The row

@@ -367,7 +367,7 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
     public async Task A_replaced_upload_keeps_its_slot_and_identity_and_two_departments_get_two_slots_of_the_same_bytes()
     {
         var uploads = new PostgresUploadStore(Worker);
-        var root = Directory.CreateTempSubdirectory("ume-rag-upload-db-");
+        var root = Directory.CreateTempSubdirectory("kalla-upload-db-");
         try
         {
             var blobs = new FileSystemBlobStore(Options.Create(new BlobStoreOptions { Root = root.FullName }), TimeProvider.System);
@@ -411,7 +411,7 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
     {
         var uploads = new PostgresUploadStore(Worker);
         var quarantine = new PostgresQuarantineStore(Worker);
-        var root = Directory.CreateTempSubdirectory("ume-rag-upload-db-");
+        var root = Directory.CreateTempSubdirectory("kalla-upload-db-");
         try
         {
             var blobs = new FileSystemBlobStore(Options.Create(new BlobStoreOptions { Root = root.FullName }), TimeProvider.System);

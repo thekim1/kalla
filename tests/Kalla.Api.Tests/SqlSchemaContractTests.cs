@@ -5,11 +5,11 @@ using Kalla.TestKit;
 namespace Kalla.Api.Tests;
 
 /// <summary>
-/// The schema contract of rag-api's raw SQL (B-34, #510; the worker's is A-28): every SQL constant and inline SQL literal of
-/// rag-api and the libraries it runs (<c>Kalla.Api</c>, <c>Answering</c>, <c>Retrieval</c>, <c>Infrastructure</c>), and
+/// The schema contract of kalla-api's raw SQL (B-34, #510; the worker's is A-28): every SQL constant and inline SQL literal of
+/// kalla-api and the libraries it runs (<c>Kalla.Api</c>, <c>Answering</c>, <c>Retrieval</c>, <c>Infrastructure</c>), and
 /// the retrieval statements K and V built for each filter combination, must prepare against the migrated database, and the
 /// result columns of each that returns rows must equal <c>sql-shapes.json</c> next to this file (<see cref="SqlContract"/>).
-/// A changed shape fails here: check the statement's reader, then regenerate the file with <c>UME_RAG_UPDATE_CONTRACTS=1</c>.
+/// A changed shape fails here: check the statement's reader, then regenerate the file with <c>KALLA_UPDATE_CONTRACTS=1</c>.
 /// </summary>
 public sealed class SqlSchemaContractTests(SqlContractDatabase database) : IClassFixture<SqlContractDatabase>
 {
@@ -55,7 +55,7 @@ public sealed class SqlSchemaContractTests(SqlContractDatabase database) : IClas
         described.Failures.ShouldBeEmpty();
         var (expected, actual) = await SqlContract.CompareAsync(ShapesFile, described.Shapes, Ct);
         expected.ShouldBe(actual,
-            "A statement's result columns changed: check its reader, then run with UME_RAG_UPDATE_CONTRACTS=1 to regenerate.");
+            "A statement's result columns changed: check its reader, then run with KALLA_UPDATE_CONTRACTS=1 to regenerate.");
     }
 
     [Fact]

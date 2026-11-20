@@ -77,7 +77,7 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
     private DateTimeOffset? _openUntil;
     private bool _probing;
 
-    /// <summary><paramref name="cacheKey"/> is the cache key's HMAC secret: <c>Security:CacheKeyPepper</c> in <c>rag-api</c>, a random per-process key in the admin (§5.4).</summary>
+    /// <summary><paramref name="cacheKey"/> is the cache key's HMAC secret: <c>Security:CacheKeyPepper</c> in <c>kalla-api</c>, a random per-process key in the admin (§5.4).</summary>
     public GatewayQueryEmbedder(IHttpClientFactory clients, QueryEmbeddingOptions options, byte[] cacheKey, TimeProvider time, ILogger<GatewayQueryEmbedder> logger)
     {
         ArgumentNullException.ThrowIfNull(cacheKey);

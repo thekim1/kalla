@@ -36,7 +36,7 @@ start() { # start <name> <executable> [arguments]
 }
 
 # Every test project but the shared kit (a library) and the benchmarks (a console app run by hand).
-for dir in tests/Ume.Rag.*/; do
+for dir in tests/Kalla.*/; do
   project="$(basename "$dir")"
   case "$project" in Kalla.TestKit|Kalla.Benchmarks|"$admin") continue ;; esac
   [ -x "$(exe "$project")" ] || { echo "error: $(exe "$project") is not built (dotnet build Kalla.slnx -c $configuration)" >&2; exit 1; }

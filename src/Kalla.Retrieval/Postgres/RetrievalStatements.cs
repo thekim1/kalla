@@ -145,7 +145,7 @@ public static class RetrievalStatements
     /// <summary>
     /// The keyword stop list's statistics (knowledge design §6.2, §20): the rows the worker keeps in
     /// <c>content."KeywordStatistics"</c> (A-29). A small table (lexemes in at least 10 % of a collection's chunks), read
-    /// every 10 minutes; rag-api runs no <c>ts_stat</c> (#499 step 2).
+    /// every 10 minutes; kalla-api runs no <c>ts_stat</c> (#499 step 2).
     /// </summary>
     public const string KeywordStatistics = """
         SELECT "EmbeddingProfileId", "CollectionId", "Lexeme", "Ndoc", "ChunkCount"

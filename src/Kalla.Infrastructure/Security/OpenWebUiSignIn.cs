@@ -9,7 +9,7 @@ using Kalla.Infrastructure.Persistence;
 
 namespace Kalla.Infrastructure.Security;
 
-/// <summary>Where an effective sign-in value comes from (identity design §19, "Effective sign-in values"), rag-admin's and Open WebUI's alike.</summary>
+/// <summary>Where an effective sign-in value comes from (identity design §19, "Effective sign-in values"), kalla-admin's and Open WebUI's alike.</summary>
 public static class SignInSources
 {
     /// <summary>The deployment's configuration (<c>Oidc:*</c>, <c>OpenWebUi:Oidc:*</c>); an empty value is unset.</summary>
@@ -88,7 +88,7 @@ public sealed record EffectiveOpenWebUiSignIn(
     DateOnly? ClientSecretExpiresOn, bool ProviderUrlFromDeployment)
 {
     /// <summary>
-    /// Whether Open WebUI can offer OIDC sign-in with these values: a provider address is known (set, or rag-admin's effective authority
+    /// Whether Open WebUI can offer OIDC sign-in with these values: a provider address is known (set, or kalla-admin's effective authority
     /// to derive it from) and no stored secret is unreadable. The client id always has a value (its default), and a public client has
     /// no secret, so neither decides.
     /// </summary>
@@ -98,8 +98,8 @@ public sealed record EffectiveOpenWebUiSignIn(
 /// <summary>
 /// Open WebUI's sign-in values (identity design §19, "Open WebUI"): each from the deployment (<c>OpenWebUi:Oidc:*</c> in the raw
 /// configuration, an empty value is unset), else from <c>Settings.OpenWebUi.Oidc.*</c>, else the default. The provider address
-/// defaults to rag-admin's effective authority (the deployment's <c>Oidc:Authority</c>, else the wizard's) and its discovery
-/// document. rag-admin shows and saves them; rag-api serves them to the deployment's own Open WebUI client.
+/// defaults to kalla-admin's effective authority (the deployment's <c>Oidc:Authority</c>, else the wizard's) and its discovery
+/// document. kalla-admin shows and saves them; kalla-api serves them to the deployment's own Open WebUI client.
 /// </summary>
 public static class OpenWebUiSignIn
 {
@@ -107,13 +107,13 @@ public static class OpenWebUiSignIn
     public const string DefaultClientId = "open-webui";
     public const string DefaultProviderName = "Umeå kommun";
 
-    /// <summary>rag-admin's deployment authority, which the default provider address derives from (rag-api gets it too).</summary>
+    /// <summary>kalla-admin's deployment authority, which the default provider address derives from (kalla-api gets it too).</summary>
     public const string AdminAuthorityKey = "Oidc:Authority";
 
-    /// <summary>rag-admin: whether the deployment runs Open WebUI (the openwebui profile, or the Compose project's address); default false.</summary>
+    /// <summary>kalla-admin: whether the deployment runs Open WebUI (the openwebui profile, or the Compose project's address); default false.</summary>
     public const string EnabledKey = "OpenWebUi:Enabled";
 
-    /// <summary>rag-admin: Open WebUI's public address (its <c>WEBUI_URL</c>), for the redirect URI the wizard names.</summary>
+    /// <summary>kalla-admin: Open WebUI's public address (its <c>WEBUI_URL</c>), for the redirect URI the wizard names.</summary>
     public const string PublicUrlKey = "OpenWebUi:PublicUrl";
 
     /// <summary>Open WebUI's OIDC callback path (<c>OPENID_REDIRECT_URI</c>, identity design §5.3).</summary>
@@ -125,10 +125,10 @@ public static class OpenWebUiSignIn
     public const string ProviderNameKey = nameof(OpenWebUiOidcValues.ProviderName);
 
     /// <summary>
-    /// The precedence rule on its own. <paramref name="wizardAdminAuthority"/> is rag-admin's authority from the wizard
+    /// The precedence rule on its own. <paramref name="wizardAdminAuthority"/> is kalla-admin's authority from the wizard
     /// (<see cref="AuthorityOf"/>). <paramref name="storedSecret"/> is asked only when the deployment sets no client secret.
-    /// <paramref name="sessionAuthority"/>, only inside a setup session: the authority of the session's latest passed rag-admin test,
-    /// which the default provider address derives from while rag-admin's effective authority is unset (before Finish saves it).
+    /// <paramref name="sessionAuthority"/>, only inside a setup session: the authority of the session's latest passed kalla-admin test,
+    /// which the default provider address derives from while kalla-admin's effective authority is unset (before Finish saves it).
     /// </summary>
     public static EffectiveOpenWebUiSignIn Resolve(IConfiguration configuration, OpenWebUiOidcValues wizard, string? wizardAdminAuthority,
         Func<StoredSecretValue> storedSecret, DateTimeOffset? secretSetAt, string? sessionAuthority = null)
@@ -182,7 +182,7 @@ public static class OpenWebUiSignIn
         };
     }
 
-    /// <summary>rag-admin's authority as the wizard stored it (<c>Settings.Identity.Oidc</c>'s <c>authority</c>), or null.</summary>
+    /// <summary>kalla-admin's authority as the wizard stored it (<c>Settings.Identity.Oidc</c>'s <c>authority</c>), or null.</summary>
     public static string? AuthorityOf(string? identityOidcJson)
     {
         if (string.IsNullOrWhiteSpace(identityOidcJson))
@@ -195,7 +195,7 @@ public static class OpenWebUiSignIn
                authority.ValueKind == JsonValueKind.String ? Blank(authority.GetString()) : null;
     }
 
-    /// <summary>rag-admin: whether the deployment runs Open WebUI (<see cref="EnabledKey"/>); anything but <c>true</c> is false.</summary>
+    /// <summary>kalla-admin: whether the deployment runs Open WebUI (<see cref="EnabledKey"/>); anything but <c>true</c> is false.</summary>
     public static bool Enabled(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
@@ -212,13 +212,13 @@ public static class OpenWebUiSignIn
     }
 
     /// <summary>
-    /// An opaque version of what rag-api answers Open WebUI (<paramref name="answered"/>, null while not configured): HMAC-SHA-256 under
-    /// <paramref name="key"/> (rag-api's <c>Security:CacheKeyPepper</c>) over every value, the secret included, so a change of any
+    /// An opaque version of what kalla-api answers Open WebUI (<paramref name="answered"/>, null while not configured): HMAC-SHA-256 under
+    /// <paramref name="key"/> (kalla-api's <c>Security:CacheKeyPepper</c>) over every value, the secret included, so a change of any
     /// one changes it and it cannot be used to test guesses of the secret without the key. 128 bits, hex.
     /// </summary>
     public static string Version(EffectiveOpenWebUiSignIn? answered, ReadOnlySpan<byte> key)
     {
-        var text = new StringBuilder("ume-rag/openwebui-sign-in/v1\n");
+        var text = new StringBuilder("kalla/openwebui-sign-in/v1\n");
         string?[] parts = answered is null
             ? ["0"]
             : ["1", answered.ProviderUrl.Value, answered.ClientId.Value, answered.ProviderName.Value, answered.ClientSecret.Value];

@@ -53,7 +53,7 @@ internal static class ParseRuleRows
     public const string NotManualCode = "parse_rule.not_manual";
     public const string LevelMismatchCode = "parse_rule.level_mismatch";
     public const string AuditEntityType = "parserule";
-    public const string AuditService = "rag-worker";
+    public const string AuditService = "kalla-worker";
 
     public const string Columns = """
         "Id", "Classification", "DepartmentId", "Origin", "State", "Match"::text, "Strategy"::text, "CleanupRules"::text

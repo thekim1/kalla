@@ -27,8 +27,8 @@ crawl, the gold set and the test host) is ahead. The [changelog](../CHANGELOG.md
 
 ## How it runs
 
-The pilot runs on one Linux host with Docker Compose: `rag-postgres`, `rag-api` (chat and knowledge), `rag-admin` (the
-admin UI and its API), `rag-worker` (ingestion), `rag-parser` and `rag-clamav`, plus the one-shot `rag-migrate`. The
+The pilot runs on one Linux host with Docker Compose: `kalla-postgres`, `kalla-api` (chat and knowledge), `kalla-admin` (the
+admin UI and its API), `kalla-worker` (ingestion), `kalla-parser` and `kalla-clamav`, plus the one-shot `kalla-migrate`. The
 same services run as one Portainer stack together with the gateway, or on Kubernetes.
 
 - Every model call goes through the gateway with an explicit residency ceiling (on-prem or EU), so the gateway refuses

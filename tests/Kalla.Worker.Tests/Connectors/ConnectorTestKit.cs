@@ -178,7 +178,7 @@ internal sealed class TestSite : IAsyncDisposable
         var guard = ConnectorTestKit.Guard(dns ?? Resolver(), new FixedEgressPolicy(Port, SecurePort), allowedPrivateRanges);
         var client = new CrawlHttpClient(guard, (_, certificate, _, _) => certificate?.GetCertHashString() == _certificate.GetCertHashString());
         var fetcher = new HttpFetcher(client, guard, policy, TimeProvider.System);
-        var blobRoot = Directory.CreateTempSubdirectory("ume-rag-connector-blobs-");
+        var blobRoot = Directory.CreateTempSubdirectory("kalla-connector-blobs-");
         var blobs = new FileSystemBlobStore(Options.Create(new BlobStoreOptions { Root = blobRoot.FullName }), TimeProvider.System);
         var robots = new RobotsCache(fetcher, policy, TimeProvider.System);
         budget ??= new HostBudget(new InMemoryCrawlHostStore(TimeProvider.System), policy, TimeProvider.System);

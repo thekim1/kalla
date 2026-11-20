@@ -26,21 +26,21 @@ Retention of the backups is 35 days (proposed).
 
 ```bash
 dc ps                                    # state and health of every container
-dc logs --since 1h rag-worker            # one service's log
-dc restart rag-api                       # restart one service
+dc logs --since 1h kalla-worker            # one service's log
+dc restart kalla-api                       # restart one service
 dc stop                                  # stop everything, keep the volumes
 dc up -d --wait                          # start (or apply a changed .env or image)
 ```
 
-Never run `dc down --volumes` on a deployment: it deletes `rag-postgres-data`, `rag-blobs`, the certificates and
-secrets (`rag-certs`, `rag-secrets`), the signatures and, with a `local` backup target, the backup repository. A plain
+Never run `dc down --volumes` on a deployment: it deletes `kalla-postgres-data`, `kalla-blobs`, the certificates and
+secrets (`kalla-certs`, `kalla-secrets`), the signatures and, with a `local` backup target, the backup repository. A plain
 `dc down` keeps the volumes. Every .NET service answers `/health/live`, `/health/ready` and `/version`; the published
-ones are on `https://localhost:8543` (api) and `:9543` (admin), with the internal CA in the `rag-certs` volume. Read it
+ones are on `https://localhost:8543` (api) and `:9543` (admin), with the internal CA in the `kalla-certs` volume. Read it
 out once, as `rag-ca.pem`, for the checks below:
 
 ```bash
-docker run --rm --network none -v ume-rag_rag-certs:/c:ro --entrypoint cat \
-  "$(docker compose --env-file deploy/.env config --images rag-bootstrap)" /c/ca.pem > rag-ca.pem
+docker run --rm --network none -v kalla_kalla-certs:/c:ro --entrypoint cat \
+  "$(docker compose --env-file deploy/.env config --images kalla-bootstrap)" /c/ca.pem > rag-ca.pem
 ```
 
 ## Daily checks
@@ -51,11 +51,11 @@ each working day:
 ```bash
 systemctl list-timers 'rag-*'                   # every timer has a next run; the backup ran last night
 systemctl list-units --failed 'rag-*'           # no failed unit
-cat /var/lib/ume-rag/backup.prom /var/lib/ume-rag/upload-backup.prom
-dc ps                                           # every service healthy (rag-migrate exited 0)
+cat /var/lib/kalla/backup.prom /var/lib/kalla/upload-backup.prom
+dc ps                                           # every service healthy (kalla-migrate exited 0)
 curl --cacert rag-ca.pem https://localhost:8543/health/ready
 curl --cacert rag-ca.pem https://localhost:9543/health/ready
-dc exec -T rag-postgres pgbackrest --stanza=ragdb info
+dc exec -T kalla-postgres pgbackrest --stanza=ragdb info
 ```
 
 In `backup.prom`: `rag_backup_age_seconds` under 93600 (26 h), `rag_backup_repo_status 0`,
@@ -85,7 +85,7 @@ Each row holds calls, input tokens (cached ones included, as the gateway counts 
 tokens, and the cost in two parts that are never mixed:
 
 - **From the AI gateway** (`CostUsd`): the gateway's own figure, from the `x-fors-cost-usd` header on a complete answer,
-  or from the stream comment `: fors-cost-usd=<usd>` the gateway writes before `data: [DONE]` (rag-api asks for it with
+  or from the stream comment `: fors-cost-usd=<usd>` the gateway writes before `data: [DONE]` (kalla-api asks for it with
   `x-fors-stream-cost: 1` and never passes it on).
 - **Estimated** (`EstimatedCostUsd`, `EstimatedCalls`): a call that came back without a gateway cost, priced from the
   model list's mirrored prices: (input − cached) × input price + cached × cached price (the input price when that is
@@ -118,8 +118,8 @@ the key) before comparing with the gateway's export, which is per key.
 
 ### The gateway's figures beside Ume.Rag's
 
-When rag-admin's gateway context names the Integration API (`integration_api_url`, the gateway's
-`UME_INTEGRATION_API_URL`) and its credential key has the scope `usage.read`, the Cost card of an object **with a gateway key** reads that
+When kalla-admin's gateway context names the Integration API (`integration_api_url`, the gateway's
+`FORS_INTEGRATION_API_URL`) and its credential key has the scope `usage.read`, the Cost card of an object **with a gateway key** reads that
 key's usage from the gateway's Integration API (`/integration/v1/usage?groupBy=step&keyId=…`) for the same period:
 
 - a **Gateway** column in the *By step* table: the gateway's cost for the key per `x-fors-step`;
@@ -140,7 +140,7 @@ Without the read-back (the setting unset, the scope missing, the gateway refusin
 the last refusal with its time), and is logged:
 
 ```bash
-dc logs --since 1h rag-admin | grep "Integration API"   # "refused or failed (HTTP 403, scope_missing); no read-back this time"
+dc logs --since 1h kalla-admin | grep "Integration API"   # "refused or failed (HTTP 403, scope_missing); no read-back this time"
 ```
 
 A platform admin also sees it in `integration.lastError` of `GET /api/gateway/status`; the admin UI's *AI gateway* card on *Models* shows it too.
@@ -150,7 +150,7 @@ A platform admin also sees it in `integration.lastError` of `GET /api/gateway/st
 Compare the same key, the same day and Ume.Rag's gateway part plus its estimate. The differences, in the order they
 usually matter:
 
-1. **Calls Ume.Rag never sees answered.** rag-api retries a `502`/`504` once, and a connection failure once; the gateway
+1. **Calls Ume.Rag never sees answered.** kalla-api retries a `502`/`504` once, and a connection failure once; the gateway
    has already tried its fallbacks before it answers `502`/`504`. The failed attempts are requests in the gateway
    (usually at no cost, since no provider answered) and nothing in Ume.Rag; a fallback inside the gateway is one
    request there, with its fallback count. A non-streamed call that Ume.Rag gives up on (a condense or follow-up
@@ -169,13 +169,13 @@ usually matter:
      the first searched knowledge base's key, so they show in that knowledge base's **Gateway** column under
      *Query embedding* with nothing beside them in Ume.Rag.
    - The admin's own calls outside the test panel: the retrieval test (on the knowledge base's key), and the embedding
-     canary, embedding profile test and status checks (on rag-admin's credential key).
+     canary, embedding profile test and status checks (on kalla-admin's credential key).
 5. **The test panel.** Its calls run as the assistant's key and are counted under the client `admin-console`, so they
-   show as *Test panel*, apart from real use. rag-migrate creates that client (type `internal`, managed by the deployment)
-   on every run; without it (rag-migrate has not run) nothing is written and rag-admin logs it:
+   show as *Test panel*, apart from real use. kalla-migrate creates that client (type `internal`, managed by the deployment)
+   on every run; without it (kalla-migrate has not run) nothing is written and kalla-admin logs it:
 
    ```bash
-   dc logs --since 24h rag-admin | grep "Test panel usage"   # "Test panel usage of assistant <id> not written (<n> calls): no admin-console client row of kind internal"
+   dc logs --since 24h kalla-admin | grep "Test panel usage"   # "Test panel usage of assistant <id> not written (<n> calls): no admin-console client row of kind internal"
    ```
 
 6. **Days.** Ume.Rag's days are Europe/Stockholm days: a chat turn is dated when it starts, a worker call when it is
@@ -186,8 +186,8 @@ usually matter:
      zone, so read them on a computer set to Swedish time;
    - the usage summary grouped by *day*: grouped on the record's timestamp date, not on Stockholm days, so its day
      boundary can be an hour or two off. Don't use it to reconcile a day.
-7. **Objects without a key.** Their calls run as the service's credential key (rag-api's for chat, rag-worker's for
-   indexing, rag-admin's for the test panel), so in the gateway they are part of that key's line together with every
+7. **Objects without a key.** Their calls run as the service's credential key (kalla-api's for chat, kalla-worker's for
+   indexing, kalla-admin's for the test panel), so in the gateway they are part of that key's line together with every
    other object without a key. The Cost card has no **Gateway** column for them. The same holds for every object
    until the gateway's `features` contain `act-as-key`.
 8. **Rounding.** The stream comment carries six decimals; sums over thousands of calls can differ in the fourth
@@ -223,7 +223,7 @@ of it is `gateway`; the estimate is the aborted streams. When the `estimate` sha
 - by step `chat-answer` only, with more cancelled turns (`AssistantDailyTotals.Cancelled`): users leave or answers hit
   the idle or total timeout. Look at the model's speed in the gateway;
 - on every step at once: the gateway stopped sending its cost. Check that the gateway is at a release with the stream
-  cost and `x-fors-cost-usd`, and that nothing between rag-api and the gateway strips the header;
+  cost and `x-fors-cost-usd`, and that nothing between kalla-api and the gateway strips the header;
 - an estimated cost of 0 for calls that have tokens: the model has no prices in the model list (*Models*, filled by the model sync).
 
 `rag.chat.tokens` counts the tokens by `direction` (`input`, `cached-input`, `output`) and `step`. For knowledge bases,
@@ -240,8 +240,8 @@ column or the usage page with the browser in Swedish time).
 
 | Key | Ume.Rag (gateway part + estimate) | Gateway | Difference and why |
 |---|---|---|---|
-| `bygg-chat` | 1.9859 + 0.0105 = 1.9964 USD, 1,327 calls (3 estimated) | 2.0012 USD, 1,336 requests, 1,327 successful | +0.0026 the gateway's own figures for the 3 aborted answers (item 3); +0.0004 two follow-ups that timed out in rag-api (item 1); +0.0018 a turn started at 23:59:58 on 11 November, whose calls the gateway dates the 12th (item 6). Requests: 4 retried `502`s, 3 cancelled answers, 2 cancelled follow-ups (items 1, 3) |
-| `plan-chat` | 0.6120 + 0 = 0.6120 USD, 402 calls | 0.6330 USD, 407 successful | +0.0210 five test-panel calls not written; rag-admin logged "Test panel usage of assistant … not written (5 calls)", there is no `admin-console` client row (item 5) |
+| `bygg-chat` | 1.9859 + 0.0105 = 1.9964 USD, 1,327 calls (3 estimated) | 2.0012 USD, 1,336 requests, 1,327 successful | +0.0026 the gateway's own figures for the 3 aborted answers (item 3); +0.0004 two follow-ups that timed out in kalla-api (item 1); +0.0018 a turn started at 23:59:58 on 11 November, whose calls the gateway dates the 12th (item 6). Requests: 4 retried `502`s, 3 cancelled answers, 2 cancelled follow-ups (items 1, 3) |
+| `plan-chat` | 0.6120 + 0 = 0.6120 USD, 402 calls | 0.6330 USD, 407 successful | +0.0210 five test-panel calls not written; kalla-admin logged "Test panel usage of assistant … not written (5 calls)", there is no `admin-console` client row (item 5) |
 | `bygg-kb` | `embed` 0.0820 + 0 USD, 530 calls | `embed` 0.0820 USD; *Query embedding* 0.0035 USD | `embed` agrees, the 530 calls include 12 documents' first attempts that failed and were retried (item 1; the run's own `Runs.CostUsd` is 0.0790). The 0.0035 are query embeddings of Knowledge API callers without an assistant and two retrieval tests (item 4) |
 
 Every difference has a name, so the day is reconciled. A difference with no name, or one that grows from day to day on
@@ -253,22 +253,22 @@ the gateway part (not the estimate), is worth an issue: Ume.Rag may be missing a
 
 | Unit | Runs | When |
 |---|---|---|
-| `rag-backup.timer` | `backup-postgres.sh --type auto`: a pgBackRest backup inside the rag-postgres container; full on Sundays or when the newest full is 7 days old (or there is none), else differential; expiry follows each backup | daily at 01:30 (up to 15 minutes later), caught up after downtime |
+| `rag-backup.timer` | `backup-postgres.sh --type auto`: a pgBackRest backup inside the kalla-postgres container; full on Sundays or when the newest full is 7 days old (or there is none), else differential; expiry follows each backup | daily at 01:30 (up to 15 minutes later), caught up after downtime |
 | `rag-backup-status.timer` | `backup-postgres.sh --status-only`: the metrics below, from `pgbackrest info` and `pg_stat_archiver` | every 2 minutes |
 | `rag-upload-backup.timer` | `backup-uploads.sh`: new files below `uploads/` of the blob store to the upload copy, never overwriting | every 10 minutes (not with an S3 target) |
-| `archive_command` in rag-postgres | `pgbackrest archive-push`: every WAL segment, synchronously | at least every 60 s (`archive_timeout`) when anything was written |
+| `archive_command` in kalla-postgres | `pgbackrest archive-push`: every WAL segment, synchronously | at least every 60 s (`archive_timeout`) when anything was written |
 
 Derived blobs (fetched pages, parse outputs) are not backed up: a restore fetches and parses them again. What no
 backup holds and a restore needs (the pepper, the blob master key, the pgBackRest passphrase, the database roles' passwords,
 the conversation id key, the Data Protection certificate and the internal CA) is in the escrow set (*Key escrow*). The
-other files in `rag-secrets` and `rag-certs` are generated again by `rag-bootstrap` when they are missing, and a new
-one breaks nothing a backup restores. Open WebUI's data (the volume `rag-openwebui-data`) is **not backed up by any
+other files in `kalla-secrets` and `kalla-certs` are generated again by `kalla-bootstrap` when they are missing, and a new
+one breaks nothing a backup restores. Open WebUI's data (the volume `kalla-openwebui-data`) is **not backed up by any
 script in P0** (*Public-records requests*).
 
 ```bash
 systemctl list-timers 'rag-*'
 journalctl -u rag-backup.service --since yesterday
-dc exec -T rag-postgres pgbackrest --stanza=ragdb info  # backup sets and the archived WAL range
+dc exec -T kalla-postgres pgbackrest --stanza=ragdb info  # backup sets and the archived WAL range
 ```
 
 ### `backup-postgres.sh`
@@ -281,12 +281,12 @@ sudo systemctl start rag-backup.service                  # the scheduled run (--
 ```
 
 `--env-file FILE` (default `deploy/.env`) picks the deployment, and `--state-dir DIR` (default `$STATE_DIRECTORY`, else
-`/var/lib/ume-rag`) where `backup.prom` and `backup-last-run` go. A diff without a full becomes a full. A failed run is
+`/var/lib/kalla`) where `backup.prom` and `backup-last-run` go. A diff without a full becomes a full. A failed run is
 recorded (`rag_backup_last_run_success 0`) and the metrics are refreshed if the database still answers.
 
 ### Metrics and alerts
 
-The scripts write Prometheus text files to `/var/lib/ume-rag/` (`backup.prom`, `upload-backup.prom`), atomically and
+The scripts write Prometheus text files to `/var/lib/kalla/` (`backup.prom`, `upload-backup.prom`), atomically and
 world-readable. Point node_exporter's textfile collector, or the collector that reads them, at that directory (how they
 reach the municipal monitoring is still to be settled). Every value is read from the repository and `pg_stat_archiver`
 at run time, so a backup taken by any means is reported.
@@ -318,14 +318,14 @@ Proposed alerts (§7.4 rule 5):
 `deploy/restore-pitr.sh` restores ragdb **in place** to a moment you choose. It replaces the current database:
 everything archived before it starts stays restorable, nothing written after its first step is.
 
-**First, the setup wizard's re-open value:** remove `UME_RAG_SETUP_REOPEN` from `deploy/.env`
-(`./deploy/init-deployment.sh --set UME_RAG_SETUP_REOPEN=`, then `dc up -d`; Kubernetes: the
-`Setup__Reopen` literal; Portainer: the variable). The restored database may have consumed an older value, and rag-admin
+**First, the setup wizard's re-open value:** remove `KALLA_SETUP_REOPEN` from `deploy/.env`
+(`./deploy/init-deployment.sh --set KALLA_SETUP_REOPEN=`, then `dc up -d`; Kubernetes: the
+`Setup__Reopen` literal; Portainer: the variable). The restored database may have consumed an older value, and kalla-admin
 would open the wizard again for an hour. The client secrets the wizard stored need the same `data-protection.pfx`
 (*Sign-in and the setup wizard*).
 
 1. **Choose the time.** Find the last good moment (an incident report, the audit log). Check that it lies inside the
-   archived range with `dc exec -T rag-postgres pgbackrest --stanza=ragdb info`. Write it with a UTC offset; without one the
+   archived range with `dc exec -T kalla-postgres pgbackrest --stanza=ragdb info`. Write it with a UTC offset; without one the
    host's time zone applies. Transactions committed up to and including that time are kept.
 2. **Preview.** Without `--confirm` the script prints what it would do and stops:
 
@@ -344,11 +344,11 @@ would open the wizard again for an hour. The client secrets the wizard stored ne
    It then:
    1. closes the current WAL segment and waits up to 60 s until it is archived, so the restore can reach the newest
       commits;
-   2. stops `rag-api`, `rag-admin` and `rag-worker` (those that run, the second slots of `--rolling` included), then
-      `rag-postgres`;
-   3. runs `pgbackrest restore --type=time --delta` in a one-off container of the `rag-postgres` service (same image,
-      user, volumes and repository settings) on the `rag-postgres-data` volume;
-   4. starts `rag-postgres`, which recovers to the target and pauses there, and prints the last transaction it replayed;
+   2. stops `kalla-api`, `kalla-admin` and `kalla-worker` (those that run, the second slots of `--rolling` included), then
+      `kalla-postgres`;
+   3. runs `pgbackrest restore --type=time --delta` in a one-off container of the `kalla-postgres` service (same image,
+      user, volumes and repository settings) on the `kalla-postgres-data` volume;
+   4. starts `kalla-postgres`, which recovers to the target and pauses there, and prints the last transaction it replayed;
    5. promotes it to a new timeline (the old one stays in the repository) and runs `pgbackrest check`;
    6. starts the services it stopped, waits until they are healthy, and prints the time of each step and the total
       (the achieved RTO).
@@ -375,7 +375,7 @@ backup, and a share or S3 target is slower than a local volume: the test-host dr
 
 ### Restoring onto another host
 
-Not drilled yet; the test-host drill confirms it. The order matters, because `rag-bootstrap` never overwrites an
+Not drilled yet; the test-host drill confirms it. The order matters, because `kalla-bootstrap` never overwrites an
 existing secret but creates a new one where none is, at the first `up`:
 
 1. Run `init-deployment.sh` on the new host with the same `--backup-target`, then the install steps of
@@ -387,7 +387,7 @@ existing secret but creates a new one where none is, at the first `up`:
    sudo deploy/escrow-keys.sh --restore /media/escrow-a/<set>
    ```
 
-3. `dc up -d --wait` (no `stanza-create`: the stanza exists; `rag-bootstrap` derives the rest from the restored files),
+3. `dc up -d --wait` (no `stanza-create`: the stanza exists; `kalla-bootstrap` derives the rest from the restored files),
    then `escrow-keys.sh --verify` against the set.
 4. Run `restore-pitr.sh --target-time … --confirm`, then take a full backup.
 
@@ -422,33 +422,33 @@ Record the date, the achieved RPO and RTO, and anything that went wrong.
 ## Key escrow
 
 `deploy/escrow-keys.sh` writes one escrow set with everything a restored deployment needs that no backup holds, reads
-it back, and restores it. The same command in every form. `rag-bootstrap` generates each of these once and never again; every other file it
+it back, and restores it. The same command in every form. `kalla-bootstrap` generates each of these once and never again; every other file it
 generates or derives on each start:
 
-- `rag-secrets/.pepper`: the key pepper. Without it no API key or client key verifies.
-- `rag-secrets/keys/rag-blob-*`: the blob master keys of the file key provider (`rag-blob-internal`). Without them the
+- `kalla-secrets/.pepper`: the key pepper. Without it no API key or client key verifies.
+- `kalla-secrets/keys/rag-blob-*`: the blob master keys of the file key provider (`rag-blob-internal`). Without them the
   `internal` blobs cannot be decrypted. Chat master keys (`rag-chat-<level>`) join only once stored chat content is
   allowed (register A1).
-- `rag-secrets/pgbackrest/cipher-pass`, with a backup target: the repository passphrase. Without it no backup can be read.
-- `rag-secrets/postgres/*_password`: the passwords of the database roles (`bootstrap`, the superuser, and the four
+- `kalla-secrets/pgbackrest/cipher-pass`, with a backup target: the repository passphrase. Without it no backup can be read.
+- `kalla-secrets/postgres/*_password`: the passwords of the database roles (`bootstrap`, the superuser, and the four
   service roles). A restored cluster keeps the roles it had, with these passwords: with new ones the services can't log
   in after `restore-pitr.sh`. Restored before the first start, they are also the ones the new cluster is created with.
-- `rag-secrets/api/Security__ConversationIdKeys__*`: the keys that sign the conversation ids clients hold. Without them
+- `kalla-secrets/api/Security__ConversationIdKeys__*`: the keys that sign the conversation ids clients hold. Without them
   every conversation id a client kept is refused (`conversation_not_found`), though the conversations are restored.
-- `rag-certs/data-protection.pfx`: the Data Protection certificate. Without it the stored client secrets (the sign-in
+- `kalla-certs/data-protection.pfx`: the Data Protection certificate. Without it the stored client secrets (the sign-in
   settings) can't be read.
-- `rag-certs/ca.pem` and `ca.key`: the internal CA. With them the services' certificates and the trust in them stay as
+- `kalla-certs/ca.pem` and `ca.key`: the internal CA. With them the services' certificates and the trust in them stay as
   they were (a Kubernetes installation that keeps `ca.key` offline keeps that copy with the set).
 
 ```bash
-sudo deploy/escrow-keys.sh /media/escrow-a              # writes /media/escrow-a/ume-rag-keys-<project>-<UTC time>/
+sudo deploy/escrow-keys.sh /media/escrow-a              # writes /media/escrow-a/kalla-keys-<project>-<UTC time>/
 sudo deploy/escrow-keys.sh --verify /media/escrow-a     # the newest set there, or name one set
 sudo deploy/escrow-keys.sh --restore /media/escrow-a/<set>   # into a new deployment, before its first start
 ```
 
 The deployment is the Compose installation of `deploy/.env` (`--env-file FILE` for another), a Portainer stack by
-`--project <stack>` (the image comes from the stack's `rag-bootstrap` container; before the stack's first deploy pass
-`--image` with the stack file's `rag-bootstrap` image), or Kubernetes' directories by `--secrets-dir deploy/secrets
+`--project <stack>` (the image comes from the stack's `kalla-bootstrap` container; before the stack's first deploy pass
+`--image` with the stack file's `kalla-bootstrap` image), or Kubernetes' directories by `--secrets-dir deploy/secrets
 --certs-dir deploy/certs`.
 
 The export writes the files with `SHA256SUMS` and a `MANIFEST`, read-only for the owner, read out of the volumes
@@ -456,7 +456,7 @@ read-only. `--verify` checks the checksums and the formats, that every file equa
 deployment has no key the set lacks, and that the passphrase equals `repo1-cipher-pass` in `repo.conf`; it prints
 `PASS` and exits 0, or names each `FAIL`. `--restore` checks the set the same way, makes the volumes (with the
 project's labels) when they don't exist yet, and refuses to replace a file that differs: it is for new volumes, before
-`rag-bootstrap` has made its own.
+`kalla-bootstrap` has made its own.
 
 - **Run it** after the first deployment (production-setup.md) and **after every rotation**, then verify: `--verify`
   fails with "differs from the deployment's key" until the new key is escrowed. The upgrade guide verifies the escrow
@@ -470,9 +470,9 @@ project's labels) when they don't exist yet, and refuses to replace a file that 
 ## Upload copy
 
 `rag-upload-backup.timer` runs `deploy/backup-uploads.sh` every 10 minutes, so an upload is off the host within 15. It
-runs the profiled Compose service `rag-upload-backup` of `compose.backup.yaml` (a shell in `rag-bootstrap`'s image
-as uid 1654, the blob volume read-only, no network) with `UME_RAG_UPLOAD_BACKUP_DIR` (or, with a `local` target, the
-volume `rag-upload-copy`) mounted as the target. Each new file is written under a
+runs the profiled Compose service `rag-upload-backup` of `compose.backup.yaml` (a shell in `kalla-bootstrap`'s image
+as uid 1654, the blob volume read-only, no network) with `KALLA_UPLOAD_BACKUP_DIR` (or, with a `local` target, the
+volume `kalla-upload-copy`) mounted as the target. Each new file is written under a
 temporary name and renamed; a file already in the copy is skipped. Deletions are not propagated: prune the copy with
 the backup retention (35 days). With an S3 target there is no upload copy yet (not built in P0).
 
@@ -485,41 +485,41 @@ journalctl -u rag-upload-backup.service --since today
 ### Restoring a missing upload
 
 The upload copy holds every file below `uploads/` of the blob store, under the same key (`<backup target>/uploads/uploads/`,
-or `uploads/` in the volume `rag-upload-copy` with a `local` target). Keys are write-once, so copying back only what
+or `uploads/` in the volume `kalla-upload-copy` with a `local` target). Keys are write-once, so copying back only what
 is missing is always safe. With the stack running:
 
 ```bash
-dir="$(sed -n "s/^UME_RAG_UPLOAD_BACKUP_DIR='\(.*\)'$/\1/p" deploy/.env)"
+dir="$(sed -n "s/^KALLA_UPLOAD_BACKUP_DIR='\(.*\)'$/\1/p" deploy/.env)"
 docker run --rm --network none --user 1654:1654 --read-only \
-  -v ume-rag_rag-blobs:/data/blobs -v "${dir:-ume-rag_rag-upload-copy}:/backup:ro" \
-  --entrypoint sh "$(docker compose --env-file deploy/.env config --images rag-bootstrap)" -c '
+  -v kalla_kalla-blobs:/data/blobs -v "${dir:-ume-rag_rag-upload-copy}:/backup:ro" \
+  --entrypoint sh "$(docker compose --env-file deploy/.env config --images kalla-bootstrap)" -c '
     cd /backup/uploads && find . -type f ! -name "*.partial" | while IFS= read -r f; do
       [ -e "/data/blobs/rag/uploads/$f" ] && continue
       mkdir -p "/data/blobs/rag/uploads/$(dirname "$f")" && cp -p "$f" "/data/blobs/rag/uploads/$f"
     done'
 ```
 
-Any image with a POSIX shell works; `rag-bootstrap`'s is the one `rag-upload-backup` uses. This step has not been
+Any image with a POSIX shell works; `kalla-bootstrap`'s is the one `rag-upload-backup` uses. This step has not been
 drilled yet.
 
 ## Updates and restarts
 
 Upgrades follow the [upgrade guide](upgrade-guide.md): announce the window, take a full backup and verify the escrow,
-replace `deploy/`, run the superuser steps if the release lists them, then `dc up -d --wait`, which runs `rag-migrate`
-first (after `rag-bootstrap`). With one slot each (the default) `rag-api` and `rag-admin` are replaced together in
+replace `deploy/`, run the superuser steps if the release lists them, then `dc up -d --wait`, which runs `kalla-migrate`
+first (after `kalla-bootstrap`). With one slot each (the default) `kalla-api` and `kalla-admin` are replaced together in
 one announced window. With `init-deployment.sh --rolling` there are two of each behind your own proxy, and `deploy/rolling-update.sh` replaces them one
 at a time for releases marked *Rolling update: yes* ([Updates without downtime](zero-downtime-updates.md)).
 
-**The worker is stop-then-start, never overlapping.** Two `rag-worker` processes at once would exceed its role's
-connection limit; its job leases make a short pause harmless. Never scale it (`--scale rag-worker=2`) or start a
+**The worker is stop-then-start, never overlapping.** Two `kalla-worker` processes at once would exceed its role's
+connection limit; its job leases make a short pause harmless. Never scale it (`--scale kalla-worker=2`) or start a
 second worker against the same database. To restart it by hand:
 
 ```bash
-dc stop rag-worker              # it gets its stop grace period (120 s) before it is killed
-dc up -d --wait rag-worker
+dc stop kalla-worker              # it gets its stop grace period (120 s) before it is killed
+dc up -d --wait kalla-worker
 ```
 
-`dc restart rag-worker` also stops it before it starts. The parser, ClamAV (when its `clamav` profile is on) and the
+`dc restart kalla-worker` also stops it before it starts. The parser, ClamAV (when its `clamav` profile is on) and the
 renderer (when its `render` profile is on) can be restarted on their own: the worker reports them in its own health and retries (a render that loses the renderer fails as
 `render.unavailable` and keeps the page's last good content).
 
@@ -533,7 +533,7 @@ first*).
 
 Docker restarts a container only when its main process exits. ClamAV's does not, so a hung clamd would stay
 unhealthy. `rag-restart-unhealthy.timer` runs `deploy/host/restart-unhealthy.sh` every minute: it restarts every
-container labelled `ume-rag.restart-unhealthy=true` (today `rag-clamav` and `rag-renderer`, where they run) that Docker reports
+container labelled `kalla.restart-unhealthy=true` (today `kalla-clamav` and `kalla-renderer`, where they run) that Docker reports
 unhealthy. A container
 in its start period counts as starting, not unhealthy, so a slow first download does not loop.
 
@@ -546,9 +546,9 @@ journalctl -u rag-restart-unhealthy.service --since today
 
 `deploy/portainer/compose.portainer.yaml` runs the gateway and Ume Rag as **one** Portainer stack, configured only
 through environment variables, for hosts without shell access. It is the gateway's
-`deploy/compose.portainer.yaml`, unchanged but for the default of its `UME_INTEGRATION_MANIFEST` (below), plus RAG's
-services from `deploy/compose.rag.yaml`, the same file a Compose host runs (all named `rag-…`): rag-postgres, rag-migrate, rag-api (8543), rag-admin (9543), rag-worker, rag-parser and,
-with their profiles, rag-clamav (`clamav`) and rag-renderer (`render`) and rag-openwebui (`openwebui`, #657). Step by
+`deploy/compose.portainer.yaml`, unchanged but for the default of its `FORS_INTEGRATION_MANIFEST` (below), plus RAG's
+services from `deploy/compose.rag.yaml`, the same file a Compose host runs (all named `rag-…`): kalla-postgres, kalla-migrate, kalla-api (8543), kalla-admin (9543), kalla-worker, kalla-parser and,
+with their profiles, kalla-clamav (`clamav`) and kalla-renderer (`render`) and kalla-openwebui (`openwebui`, #657). Step by
 step for a new VM or an upgrade: [portainer.md](portainer.md).
 
 **Deploy.** In the gateway's existing stack, *Editor*: replace the file with this one, keep the stack name (the
@@ -558,32 +558,32 @@ that can read packages.
 
 | Variable | |
 |---|---|
-| `UME_DOMAIN`, `UME_RAG_API_PUBLIC_URL` | `UME_DOMAIN` is required, and the one value a new stack types (without it, `UME_GATEWAY_HOST` and `UME_RAG_API_HOST`): the host names default to `llm.<domain>` and `llm-admin.<domain>` (the gateway's), `rag.<domain>` (rag-api), `rag-admin.<domain>` and `chat.<domain>` (Open WebUI); `UME_GATEWAY_HOST`, `UME_ADMIN_HOST`, `UME_RAG_API_HOST`, `UME_RAG_ADMIN_HOST` and `UME_RAG_OPENWEBUI_HOST` override one each. rag-api's public URL is `https://<host>` unless `UME_RAG_API_PUBLIC_URL` gives another (a port: `https://rag.example.se:8543`) |
-| `UME_INTEGRATION_MANIFEST` | the gateway's; unset, the stack file's default, `deploy/portainer/integration-manifest.json`: the gateway creates the integration *Ume.Rag* and its three credential keys (in a team and department `ume-rag` that a gateway admin can move) and `rag-bootstrap` gives each service its key. Set, your own manifest wins; set and empty, nothing is created |
-| `UME_RAG_API_GATEWAY_KEY`, `UME_RAG_ADMIN_GATEWAY_KEY`, `UME_RAG_WORKER_GATEWAY_KEY` | optional: each service's credential key of the gateway integration *Ume.Rag*, issued by a gateway admin as [production-setup.md](production-setup.md), *Gateway credential keys*, says (an empty manifest, or a gateway elsewhere); set, it wins over the manifest's. Without a key that service's model calls are refused |
-| `COMPOSE_PROFILES` | `clamav`: `rag-clamav`, the malware scan; `clamav,render` adds the renderer; `openwebui` the chat. `rag-bootstrap` sets the worker's malware scan from it: on with `clamav`, else off, which stores files without a scan, marked so ([production-setup.md](production-setup.md), *Malware scan*) |
-| `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` | optional: roles come from the token's `roles` claim (Keycloak: the realm role `rag-platform-admin`), and a group grants one only for an identity provider whose tokens carry groups instead: this is the break-glass for the first platform admin, and every other role's groups are set in RAG's admin (*Settings → Role groups*) |
+| `FORS_DOMAIN`, `KALLA_API_PUBLIC_URL` | `FORS_DOMAIN` is required, and the one value a new stack types (without it, `FORS_GATEWAY_HOST` and `KALLA_API_HOST`): the host names default to `llm.<domain>` and `llm-admin.<domain>` (the gateway's), `rag.<domain>` (kalla-api), `kalla-admin.<domain>` and `chat.<domain>` (Open WebUI); `FORS_GATEWAY_HOST`, `FORS_ADMIN_HOST`, `KALLA_API_HOST`, `KALLA_ADMIN_HOST` and `KALLA_OPENWEBUI_HOST` override one each. kalla-api's public URL is `https://<host>` unless `KALLA_API_PUBLIC_URL` gives another (a port: `https://rag.example.se:8543`) |
+| `FORS_INTEGRATION_MANIFEST` | the gateway's; unset, the stack file's default, `deploy/portainer/integration-manifest.json`: the gateway creates the integration *Ume.Rag* and its three credential keys (in a team and department `kalla` that a gateway admin can move) and `kalla-bootstrap` gives each service its key. Set, your own manifest wins; set and empty, nothing is created |
+| `KALLA_API_GATEWAY_KEY`, `KALLA_ADMIN_GATEWAY_KEY`, `KALLA_WORKER_GATEWAY_KEY` | optional: each service's credential key of the gateway integration *Ume.Rag*, issued by a gateway admin as [production-setup.md](production-setup.md), *Gateway credential keys*, says (an empty manifest, or a gateway elsewhere); set, it wins over the manifest's. Without a key that service's model calls are refused |
+| `COMPOSE_PROFILES` | `clamav`: `kalla-clamav`, the malware scan; `clamav,render` adds the renderer; `openwebui` the chat. `kalla-bootstrap` sets the worker's malware scan from it: on with `clamav`, else off, which stores files without a scan, marked so ([production-setup.md](production-setup.md), *Malware scan*) |
+| `KALLA_OIDC_GROUPS_PLATFORM_ADMIN` | optional: roles come from the token's `roles` claim (Keycloak: the realm role `rag-platform-admin`), and a group grants one only for an identity provider whose tokens carry groups instead: this is the break-glass for the first platform admin, and every other role's groups are set in RAG's admin (*Settings → Role groups*) |
 
 Sign-in is no variable: after the first start a gateway admin sets the gateway's in its own setup wizard
 (`https://<gateway admin host>/setup`, with the setup code from `adminapi`'s log), then a platform admin sets
-rag-admin's in rag-admin's wizard (`https://<admin host>/setup`, with the setup code from rag-admin's log; *Sign-in and
+kalla-admin's in kalla-admin's wizard (`https://<admin host>/setup`, with the setup code from kalla-admin's log; *Sign-in and
 the setup wizard* below), which suggests the provider saved in the gateway's. A stack may declare sign-in instead: the
-gateway's `UME_OIDC_AUTHORITY` is the provider of both (rag-admin's client `ume-rag-admin` uses it unless
-`UME_RAG_OIDC_AUTHORITY` names another) and keeps the gateway's wizard closed, and with `UME_RAG_OIDC_CLIENT_SECRET`
-(and the other `UME_RAG_OIDC_*`) rag-admin's wizard never opens ([portainer.md](portainer.md), *Declaring sign-in
+gateway's `FORS_OIDC_AUTHORITY` is the provider of both (kalla-admin's client `kalla-admin` uses it unless
+`KALLA_OIDC_AUTHORITY` names another) and keeps the gateway's wizard closed, and with `KALLA_OIDC_CLIENT_SECRET`
+(and the other `KALLA_OIDC_*`) kalla-admin's wizard never opens ([portainer.md](portainer.md), *Declaring sign-in
 instead*).
 
-The optional ones (ports, a separate admin host, `UME_RAG_OIDC_TENANT_ID` for Entra ID, image overrides
+The optional ones (ports, a separate admin host, `KALLA_OIDC_TENANT_ID` for Entra ID, image overrides
 `RAG_*_IMAGE`) are listed at the top of the file. The embedding profile is no variable: a platform admin creates it in
 the admin UI from the gateway's embedding model (*Models → Embedding profiles → Create profile*; every RAG credential
-key must allow that model). rag-api, rag-admin and rag-worker join the gateway's `llm`
-network and reach it at `https://gateway:8443`, trusting the gateway's internal CA; rag-admin's organisation and model
-syncs call it there with `UME_RAG_ADMIN_GATEWAY_KEY` (scope `organisation.read`). The gateway's part of the file is
+key must allow that model). kalla-api, kalla-admin and kalla-worker join the gateway's `llm`
+network and reach it at `https://gateway:8443`, trusting the gateway's internal CA; kalla-admin's organisation and model
+syncs call it there with `KALLA_ADMIN_GATEWAY_KEY` (scope `organisation.read`). The gateway's part of the file is
 the gateway's own, unchanged but for that one default.
 
-**Bootstrap.** The one-shot `rag-bootstrap` runs after the gateway's `bootstrap` and creates RAG's internal CA, service
+**Bootstrap.** The one-shot `kalla-bootstrap` runs after the gateway's `bootstrap` and creates RAG's internal CA, service
 certificates, the Data Protection certificate, database passwords, the key pepper, the api's keys and the blob master
-key in the `rag-certs` and `rag-secrets` volumes. It is idempotent: secrets are never regenerated, service
+key in the `kalla-certs` and `kalla-secrets` volumes. It is idempotent: secrets are never regenerated, service
 certificates are re-issued when they expire within 30 days or the host names change (its checklist then says which
 services to restart, and names every certificate within 60 days of expiry:
 [portainer.md](portainer.md#internal-certificates)). The secrets that follow a variable (the gateway credential keys,
@@ -595,17 +595,17 @@ changed gateway key or client secret within seconds, without a restart.
 (*Host firewall* does not apply;
 firewall 8543 and 9543 to your proxy yourself, or use the stack's own TLS proxy, the profile `proxy`:
 [portainer.md](portainer.md#tls-proxy)), no ingestion slice, and no pgBackRest: WAL archiving is off, so back
-up `rag-postgres` with `pg_dump` or volume snapshots. The renderer is off by default: Portainer cannot load its
+up `kalla-postgres` with `pg_dump` or volume snapshots. The renderer is off by default: Portainer cannot load its
 seccomp profile from a file, so with `render` on it runs without Docker's seccomp filter (Chromium's own sandbox stays
 on); without it the crawler indexes pages as served. Certificates from your PKI go on the stack's TLS proxy; the services' own
 listeners keep the internal CA.
 
-- **Back up** `rag-secrets/.pepper`, `rag-secrets/keys/rag-blob-internal` and `rag-certs/data-protection.pfx` with the
-  database (for example `docker run --rm -v <stack>_rag-secrets:/s alpine cat /s/.pepper`). A database restored without
+- **Back up** `kalla-secrets/.pepper`, `kalla-secrets/keys/rag-blob-internal` and `kalla-certs/data-protection.pfx` with the
+  database (for example `docker run --rm -v <stack>_kalla-secrets:/s alpine cat /s/.pepper`). A database restored without
   them is unusable.
 - **Upgrade.** Read the [upgrade guide](upgrade-guide.md), paste the new release's `compose.portainer.yaml` asset over
   the stack's file (one release at a time: [portainer.md](portainer.md)), and
-  *Update the stack* with *Re-pull image and redeploy*. `rag-migrate` runs before the services.
+  *Update the stack* with *Re-pull image and redeploy*. `kalla-migrate` runs before the services.
 - **Generated file.** Edit `deploy/compose.rag.yaml`, `deploy/portainer/bootstrap.sh` or
   `deploy/portainer/stack-header.txt`, then run `deploy/portainer/build-stack.sh`: it takes the gateway's
   `compose.portainer.yaml` (a release's asset from GitHub, or a path argument), adds RAG's services and inlines the
@@ -621,15 +621,15 @@ the allow-lists are host names, resolved when it runs. Without `--hardened` none
 
 | Network | May reach |
 |---|---|
-| `rag-data`, `rag-ingestion`, `rag-parser`, `rag-render` | nothing; `rag-render` holds the renderer's Chromium, and the host is rejected for it too (`UME-RAG-INPUT`) |
-| `rag-edge` (api, admin, Open WebUI, rag-proxy) | Open WebUI's OIDC provider and DNS, with the profile `openwebui`; else nothing (it carries the published ports and the traffic between its members) |
-| `llm` (api, admin) | the gateway, the gateway's Admin API (with `--allow llm=HOST:PORT`), the OIDC authority (`UME_RAG_OIDC_AUTHORITY`: empty, the setup wizard can't reach any provider), the OTLP endpoint, DNS |
-| `rag-crawl` (worker) | the gateway, the OTLP endpoint, DNS, `UME_RAG_CRAWL_ALLOW`; then the public Internet, but no private, loopback, link-local or reserved range |
-| `rag-mirror` (clamav) | `database.clamav.net:443`, or only freshclam's proxy; unused without the profile `clamav` |
-| `backup` (rag-postgres) | the S3 endpoint, DNS; nothing with a mounted share |
+| `kalla-data`, `kalla-ingestion`, `kalla-parser`, `kalla-render` | nothing; `kalla-render` holds the renderer's Chromium, and the host is rejected for it too (`UME-RAG-INPUT`) |
+| `kalla-edge` (api, admin, Open WebUI, kalla-proxy) | Open WebUI's OIDC provider and DNS, with the profile `openwebui`; else nothing (it carries the published ports and the traffic between its members) |
+| `llm` (api, admin) | the gateway, the gateway's Admin API (with `--allow llm=HOST:PORT`), the OIDC authority (`KALLA_OIDC_AUTHORITY`: empty, the setup wizard can't reach any provider), the OTLP endpoint, DNS |
+| `kalla-crawl` (worker) | the gateway, the OTLP endpoint, DNS, `KALLA_CRAWL_ALLOW`; then the public Internet, but no private, loopback, link-local or reserved range |
+| `kalla-mirror` (clamav) | `database.clamav.net:443`, or only freshclam's proxy; unused without the profile `clamav` |
+| `backup` (kalla-postgres) | the S3 endpoint, DNS; nothing with a mounted share |
 
 A container sends all its egress through the network that holds its default route; Compose pins that with
-`gw_priority` (api and admin: `llm`, worker: `rag-crawl`).
+`gw_priority` (api and admin: `llm`, worker: `kalla-crawl`).
 
 ```bash
 deploy/host/docker-user-firewall.sh --dry-run                    # the rules it would apply (no root needed)
@@ -647,7 +647,7 @@ run. To keep one, override the service's command with `sudo systemctl edit rag-f
 ```ini
 [Service]
 ExecStart=
-ExecStart=/opt/ume-rag/deploy/host/docker-user-firewall.sh --env-file /opt/ume-rag/deploy/.env --allow rag-crawl=intranet.umea.se
+ExecStart=/opt/kalla/deploy/host/docker-user-firewall.sh --env-file /opt/kalla/deploy/.env --allow kalla-crawl=intranet.umea.se
 ```
 
 (with your deployment's path). `install.sh` leaves that override in place.
@@ -673,12 +673,12 @@ preset (`polite`, `municipal`, `fast`, `custom`) and the settings that override 
 - `fast` = 10 requests a second, 4 connections, `Crawl-delay` and latency ignored, any time of day.
 - robots.txt can only be ignored per host and with a reason; its `Sitemap:` lines are still read. The User-Agent is
   free per host; robots.txt rules are still matched against the crawler's own product token.
-- The crawler's own User-Agent is `Crawl:UserAgent` on `rag-worker` (default `UmeaKommunBot/1.0`), e.g.
+- The crawler's own User-Agent is `Crawl:UserAgent` on `kalla-worker` (default `UmeaKommunBot/1.0`), e.g.
   `Crawl__UserAgent="ExampleBot/1.0 (+https://www.example.org/bot)"`. Its product token, the part before the first `/` or
   space (letters, `_` and `-` only), is the name robots.txt groups, meta robots and `X-Robots-Tag` are matched against.
   The worker refuses to start with an invalid value.
 - The deployment caps every host at `Crawl:MaxHostRate` (50 requests a second) and `Crawl:MaxHostConnections` (16).
-  Set them alike on `rag-admin` (which refuses more) and `rag-worker` (which clamps to them), e.g.
+  Set them alike on `kalla-admin` (which refuses more) and `kalla-worker` (which clamps to them), e.g.
   `Crawl__MaxHostRate=20` in both services' environment. `renderPerHost` is capped at `Render:MaxConcurrent` (4) and, in effect, at the host's `maxConnections`.
 - A crawl run's page lists the hosts it fetched with their own politeness and the robots.txt reason.
 
@@ -736,7 +736,7 @@ chosen one and drops the others.
 Also for G1 and W2:
 
 - *Feedback snapshots* cover only rated conversations, as of the rating.
-- *Backups of Open WebUI's data (the volume `rag-openwebui-data`)*: none in P0, so a deleted conversation cannot be recovered.
+- *Backups of Open WebUI's data (the volume `kalla-openwebui-data`)*: none in P0, so a deleted conversation cannot be recovered.
 - Open WebUI (the profile `openwebui`) is off by default and not deployed in P0 (production-setup.md, *Open WebUI*).
 
 ## Gateway keys, budgets and the read-back
@@ -760,66 +760,66 @@ or at once with *Fetch now* on the *Organisation* page; chat and the admin UI ju
 | Security event 5011 `rag.gateway.delegation_missing` ("Gateway call … aborted: no echo of the gateway key …"); chat answers `502 upstream_error`; worker documents or evaluations fail with `gateway.delegation_not_applied`; `acted.outcome` of `GET /api/gateway/status` is `echo_missing` | A gateway instance answered a call made as an object's key without echoing the key id. That is an **older gateway instance during the gateway's rolling update**: it ignores the header and would have charged the credential key, past the department's budget. Ume.Rag discards the answer before use (fails closed) because `Gateway:RequireDelegationEcho` is `true` | Nothing to change here: the events stop once every gateway instance runs the new release. If they go on, ask the gateway team (an instance left on an old version, or a proxy that drops the `x-fors-on-behalf-of` response header). **Keep `Gateway:RequireDelegationEcho` at `true`**; `false` lets such answers through, charged to the platform's owner team. Run the failed documents or evaluations again afterwards (a new run of the source, or the evaluation) |
 | Chat users get "The assistant is unavailable: its gateway key is disabled." (`503 assistant_unavailable`; also *has expired*, *has been revoked*, *the team or department of its gateway key is inactive*, *is not known to the platform*, *the gateway does not let this platform use its key*, *cannot be used now*); the test panel answers the same as `test_assistant_unavailable`; the assistant's page shows *Unavailable* with the reason | The assistant's gateway key is disabled, revoked or expired, its owner is inactive, it is no longer assigned to the integration *Ume.Rag* (`delegation_not_allowed`, or `missing` once the sync has dropped it), or it shares no residency with the service's credential key (*Unavailable*: "allows no residency in common"). Chat refuses from the mirror before any model call, and the gateway's own `403` gives the same answer | The department fixes it in the gateway: its key's managers re-enable the key, or a department admin chooses another active key of the department on the assistant and publishes. A revoked or expired key cannot come back. Then wait for the next sync or use *Fetch now* (above) |
 | Chat users get `402 budget_exceeded` with the gateway's message (it names the key's, the team's or the department's budget); the assistant's page shows *Unavailable*: "The key's budget is used up" (or the team's, the department's; only with the read-back, below) | A budget in the gateway is used up | The department raises the budget in the gateway, or waits for its next period. Budgets are never set in Ume.Rag |
-| Worker jobs wait with `gateway.budget_exhausted` or `gateway.key_unavailable` (`content."Jobs"`: `State` `queued`, `LastError` the reason, `AvailableAt` the next full hour); the knowledge base's page shows *Unavailable* | The knowledge base's key is refused: `gateway.budget_exhausted` for a `402` (a budget used up), `gateway.key_unavailable` for a `403 delegation_not_allowed`, `key_disabled`, `key_revoked` or `key_expired`. Each try counts as an attempt; after the job's last attempt the document fails with the same reason | As the two rows above: the department fixes the key or the budget in the gateway; the jobs continue at the next full hour. For documents that failed meanwhile, start a new run of the source. To see what waits: `dc exec -T rag-postgres psql -U postgres -d ragdb -c "SELECT \"Class\", \"LastError\", count(*), min(\"AvailableAt\") FROM content.\"Jobs\" WHERE \"State\" = 'queued' AND \"LastError\" LIKE 'gateway.%' GROUP BY 1, 2"` |
+| Worker jobs wait with `gateway.budget_exhausted` or `gateway.key_unavailable` (`content."Jobs"`: `State` `queued`, `LastError` the reason, `AvailableAt` the next full hour); the knowledge base's page shows *Unavailable* | The knowledge base's key is refused: `gateway.budget_exhausted` for a `402` (a budget used up), `gateway.key_unavailable` for a `403 delegation_not_allowed`, `key_disabled`, `key_revoked` or `key_expired`. Each try counts as an attempt; after the job's last attempt the document fails with the same reason | As the two rows above: the department fixes the key or the budget in the gateway; the jobs continue at the next full hour. For documents that failed meanwhile, start a new run of the source. To see what waits: `dc exec -T kalla-postgres psql -U postgres -d ragdb -c "SELECT \"Class\", \"LastError\", count(*), min(\"AvailableAt\") FROM content.\"Jobs\" WHERE \"State\" = 'queued' AND \"LastError\" LIKE 'gateway.%' GROUP BY 1, 2"` |
 | A gateway `401` in any service's log, for any call, the read-back included | The service's own credential key failed: wrong, expired, revoked, the rotation's grace period over, or the request came from an address outside the key's address list. Never the object's key, and never shown on an assistant or knowledge base | *Secrets and certificates* below and production-setup.md, *Gateway credential keys*: ask the gateway admin, re-run `init-deployment.sh --gateway-credential-key-file SERVICE=FILE`, `dc up -d` and restart that service |
-| rag-admin warns "Test panel usage of assistant … not written (… calls): no admin-console client row of kind internal" | The registry has no `internal` client managed by the deployment (`admin-console`), so test-panel cost is not recorded (the panel still answers) | rag-migrate creates it on every run (production-setup.md, *The admin test panel's client*): check that `rag-migrate` completed (`dc logs rag-migrate`: "The admin test panel's client admin-console: …"), and run it again. Turns made before it are not recovered |
+| kalla-admin warns "Test panel usage of assistant … not written (… calls): no admin-console client row of kind internal" | The registry has no `internal` client managed by the deployment (`admin-console`), so test-panel cost is not recorded (the panel still answers) | kalla-migrate creates it on every run (production-setup.md, *The admin test panel's client*): check that `kalla-migrate` completed (`dc logs kalla-migrate`: "The admin test panel's client admin-console: …"), and run it again. Turns made before it are not recovered |
 
-**The read-back's reasons.** When the gateway names its Integration API (`integration_api_url`), rag-admin reads the gateway's cost and
+**The read-back's reasons.** When the gateway names its Integration API (`integration_api_url`), kalla-admin reads the gateway's cost and
 budgets per key from its Integration API (production-setup.md, *Cost and budget read-back*). *Models* shows it in the *AI gateway* card; the status behind it (`GET /api/organisation/sync`, and
 `GET /api/gateway/status`) carries `integration`: `configured`, and `lastError` with `reason`, `status` and
-`at` when the last read gave nothing; rag-admin also logs "The gateway's Integration API refused or failed (HTTP …,
+`at` when the last read gave nothing; kalla-admin also logs "The gateway's Integration API refused or failed (HTTP …,
 reason); no read-back this time". The *Cost* cards then show Ume.Rag's figures only, and a used-up budget shows no
 badge (the gateway still refuses the calls).
 
 | `configured` / `reason` | Meaning | Fix |
 |---|---|---|
-| `configured: false` | The gateway's context names no Integration API (`integration_api_url` null: the gateway's `UME_INTEGRATION_API_URL` is unset, or the gateway is older than v0.10.2), or rag-admin has not read its context yet | The gateway admin sets `UME_INTEGRATION_API_URL` as production-setup.md says, if the read-back is wanted; rag-admin picks it up within 5 minutes |
-| `scope_missing` (403) | rag-admin's credential key lacks the scope `usage.read` | The gateway admin adds `usage.read` to that key; the next read picks it up (only answers are cached), no restart needed |
+| `configured: false` | The gateway's context names no Integration API (`integration_api_url` null: the gateway's `FORS_INTEGRATION_API_URL` is unset, or the gateway is older than v0.10.2), or kalla-admin has not read its context yet | The gateway admin sets `FORS_INTEGRATION_API_URL` as production-setup.md says, if the read-back is wanted; kalla-admin picks it up within 5 minutes |
+| `scope_missing` (403) | kalla-admin's credential key lacks the scope `usage.read` | The gateway admin adds `usage.read` to that key; the next read picks it up (only answers are cached), no restart needed |
 | `rate_limited` (429) | More than the gateway's 60 reads a minute for the key (its `Admin:IntegrationRequestsPerMinute`) | Passes by itself; answers are cached 5 minutes per key. If it persists, ask the gateway team about the limit |
-| `unauthorized` (401) | rag-admin's credential key itself failed, as in the `401` row above; also when the Admin API sees the request from an address outside the key's address list | As the `401` row: check the key with the gateway admin, and that its address list holds the address the Admin API sees |
+| `unauthorized` (401) | kalla-admin's credential key itself failed, as in the `401` row above; also when the Admin API sees the request from an address outside the key's address list | As the `401` row: check the key with the gateway admin, and that its address list holds the address the Admin API sees |
 | `not_found` (404) | The key is not one of the integration *Ume.Rag*'s keys | It was moved out of the integration in the gateway; the next organisation sync drops it from the mirror |
-| `unavailable` (no status) | No answer: wrong URL, DNS, the host firewall (`llm` reaches the address only with `--allow llm=HOST:PORT` in a drop-in of `rag-firewall.service`, *Host firewall*), a network firewall, a certificate rag-admin does not trust, or a timeout | Check the gateway's `UME_INTEGRATION_API_URL`, the firewall's `--allow` and `sudo systemctl start rag-firewall.service`, and `UME_RAG_TRUST_DIR` for the Admin API's CA |
-| `failed` | Any other answer (a `5xx`, a `400`) | rag-admin's log has the status; ask the gateway team |
+| `unavailable` (no status) | No answer: wrong URL, DNS, the host firewall (`llm` reaches the address only with `--allow llm=HOST:PORT` in a drop-in of `rag-firewall.service`, *Host firewall*), a network firewall, a certificate kalla-admin does not trust, or a timeout | Check the gateway's `FORS_INTEGRATION_API_URL`, the firewall's `--allow` and `sudo systemctl start rag-firewall.service`, and `KALLA_TRUST_DIR` for the Admin API's CA |
+| `failed` | Any other answer (a `5xx`, a `400`) | kalla-admin's log has the status; ask the gateway team |
 
 ## Sign-in and the setup wizard
 
-rag-admin's sign-in provider, client and secret, and Open WebUI's, are set in the setup wizard (identity design §19;
+kalla-admin's sign-in provider, client and secret, and Open WebUI's, are set in the setup wizard (identity design §19;
 first setup: [production-setup.md](production-setup.md), *3. Sign-in*, or [portainer.md](portainer.md), *First deploy*
 step 5). After setup they change only in the wizard after a re-open, never from an admin session. A value the
 deployment sets (`deploy/.env`, the Portainer variables, the Kubernetes literals and secret files) wins and is locked
 there.
 
-**Re-open:** give `UME_RAG_SETUP_REOPEN` (Kubernetes: `Setup__Reopen`) a new value, for example today's date, and
-`dc up -d` (Portainer: update the stack; Kubernetes: `deploy.sh`). rag-admin opens the wizard once, for one hour, and
-prints a new setup code: `dc logs rag-admin | grep 'Setup code'` (Kubernetes: `kubectl logs deploy/rag-admin`, either
+**Re-open:** give `KALLA_SETUP_REOPEN` (Kubernetes: `Setup__Reopen`) a new value, for example today's date, and
+`dc up -d` (Portainer: update the stack; Kubernetes: `deploy.sh`). kalla-admin opens the wizard once, for one hour, and
+prints a new setup code: `dc logs kalla-admin | grep 'Setup code'` (Kubernetes: `kubectl logs deploy/kalla-admin`, either
 pod). The current sign-in keeps working until a platform admin's test sign-in passes and they finish. A restart doesn't
 open it again; the next re-open needs another new value.
 
 - **Rotating a client secret:** create the new secret at the provider (keep the old one valid), re-open, type the new
   secret and its expiry date, test and finish, then remove the old one at the provider. Home reminds platform admins from 30 days
   before the expiry date typed there. A declared secret is rotated where it is declared instead:
-  `init-deployment.sh --set-file UME_RAG_OIDC_CLIENT_SECRET=FILE` and `dc up -d` (`rag-bootstrap` rewrites the file;
-  Kubernetes: `create-secrets.sh --oidc-client-secret-file`), or `UME_RAG_OIDC_CLIENT_SECRET` and update the stack
-  (Portainer); rag-admin follows the file at the next sign-in.
-- **Locked out** (sign-in broken: a revoked secret, a moved provider, a certificate rag-admin no longer trusts): re-open
+  `init-deployment.sh --set-file KALLA_OIDC_CLIENT_SECRET=FILE` and `dc up -d` (`kalla-bootstrap` rewrites the file;
+  Kubernetes: `create-secrets.sh --oidc-client-secret-file`), or `KALLA_OIDC_CLIENT_SECRET` and update the stack
+  (Portainer); kalla-admin follows the file at the next sign-in.
+- **Locked out** (sign-in broken: a revoked secret, a moved provider, a certificate kalla-admin no longer trusts): re-open
   and fix the values in the wizard, which tests them before saving. Or declare the working values (`--oidc-authority`
-  and `--set-file UME_RAG_OIDC_CLIENT_SECRET=FILE` with a re-run of `init-deployment.sh`, then
+  and `--set-file KALLA_OIDC_CLIENT_SECRET=FILE` with a re-run of `init-deployment.sh`, then
   `docker compose --env-file deploy/.env up -d` and, with `--hardened`, `sudo systemctl start rag-firewall.service`,
   since a restart alone does not read a changed `deploy/.env`; Portainer: the variables and an update of the stack): a deployment value always wins. *Sign-in is not set up* on the sign-in page means no usable authority, or a
-  stored secret rag-admin can't read.
+  stored secret kalla-admin can't read.
 - **Restoring a database:** empty the re-open value first (*Restore*, above), or the restored database may open the
   wizard again for an hour. The secrets the wizard stored are encrypted with Data Protection: they can be read only
   with the same `data-protection.pfx`. With another certificate sign-in fails until you re-open and type them again.
-- **Setup never finished and the hour ran out:** `dc restart rag-admin` opens it again with a new code.
+- **Setup never finished and the hour ran out:** `dc restart kalla-admin` opens it again with a new code.
 
 **Security events** ([security-events.md](security-events.md) has the fields and the alerts):
 
 | Event | Means |
 |---|---|
-| 6008 `rag.admin.setup.opened` | Setup opened at rag-admin's start: `first_run` or `reopen`. Expect one per re-open you asked for |
+| 6008 `rag.admin.setup.opened` | Setup opened at kalla-admin's start: `first_run` or `reopen`. Expect one per re-open you asked for |
 | 6009 `rag.admin.setup.code_refused` | Wrong setup codes (sampled, with a count); bursts mean someone is guessing |
 | 6010 `rag.admin.setup.session` | Someone entered the right code and got a setup session |
-| 6011 `rag.admin.setup.test` | A test finished: rag-admin's test sign-in or Open WebUI's client check, passed or the step that failed |
+| 6011 `rag.admin.setup.test` | A test finished: kalla-admin's test sign-in or Open WebUI's client check, passed or the step that failed |
 | 6012 `rag.admin.setup.completed` | Sign-in values saved and setup closed; the audit entry names the tested person |
 | 6013 `rag.admin.setup.openwebui_saved` | Open WebUI's sign-in values saved in setup mode (setup stays open) |
 
@@ -840,26 +840,26 @@ open it again; the next re-open needs another new value.
 
 | Symptom | Where to look and what to do |
 |---|---|
-| Postgres log: archive command failed, pgBackRest error `[103]`; `rag_backup_wal_archive_failed_total` rising | The stanza does not exist yet: `dc exec -T rag-postgres pgbackrest --stanza=ragdb stanza-create` (once per new database or repository) |
-| `rag_backup_repo_status` 99 | pgBackRest cannot read the repository: is the share mounted (`UME_RAG_BACKUP_DIR`), are the S3 endpoint and credentials right, does the firewall's `backup` rule have the endpoint? `dc exec -T rag-postgres pgbackrest --stanza=ragdb info` shows the error |
-| `rag_backup_wal_archive_age_seconds` above 300 | WAL is not being archived: `dc logs --since 30m rag-postgres`, and `SELECT * FROM pg_stat_archiver` through `dc exec -T rag-postgres psql -U postgres -d ragdb` |
+| Postgres log: archive command failed, pgBackRest error `[103]`; `rag_backup_wal_archive_failed_total` rising | The stanza does not exist yet: `dc exec -T kalla-postgres pgbackrest --stanza=ragdb stanza-create` (once per new database or repository) |
+| `rag_backup_repo_status` 99 | pgBackRest cannot read the repository: is the share mounted (`KALLA_BACKUP_DIR`), are the S3 endpoint and credentials right, does the firewall's `backup` rule have the endpoint? `dc exec -T kalla-postgres pgbackrest --stanza=ragdb info` shows the error |
+| `rag_backup_wal_archive_age_seconds` above 300 | WAL is not being archived: `dc logs --since 30m kalla-postgres`, and `SELECT * FROM pg_stat_archiver` through `dc exec -T kalla-postgres psql -U postgres -d ragdb` |
 | `rag-backup.service` failed | `journalctl -u rag-backup.service`; a failed run leaves the previous backups intact. Run it again by hand once the cause is fixed |
 | Upload copy: "the upload copy's directory … does not exist (is the backup share mounted?)" | Mount the share; the next run catches up |
-| `rag-clamav` unhealthy after a signature update | On a 16 GB host a failed reload leaves clamd without an engine (it still answers PING; every scan fails). The restart timer restarts it within a few minutes; meanwhile nothing can be scanned (the worker's scan step, P1, fails closed). `journalctl -u rag-restart-unhealthy.service`, `dc logs rag-clamav`. On a 24 GB host clamd keeps its old engine during a reload |
+| `kalla-clamav` unhealthy after a signature update | On a 16 GB host a failed reload leaves clamd without an engine (it still answers PING; every scan fails). The restart timer restarts it within a few minutes; meanwhile nothing can be scanned (the worker's scan step, P1, fails closed). `journalctl -u rag-restart-unhealthy.service`, `dc logs kalla-clamav`. On a 24 GB host clamd keeps its old engine during a reload |
 | Admin API answers 503 `config_busy` | Another config change held the config version lock for more than 5 s. Retry; if it persists, look for a long transaction holding the lock on `config."ConfigVersion"` in `pg_stat_activity` |
-| `rag-migrate` exited non-zero; api, admin and worker do not start | `dc logs rag-migrate`. They wait for a successful migration, so the old schema is untouched; fix the cause and `dc up -d --wait` again |
-| A service exits at once with a permission error on `/run/app-secrets` or `/run/certs` | The files in the volumes belong to the wrong user: `rag-bootstrap` gives them to their users at every start, so `dc up -d --wait` again and read `dc logs rag-bootstrap` |
-| One service's model calls fail: admin code `gateway_key_missing`, or the gateway answers `401` | No credential key in `rag-secrets/<service>/Gateway__Key` (the end of `dc logs rag-bootstrap` names the services without one), or the key is wrong, expired or revoked: ask the gateway admin, then re-run `init-deployment.sh --gateway-credential-key-file SERVICE=FILE`, `dc up -d` and restart that service (production-setup.md, *Gateway credential keys*) |
+| `kalla-migrate` exited non-zero; api, admin and worker do not start | `dc logs kalla-migrate`. They wait for a successful migration, so the old schema is untouched; fix the cause and `dc up -d --wait` again |
+| A service exits at once with a permission error on `/run/app-secrets` or `/run/certs` | The files in the volumes belong to the wrong user: `kalla-bootstrap` gives them to their users at every start, so `dc up -d --wait` again and read `dc logs kalla-bootstrap` |
+| One service's model calls fail: admin code `gateway_key_missing`, or the gateway answers `401` | No credential key in `kalla-secrets/<service>/Gateway__Key` (the end of `dc logs kalla-bootstrap` names the services without one), or the key is wrong, expired or revoked: ask the gateway admin, then re-run `init-deployment.sh --gateway-credential-key-file SERVICE=FILE`, `dc up -d` and restart that service (production-setup.md, *Gateway credential keys*) |
 | `rag-firewall.service` failed: "cannot resolve HOST" | DNS for an allow-listed name failed; the previous rules stay in place. Check the name in `deploy/.env` |
 | `rag-firewall.service` failed: "no DOCKER-USER chain" | Docker is not running, or runs without its iptables integration |
 | `install.sh` warns "Docker does not use the systemd cgroup driver" | The ingestion slice caps nothing: set `native.cgroupdriver=systemd` (production-setup.md), restart Docker, then `dc up -d --force-recreate` |
 | `escrow-keys.sh --verify`: "differs from the deployment's key" | A key was rotated after that escrow: escrow again and verify |
-| `rag-renderer` restarts in a loop; its log says "No usable sandbox" | Chromium cannot create the user namespaces of its sandbox: with `--hardened`, the seccomp profile is not applied (`images/renderer/seccomp.json` missing next to `deploy/`), or the host restricts unprivileged user namespaces (AppArmor on Ubuntu 23.10+). Don't turn the sandbox off: production-setup.md, *Renderer* |
-| `rag-renderer` exits at once: "UME_RAG_RENDER_WS_PATH is required" | `rag-secrets/renderer/ws-path` is missing or empty: `dc up -d --wait`, so `rag-bootstrap` writes it again (it keeps every other secret), then `dc logs rag-bootstrap` |
-| Uploads and fetched files wait with `clamav.unavailable`; `dc ps` lists no `rag-clamav` | The worker's malware scan is `on` but `rag-clamav` does not run: `COMPOSE_PROFILES` or the containers changed without an `up`. `dc up -d --wait` starts `rag-clamav` while the profile `clamav` is on, and otherwise recreates the worker with the mode that follows the profiles (`rag-bootstrap` writes it); to store files unscanned, take `clamav` out (`init-deployment.sh --profiles`) |
+| `kalla-renderer` restarts in a loop; its log says "No usable sandbox" | Chromium cannot create the user namespaces of its sandbox: with `--hardened`, the seccomp profile is not applied (`images/renderer/seccomp.json` missing next to `deploy/`), or the host restricts unprivileged user namespaces (AppArmor on Ubuntu 23.10+). Don't turn the sandbox off: production-setup.md, *Renderer* |
+| `kalla-renderer` exits at once: "KALLA_RENDER_WS_PATH is required" | `kalla-secrets/renderer/ws-path` is missing or empty: `dc up -d --wait`, so `kalla-bootstrap` writes it again (it keeps every other secret), then `dc logs kalla-bootstrap` |
+| Uploads and fetched files wait with `clamav.unavailable`; `dc ps` lists no `kalla-clamav` | The worker's malware scan is `on` but `kalla-clamav` does not run: `COMPOSE_PROFILES` or the containers changed without an `up`. `dc up -d --wait` starts `kalla-clamav` while the profile `clamav` is on, and otherwise recreates the worker with the mode that follows the profiles (`kalla-bootstrap` writes it); to store files unscanned, take `clamav` out (`init-deployment.sh --profiles`) |
 | Worker log warns at every start that the malware scan is off; security event 5106 `rag.malware.scan_off`; files show *Not scanned for malware* | `COMPOSE_PROFILES` lacks `clamav`: intended there, or re-run `init-deployment.sh --profiles` with `clamav` in the list, then `dc up -d --wait`. Files stored meanwhile stay unscanned (production-setup.md, *Malware scan*) |
-| Sources with fetch mode `browser` wait with `render.not_configured`; `dc ps` lists no `rag-renderer` | The renderer is off (its Compose profile `render`, production-setup.md, *Renderer*): re-run `init-deployment.sh --profiles` with `render` in the list, then `dc up -d --wait` |
-| Every render fails with `render.unavailable` and `dc ps` lists no `rag-renderer` | The worker has `rag-secrets/worker/Render__Endpoint` but `rag-renderer` does not run: `COMPOSE_PROFILES` or the containers changed without an `up`. `dc up -d --wait` starts `rag-renderer` while the profile `render` is on, and otherwise recreates the worker without the endpoint |
+| Sources with fetch mode `browser` wait with `render.not_configured`; `dc ps` lists no `kalla-renderer` | The renderer is off (its Compose profile `render`, production-setup.md, *Renderer*): re-run `init-deployment.sh --profiles` with `render` in the list, then `dc up -d --wait` |
+| Every render fails with `render.unavailable` and `dc ps` lists no `kalla-renderer` | The worker has `kalla-secrets/worker/Render__Endpoint` but `kalla-renderer` does not run: `COMPOSE_PROFILES` or the containers changed without an `up`. `dc up -d --wait` starts `kalla-renderer` while the profile `render` is on, and otherwise recreates the worker without the endpoint |
 | The parser stays unhealthy for minutes after a start | It warms its slots and runs a self-test first; the worker reports it in its own health and retries |
 | Worker health unhealthy on `embedding-canary`; embed, preview and evaluation jobs wait with `embed.canary_mismatch` | The last embedding canary check of a profile came out below 0.999: the gateway's model alias now answers with another model, which would mix vector spaces. Ask the gateway team what changed; once the profile's model is restored, run **Check embedding canary** again (admin UI, *Models*). The jobs continue when a check passes. A new model is a profile migration, not a fix here |
 
@@ -867,11 +867,11 @@ open it again; the next re-open needs another new value.
 
 - **Internal certificates** last 825 days. `rag-cert-expiry.timer` (deploy/host/README.md) fails and names the
   certificate from 60 days before it expires (`systemctl --failed`, `journalctl -u rag-cert-expiry`, or
-  `rag_cert_expiry_timestamp_seconds` in `certs.prom`). Once fewer than 30 days remain, `dc up -d`: `rag-bootstrap`
-  re-issues it (it needs `ca.key` in `rag-certs`) and the end of its log names what to restart, `rag-postgres` and
-  `rag-parser` (`dc restart rag-postgres rag-parser`: they read their certificates only at start). A certificate of
-  your PKI (`UME_RAG_PKI_DIR`) is renewed there: put the new pair in the directory and `dc up -d`. **A new internal
-  CA:** delete `ca.pem` and `ca.key` in `rag-certs` and `dc up -d --wait`; `rag-bootstrap` creates a new CA and
+  `rag_cert_expiry_timestamp_seconds` in `certs.prom`). Once fewer than 30 days remain, `dc up -d`: `kalla-bootstrap`
+  re-issues it (it needs `ca.key` in `kalla-certs`) and the end of its log names what to restart, `kalla-postgres` and
+  `kalla-parser` (`dc restart kalla-postgres kalla-parser`: they read their certificates only at start). A certificate of
+  your PKI (`KALLA_PKI_DIR`) is renewed there: put the new pair in the directory and `dc up -d`. **A new internal
+  CA:** delete `ca.pem` and `ca.key` in `kalla-certs` and `dc up -d --wait`; `kalla-bootstrap` creates a new CA and
   re-issues every service certificate. Then restart the whole stack (`dc restart`), since the services read the CA only
   at start (production-setup.md, *Internal TLS*; Portainer: [portainer.md](portainer.md#internal-certificates)).
 - **The Data Protection certificate and the pepper** are never regenerated: a new one makes the stored data
@@ -880,16 +880,16 @@ open it again; the next re-open needs another new value.
   procedure yet (key provider decision K1).
 - **The api's keys** (`Security__DownloadGrantKeys__<kid>`, `Security__ConversationIdKeys__<kid>`): a rotation adds a
   new key id next to `k1`.
-- **The gateway credential keys** (`rag-secrets/{api,admin,worker}/Gateway__Key`, one per service of the gateway
-  integration *Ume.Rag*, from `UME_RAG_*_GATEWAY_KEY` or the gateway's manifest keys): a gateway admin issues and
+- **The gateway credential keys** (`kalla-secrets/{api,admin,worker}/Gateway__Key`, one per service of the gateway
+  integration *Ume.Rag*, from `KALLA_*_GATEWAY_KEY` or the gateway's manifest keys): a gateway admin issues and
   rotates them; rotate one with the gateway's 24-hour grace period, re-run
   `init-deployment.sh --gateway-credential-key-file SERVICE=FILE`, `dc up -d`, and restart that service
   ([production-setup.md](production-setup.md), *Gateway credential keys*, which also lists each key's settings). Gateway
   `401` answers in one service's log mean its key expired, was revoked or the rotation's grace period ended first.
-- **The OIDC client secrets** of rag-admin and Open WebUI: rotated through a re-open of the setup wizard, or where they
-  are declared (*Sign-in and the setup wizard*). `rag-secrets/admin/Setup__Secret` only derives setup codes: it needs
+- **The OIDC client secrets** of kalla-admin and Open WebUI: rotated through a re-open of the setup wizard, or where they
+  are declared (*Sign-in and the setup wizard*). `kalla-secrets/admin/Setup__Secret` only derives setup codes: it needs
   no backup or rotation.
-- **The feedback service account's Open WebUI key** (`rag-secrets/openwebui-feedback/OpenWebUi__AdminApiKey`): delete
-  the file and `dc up -d` (Portainer: update the stack); `rag-openwebui-setup` mints a new one, the old one stops
-  working at once, and rag-api reads the new one without a restart. Its password stays in
-  `rag-secrets/openwebui/admin-password` and is never used: password sign-in is off.
+- **The feedback service account's Open WebUI key** (`kalla-secrets/openwebui-feedback/OpenWebUi__AdminApiKey`): delete
+  the file and `dc up -d` (Portainer: update the stack); `kalla-openwebui-setup` mints a new one, the old one stops
+  working at once, and kalla-api reads the new one without a restart. Its password stays in
+  `kalla-secrets/openwebui/admin-password` and is never used: password sign-in is off.

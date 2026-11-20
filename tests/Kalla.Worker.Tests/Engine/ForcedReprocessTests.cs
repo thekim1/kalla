@@ -28,7 +28,7 @@ public sealed class ForcedReprocessTests(RagDatabaseFixture database, FakeGatewa
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-forced-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-forced-");
     private readonly string _marker = Guid.NewGuid().ToString("N");
     private readonly CountingConverter _converter = new();
 

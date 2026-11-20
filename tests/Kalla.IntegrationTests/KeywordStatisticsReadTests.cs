@@ -11,8 +11,8 @@ using static Kalla.TestKit.RagDatabase;
 namespace Kalla.IntegrationTests;
 
 /// <summary>
-/// B-33 (#499 step 2, api part; knowledge design §6.2): rag-api builds the keyword stop list from the worker's
-/// <c>content."KeywordStatistics"</c> rows and runs no <c>ts_stat</c>; the stop list equals the one rag-api computed with
+/// B-33 (#499 step 2, api part; knowledge design §6.2): kalla-api builds the keyword stop list from the worker's
+/// <c>content."KeywordStatistics"</c> rows and runs no <c>ts_stat</c>; the stop list equals the one kalla-api computed with
 /// <c>ts_stat</c> over the live chunks before (the statement is kept here as the reference), on the evaluation smoke
 /// collection and on scopes large enough to have one.
 /// </summary>
@@ -21,7 +21,7 @@ public sealed class KeywordStatisticsReadTests(RagDatabaseFixture database) : IA
 {
     private const int Dims = 3;
 
-    /// <summary>rag-api's statement until B-33 (<c>RetrievalStatements.FrequentLexemes</c>), the reference for "today's" list.</summary>
+    /// <summary>kalla-api's statement until B-33 (<c>RetrievalStatements.FrequentLexemes</c>), the reference for "today's" list.</summary>
     private const string FrequentLexemesBeforeB33 = """
         WITH counts AS (
             SELECT "EmbeddingProfileId" AS profile, "CollectionId" AS collection, count(*) AS chunks

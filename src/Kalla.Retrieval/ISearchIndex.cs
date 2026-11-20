@@ -105,7 +105,7 @@ public interface IScopeSizeSource
     /// <summary>
     /// The rows of <c>content."KeywordStatistics"</c>, which the worker keeps (A-29): per (profile, collection) of at least
     /// <see cref="ScopeSizeCache.KeywordStatisticsMinChunks"/> live child chunks, the lexemes in at least
-    /// <see cref="ScopeSizeCache.KeywordStatisticsShare"/> of them. rag-api runs no <c>ts_stat</c> (#499 step 2, B-33).
+    /// <see cref="ScopeSizeCache.KeywordStatisticsShare"/> of them. kalla-api runs no <c>ts_stat</c> (#499 step 2, B-33).
     /// </summary>
     Task<IReadOnlyList<FrequentLexeme>> KeywordStatisticsAsync(CancellationToken cancellationToken);
 }

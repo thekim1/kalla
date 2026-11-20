@@ -12,9 +12,9 @@ public sealed record ServiceFence(string Role, string Migration);
 /// <summary>
 /// The database-side stop of a release that cannot run beside the previous one (data-model §10): a migration marked
 /// <see cref="StopsServicesAttribute"/> fences its roles. On an upgrade the migration service records the fence in
-/// <c>public.ume_rag_service_fences</c> and revokes the role's schema <c>USAGE</c> before it migrates, and again after
+/// <c>public.kalla_service_fences</c> and revokes the role's schema <c>USAGE</c> before it migrates, and again after
 /// <c>app-roles.sql</c> has granted it, so the role's old containers fail every statement until they are replaced. A
-/// service of the role gets its schemas back through <c>public.ume_rag_admit(build)</c> (<see cref="SchemaAdmissionService"/>)
+/// service of the role gets its schemas back through <c>public.kalla_admit(build)</c> (<see cref="SchemaAdmissionService"/>)
 /// with the last migration compiled into it: a build older than the fence is refused (<see cref="RefusedSqlState"/>), a
 /// newer one is admitted and keeps its access through later migration runs. Only with the production roles (a roles
 /// path); the development superuser has none. The table and function are kept out of the EF model and created on every
@@ -27,19 +27,19 @@ public static class ServiceAdmission
 
     /// <summary>Idempotent: the fence table (no grants to the service roles) and the admission function.</summary>
     public const string Sql = """
-        CREATE TABLE IF NOT EXISTS public.ume_rag_service_fences (
+        CREATE TABLE IF NOT EXISTS public.kalla_service_fences (
             role text PRIMARY KEY,
             fence text NOT NULL,
             admitted text NULL,
             schemas text[] NOT NULL DEFAULT '{}'
         );
-        CREATE OR REPLACE FUNCTION public.ume_rag_admit(build text) RETURNS void
+        CREATE OR REPLACE FUNCTION public.kalla_admit(build text) RETURNS void
         LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
         DECLARE
-            fenced public.ume_rag_service_fences;
+            fenced public.kalla_service_fences;
             schema_name text;
         BEGIN
-            SELECT * INTO fenced FROM public.ume_rag_service_fences WHERE role = session_user FOR UPDATE;
+            SELECT * INTO fenced FROM public.kalla_service_fences WHERE role = session_user FOR UPDATE;
             IF NOT FOUND THEN
                 RETURN;
             END IF;
@@ -47,7 +47,7 @@ public static class ServiceAdmission
                 RAISE EXCEPTION 'build % of % is older than its schema fence %', coalesce(build, 'null'), session_user, fenced.fence
                     USING ERRCODE = 'UR001';
             END IF;
-            UPDATE public.ume_rag_service_fences SET admitted = greatest(admitted COLLATE "C", build COLLATE "C") WHERE role = session_user;
+            UPDATE public.kalla_service_fences SET admitted = greatest(admitted COLLATE "C", build COLLATE "C") WHERE role = session_user;
             -- Only a role still held out gets its schemas back: once admitted, app-roles.sql alone decides its grants.
             IF fenced.admitted IS NULL OR fenced.admitted COLLATE "C" < fenced.fence COLLATE "C" THEN
                 FOREACH schema_name IN ARRAY fenced.schemas LOOP
@@ -58,15 +58,15 @@ public static class ServiceAdmission
             END IF;
         END
         $$;
-        REVOKE ALL ON FUNCTION public.ume_rag_admit(text) FROM PUBLIC;
-        GRANT EXECUTE ON FUNCTION public.ume_rag_admit(text) TO ume_rag_api, ume_rag_admin, ume_rag_worker;
+        REVOKE ALL ON FUNCTION public.kalla_admit(text) FROM PUBLIC;
+        GRANT EXECUTE ON FUNCTION public.kalla_admit(text) TO kalla_api, kalla_admin, kalla_worker;
         """;
 
     /// <summary>Records the fences, keeping a greater one; <c>admitted</c> stays as it is.</summary>
     private const string UpsertFencesSql = """
-        INSERT INTO public.ume_rag_service_fences (role, fence)
+        INSERT INTO public.kalla_service_fences (role, fence)
         SELECT f.role, f.fence FROM unnest($1::text[], $2::text[]) AS f(role, fence)
-        ON CONFLICT (role) DO UPDATE SET fence = greatest(ume_rag_service_fences.fence COLLATE "C", excluded.fence COLLATE "C")
+        ON CONFLICT (role) DO UPDATE SET fence = greatest(kalla_service_fences.fence COLLATE "C", excluded.fence COLLATE "C")
         """;
 
     /// <summary>Revokes the schemas from every role not admitted past its fence.</summary>
@@ -76,7 +76,7 @@ public static class ServiceAdmission
             held record;
             schema_name text;
         BEGIN
-            FOR held IN SELECT role FROM public.ume_rag_service_fences
+            FOR held IN SELECT role FROM public.kalla_service_fences
                         WHERE admitted IS NULL OR admitted COLLATE "C" < fence COLLATE "C" LOOP
                 FOR schema_name IN SELECT nspname FROM pg_namespace WHERE nspname IN ('config', 'content', 'chat', 'audit') LOOP
                     EXECUTE format('REVOKE USAGE ON SCHEMA %I FROM %I', schema_name, held.role);
@@ -96,14 +96,14 @@ public static class ServiceAdmission
             held record;
             schema_name text;
         BEGIN
-            FOR held IN SELECT role FROM public.ume_rag_service_fences
+            FOR held IN SELECT role FROM public.kalla_service_fences
                         WHERE admitted IS NULL OR admitted COLLATE "C" < fence COLLATE "C" FOR UPDATE LOOP
-                UPDATE public.ume_rag_service_fences SET schemas = ARRAY(
+                UPDATE public.kalla_service_fences SET schemas = ARRAY(
                     SELECT n.nspname::text FROM pg_namespace n
                     WHERE n.nspname IN ('config', 'content', 'chat', 'audit') AND has_schema_privilege(held.role::name, n.oid, 'USAGE')
                     ORDER BY n.nspname)
                 WHERE role = held.role;
-                FOR schema_name IN SELECT unnest(schemas) FROM public.ume_rag_service_fences WHERE role = held.role LOOP
+                FOR schema_name IN SELECT unnest(schemas) FROM public.kalla_service_fences WHERE role = held.role LOOP
                     EXECUTE format('REVOKE USAGE ON SCHEMA %I FROM %I', schema_name, held.role);
                 END LOOP;
             END LOOP;

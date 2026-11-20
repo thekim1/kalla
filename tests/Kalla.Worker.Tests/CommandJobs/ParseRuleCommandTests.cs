@@ -62,8 +62,8 @@ public sealed class ParseRuleCommandTests(RagDatabaseFixture database) : IAsyncL
 
         (await AuditAsync(profileId)).ShouldBe(
         [
-            $"{Admin}|create|-|{revision1}|rag-worker|internal",
-            $"{Admin}|update|{revision1}|{revision2}|rag-worker|internal",
+            $"{Admin}|create|-|{revision1}|kalla-worker|internal",
+            $"{Admin}|update|{revision1}|{revision2}|kalla-worker|internal",
         ], "one entry per revision, none for the edit that changed nothing");
     }
 

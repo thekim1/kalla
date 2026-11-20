@@ -61,6 +61,6 @@ is still counted in the summary. After its last day the exception no longer appl
 matched no finding in its image, are printed as workflow warnings. A malformed line fails the check.
 
 ```bash
-grype registry:ghcr.io/thekim1/ume-rag/parser:0.7.0 -o json --file /tmp/parser.json -q
+grype registry:ghcr.io/thekim1/kalla/parser:0.7.0 -o json --file /tmp/parser.json -q
 python3 -I scripts/audit/audit.py grype parser=/tmp/parser.json
 ```

@@ -5,7 +5,7 @@ using Microsoft.Playwright;
 namespace Kalla.Worker.Connectors.Render;
 
 /// <summary>
-/// <see cref="IRenderer"/> on <c>rag-renderer</c> (connectors design §8.3): Playwright .NET connects to the container's
+/// <see cref="IRenderer"/> on <c>kalla-renderer</c> (connectors design §8.3): Playwright .NET connects to the container's
 /// <c>launch-server</c> at <c>Render:Endpoint</c> (secret path included) and drives one shared Chromium; each page gets a
 /// fresh context (service workers blocked, downloads off, <c>Render:Viewport</c>, the host's User-Agent) that is closed
 /// after it, cookies and all. Every request of the page is routed to the worker's <see cref="IRenderFetcher"/>; the first

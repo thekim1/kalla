@@ -16,7 +16,7 @@ public sealed class CrawlOptions
 
     /// <summary>
     /// Comma list of CIDRs that lift the private-range block (env <c>Crawl__AllowedPrivateRanges</c>, fed from the same
-    /// <c>UME_RAG_CRAWL_ALLOW</c> as the host firewall). Nothing else can lift it.
+    /// <c>KALLA_CRAWL_ALLOW</c> as the host firewall). Nothing else can lift it.
     /// </summary>
     public string? AllowedPrivateRanges { get; set; }
 

@@ -196,7 +196,7 @@ public static partial class SecurityEvents
     public static partial void SetupSessionStarted(ILogger logger, string sessionId, string? sourceAddress, DateTimeOffset expiresAt);
 
     /// <summary>
-    /// A setup test finished: <c>Target</c> <c>rag-admin</c> (a test sign-in, with the tested person's subject) or <c>open-webui</c>
+    /// A setup test finished: <c>Target</c> <c>kalla-admin</c> (a test sign-in, with the tested person's subject) or <c>open-webui</c>
     /// (a back-channel test, no person); <c>Result</c> <c>passed</c> or <c>failed</c> with its reason. Callbacks with an unknown test
     /// are sampled like 6009, <c>Count</c> the number since the last event (1 otherwise).
     /// </summary>
@@ -213,7 +213,7 @@ public static partial class SecurityEvents
 
     /// <summary>
     /// Open WebUI's sign-in values saved in setup mode (identity design §19), setup still open; <c>Actor</c> is the person of the session's
-    /// passed rag-admin test, <c>ClientVerified</c> whether the test confirmed the client's credentials. Never a value.
+    /// passed kalla-admin test, <c>ClientVerified</c> whether the test confirmed the client's credentials. Never a value.
     /// </summary>
     [LoggerMessage(6013, LogLevel.Warning,
         "Open WebUI's sign-in values saved by {Actor} in setup session {SessionId} from {SourceAddress}; client verified {ClientVerified}",

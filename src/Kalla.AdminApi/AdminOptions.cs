@@ -64,8 +64,8 @@ public sealed class AdminOptions
     public string? GatewayAdminUrl { get; set; }
 
     /// <summary>
-    /// rag-api's public address, shown to a platform admin who connects an app (<c>GET /api/clients/connection</c>, admin design
-    /// §5.9.1): the value rag-api has as <c>Knowledge:PublicBaseUrl</c>. Unset by default; only an absolute http(s) URL is used.
+    /// kalla-api's public address, shown to a platform admin who connects an app (<c>GET /api/clients/connection</c>, admin design
+    /// §5.9.1): the value kalla-api has as <c>Knowledge:PublicBaseUrl</c>. Unset by default; only an absolute http(s) URL is used.
     /// </summary>
     [Url]
     public string? ApiPublicUrl { get; set; }
@@ -86,7 +86,7 @@ public sealed class AdminOptions
 /// realm; other identity providers remap claims or map groups to roles. Bound and validated at start, but only
 /// <see cref="RoleGroups"/> is read from the bound options: every other value is an effective sign-in value (identity design
 /// §19, <see cref="SignInSettings"/>), from the deployment, else the setup wizard, else these defaults, and the sign-in checks
-/// take an instance built from them (<see cref="SignInSnapshot.ToOidcOptions"/>). rag-admin starts without an authority.
+/// take an instance built from them (<see cref="SignInSnapshot.ToOidcOptions"/>). kalla-admin starts without an authority.
 /// </summary>
 public sealed class OidcOptions
 {
@@ -96,7 +96,7 @@ public sealed class OidcOptions
     public string? Authority { get; set; }
 
     /// <summary>Källa's own registration (identity design §1.6), never the gateway's <c>ume-admin</c>. An empty value is unset (§19).</summary>
-    public string ClientId { get; set; } = "ume-rag-admin";
+    public string ClientId { get; set; } = "kalla-admin";
 
     public string? ClientSecret { get; set; }
 
@@ -160,7 +160,7 @@ public sealed class OidcOptionsValidator : IValidateOptions<OidcOptions>
 
 /// <summary>
 /// A deployment's <c>Oidc:Authority</c>, when set, is an absolute https URL (http in Development only, as the handler's
-/// <c>RequireHttpsMetadata</c>), so a wrong value still stops rag-admin at start instead of leaving sign-in unconfigured.
+/// <c>RequireHttpsMetadata</c>), so a wrong value still stops kalla-admin at start instead of leaving sign-in unconfigured.
 /// </summary>
 public sealed class OidcAuthorityValidator(IHostEnvironment environment) : IValidateOptions<OidcOptions>
 {

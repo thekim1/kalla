@@ -1,9 +1,9 @@
 namespace Kalla.Domain.Entities;
 
-/// <summary>What a setup test checks (identity design §19): rag-admin's own client, or Open WebUI's.</summary>
+/// <summary>What a setup test checks (identity design §19): kalla-admin's own client, or Open WebUI's.</summary>
 public static class SetupTargets
 {
-    public const string RagAdmin = "rag-admin";
+    public const string RagAdmin = "kalla-admin";
 
     /// <summary>Open WebUI's client: a back-channel test (its discovery document and its credentials at the token endpoint); nobody signs in.</summary>
     public const string OpenWebUi = "open-webui";

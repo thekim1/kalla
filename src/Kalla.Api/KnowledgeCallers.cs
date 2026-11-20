@@ -29,10 +29,10 @@ public sealed class KnowledgeCallers(KeyStore keys, IPolicySnapshotSource snapsh
     TimeProvider time, KeyLastUseRecorder lastUse)
 {
     /// <summary>The principal of this request, kept for events 5002/5005 (<see cref="KnowledgeProblems"/>).</summary>
-    public const string PrincipalItem = "ume-rag-principal";
+    public const string PrincipalItem = "kalla-principal";
 
     /// <summary>The download grant of this request, kept for events.</summary>
-    public const string GrantItem = "ume-rag-grant";
+    public const string GrantItem = "kalla-grant";
 
     /// <summary>
     /// The key's principal (identity §6.2–§6.3). <paramref name="knowledgeRoute"/>: the knowledge routes are open only to

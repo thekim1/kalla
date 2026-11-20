@@ -31,7 +31,7 @@ public sealed class EngineUsageTests(RagDatabaseFixture database, FakeGatewayFac
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-usage-blobs-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-usage-blobs-");
 
     public async ValueTask InitializeAsync() => await database.ResetAsync();
 

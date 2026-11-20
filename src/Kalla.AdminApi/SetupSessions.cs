@@ -33,7 +33,7 @@ public sealed record SetupCodeResult(SetupCodeOutcome Outcome, SetupSession? Ses
 public sealed class SetupSessions(RagDbContext db, TimeProvider time, SetupSecret secret, ConfigLockMetrics lockMetrics)
 {
     /// <summary><c>__Secure-</c>, not <c>__Host-</c>: the cookie's path is <c>/bff/setup</c>, and <c>__Host-</c> requires <c>/</c>.</summary>
-    public const string CookieName = "__Secure-ume-rag-setup";
+    public const string CookieName = "__Secure-kalla-setup";
 
     public const string CookiePath = "/bff/setup";
 

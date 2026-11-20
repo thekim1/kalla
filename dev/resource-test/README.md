@@ -20,11 +20,11 @@ dev/resource-test/run.sh --parser-image <parser image>   # plus the parser, ~1 m
 
 | Option | Default | |
 |---|---|---|
-| `--out DIR` | a new `ume-rag-resource-test.*` directory under `$TMPDIR` | `report.md`, `samples.tsv`, `facts.txt`, the site |
+| `--out DIR` | a new `kalla-resource-test.*` directory under `$TMPDIR` | `report.md`, `samples.tsv`, `facts.txt`, the site |
 | `--pages N` | 150 | generated HTML pages (the crawl runs at the politeness rate, about 1 page/s) |
 | `--idle S` / `--load S` | 60 / 20 | idle sample; length of each retrieval load phase (1 and 8 clients) |
 | `--ingest-timeout S` | 900 | longest wait for the job queue to empty |
-| `--parser-image IMAGE` | none: no parser phase | an existing image, e.g. `docker build -t ume-rag.local/parser:ci src/parser` (several GB: build only when needed) |
+| `--parser-image IMAGE` | none: no parser phase | an existing image, e.g. `docker build -t kalla.local/parser:ci src/parser` (several GB: build only when needed) |
 | `--keep` | off | leave the AppHost running afterwards |
 
 Needs Docker, the Aspire CLI, .NET, Python 3.12+ and an AppHost that has run once (its user secrets). It refuses to start
@@ -121,7 +121,7 @@ From the exploratory runs the same day (same stack, by hand):
 - **Parser peak** while converting: 2.17 GB (1 s sampling; the report's 2 s sampling saw 1.95 GB).
 - **Larger crawl:** 309 pages (1,509 chunks) in about 5 minutes, at about 1 page/s: the politeness delay, not
   resources. The worker stayed under 0.3 cores.
-- **Retrieval CPU:** about 8 ms per query in total (Postgres 5 ms, rag-api 3 ms), so one core serves about 120
+- **Retrieval CPU:** about 8 ms per query in total (Postgres 5 ms, kalla-api 3 ms), so one core serves about 120
   retrievals/s on this corpus. 8 clients: 470–690 requests/s, p95 16–22 ms, no errors.
 - **`jit` on or off** (for #500): 669 vs 689 requests/s, within noise. At this corpus size no statement reaches
   `jit_above_cost`, so #500 is still unmeasured where it matters (a large collection).
@@ -129,7 +129,7 @@ From the exploratory runs the same day (same stack, by hand):
 #### Minimum hardware for the platform (estimate from these numbers)
 
 Peak working set per component with the production settings: Postgres about 1.0–1.2 GB (768 MB `shared_buffers`
-plus working memory; 0.1–0.2 GB measured with stock settings), rag-api 0.3 GB, rag-admin 0.2 GB, worker 0.4 GB (plus
+plus working memory; 0.1–0.2 GB measured with stock settings), kalla-api 0.3 GB, kalla-admin 0.2 GB, worker 0.4 GB (plus
 about 0.17 GB for Playwright's driver when rendering), parser 2.2 GB peak (less on current `main`, and close to
 nothing once its slots are cold), ClamAV 1.05 GB, renderer about 0.2 GB (A-9/A-10). Total **about 5.5–5.7 GB** at peak,
 4.5 GB with the parser cold, plus 1–1.5 GB for the OS and Docker. The Compose `mem_reservation` values alone add up to

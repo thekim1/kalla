@@ -1,30 +1,30 @@
-# Overlay that replaces the ClamAV image's clamd.conf and freshclam.conf with copies rag-bootstrap writes to
-# rag-config/clamav (repo-and-deployment §5.5). The image's unprivileged entrypoint ignores the CLAMD_CONF_* and
+# Overlay that replaces the ClamAV image's clamd.conf and freshclam.conf with copies kalla-bootstrap writes to
+# kalla-config/clamav (repo-and-deployment §5.5). The image's unprivileged entrypoint ignores the CLAMD_CONF_* and
 # FRESHCLAM_CONF_* variables, so a setting changes only through a mounted file. init-deployment.sh adds this file to
 # COMPOSE_FILE, with the malware scan on (the clamav profile), for either of:
 #   --host-memory 24          ConcurrentDatabaseReload yes and TestDatabases yes (with compose.host-24g.yaml's 3g)
-#   --freshclam-proxy H:P     HTTPProxyServer/HTTPProxyPort (UME_RAG_FRESHCLAM_PROXY), when database.clamav.net is
+#   --freshclam-proxy H:P     HTTPProxyServer/HTTPProxyPort (KALLA_FRESHCLAM_PROXY), when database.clamav.net is
 #                             reached through a proxy
 # Without either the image's own confs are used (16 GB host, direct egress) and this file is not needed. The copies are
 # made from the image's confs in images/clamav/ (the release bundle carries them at the same relative path).
 
 services:
-  rag-bootstrap:
+  kalla-bootstrap:
     environment:
-      UME_RAG_FRESHCLAM_PROXY: ${UME_RAG_FRESHCLAM_PROXY:-}
+      KALLA_FRESHCLAM_PROXY: ${KALLA_FRESHCLAM_PROXY:-}
     configs:
-      - {source: rag-clamd-conf, target: /config/clamd.conf}
-      - {source: rag-freshclam-conf, target: /config/freshclam.conf}
+      - {source: kalla-clamd-conf, target: /config/clamd.conf}
+      - {source: kalla-freshclam-conf, target: /config/freshclam.conf}
 
-  rag-clamav:
+  kalla-clamav:
     volumes:
-      - {type: volume, source: rag-config, target: /etc/clamav, read_only: true, volume: {subpath: clamav}}
+      - {type: volume, source: kalla-config, target: /etc/clamav, read_only: true, volume: {subpath: clamav}}
     # A volume subpath must exist when the container starts.
     depends_on:
-      rag-bootstrap: {condition: service_completed_successfully}
+      kalla-bootstrap: {condition: service_completed_successfully}
 
 configs:
-  rag-clamd-conf:
+  kalla-clamd-conf:
     file: ../images/clamav/clamd.conf
-  rag-freshclam-conf:
+  kalla-freshclam-conf:
     file: ../images/clamav/freshclam.conf

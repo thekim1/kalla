@@ -26,7 +26,7 @@ public sealed class StageRunnerParityTests(RagDatabaseFixture database, FakeGate
 {
     private static readonly string[] Stages = [StageNames.Detect, StageNames.Parse, StageNames.Clean, StageNames.Chunk, StageNames.PersonalData];
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-stage-parity-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-stage-parity-");
     private readonly string _marker = Guid.NewGuid().ToString("N");
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

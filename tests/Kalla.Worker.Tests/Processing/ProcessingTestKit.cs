@@ -38,7 +38,7 @@ public static class Fixtures
     public static string Umea => Path.Combine(Root, "tests", "fixtures", "umea");
 
     /// <summary>The goldens are rewritten instead of compared when this variable is 1 (then review the diff).</summary>
-    public static bool Update => Environment.GetEnvironmentVariable("UME_RAG_UPDATE_GOLDENS") == "1";
+    public static bool Update => Environment.GetEnvironmentVariable("KALLA_UPDATE_GOLDENS") == "1";
 
     private static string FindRoot()
     {
@@ -577,7 +577,7 @@ public static class Golden
         if (Difference(path, actual) is { } difference)
         {
             Assert.Fail("A stage output changed without a version bump (engine design §19). Bump the stage version, regenerate with "
-                + "UME_RAG_UPDATE_GOLDENS=1 and review the diff.\n" + difference);
+                + "KALLA_UPDATE_GOLDENS=1 and review the diff.\n" + difference);
         }
     }
 

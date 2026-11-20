@@ -5,9 +5,9 @@ using Kalla.Infrastructure.Security;
 namespace Kalla.AdminApi;
 
 /// <summary>
-/// Open WebUI's sign-in values in rag-admin (identity design §19, "Open WebUI"): read through the shared precedence
+/// Open WebUI's sign-in values in kalla-admin (identity design §19, "Open WebUI"): read through the shared precedence
 /// (<see cref="OpenWebUiSignInReader"/>), shown with their sources, and saved only by setup mode (<see cref="SaveWizardValuesAsync"/>).
-/// Whether the deployment runs Open WebUI and its public address are deployment values of rag-admin (<c>OpenWebUi:Enabled</c>,
+/// Whether the deployment runs Open WebUI and its public address are deployment values of kalla-admin (<c>OpenWebUi:Enabled</c>,
 /// <c>OpenWebUi:PublicUrl</c>).
 /// </summary>
 public sealed class OpenWebUiSignInSettings(OpenWebUiSignInReader reader, IConfiguration configuration, SettingsSecretProtector secrets)
@@ -21,8 +21,8 @@ public sealed class OpenWebUiSignInSettings(OpenWebUiSignInReader reader, IConfi
     public Task<OpenWebUiSettingsDto> ShowAsync(CancellationToken ct) => ShowAsync(null, ct);
 
     /// <summary>
-    /// The block as <c>GET /bff/setup/state</c> shows it: <paramref name="sessionAuthority"/> is the setup session's latest passed rag-admin
-    /// test's authority (<see cref="SetupOpenWebUiTest.SessionAuthorityAsync"/>), the default provider address's source while rag-admin's
+    /// The block as <c>GET /bff/setup/state</c> shows it: <paramref name="sessionAuthority"/> is the setup session's latest passed kalla-admin
+    /// test's authority (<see cref="SetupOpenWebUiTest.SessionAuthorityAsync"/>), the default provider address's source while kalla-admin's
     /// effective authority is unset.
     /// </summary>
     public async Task<OpenWebUiSettingsDto> ShowAsync(string? sessionAuthority, CancellationToken ct) =>
@@ -89,7 +89,7 @@ public sealed record OpenWebUiSignInDto(
 
 /// <summary>
 /// The Open WebUI block: <see cref="Enabled"/> whether the deployment runs it (<c>OpenWebUi:Enabled</c>), its sign-in values, and the
-/// redirect URI to register on its client (null while rag-admin has no <c>OpenWebUi:PublicUrl</c>).
+/// redirect URI to register on its client (null while kalla-admin has no <c>OpenWebUi:PublicUrl</c>).
 /// </summary>
 public sealed record OpenWebUiSettingsDto(bool Enabled, OpenWebUiSignInDto SignIn, string? RedirectUri);
 

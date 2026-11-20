@@ -20,9 +20,9 @@ namespace Kalla.AdminApi.Tests;
 /// A Keycloak container (<see cref="KeycloakFixture.Image"/>, the shared Keycloak's 26.8.1) and keycloak-config-cli
 /// runs against it, as the gateway's <c>deploy/keycloak</c> project applies realm files (identity design §11.2,
 /// thekim1/llmgateway#70): the same image and digest, sign-in as the bootstrap service account
-/// <c>ume-realm-import</c> by client credentials with its secret from a Spring config tree, <c>realm/*.json</c> then
+/// <c>fors-realm-import</c> by client credentials with its secret from a Spring config tree, <c>realm/*.json</c> then
 /// <c>additions/*.json</c> in name order, <c>$(env:...)</c> substitution, and every resource type <c>no-delete</c>.
-/// The placeholder values are the job's environment, as <c>UME_KEYCLOAK_IMPORT_ENV</c>'s file makes them.
+/// The placeholder values are the job's environment, as <c>FORS_KEYCLOAK_IMPORT_ENV</c>'s file makes them.
 /// </summary>
 public sealed class RealmImport(IReadOnlyList<string> realmFiles, IReadOnlyList<string> additionFiles, IReadOnlyDictionary<string, string> values)
     : IAsyncDisposable
@@ -52,14 +52,14 @@ public sealed class RealmImport(IReadOnlyList<string> realmFiles, IReadOnlyList<
     };
 
     private const int Port = 8080;
-    private const string ImportClientId = "ume-realm-import";
+    private const string ImportClientId = "fors-realm-import";
     private readonly string _adminPassword = TestSecrets.RandomHex(16);
     private readonly string _importSecret = TestSecrets.RandomHex();
     private readonly INetwork _network = new NetworkBuilder().Build();
     private IContainer? _keycloak;
 
     public string BaseUrl => $"http://{_keycloak!.Hostname}:{_keycloak.GetMappedPublicPort(Port)}";
-    public string Authority => $"{BaseUrl}/realms/ume";
+    public string Authority => $"{BaseUrl}/realms/fors";
 
     public async Task StartAsync()
     {
@@ -114,7 +114,7 @@ public sealed class RealmImport(IReadOnlyList<string> realmFiles, IReadOnlyList<
         return (exitCode, stdout + stderr);
     }
 
-    /// <summary>An admin REST client for realm <c>ume</c> (the bootstrap admin of <c>master</c>).</summary>
+    /// <summary>An admin REST client for realm <c>fors</c> (the bootstrap admin of <c>master</c>).</summary>
     public async Task<HttpClient> AdminAsync()
     {
         using var anonymous = new HttpClient();
@@ -124,7 +124,7 @@ public sealed class RealmImport(IReadOnlyList<string> realmFiles, IReadOnlyList<
         }));
         response.EnsureSuccessStatusCode();
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        var admin = new HttpClient { BaseAddress = new Uri($"{BaseUrl}/admin/realms/ume/") };
+        var admin = new HttpClient { BaseAddress = new Uri($"{BaseUrl}/admin/realms/fors/") };
         admin.DefaultRequestHeaders.Authorization = new("Bearer", json.RootElement.GetProperty("access_token").GetString());
         return admin;
     }
@@ -187,7 +187,7 @@ public sealed class RealmImport(IReadOnlyList<string> realmFiles, IReadOnlyList<
 /// <summary>
 /// RAG's additions (<c>deploy/keycloak/rag-additions.json</c>, identity design §11.2) imported with keycloak-config-cli
 /// after a minimal stand-in for the gateway's <c>realm/10-gateway.json</c> (realm-wide settings, the user profile with
-/// <c>departmentCodes</c> and <c>teamCodes</c>, the client <c>ume-admin</c> and two gateway roles). This is a test
+/// <c>departmentCodes</c> and <c>teamCodes</c>, the client <c>fors-admin</c> and two gateway roles). This is a test
 /// realm, so <c>rag-additions.local.json</c> follows (the BFF below signs in on https://localhost:5174). Then the test
 /// accounts are created by hand.
 /// </summary>
@@ -206,10 +206,11 @@ public sealed class RealmAdditionsFixture : IAsyncLifetime
         Import = new RealmImport([Path.Combine("tests", "Kalla.AdminApi.Tests", "Keycloak", "10-gateway.json")], Additions, new Dictionary<string, string>
         {
             ["GATEWAY_CLIENT_SECRET"] = TestSecrets.RandomHex(),
-            ["UME_RAG_ADMIN_PUBLIC_HOST"] = "rag-admin.example.invalid",
-            ["UME_RAG_OPENWEBUI_HOST"] = "chat.example.invalid",
-            ["UME_RAG_OIDC_CLIENT_SECRET"] = OidcClientSecret,
-            ["UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET"] = TestSecrets.RandomHex(),
+            ["FORS_KEYCLOAK_REALM"] = "fors",
+            ["KALLA_ADMIN_PUBLIC_HOST"] = "kalla-admin.example.invalid",
+            ["KALLA_OPENWEBUI_HOST"] = "chat.example.invalid",
+            ["KALLA_OIDC_CLIENT_SECRET"] = OidcClientSecret,
+            ["KALLA_OPENWEBUI_OIDC_CLIENT_SECRET"] = TestSecrets.RandomHex(),
         });
     }
 
@@ -246,7 +247,7 @@ public sealed class RealmAdditionsFixture : IAsyncLifetime
         await Import.CreateUserAsync("rag-editor-user", UserPassword, ["rag-pipeline-editor"], departments);
         await Import.CreateUserAsync("rag-admin-user", UserPassword, ["rag-platform-admin", "rag-department-admin", "gateway-admin"], departments);
         await Import.CreateUserAsync("rag-department-admin-user", UserPassword, ["rag-department-admin"], departments);
-        await Import.JoinGroupAsync(await Import.CreateUserAsync("shared-admin-user", UserPassword, [], departments), "ume-admins");
+        await Import.JoinGroupAsync(await Import.CreateUserAsync("shared-admin-user", UserPassword, [], departments), "fors-admins");
     }
 
     public async ValueTask DisposeAsync()
@@ -272,7 +273,7 @@ public sealed class RealmAdditionsFixture : IAsyncLifetime
 /// </summary>
 public sealed partial class RealmAdditionsTests(RealmAdditionsFixture keycloak) : IClassFixture<RealmAdditionsFixture>
 {
-    private static readonly string[] RagClients = ["ume-rag-admin", "open-webui", "ume-rag-api"];
+    private static readonly string[] RagClients = ["kalla-admin", "open-webui", "kalla-api"];
     private static readonly string[] RagRoles =
         ["rag-platform-admin", "rag-department-admin", "rag-pipeline-editor", "rag-reviewer", "rag-skill-editor", "rag-editor", "rag-viewer"];
 
@@ -286,15 +287,15 @@ public sealed partial class RealmAdditionsTests(RealmAdditionsFixture keycloak) 
         using var admin = await keycloak.Import.AdminAsync();
         using var clients = JsonDocument.Parse(await admin.GetStringAsync("clients", Ct));
         var all = clients.RootElement.EnumerateArray().ToDictionary(c => c.GetProperty("clientId").GetString()!, c => c.Clone());
-        foreach (var clientId in RagClients.Append("ume-admin"))
+        foreach (var clientId in RagClients.Append("fors-admin"))
         {
             all.ShouldContainKey(clientId);
             all[clientId].GetProperty("fullScopeAllowed").GetBoolean().ShouldBeFalse(clientId);
         }
 
         // The local file (a test realm only) adds the AppHost URIs and keeps the pilot's.
-        Strings(all["ume-rag-admin"].GetProperty("redirectUris")).ShouldBe(
-            ["https://rag-admin.example.invalid/signin-oidc", "https://localhost:5174/signin-oidc", "https://localhost:7402/signin-oidc"], ignoreOrder: true);
+        Strings(all["kalla-admin"].GetProperty("redirectUris")).ShouldBe(
+            ["https://kalla-admin.example.invalid/signin-oidc", "https://localhost:5174/signin-oidc", "https://localhost:7402/signin-oidc"], ignoreOrder: true);
         Strings(all["open-webui"].GetProperty("redirectUris")).ShouldBe(
             ["https://chat.example.invalid/oauth/oidc/login/callback", "http://localhost:8080/oauth/oidc/login/callback"], ignoreOrder: true);
 
@@ -326,7 +327,7 @@ public sealed partial class RealmAdditionsTests(RealmAdditionsFixture keycloak) 
 
         using var admin = await keycloak.Import.AdminAsync(); // a fresh token: master's access tokens live 60 s
 
-        foreach (var clientId in RagClients.Append("ume-admin").Append("made-by-hand"))
+        foreach (var clientId in RagClients.Append("fors-admin").Append("made-by-hand"))
         {
             using var found = JsonDocument.Parse(await admin.GetStringAsync($"clients?clientId={clientId}", Ct));
             found.RootElement.GetArrayLength().ShouldBe(1, clientId);
@@ -340,7 +341,7 @@ public sealed partial class RealmAdditionsTests(RealmAdditionsFixture keycloak) 
         var shared = await RealmImport.IdOfAsync(admin, "users?exact=true&username=shared-admin-user");
         using (var groups = JsonDocument.Parse(await admin.GetStringAsync($"users/{shared}/groups", Ct)))
         {
-            groups.RootElement.EnumerateArray().Select(g => g.GetProperty("name").GetString()).ShouldContain("ume-admins");
+            groups.RootElement.EnumerateArray().Select(g => g.GetProperty("name").GetString()).ShouldContain("fors-admins");
         }
 
         var user = await RealmImport.IdOfAsync(admin, "users?exact=true&username=rag-admin-user");
@@ -351,36 +352,36 @@ public sealed partial class RealmAdditionsTests(RealmAdditionsFixture keycloak) 
     [Fact]
     public async Task One_shared_group_gives_each_system_its_own_role_and_no_other()
     {
-        // Decisions "Shared sign-in with the gateway" (#468): the operator's group ume-admins (examples/site-groups.json)
+        // Decisions "Shared sign-in with the gateway" (#468): the operator's group fors-admins (examples/site-groups.json)
         // maps gateway-admin and rag-platform-admin. Its member has no direct role, and each client's token carries only
         // its own system's role, because full scope allowed is off and each client maps only its own roles.
         using var admin = await keycloak.Import.AdminAsync();
         var user = await RealmImport.IdOfAsync(admin, "users?exact=true&username=shared-admin-user");
 
-        using (var rag = await RealmImport.ExampleTokenAsync(admin, "ume-rag-admin", user))
+        using (var rag = await RealmImport.ExampleTokenAsync(admin, "kalla-admin", user))
         {
             Claim(rag, "roles").ShouldBe(["rag-platform-admin"]);
         }
 
-        using var gateway = await RealmImport.ExampleTokenAsync(admin, "ume-admin", user);
+        using var gateway = await RealmImport.ExampleTokenAsync(admin, "fors-admin", user);
         Claim(gateway, "roles").ShouldBe(["gateway-admin"]);
     }
 
     [Fact]
     public async Task Each_client_carries_only_its_own_systems_roles()
     {
-        // Full scope allowed is off on every client: ume-rag-admin's roles claim carries the rag-* roles in its scope
+        // Full scope allowed is off on every client: kalla-admin's roles claim carries the rag-* roles in its scope
         // mappings and no gateway role; the gateway's client the reverse. Both carry departmentCodes (identity design §11.2).
         using var admin = await keycloak.Import.AdminAsync();
         var user = await RealmImport.IdOfAsync(admin, "users?exact=true&username=rag-admin-user");
 
-        using (var rag = await RealmImport.ExampleTokenAsync(admin, "ume-rag-admin", user))
+        using (var rag = await RealmImport.ExampleTokenAsync(admin, "kalla-admin", user))
         {
             Claim(rag, "roles").ShouldBe(["rag-platform-admin", "rag-department-admin"], ignoreOrder: true);
             Claim(rag, "departmentCodes").ShouldBe(["1000"]);
         }
 
-        using (var gateway = await RealmImport.ExampleTokenAsync(admin, "ume-admin", user))
+        using (var gateway = await RealmImport.ExampleTokenAsync(admin, "fors-admin", user))
         {
             Claim(gateway, "roles").ShouldBe(["gateway-admin"]);
             Claim(gateway, "departmentCodes").ShouldBe(["1000"]);
@@ -404,11 +405,11 @@ public sealed partial class RealmAdditionsTests(RealmAdditionsFixture keycloak) 
         {
             var text = File.ReadAllText(TestPostgres.RepositoryFile(Path.Combine("deploy", "keycloak", file)));
             using var json = JsonDocument.Parse(text);
-            json.RootElement.GetProperty("realm").GetString().ShouldBe("ume", file);
+            json.RootElement.GetProperty("realm").GetString().ShouldBe("$(env:FORS_KEYCLOAK_REALM)", file);
             json.RootElement.EnumerateObject().Select(p => p.Name).ShouldBeSubsetOf(keys, file);
             text.ShouldNotContain("${", Case.Sensitive, file);
             PlaceholderName().Matches(text).Select(m => m.Groups[1].Value).Distinct().ShouldBeSubsetOf(
-                ["UME_RAG_ADMIN_PUBLIC_HOST", "UME_RAG_OPENWEBUI_HOST", "UME_RAG_OIDC_CLIENT_SECRET", "UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET"], file);
+                ["KALLA_ADMIN_PUBLIC_HOST", "KALLA_OPENWEBUI_HOST", "KALLA_OIDC_CLIENT_SECRET", "KALLA_OPENWEBUI_OIDC_CLIENT_SECRET"], file);
         }
 
         // #207 review: the local AppHost URIs are only in rag-additions.local.json, which never goes to production.
@@ -426,7 +427,7 @@ public sealed partial class RealmAdditionsTests(RealmAdditionsFixture keycloak) 
         // B-23: Open WebUI moved to /oauth/oidc/login/callback at v0.12.5 (identity design 5.3); the description followed.
         using var json = JsonDocument.Parse(File.ReadAllText(TestPostgres.RepositoryFile(Path.Combine("deploy", "keycloak", "rag-additions.json"))));
         var client = json.RootElement.GetProperty("clients").EnumerateArray().Single(c => c.GetProperty("clientId").GetString() == "open-webui");
-        var redirect = new Uri(client.GetProperty("redirectUris").EnumerateArray().Single().GetString()!.Replace("$(env:UME_RAG_OPENWEBUI_HOST)", "owui.test", StringComparison.Ordinal));
+        var redirect = new Uri(client.GetProperty("redirectUris").EnumerateArray().Single().GetString()!.Replace("$(env:KALLA_OPENWEBUI_HOST)", "owui.test", StringComparison.Ordinal));
         var description = client.GetProperty("description").GetString()!;
         description.ShouldContain(redirect.AbsolutePath);
         description.ShouldNotContain("legacy", Case.Insensitive);

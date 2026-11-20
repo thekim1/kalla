@@ -27,7 +27,7 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database, UploadEn
     /// <summary>The class's admin host on a blob store and a key directory of its own, deleted after the class.</summary>
     public sealed class Host(AdminDatabaseFixture database) : AdminHost(database)
     {
-        public string Blobs { get; } = Directory.CreateTempSubdirectory("ume-rag-admin-blobs-").FullName;
+        public string Blobs { get; } = Directory.CreateTempSubdirectory("kalla-admin-blobs-").FullName;
 
         private string Keys => Path.Combine(Path.GetDirectoryName(Blobs)!, Path.GetFileName(Blobs) + "-keys");
 

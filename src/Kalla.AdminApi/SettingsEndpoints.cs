@@ -81,7 +81,7 @@ public static class SettingsEndpoints
             });
         // Decisions "Role groups as a setting" (M-17 C10): which IdP groups grant which role, read at each sign-in.
         Section(settings, "identity", IdentitySettings.Of, (IdentitySettingsRequest r, PlatformSettings s) => s.IdentityRoleGroups = r.ToJson());
-        // Identity design §19: rag-admin's and Open WebUI's sign-in values with their sources. Read-only here: they change only in setup
+        // Identity design §19: kalla-admin's and Open WebUI's sign-in values with their sources. Read-only here: they change only in setup
         // mode, Open WebUI's provider name excepted (the openwebui section below).
         settings.MapGet("/sign-in", async (SignInSettings signIn, OpenWebUiSignInSettings openWebUi, CancellationToken ct) =>
                 SignInSettingsDto.Of(await signIn.ReadAsync(ct)) with { OpenWebUi = await openWebUi.ShowAsync(ct) })

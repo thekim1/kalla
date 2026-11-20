@@ -158,7 +158,7 @@ public static class Extensions
         app.MapHealthChecks(HealthEndpoints.LivePath, new HealthCheckOptions { Predicate = r => r.Tags.Contains("live") })
             .DisableHttpMetrics();
         app.MapHealthChecks(HealthEndpoints.ReadyPath).DisableHttpMetrics();
-        // Fixed web (camelCase) options, not the service's own: rag-api names its JSON in snake_case for the
+        // Fixed web (camelCase) options, not the service's own: kalla-api names its JSON in snake_case for the
         // OpenAI-compatible API, and /version has one shape in every service, as the gateway's (#497).
         app.MapGet("/version", () => Results.Json(new
         {

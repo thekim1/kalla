@@ -10,7 +10,7 @@ public sealed record KeywordStatisticsCheck(int Recomputed, int Kept, int Remove
 
 /// <summary>
 /// The keyword stop list's statistics (knowledge design §6.2; #499 step 2, A-29): the worker keeps
-/// <c>content."KeywordStatistics"</c>, so rag-api runs no <c>ts_stat</c>. Per (profile, collection) with at least
+/// <c>content."KeywordStatistics"</c>, so kalla-api runs no <c>ts_stat</c>. Per (profile, collection) with at least
 /// <see cref="ScopeSizeCache.KeywordStatisticsMinChunks"/> live child chunks, the rows are recomputed with <c>ts_stat</c> when
 /// there are none, when the live count moved by more than <see cref="MovedShare"/> from the stored <c>ChunkCount</c>, or when
 /// they are older than <see cref="MaxAge"/>; otherwise kept. Under 100 chunks (or no chunks: a deleted collection) the rows go.

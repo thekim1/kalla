@@ -5,8 +5,8 @@ Ume.Rag is licensed under the European Union Public Licence v. 1.2 (EUPL-1.2); t
 
 Ume.Rag includes or uses third-party components under their own licences:
 
-- The parser image (ume-rag/parser): every Python package, Debian package and model it ships, with its licence, is
-  listed in src/parser/LICENSES.md (in the image: /usr/share/doc/ume-rag-parser/LICENSES.md). The model licence texts
+- The parser image (kalla/parser): every Python package, Debian package and model it ships, with its licence, is
+  listed in src/parser/LICENSES.md (in the image: /usr/share/doc/kalla-parser/LICENSES.md). The model licence texts
   are in src/parser/licences/models/ (in the image: /opt/models/<model>/LICENSE).
 - Docling, docling-core, docling-parse, docling-ibm-models: MIT, Copyright The Docling Contributors / IBM.
 - Docling layout model "heron": Apache-2.0. TableFormer models: CDLA-Permissive-2.0. (IBM / Docling project)

@@ -65,7 +65,7 @@ shows a gain ([`04-assistant.md`](04-assistant.md) §5). The chat-model reranker
 | Key | Holder | Settings | Reference |
 |---|---|---|---|
 | One gateway credential key per RAG deployable: `api`, `admin`, `worker` | `init-deployment.sh --gateway-credential-key-file api=…` etc. | residencies capped per service; the worker's at `OnPrem` + `Eu`, never `External` | [`../../../docs/compose-quick-start.md`](../../../docs/compose-quick-start.md) step 3; [`../../../docs/production-setup.md`](../../../docs/production-setup.md) "2. `init-deployment.sh`" |
-| The scope `organisation.read` on `rag-admin`'s credential key (no Data API key) | the admin's organisation and model sync | – | same |
+| The scope `organisation.read` on `kalla-admin`'s credential key (no Data API key) | the admin's organisation and model sync | – | same |
 
 The support assistant's chat traffic runs on the **api** key, shared with every other assistant on the deployment.
 Gateway budgets and usage therefore show it under the RAG team's key, not under the support department (see
@@ -75,8 +75,8 @@ gateway ("Every model call goes through the gateway", `AGENTS.md`).
 ## 3. Residency ceiling
 
 Ume.Rag sends `x-fors-max-residency` on every model call, derived from the level of the data in the call (identity
-§4.7), capped by the service's credential key's residencies from the gateway's context (M-17 C9): give `rag-api`'s and
-`rag-admin`'s keys `OnPrem` and `Eu`. An
+§4.7), capped by the service's credential key's residencies from the gateway's context (M-17 C9): give `kalla-api`'s and
+`kalla-admin`'s keys `OnPrem` and `Eu`. An
 `internal` assistant therefore calls at most `Eu`. The gateway refuses with `403 max_residency_not_met` when no
 target within the ceiling exists, and answers `503 no_eligible_provider` when in-ceiling targets are drained; Ume.Rag
 retries only with the same ceiling (Decisions "Gateway release 1 …"; gateway ADR 018 in
@@ -109,7 +109,7 @@ Trade-offs to bring to it:
       prices set (the model mirror shows cost).
 - [ ] `text-embedding-3-large` within `Eu`; the platform embedding profile's canary passes.
 - [ ] `api`, `admin`, `worker` credential keys of the integration *Ume.Rag*, the worker's capped at `OnPrem` + `Eu`,
-      `rag-admin`'s with `organisation.read`; no Data API key.
+      `kalla-admin`'s with `organisation.read`; no Data API key.
 - [ ] PII policy on the api key decided in the DPIA.
 - [ ] Optional: the Foundry `Cohere-rerank-v5-fast` reranker under the Foundry provider (kind Rerank, residency `Eu`;
       gateway v0.9.1); `Settings.Retrieval.gatewayRerankModel` set to its alias.
@@ -117,5 +117,5 @@ Trade-offs to bring to it:
 - [ ] Optional: the embedding deployment's `ContextWindow`. The first set-up guide
       said to leave it empty because the gateway checked whole batches; release 1 checks embeddings per input
       (Decisions "Gateway release 1 …"), so this can be revisited (unverified on the deployed gateway).
-- [ ] Keycloak realm `kalla`: a client for the frontend's own sign-in, made by the realm's administrator (the gateway
+- [ ] Keycloak realm `fors`: a client for the frontend's own sign-in, made by the realm's administrator (the gateway
       operator for the pilot; Decisions "Gateway release 1 …" Q1/Q6). See [`05-frontend-integration.md`](05-frontend-integration.md) §1.

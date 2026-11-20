@@ -10,10 +10,10 @@ namespace Kalla.Infrastructure.Security;
 /// </summary>
 public sealed class StoredSecret
 {
-    /// <summary>rag-admin's client secret, <c>Settings.Identity.Oidc.ClientSecret</c>.</summary>
+    /// <summary>kalla-admin's client secret, <c>Settings.Identity.Oidc.ClientSecret</c>.</summary>
     public static readonly StoredSecret IdentityOidcClientSecret = new("Kalla.Settings.Identity.Oidc.ClientSecret");
 
-    /// <summary>Open WebUI's client secret, <c>Settings.OpenWebUi.Oidc.ClientSecret</c>: the only stored secret rag-api unprotects.</summary>
+    /// <summary>Open WebUI's client secret, <c>Settings.OpenWebUi.Oidc.ClientSecret</c>: the only stored secret kalla-api unprotects.</summary>
     public static readonly StoredSecret OpenWebUiOidcClientSecret = new("Kalla.Settings.OpenWebUi.Oidc.ClientSecret");
 
     /// <summary>A setup test sign-in's candidate values, PKCE verifier and nonce (<c>config."SetupTests"."Protected"</c>, identity design §19).</summary>

@@ -8,7 +8,7 @@ namespace Kalla.Worker.Tests;
 
 /// <summary>
 /// The worker's content retention (data-model §8, A-39): <c>content.rag_retention_content_step</c>, as
-/// <c>ume_rag_worker</c>, removes only the rows past their age, one batch per table and call, and the run is audited as
+/// <c>kalla_worker</c>, removes only the rows past their age, one batch per table and call, and the run is audited as
 /// <c>system:retention</c>. Each table gets a row just inside its rule and two just outside it (the older one goes first).
 /// </summary>
 [Collection(RagDatabaseGroup3.Name)]
@@ -45,7 +45,7 @@ public sealed class ContentRetentionTests(RagDatabaseFixture database) : IAsyncL
         (await Sql.ScalarAsync<string>(database.Connection(null), """
             SELECT string_agg("Actor" || ' ' || "Action" || ' ' || "EntityType" || ' ' || "Service" || ' ' || ("Details" ->> 'deleted'), ';')
             FROM audit."AuditLog" WHERE "Id" > $1 AND "Actor" = 'system:retention'
-            """, audited)).ShouldBe("system:retention retention content rag-worker 6");
+            """, audited)).ShouldBe("system:retention retention content kalla-worker 6");
     }
 
     [Theory]
@@ -86,7 +86,7 @@ public sealed class ContentRetentionTests(RagDatabaseFixture database) : IAsyncL
             .ShouldBe(1);
         logs.Entries.ShouldContain(e => e.Message.StartsWith("Content retention removed", StringComparison.Ordinal));
         (await Sql.ScalarAsync<long>(database.Connection(null), """
-            SELECT count(*) FROM audit."AuditLog" WHERE "Id" > $1 AND "Actor" = 'system:retention' AND "Service" = 'rag-worker'
+            SELECT count(*) FROM audit."AuditLog" WHERE "Id" > $1 AND "Actor" = 'system:retention' AND "Service" = 'kalla-worker'
             """, audited)).ShouldBe(1);
     }
 

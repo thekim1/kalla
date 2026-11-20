@@ -6,7 +6,7 @@ orchestrated with Aspire 13.6. The design lives beside the code: start at [`AGEN
 [`HANDOVER.md`](HANDOVER.md).
 
 **Status: P1 (pilot), built and released; the live block is ahead.** The last release is
-[`v0.8.0`](https://github.com/thekim1/ume-rag-platform/releases/tag/v0.8.0) (2026-11-19), on the gateway's `v0.11.0`;
+[`v0.8.0`](https://github.com/thekim1/kalla/releases/tag/v0.8.0) (2026-11-19), on the gateway's `v0.11.0`;
 [`CHANGELOG.md`](CHANGELOG.md) has every release. P1 was built on FakeGateway, fixtures and the dev Keycloak first; the
 live parts (the real gateway, the shared Keycloak, the umea.se crawl, the gold set, the pilot member, the test host)
 come as one block at the end. Built:
@@ -38,19 +38,19 @@ dotnet test --solution Kalla.slnx -c Release --no-build --filter-not-trait "Cate
 ```
 
 `--filter-not-trait` skips tests marked `[Trait(TestCategory.Name, TestCategory.Flaky)]`, as CI does. The integration
-tests start the pinned pgvector image with Testcontainers, so Docker must be running. `UME_RAG_TEST_POSTGRES_IMAGE`
-runs them against another image (CI: the built `ume-rag/postgres`).
+tests start the pinned pgvector image with Testcontainers, so Docker must be running. `KALLA_TEST_POSTGRES_IMAGE`
+runs them against another image (CI: the built `kalla/postgres`).
 
 The container tests skip unless their image is named. Build the images locally (Testcontainers wants a dot in a local
 registry name): the worker's tests use ClamAV and the renderer, the contract tests the parser.
 
 ```bash
-docker build -t ume-rag.local/clamav:dev images/clamav
-docker build -t ume-rag.local/renderer:dev images/renderer
-UME_RAG_TEST_CLAMAV_IMAGE=ume-rag.local/clamav:dev UME_RAG_TEST_RENDERER_IMAGE=ume-rag.local/renderer:dev \
+docker build -t kalla.local/clamav:dev images/clamav
+docker build -t kalla.local/renderer:dev images/renderer
+KALLA_TEST_CLAMAV_IMAGE=kalla.local/clamav:dev KALLA_TEST_RENDERER_IMAGE=kalla.local/renderer:dev \
   dotnet test --project tests/Kalla.Worker.Tests -c Release --no-build
-docker build -t ume-rag.local/parser:ci src/parser
-UME_RAG_TEST_PARSER_IMAGE=ume-rag.local/parser:ci \
+docker build -t kalla.local/parser:ci src/parser
+KALLA_TEST_PARSER_IMAGE=kalla.local/parser:ci \
   dotnet test --project tests/Kalla.ContractTests -c Release --no-build
 ```
 
@@ -85,7 +85,7 @@ background (`aspire describe`, `aspire logs <resource>`, `aspire stop`); `Seed__
 it without demo data.
 
 Container health probe: every .NET service image runs its own probe with `--health-check` (exit 0 healthy, 1 not),
-against `UME_HEALTHCHECK_URL` (default `https://localhost:8443/health/ready`).
+against `FORS_HEALTHCHECK_URL` (default `https://localhost:8443/health/ready`).
 
 ## Docs
 

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
-    <UserSecretsId>ume-rag-worker</UserSecretsId>
-    <ContainerRepository>ume-rag/worker</ContainerRepository>
+    <UserSecretsId>kalla-worker</UserSecretsId>
+    <ContainerRepository>kalla/worker</ContainerRepository>
     <KallaServiceContainer>true</KallaServiceContainer>
   </PropertyGroup>
   <ItemGroup>

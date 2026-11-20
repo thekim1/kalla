@@ -24,7 +24,7 @@ public sealed class FetchUrlEngineTests(RagDatabaseFixture database, FakeGateway
     // The worker's own scheduler stays out of the way: a settings change gets only the run the test starts.
     private static readonly Dictionary<string, string?> QuietScheduler = new() { ["Worker:SchedulerSeconds"] = "600" };
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-fetchurl-blobs-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-fetchurl-blobs-");
     private readonly ConcurrentQueue<string> _requests = new();
     private readonly ConcurrentDictionary<string, int> _status = new(StringComparer.Ordinal);
     private readonly string _tag = Guid.NewGuid().ToString("N");

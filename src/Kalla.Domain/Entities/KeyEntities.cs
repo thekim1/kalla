@@ -47,11 +47,11 @@ public sealed class Client
     public bool IsEnabled { get; set; } = true;
 
     /// <summary>
-    /// The deployment's own client (identity design §4.1, §5.2; M-17 C4, #712): <c>rag-migrate</c> creates it and keeps its keys:
+    /// The deployment's own client (identity design §4.1, §5.2; M-17 C4, #712): <c>kalla-migrate</c> creates it and keeps its keys:
     /// Open WebUI's one key, the one the deployment generated, and none on <see cref="AdminConsoleName"/>; the admin edits its
     /// settings but not its name, kind or keys. Only the managed <c>open-webui</c> client's users are trusted from their JWT. At most
     /// one per kind and name (<c>IX_Clients_Managed</c>, #712: <c>admin-console</c> and P2's <c>rag-internal</c> are both
-    /// <c>internal</c>); rag-migrate keeps one managed <c>open-webui</c> client.
+    /// <c>internal</c>); kalla-migrate keeps one managed <c>open-webui</c> client.
     /// </summary>
     public bool IsManagedByDeployment { get; set; }
 

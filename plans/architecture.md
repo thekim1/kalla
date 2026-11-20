@@ -13,8 +13,8 @@ Where a diagram and a document differ, the document wins.
 
 ## 1. System overview
 
-Dashed edges and boxes marked P2 are not in the pilot. The pilot runs six long-running containers (rag-api, rag-admin,
-rag-worker, rag-parser, rag-clamav, postgres) plus the one-shot rag-migrate; Redis arrives with the first multi-host
+Dashed edges and boxes marked P2 are not in the pilot. The pilot runs six long-running containers (kalla-api, kalla-admin,
+kalla-worker, kalla-parser, kalla-clamav, postgres) plus the one-shot kalla-migrate; Redis arrives with the first multi-host
 deployment (P2).
 
 ```mermaid
@@ -29,18 +29,18 @@ flowchart LR
     proxy["Municipal reverse proxy<br/>(TLS)"]
 
     subgraph data_plane["Data plane zone"]
-        api["rag-api (one slot in the pilot; a/b from P2)<br/>roles: chat, knowledge, mcp (P2)<br/>Kalla.Answering + Kalla.Retrieval<br/>in-process tool hub (P2)"]
+        api["kalla-api (one slot in the pilot; a/b from P2)<br/>roles: chat, knowledge, mcp (P2)<br/>Kalla.Answering + Kalla.Retrieval<br/>in-process tool hub (P2)"]
     end
 
     subgraph control_plane["Control plane zone"]
-        admin["rag-admin<br/>BFF + Swedish journey pages<br/>test panel, config writer<br/>assistant drafts, versions<br/>test questions, nightly answer judge,<br/>skill gate, in-process tool hub (P2)"]
+        admin["kalla-admin<br/>BFF + Swedish journey pages<br/>test panel, config writer<br/>assistant drafts, versions<br/>test questions, nightly answer judge,<br/>skill gate, in-process tool hub (P2)"]
     end
 
-    subgraph ingestion_zone["Ingestion zone (rag-ingestion.slice)"]
-        worker["rag-worker<br/>connectors, fixed pipelines,<br/>site profiles, retrieval evaluator, index writer<br/>(no tools, not on network mcp)"]
-        parser["rag-parser<br/>every PDF: pypdfium2, Docling, Tesseract swe<br/>Office, images, gated NER"]
-        renderer["rag-renderer (P2)<br/>headless browser, only if a source needs JavaScript"]
-        clamav["rag-clamav"]
+    subgraph ingestion_zone["Ingestion zone (kalla-ingestion.slice)"]
+        worker["kalla-worker<br/>connectors, fixed pipelines,<br/>site profiles, retrieval evaluator, index writer<br/>(no tools, not on network mcp)"]
+        parser["kalla-parser<br/>every PDF: pypdfium2, Docling, Tesseract swe<br/>Office, images, gated NER"]
+        renderer["kalla-renderer (P2)<br/>headless browser, only if a source needs JavaScript"]
+        clamav["kalla-clamav"]
     end
 
     subgraph data_zone["Data zone"]
@@ -103,7 +103,7 @@ flowchart LR
 The zones are one host in the pilot, with one slot per service and an announced maintenance window for updates. From
 the first multi-host deployment (P2, [`archive/passes/performance-pass.md`](archive/passes/performance-pass.md) §5) the same images run per host by
 role, Compose per host: three hosts in P2 (**D** data: Postgres, Redis, object store; **A** data plane and control;
-**I** ingestion), five in P3 (D; **A1/A2** rag-api and rag-admin; **F** fetch: worker
+**I** ingestion), five in P3 (D; **A1/A2** kalla-api and kalla-admin; **F** fetch: worker
 `preview,command,sync,fetch,eval`, clamd, small parser, renderer if needed; **P** processing: worker `parse,embed` with
 its own parser). A Postgres streaming standby is required before production beyond the pilot (register D1). Parser,
 renderer and clamd stay host-local to their worker; all hosts share the one Postgres, Redis and object store over a
@@ -120,7 +120,7 @@ retrieval searches only the collections that version links directly (simplificat
 sequenceDiagram
     autonumber
     participant U as Open WebUI
-    participant C as rag-api chat role
+    participant C as kalla-api chat role
     participant K as Knowledge core (Kalla.Answering)
     participant P as Postgres
     participant G as LLM gateway
@@ -162,7 +162,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    subgraph admin_side["Admin (rag-admin)"]
+    subgraph admin_side["Admin (kalla-admin)"]
         form["Source form + template parameters<br/>preflight, preview with site-profile before/after"]
         publish["Publish: re-process every document (P1),<br/>plan from changed parameters (P2)"]
         decide{"Owner: keep or roll back<br/>(previous chunk sets kept 14 days)"}
@@ -170,7 +170,7 @@ flowchart TD
         judge["Nightly answer judge (P2)<br/>Kalla.Answering + on-prem judge"]
     end
 
-    subgraph worker_side["Worker (rag-worker): one fixed pipeline per source type"]
+    subgraph worker_side["Worker (kalla-worker): one fixed pipeline per source type"]
         sched["Scheduler / EnsureCurrent"]
         sync["sync job: sitemap lastmod (incremental once a 500-URL sample<br/>shows it reliable; full traversals until then),<br/>change detection, deletion guard (complete at ≥ 99 % seeds),<br/>removal check, alert after 3 runs without a full traversal"]
         profile["Site profile per host<br/>P1: hand-checked Sitevision preset (manual JSON),<br/>P2: learned from 30–50 sample pages;<br/>versioned, rollback"]
@@ -186,7 +186,7 @@ flowchart TD
     jobs[("content.Jobs<br/>LISTEN/NOTIFY")]
     store[("Documents and chunk sets per source<br/>Chunks with scalar CollectionId")]
     report["Evaluation report<br/>on the publish screen"]
-    parserp["rag-parser<br/>/v1/inspect routes: pypdfium2 text layer,<br/>Docling layout, Tesseract OCR"]
+    parserp["kalla-parser<br/>/v1/inspect routes: pypdfium2 text layer,<br/>Docling layout, Tesseract OCR"]
     gw["LLM gateway"]
 
     form --> cfg
@@ -211,7 +211,7 @@ flowchart TD
 ## 4. Tool call from an agent assistant (P2)
 
 An assistant runs this loop when its published version links a skill with tools; the mode is derived from its skills,
-not chosen (simplification pass §15). The tool hub runs in-process in the chat role (`IToolHub`), and in `rag-admin`
+not chosen (simplification pass §15). The tool hub runs in-process in the chat role (`IToolHub`), and in `kalla-admin`
 for discovery, the test panel and the skill gate; never in the worker. Skills totalling ≤ about 4k tokens are included statically
 with their tools visible from step 1, and `search_knowledge` is prefetched with the user question.
 

@@ -17,7 +17,7 @@ namespace Kalla.AdminApi;
 
 /// <summary>
 /// The test panel (admin design §4.9): <c>Kalla.Answering</c>'s own <see cref="ChatService"/> and
-/// <see cref="KnowledgeService"/> run in <c>rag-admin</c> over a per-call view of the policy snapshot, so the panel never
+/// <see cref="KnowledgeService"/> run in <c>kalla-admin</c> over a per-call view of the policy snapshot, so the panel never
 /// answers with different code than chat. The view: the assistant's draft (or published version) as its published
 /// version, its linked collections live even when not yet published, the principal <c>admin-console</c> with the admin's
 /// <c>oid</c>, and a policy that allows the assistant (the admin's department scope was checked; audiences are ignored).
@@ -172,8 +172,8 @@ public sealed partial class AdminTestPanel(
     }
 
     /// <summary>
-    /// The registry's <c>admin-console</c> row (identity §4.1): the <c>internal</c> client of that name that rag-migrate keeps as
-    /// managed by the deployment (#712; one per kind and name, its name not editable); null before rag-migrate has run.
+    /// The registry's <c>admin-console</c> row (identity §4.1): the <c>internal</c> client of that name that kalla-migrate keeps as
+    /// managed by the deployment (#712; one per kind and name, its name not editable); null before kalla-migrate has run.
     /// </summary>
     private static ClientEntry? AdminConsoleRow(PolicySnapshot snapshot) =>
         snapshot.Clients.Values.SingleOrDefault(c => c.Kind == Domain.Entities.ClientKinds.Internal && c.Name == ClientName && c.IsManagedByDeployment);

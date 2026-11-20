@@ -52,7 +52,7 @@ public sealed record SetupTestStart(Guid TestId, string AuthorizeUrl, DateTimeOf
 
 /// <summary>
 /// The test sign-in (identity design §19, "How the test sign-in runs"): a hand-written authorization-code sign-in with candidate
-/// values and rag-admin's own redirect URI. <c>state</c> is <c>rag-setup-test.</c> and a 256-bit random marker (the handler's own
+/// values and kalla-admin's own redirect URI. <c>state</c> is <c>rag-setup-test.</c> and a 256-bit random marker (the handler's own
 /// state is base64url and never holds a dot); the test row, single use and 10 minutes, keeps the PKCE verifier, nonce and candidate
 /// values protected, so the callback may land on another replica. The callback exchanges the code as the handler does (secret in
 /// the form, PKCE S256), validates the id token with <c>Microsoft.IdentityModel</c> against the candidate's metadata (issuer,
@@ -67,7 +67,7 @@ public sealed partial class SetupTestSignIn(RagDbContext db, IConfiguration conf
     public const string StatePrefix = "rag-setup-test.";
 
     /// <summary>The test cookie, set by <c>POST test</c> on the callback path and required at the callback.</summary>
-    public const string TestCookieName = "__Secure-ume-rag-setup-test";
+    public const string TestCookieName = "__Secure-kalla-setup-test";
 
     private const int UnknownTestEvent = 6011;
 
@@ -292,7 +292,7 @@ public sealed partial class SetupTestSignIn(RagDbContext db, IConfiguration conf
     }
 
     /// <summary>
-    /// <see cref="Fingerprint(string, OidcWizardValues)"/> for rag-admin with what the test's result rests on besides the values: the
+    /// <see cref="Fingerprint(string, OidcWizardValues)"/> for kalla-admin with what the test's result rests on besides the values: the
     /// effective claim names, tenant and guest rule, and the deployment's role groups (<paramref name="mapping"/>). A passed test
     /// keeps the one of its callback, and <c>complete</c> compares it with the mapping then in force, so a deployment whose claim
     /// names or role groups changed in between (a rolling change) asks for a new test.

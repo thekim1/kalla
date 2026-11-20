@@ -1,6 +1,6 @@
-# ume-rag/clamav: the official ClamAV 1.4 LTS image plus our clamd.conf and freshclam.conf, nothing else
+# kalla/clamav: the official ClamAV 1.4 LTS image plus our clamd.conf and freshclam.conf, nothing else
 # (plans/platform/repo-and-deployment.md §5.5). The AppHost builds it from this directory; by hand:
-#   docker build -t ume-rag/clamav:dev images/clamav
+#   docker build -t kalla/clamav:dev images/clamav
 # Mount a volume on /var/lib/clamav: the first start downloads the signatures from database.clamav.net (no mirror),
 # later starts reuse them, and freshclam updates them FRESHCLAM_CHECKS times a day. clamd answers on TCP 3310.
 # Runs hardened (read-only root file system, tmpfs /tmp, no capabilities): it writes only to /tmp and the volume.
@@ -32,7 +32,7 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=10m --retries=3 \
 # invalidate the cache of the layers above. Only the labels read these values.
 ARG VERSION=dev
 ARG REVISION=unknown
-LABEL org.opencontainers.image.source="https://github.com/thekim1/ume-rag-platform" \
+LABEL org.opencontainers.image.source="https://github.com/thekim1/kalla" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}" \
-      org.opencontainers.image.title="ume-rag/clamav"
+      org.opencontainers.image.title="kalla/clamav"

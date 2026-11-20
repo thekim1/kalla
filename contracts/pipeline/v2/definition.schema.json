@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ume-rag.local/contracts/pipeline/v2/definition.schema.json",
+  "$id": "https://kalla.local/contracts/pipeline/v2/definition.schema.json",
   "title": "Pipeline definition",
   "type": "object",
   "properties": {

@@ -34,7 +34,7 @@ public sealed class RagDatabaseFixture : RagDatabase, IAsyncLifetime
         }
 
         var waited = System.Diagnostics.Stopwatch.StartNew();
-        while (await Sql.ScalarAsync<long>(Connection(null), "SELECT count(*) FROM pg_stat_activity WHERE usename = 'ume_rag_worker'") > 0)
+        while (await Sql.ScalarAsync<long>(Connection(null), "SELECT count(*) FROM pg_stat_activity WHERE usename = 'kalla_worker'") > 0)
         {
             waited.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(10), "worker-role connections from an earlier test are still open");
             await Task.Delay(20, TestContext.Current.CancellationToken);

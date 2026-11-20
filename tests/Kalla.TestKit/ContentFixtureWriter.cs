@@ -17,8 +17,8 @@ namespace Kalla.TestKit;
 /// text (<see cref="SwedishDecompounder"/>, data-model §3.1). Content references config by id only, so collections and
 /// sources need not exist in <c>config</c>.
 /// </summary>
-/// <param name="workerConnectionString">ragdb as <c>ume_rag_worker</c> (the content writer).</param>
-/// <param name="adminConnectionString">ragdb as <c>ume_rag_admin</c> (embedding profiles live in <c>config</c>).</param>
+/// <param name="workerConnectionString">ragdb as <c>kalla_worker</c> (the content writer).</param>
+/// <param name="adminConnectionString">ragdb as <c>kalla_admin</c> (embedding profiles live in <c>config</c>).</param>
 /// <param name="embed">Default embedding of a chunk without one (for example the FakeGateway's feature hashing).</param>
 public sealed class ContentFixtureWriter(string workerConnectionString, string adminConnectionString, Func<string, int, float[]>? embed = null)
     : IAsyncDisposable
@@ -135,7 +135,7 @@ public sealed class ContentFixtureWriter(string workerConnectionString, string a
     /// Writes <paramref name="collectionId"/>'s <c>content."KeywordStatistics"</c> rows as the worker does (A-29,
     /// <c>Kalla.Worker.Engine.KeywordStatistics</c>): per profile with at least 100 live child chunks, the lexemes of
     /// <c>ts_stat</c> in at least 10 % of them, with that count; the collection's other rows go. As the worker role, in one
-    /// transaction. Tests of rag-api's stop list call it where the worker would have run.
+    /// transaction. Tests of kalla-api's stop list call it where the worker would have run.
     /// </summary>
     public async Task RefreshKeywordStatisticsAsync(Guid collectionId, CancellationToken cancellationToken = default)
     {

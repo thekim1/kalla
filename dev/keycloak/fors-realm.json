@@ -1,5 +1,5 @@
 {
-  "realm": "ume",
+  "realm": "fors",
   "enabled": true,
   "displayName": "Umeå kommun RAG (utveckling)",
   "sslRequired": "external",
@@ -706,11 +706,11 @@
       },
       "protocolMappers": [
         {
-          "name": "ume-rag-api-audience",
+          "name": "kalla-api-audience",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-audience-mapper",
           "config": {
-            "included.custom.audience": "ume-rag-api",
+            "included.custom.audience": "kalla-api",
             "access.token.claim": "true",
             "id.token.claim": "false"
           }
@@ -727,11 +727,11 @@
       },
       "protocolMappers": [
         {
-          "name": "ume-rag-api-audience",
+          "name": "kalla-api-audience",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-audience-mapper",
           "config": {
-            "included.custom.audience": "ume-rag-api",
+            "included.custom.audience": "kalla-api",
             "access.token.claim": "true",
             "id.token.claim": "false"
           }
@@ -748,11 +748,11 @@
       },
       "protocolMappers": [
         {
-          "name": "ume-rag-api-audience",
+          "name": "kalla-api-audience",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-audience-mapper",
           "config": {
-            "included.custom.audience": "ume-rag-api",
+            "included.custom.audience": "kalla-api",
             "access.token.claim": "true",
             "id.token.claim": "false"
           }
@@ -762,12 +762,12 @@
   ],
   "clients": [
     {
-      "clientId": "ume-rag-admin",
+      "clientId": "kalla-admin",
       "name": "Ume.Rag admin BFF",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
-      "secret": "${UME_RAG_OIDC_CLIENT_SECRET}",
+      "secret": "${KALLA_OIDC_CLIENT_SECRET}",
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
@@ -840,12 +840,12 @@
       ]
     },
     {
-      "clientId": "ume-rag-api-dev",
+      "clientId": "kalla-api-dev",
       "name": "Machine client example (client credentials)",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
-      "secret": "${UME_RAG_API_CLIENT_SECRET}",
+      "secret": "${KALLA_API_CLIENT_SECRET}",
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": true,
@@ -875,11 +875,11 @@
           }
         },
         {
-          "name": "ume-rag-api-audience",
+          "name": "kalla-api-audience",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-audience-mapper",
           "config": {
-            "included.custom.audience": "ume-rag-api",
+            "included.custom.audience": "kalla-api",
             "access.token.claim": "true",
             "id.token.claim": "false"
           }
@@ -887,7 +887,7 @@
       ]
     },
     {
-      "clientId": "ume-rag-chat-dev",
+      "clientId": "kalla-chat-dev",
       "name": "Delegated chat and MCP test client",
       "enabled": true,
       "protocol": "openid-connect",
@@ -921,7 +921,7 @@
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
-      "secret": "${UME_RAG_OWUI_CLIENT_SECRET}",
+      "secret": "${KALLA_OWUI_CLIENT_SECRET}",
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "redirectUris": [
@@ -969,7 +969,7 @@
       "credentials": [
         {
           "type": "password",
-          "value": "${UME_RAG_DEV_USER_PASSWORD}",
+          "value": "${KALLA_DEV_USER_PASSWORD}",
           "temporary": false
         }
       ]
@@ -995,7 +995,7 @@
       "credentials": [
         {
           "type": "password",
-          "value": "${UME_RAG_DEV_USER_PASSWORD}",
+          "value": "${KALLA_DEV_USER_PASSWORD}",
           "temporary": false
         }
       ]
@@ -1021,7 +1021,7 @@
       "credentials": [
         {
           "type": "password",
-          "value": "${UME_RAG_DEV_USER_PASSWORD}",
+          "value": "${KALLA_DEV_USER_PASSWORD}",
           "temporary": false
         }
       ]
@@ -1047,7 +1047,7 @@
       "credentials": [
         {
           "type": "password",
-          "value": "${UME_RAG_DEV_USER_PASSWORD}",
+          "value": "${KALLA_DEV_USER_PASSWORD}",
           "temporary": false
         }
       ]
@@ -1073,7 +1073,7 @@
       "credentials": [
         {
           "type": "password",
-          "value": "${UME_RAG_DEV_USER_PASSWORD}",
+          "value": "${KALLA_DEV_USER_PASSWORD}",
           "temporary": false
         }
       ]
@@ -1099,7 +1099,7 @@
       "credentials": [
         {
           "type": "password",
-          "value": "${UME_RAG_DEV_USER_PASSWORD}",
+          "value": "${KALLA_DEV_USER_PASSWORD}",
           "temporary": false
         }
       ]
@@ -1121,7 +1121,7 @@
       "credentials": [
         {
           "type": "password",
-          "value": "${UME_RAG_DEV_USER_PASSWORD}",
+          "value": "${KALLA_DEV_USER_PASSWORD}",
           "temporary": false
         }
       ]
@@ -1144,7 +1144,7 @@
       "credentials": [
         {
           "type": "password",
-          "value": "${UME_RAG_DEV_USER_PASSWORD}",
+          "value": "${KALLA_DEV_USER_PASSWORD}",
           "temporary": false
         }
       ]
@@ -1162,15 +1162,15 @@
       "credentials": [
         {
           "type": "password",
-          "value": "${UME_RAG_DEV_USER_PASSWORD}",
+          "value": "${KALLA_DEV_USER_PASSWORD}",
           "temporary": false
         }
       ]
     },
     {
-      "username": "service-account-ume-rag-api-dev",
+      "username": "service-account-kalla-api-dev",
       "enabled": true,
-      "serviceAccountClientId": "ume-rag-api-dev",
+      "serviceAccountClientId": "kalla-api-dev",
       "realmRoles": [
         "Knowledge.Read.All",
         "Chat.Invoke.All"

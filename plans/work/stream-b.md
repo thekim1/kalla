@@ -173,7 +173,7 @@ tables in one migration of its own (no backward compatibility before production)
 
 ### [ ] B-57 Test questions per assistant
 - **Do:** admin §7.4: `config."AssistantTestQuestions"` (data-model), `GET/POST/PUT/DELETE
-  /api/assistants/{id}/test-questions[/{qid}]` with V33, `AssistantTestRunner` in rag-admin (each question through
+  /api/assistants/{id}/test-questions[/{qid}]` with V33, `AssistantTestRunner` in kalla-admin (each question through
   `Kalla.Answering` as the test panel runs it, the expected document, phrase and behaviour checks, the answer
   judge `Settings.EvaluationJudgeModel` at the assistant's level, `x-fors-step: assistant-test`), the
   `EvaluationRuns`/`EvaluationResults` rows of kind `assistant-tests` and `AssistantVersions.TestRunId`, the run after
@@ -190,7 +190,7 @@ tables in one migration of its own (no backward compatibility before production)
   processing §14.8 (the judge prompt family).
 
 ### [ ] B-58 The nightly answer run
-- **Do:** processing §14.8 *answers*: `AnswerEvaluationService` in rag-admin, nightly per published assistant: the
+- **Do:** processing §14.8 *answers*: `AnswerEvaluationService` in kalla-admin, nightly per published assistant: the
   evaluation sets of its collections answered through `Kalla.Answering` with the published version's settings, the
   judge (`Settings.EvaluationJudgeModel` at the assistant's ceiling, `x-fors-step: eval-answer`) rating faithfulness
   and citation precision; run kind `answers` with results per question; the assistant's Statistics tab shows the
@@ -224,10 +224,10 @@ tables in one migration of its own (no backward compatibility before production)
   `AssistantId` or `CollectionId`, `GatewayKeyId`, `GatewayRequestId`) while `Gateway:RequireDelegationEcho` (default
   `true`) is on; the refusals of gateway-changes §5.7 on an acted call (`403 delegation_not_allowed`, `403
   key_disabled`, `403 key_revoked`/`key_expired`, `402 budget_exceeded` with the gateway's message) surface as one typed
-  refusal the callers map (B-44, A-34), and `400 invalid_request` is logged at Error and never retried. rag-api: every
+  refusal the callers map (B-44, A-34), and `400 invalid_request` is logged at Error and never retried. kalla-api: every
   call of a turn as the assistant's `GatewayKeyId` (answer, condense, long-question condense and follow-ups in
   `GatewayChatClient`, the query embedding in `GatewayQueryEmbedder`, rerank in `GatewayReranker`, `ChatStreaming`),
-  a Knowledge API caller without an assistant as the first searched collection's key (knowledge §5.2); rag-admin: the
+  a Knowledge API caller without an assistant as the first searched collection's key (knowledge §5.2); kalla-admin: the
   test panel as the assistant's key, the retrieval test as the collection's (cost-attribution §4.1). The FakeGateway's
   phase 2 of repo-and-deployment §4.3: features `act-as-key` and `run-metadata`; the header resolved as the gateway does
   (`400` malformed or repeated, `403 delegation_not_allowed` for an id not assigned to the integration or sharing no
@@ -249,11 +249,11 @@ tables in one migration of its own (no backward compatibility before production)
   disabled key (`403 key_disabled`), an expired one (`403 key_expired`) and a spent budget (`402`) each surface as the
   typed refusal, not retried; the handler's call-site tests cover the header at every call site.
 - **Live check:** on the interim gateway on v0.10.1 (not deployed yet): one chat turn of an assistant with an assigned
-  key shows under that key in the gateway's usage report, with rag-api's credential key as the via key and the turn's
+  key shows under that key in the gateway's usage report, with kalla-api's credential key as the via key and the turn's
   run id and steps.
 - **Code merged** (#616, #617; review follow-ups #629, #631): only the live check is left.
 - **Waits on:** B-35 (the contract pinned at v0.10.0, the FakeGateway's assigned keys), B-36 (`GatewayKeyId` on
-  assistants and collections and in rag-api's snapshot). The stream cost (`x-fors-stream-cost`, the comment) and the
+  assistants and collections and in kalla-api's snapshot). The stream cost (`x-fors-stream-cost`, the comment) and the
   usage records are B-38's: not repeated here.
 - **Read:** gateway-changes §5.2, §5.3, §5.4, §5.7, §7.1; identity §4.7, §10; chat §8.1, §8.2; knowledge §5.2;
   cost-attribution §4.1; repo-and-deployment §4.3.
@@ -286,7 +286,7 @@ tables in one migration of its own (no backward compatibility before production)
   `assistant_unavailable` (the key) or 402 `budget_exceeded` with the gateway's message (a budget) before the first
   byte; the turn's outcome is `unavailable`, counted in the daily totals; a refusal after the first byte is §9.6's
   error chunk; Knowledge API callers get §5.5's embedding failure (knowledge §5.2); the test panel shows the same
-  reason. rag-admin: the `[Unavailable]` badge with its reason on the assistant's and knowledge base's pages, derived
+  reason. kalla-admin: the `[Unavailable]` badge with its reason on the assistant's and knowledge base's pages, derived
   from the mirror (admin §5.5.4, §5.5.2), and from B-45's budgets once there; the attention-list source of admin
   §5.5.1 (the list itself comes with P2's `GET /api/overview`; until then the badge is the signal).
 - **Paths:** `src/Kalla.Answering/**`, `src/Kalla.Api/**`, `src/Kalla.Retrieval/**`, `src/Kalla.AdminApi/**`,
@@ -306,8 +306,8 @@ tables in one migration of its own (no backward compatibility before production)
   §5.7; cost-attribution §4.2.
 
 ### [ ] B-45 Gateway phase 3: the Integration API read-back, cost and budget per key (#580, cost-attribution B7, API part)
-- **Do:** `Gateway:IntegrationApiUrl` in rag-admin (unset: no read-back, the routes answer `null` without a call); a
-  client for `/integration/v1/usage` and `/budgets` with rag-admin's credential key (`usage.read`), parameters and
+- **Do:** `Gateway:IntegrationApiUrl` in kalla-admin (unset: no read-back, the routes answer `null` without a call); a
+  client for `/integration/v1/usage` and `/budgets` with kalla-admin's credential key (`usage.read`), parameters and
   fields as gateway-changes §5.6; `GET /api/gateway/keys/{id}/budget` (admin §4.5) and
   `GET /api/gateway/keys/{id}/usage` (admin §8.6), cached 5 minutes per key and query; `401`, `403` (scope missing)
   and `429` shown on the *Gateway* page as the reason; the budgets' `exhausted` feeds B-44's badge. The FakeGateway's
@@ -320,10 +320,10 @@ tables in one migration of its own (no backward compatibility before production)
   `tests/**` (not `tests/Kalla.ContractTests/**`, `tests/Kalla.Worker.Tests/**`).
 - **Done when:** against the FakeGateway, after chat turns on two keys: `GET /api/gateway/keys/{id}/usage` returns per
   step that key's tokens and cost only, by day and by month; `/budget` returns an exhausted department budget with
-  `exhausted: true`; rag-api's credential key gets `403` from the FakeGateway's `/integration/v1`; with
+  `exhausted: true`; kalla-api's credential key gets `403` from the FakeGateway's `/integration/v1`; with
   `Gateway:IntegrationApiUrl` unset both routes answer `null` without a call; a second read within 5 minutes makes no
   call; the contract test fails on a renamed or missing field.
-- **Live check:** on the interim gateway on v0.10.1 with `usage.read` on rag-admin's key: an assistant key's cost for
+- **Live check:** on the interim gateway on v0.10.1 with `usage.read` on kalla-admin's key: an assistant key's cost for
   a day equals the gateway's usage report for that key.
 - **Code merged** (#637): only the live check is left.
 - **Waits on:** B-42 (the FakeGateway's record per request under the acting key), B-36 (keys on objects), B-35 (the

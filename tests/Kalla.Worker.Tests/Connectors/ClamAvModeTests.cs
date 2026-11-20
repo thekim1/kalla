@@ -47,15 +47,15 @@ public sealed class ClamAvModeTests
     [Fact]
     public void With_the_scan_on_a_host_gets_the_clamd_client_and_development_without_one_the_eicar_only_scanner()
     {
-        ScannerType(Builder(Environments.Production, ("ClamAv:Host", "rag-clamav")).AddRagConnectors()).ShouldBe(typeof(ClamAvScanner));
+        ScannerType(Builder(Environments.Production, ("ClamAv:Host", "kalla-clamav")).AddRagConnectors()).ShouldBe(typeof(ClamAvScanner));
         ScannerType(Builder(Environments.Development).AddRagConnectors()).ShouldBe(typeof(EicarOnlyScanner));
-        ScannerType(Builder(Environments.Development, ("ClamAv:Mode", "on"), ("ClamAv:Host", "rag-clamav")).AddRagConnectors()).ShouldBe(typeof(ClamAvScanner));
+        ScannerType(Builder(Environments.Development, ("ClamAv:Mode", "on"), ("ClamAv:Host", "kalla-clamav")).AddRagConnectors()).ShouldBe(typeof(ClamAvScanner));
     }
 
     [Fact]
     public async Task With_the_scan_off_any_environment_starts_without_clamd_with_a_healthy_check_and_logs_5106_at_start()
     {
-        var builder = Builder(Environments.Production, ("ClamAv:Mode", "off"), ("ClamAv:Host", "rag-clamav"));
+        var builder = Builder(Environments.Production, ("ClamAv:Mode", "off"), ("ClamAv:Host", "kalla-clamav"));
         var logs = new CapturingLoggerProvider();
         builder.Logging.AddProvider(logs);
         builder.AddRagConnectors();

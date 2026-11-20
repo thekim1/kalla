@@ -25,7 +25,7 @@ public sealed class ActingAsKeyEngineTests(RagDatabaseFixture database, FakeGate
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-acting-blobs-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-acting-blobs-");
 
     public async ValueTask InitializeAsync() => await database.ResetAsync();
 

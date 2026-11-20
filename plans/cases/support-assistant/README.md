@@ -35,7 +35,7 @@ is the other team's; tickets come in by chat only (staff paste the text); ticket
 ## Where it stands (2026-11-08)
 
 **No platform code is missing for the pilot.** Every gap chosen before the pilot is built and released in `v0.2.0`
-(https://github.com/thekim1/ume-rag-platform/releases/tag/v0.2.0): related documents and the outcome (#433), follow-up
+(https://github.com/thekim1/kalla/releases/tag/v0.2.0): related documents and the outcome (#433), follow-up
 suggestions (#434), long tickets (#431), the key's own rate limit (#430) and IP allow-list (#432). Since the first
 draft the platform also gained what this case can use: JavaScript rendering for intranet pages built in the browser
 (connectors §8), politeness profiles per host (#461), topics on uploads (#481) and restoring a deleted file (#489).

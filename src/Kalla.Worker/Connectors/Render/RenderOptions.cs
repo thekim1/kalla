@@ -12,7 +12,7 @@ public sealed partial class RenderOptions
 {
     public const string SectionName = "Render";
 
-    /// <summary>The <c>rag-renderer</c> WebSocket URL with its secret path (<c>ws://rag-renderer:3000/&lt;path&gt;</c>); a secret.</summary>
+    /// <summary>The <c>kalla-renderer</c> WebSocket URL with its secret path (<c>ws://kalla-renderer:3000/&lt;path&gt;</c>); a secret.</summary>
     public string? Endpoint { get; set; }
 
     /// <summary>

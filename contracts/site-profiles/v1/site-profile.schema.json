@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ume-rag.local/contracts/site-profiles/v1/site-profile.schema.json",
+  "$id": "https://kalla.local/contracts/site-profiles/v1/site-profile.schema.json",
   "title": "Site profile",
   "type": "object",
   "properties": {

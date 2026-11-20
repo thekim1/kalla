@@ -118,7 +118,7 @@ export function apiAddress(apiBaseUrl: string): string {
 
 /** One chat call to try the connection with; `<...>` stands for a value the page cannot show. */
 export function curlExample(apiBaseUrl: string | null, secret: string | null, model: string | null): string {
-  const address = apiBaseUrl ? apiAddress(apiBaseUrl) : 'https://<rag-api address>/v1'
+  const address = apiBaseUrl ? apiAddress(apiBaseUrl) : 'https://<kalla-api address>/v1'
   const body = JSON.stringify({ model: model ?? '<model name>', messages: [{ role: 'user', content: 'Hello' }] })
   return [
     `curl ${address}/chat/completions \\`,

@@ -19,7 +19,7 @@ public sealed class DriftSweepTests(RagDatabaseFixture database, FakeGatewayFact
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-drift-blobs-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-drift-blobs-");
 
     public async ValueTask InitializeAsync() => await database.ResetAsync();
 

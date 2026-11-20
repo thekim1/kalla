@@ -9,7 +9,7 @@ using Kalla.ServiceDefaults;
 // Connection-string name the services look up.
 const string DatabaseResourceName = "ragdb";
 
-// The stock pgvector image ume-rag/postgres is built from (§5.2; pgBackRest is not needed in dev). Same pin as
+// The stock pgvector image kalla/postgres is built from (§5.2; pgBackRest is not needed in dev). Same pin as
 // Kalla.TestKit.TestPostgres.Image; update both together.
 const string PostgresImage = "pgvector/pgvector";
 const string PostgresTag = "0.8.7-pg17-trixie";
@@ -61,15 +61,15 @@ var redis = builder.Configuration.GetValue<bool>("Redis:Enabled")
     : null;
 
 // Oidc:Authority (AppHost user secrets) points local runs at an existing identity provider instead of the bundled test
-// Keycloak, which is then not started. Its realm is dev/keycloak/ume-realm.json (identity design §11).
+// Keycloak, which is then not started. Its realm is dev/keycloak/fors-realm.json (identity design §11).
 var externalOidc = !string.IsNullOrWhiteSpace(builder.Configuration["Oidc:Authority"]);
 var keycloak = builder.ExecutionContext.IsRunMode && !externalOidc ? builder.AddKeycloak("keycloak", 7411)
     .WithImageTag(KeycloakTag).WithImageSHA256(KeycloakDigest)
     .WithRealmImport(Path.Combine("..", "..", "dev", "keycloak"))
-    .WithEnvironment("UME_RAG_OIDC_CLIENT_SECRET", oidcSecret)
-    .WithEnvironment("UME_RAG_DEV_USER_PASSWORD", devUserPassword)
-    .WithEnvironment("UME_RAG_API_CLIENT_SECRET", apiClientSecret)
-    .WithEnvironment("UME_RAG_OWUI_CLIENT_SECRET", openWebUiClientSecret)
+    .WithEnvironment("KALLA_OIDC_CLIENT_SECRET", oidcSecret)
+    .WithEnvironment("KALLA_DEV_USER_PASSWORD", devUserPassword)
+    .WithEnvironment("KALLA_API_CLIENT_SECRET", apiClientSecret)
+    .WithEnvironment("KALLA_OWUI_CLIENT_SECRET", openWebUiClientSecret)
     .WithHttpsDeveloperCertificate() : null;
 
 // FakeGateway:Enabled=false (AppHost user secrets) runs against a real local gateway instead (§4.4).
@@ -93,7 +93,7 @@ if (fakeGateway is not null)
             .WithEnvironment($"FakeGateway__CredentialKeys__{service}__MaxResidency", service == "worker" ? "Eu" : "External");
         if (service == "admin")
         {
-            // rag-admin's key reads the whole organisation in the context (identity design §2.1, gateway-changes §5.5).
+            // kalla-admin's key reads the whole organisation in the context (identity design §2.1, gateway-changes §5.5).
             fakeGateway.WithEnvironment("FakeGateway__CredentialKeys__admin__Scopes__0", "organisation.read");
             // ... and only it reads the Integration API (gateway phase 3, gateway-changes §5.6; B-45).
             fakeGateway.WithEnvironment("FakeGateway__CredentialKeys__admin__Scopes__1", "usage.read");
@@ -172,7 +172,7 @@ if (clamAvMode is not ("on" or "off"))
 
 var clamAv = clamAvMode == "on"
     ? builder.AddDockerfile("clamav", Path.Combine("..", "..", "images", "clamav"))
-        .WithVolume("ume-rag-clamav-db", "/var/lib/clamav")
+        .WithVolume("kalla-clamav-db", "/var/lib/clamav")
         .WithEndpoint(port: 7414, targetPort: 3310, name: "clamd", scheme: "tcp")
     : null;
 
@@ -187,12 +187,12 @@ ReferenceExpression? renderEndpoint = null;
 switch (renderMode)
 {
     case "container":
-        // The secret WebSocket path (UME_RAG_RENDER_WS_PATH: "/" and at least 16 of [A-Za-z0-9_-]).
+        // The secret WebSocket path (KALLA_RENDER_WS_PATH: "/" and at least 16 of [A-Za-z0-9_-]).
         var renderPath = Secret("render-ws-path", 32);
         var seccompProfile = Path.GetFullPath(Path.Combine(builder.AppHostDirectory, "..", "..", "images", "renderer", "seccomp.json"));
         var wsEndpoint = builder.AddDockerfile("renderer", Path.Combine("..", "..", "images", "renderer"))
             .WithEndpoint(port: 7417, targetPort: RendererPort, name: "ws", scheme: "tcp")
-            .WithEnvironment("UME_RAG_RENDER_WS_PATH", ReferenceExpression.Create($"/{renderPath}"))
+            .WithEnvironment("KALLA_RENDER_WS_PATH", ReferenceExpression.Create($"/{renderPath}"))
             // No --read-only here: DCP copies files into a container before it starts, which a read-only root refuses
             // ("container rootfs is marked read-only"). Compose keeps the read-only root (repo-and-deployment §5.4).
             .WithContainerRuntimeArgs(
@@ -237,7 +237,7 @@ var api = builder.AddProject<Projects.Kalla_Api>("api", o => o.LaunchProfileName
     .WithHttpHealthCheck(HealthEndpoints.ReadyPath, endpointName: "https")
     .WithExternalHttpEndpoints();
 // Citation download links are absolute (knowledge design §4.6): Open WebUI shows them on its own origin, where a relative
-// /v1/documents/... link would point at Open WebUI instead of rag-api.
+// /v1/documents/... link would point at Open WebUI instead of kalla-api.
 api.WithEnvironment("Knowledge__PublicBaseUrl", api.GetEndpoint("https"));
 
 // ConnectionStrings:ragdb-maintenance: the HNSW rebuild's own unpooled session (Decisions "M-2 open design calls"). Same
@@ -280,18 +280,18 @@ if (e2e)
 var adminApi = builder.AddProject<Projects.Kalla_AdminApi>("adminapi", o => o.LaunchProfileName = "https")
     .WithReference(database)
     .WithEnvironment("Security__KeyPepper", pepper)
-    .WithEnvironment("Oidc__ClientId", "ume-rag-admin")
+    .WithEnvironment("Oidc__ClientId", "kalla-admin")
     .WaitFor(database)
     .WaitForCompletion(migrations)
     .WithHttpHealthCheck(HealthEndpoints.ReadyPath, endpointName: "https");
 
 // The blob master key (data-model §7): KeyProvider:Directory from the AppHost's configuration, else a development key the
-// AppHost creates once under ~/.ume-rag/keys (32 random bytes, base64, as init-deployment.sh writes it). The worker writes
-// internal blobs with it, the admin writes uploads, and rag-api reads them for citation downloads (#158).
+// AppHost creates once under ~/.kalla/keys (32 random bytes, base64, as init-deployment.sh writes it). The worker writes
+// internal blobs with it, the admin writes uploads, and kalla-api reads them for citation downloads (#158).
 var keyDirectory = builder.Configuration["KeyProvider:Directory"];
 if (string.IsNullOrWhiteSpace(keyDirectory) && builder.ExecutionContext.IsRunMode)
 {
-    keyDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ume-rag", "keys");
+    keyDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".kalla", "keys");
     var keyFile = Path.Combine(keyDirectory, "rag-blob-internal");
     if (!File.Exists(keyFile))
     {
@@ -312,12 +312,12 @@ if (!string.IsNullOrWhiteSpace(keyDirectory))
     }
 }
 
-// The blob root (#168): BlobStore:Root from the AppHost's configuration, else ~/.ume-rag/blobs/rag in run mode, next to
+// The blob root (#168): BlobStore:Root from the AppHost's configuration, else ~/.kalla/blobs/rag in run mode, next to
 // the dev keys. The services' default /data/blobs/rag is the container path and is not writable on a developer machine.
 var blobRoot = builder.Configuration["BlobStore:Root"];
 if (string.IsNullOrWhiteSpace(blobRoot) && builder.ExecutionContext.IsRunMode)
 {
-    blobRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ume-rag", "blobs", "rag");
+    blobRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".kalla", "blobs", "rag");
     // Owner-only, like the keys directory: public blobs are stored as plaintext.
     if (OperatingSystem.IsWindows())
     {
@@ -415,7 +415,7 @@ else
     }
 }
 
-// Setup:Try=true (AppHost user secrets) starts rag-admin without a sign-in authority and client secret and with a setup
+// Setup:Try=true (AppHost user secrets) starts kalla-admin without a sign-in authority and client secret and with a setup
 // secret, so the setup wizard opens (identity design §19); Setup:Reopen is passed on for a database whose setup is done.
 var setupTry = builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue<bool>("Setup:Try");
 
@@ -429,7 +429,7 @@ if (keycloak is not null)
 {
     if (!setupTry)
     {
-        adminApi.WithEnvironment("Oidc__Authority", ReferenceExpression.Create($"{keycloak.GetEndpoint("http")}/realms/ume"))
+        adminApi.WithEnvironment("Oidc__Authority", ReferenceExpression.Create($"{keycloak.GetEndpoint("http")}/realms/fors"))
             .WithEnvironment("Oidc__ClientSecret", oidcSecret);
     }
 
@@ -484,13 +484,13 @@ if (File.Exists(Path.Combine(builder.AppHostDirectory, "..", "admin-ui", "packag
     adminApi.PublishWithContainerFiles(adminUi, "wwwroot");
 }
 
-// Open WebUI against rag-api (P1a item 15; chat design §4.3), OpenWebUi:Enabled (default true) in run mode. It connects with
+// Open WebUI against kalla-api (P1a item 15; chat design §4.3), OpenWebUi:Enabled (default true) in run mode. It connects with
 // the development deployment's own Open WebUI client (identity §5.2, M-17 C4): with Seed:Enabled the seeded "Open WebUI
 // (dev)" (DevSeeder.DevClientId, key kalla-sk- + dev-key); without it (e.g. the pilot stack run with Seed:Enabled=false,
 // #236) the key from the secret parameter openwebui-api-key (user secrets Parameters:openwebui-api-key, a whole
-// kalla-sk- key), which rag-migrate registers as that client (OpenWebUi__ApiKey). rag-api trusts the managed client's users.
-// It forwards each user as an HS256 JWT that rag-api checks (identity §5.2). Local accounts sign in (the first is Open WebUI's admin); the pilot signs in
-// over OIDC through rag-openwebui in deploy/compose.rag.yaml (item 18). Same pin as that file; update both together.
+// kalla-sk- key), which kalla-migrate registers as that client (OpenWebUi__ApiKey). kalla-api trusts the managed client's users.
+// It forwards each user as an HS256 JWT that kalla-api checks (identity §5.2). Local accounts sign in (the first is Open WebUI's admin); the pilot signs in
+// over OIDC through kalla-openwebui in deploy/compose.rag.yaml (item 18). Same pin as that file; update both together.
 const string OpenWebUiImage = "ghcr.io/open-webui/open-webui";
 const string OpenWebUiTag = "v0.12.5";
 const string OpenWebUiDigest = "03443b8de6b617da9d900edd09b4bf1cb0ddbfdcba6afb42c548336a0b821ded";
@@ -501,8 +501,8 @@ if (builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue("OpenWe
 {
     var openWebUiJwtSecret = Secret("openwebui-jwt-secret", 48);
     var openWebUiSecretKey = Secret("openwebui-secret-key", 48);
-    // Seeded: the dev key (rag-migrate's Seed:DevKey). Otherwise the key is never generated, only read from the user secrets,
-    // and rag-migrate registers it as the deployment's client.
+    // Seeded: the dev key (kalla-migrate's Seed:DevKey). Otherwise the key is never generated, only read from the user secrets,
+    // and kalla-migrate registers it as the deployment's client.
     ReferenceExpression openWebUiApiKey;
     if (seeded)
     {
@@ -516,24 +516,24 @@ if (builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue("OpenWe
     }
 
     api.WithEnvironment("OpenWebUi__JwtSecret", openWebUiJwtSecret);
-    // As the openwebui profile in deploy/: rag-admin knows the chat runs, so the admin UI names it (/bff/user openWebUi.enabled).
+    // As the openwebui profile in deploy/: kalla-admin knows the chat runs, so the admin UI names it (/bff/user openWebUi.enabled).
     adminApi.WithEnvironment("OpenWebUi__Enabled", "true");
     var openWebUi = builder.AddContainer("open-webui", OpenWebUiImage, OpenWebUiTag).WithImageSHA256(OpenWebUiDigest)
         .WithHttpEndpoint(port: 7410, targetPort: 8080, name: "http")
-        .WithVolume("ume-rag-openwebui-data", "/app/backend/data")
+        .WithVolume("kalla-openwebui-data", "/app/backend/data")
         .WithEnvironment("WEBUI_SECRET_KEY", openWebUiSecretKey)
         .WithEnvironment("ENABLE_PERSISTENT_CONFIG", "false")
-        // No model downloads and no retrieval of Open WebUI's own: rag-api does the RAG (as rag-openwebui in deploy/compose.rag.yaml).
+        // No model downloads and no retrieval of Open WebUI's own: kalla-api does the RAG (as kalla-openwebui in deploy/compose.rag.yaml).
         .WithEnvironment("OFFLINE_MODE", "true")
         .WithEnvironment("BYPASS_EMBEDDING_AND_RETRIEVAL", "true")
         .WithEnvironment("ENABLE_OLLAMA_API", "false")
         .WithEnvironment("ENABLE_OPENAI_API", "true")
-        // rag-api's HTTP endpoint: the container does not trust the AppHost's development certificate.
+        // kalla-api's HTTP endpoint: the container does not trust the AppHost's development certificate.
         .WithEnvironment("OPENAI_API_BASE_URLS", ReferenceExpression.Create($"{api.GetEndpoint("http")}/v1"))
         .WithEnvironment("OPENAI_API_KEYS", openWebUiApiKey)
         .WithEnvironment("OPENAI_API_CONFIGS", """{"0":{"headers":{"X-Rag-Owui-Message-Id":"{{MESSAGE_ID}}","X-Rag-Owui-User-Message-Id":"{{USER_MESSAGE_ID}}"}}}""")
         // Open WebUI 0.12.3 adds its builtin tools to every browser chat unless a model's capabilities.builtin_tools is false
-        // (utils/middleware.py:2076-2082), and rag-api refuses tools (chat design §3.2): the default metadata is merged into every
+        // (utils/middleware.py:2076-2082), and kalla-api refuses tools (chat design §3.2): the default metadata is merged into every
         // model's capabilities, per-model overrides win (utils/models.py:367-381), and it holds with ENABLE_PERSISTENT_CONFIG=false (#276).
         .WithEnvironment("DEFAULT_MODEL_METADATA", """{"capabilities":{"builtin_tools":false}}""")
         .WithEnvironment("ENABLE_FORWARD_USER_INFO_HEADERS", "true")
@@ -556,7 +556,7 @@ if (builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue("OpenWe
         .WithEnvironment("USER_PERMISSIONS_CHAT_PARAMS", "false")
         .WithEnvironment("ENABLE_ADMIN_CHAT_ACCESS", "false")
         .WithEnvironment("ENABLE_ADMIN_EXPORT", "false")
-        // As rag-openwebui in deploy/compose.rag.yaml: API keys only for the feedback routes the importer uses (chat design §14.2).
+        // As kalla-openwebui in deploy/compose.rag.yaml: API keys only for the feedback routes the importer uses (chat design §14.2).
         .WithEnvironment("ENABLE_API_KEYS", "true")
         .WithEnvironment("ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS", "true")
         .WithEnvironment("API_KEYS_ALLOWED_ENDPOINTS", "/api/v1/evaluations/feedbacks/list,/api/v1/evaluations/feedback")

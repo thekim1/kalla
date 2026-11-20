@@ -17,7 +17,7 @@ namespace Kalla.Worker.Tests.Evaluation;
 /// The <c>evaluation-smoke</c> job of <c>verify.yml</c> (knowledge design §16.4, repo-and-deployment §8.2; P1 item 17):
 /// the 13 pages of <c>tests/evaluation/smoke</c> ingested through the worker as one committed upload batch of a public
 /// upload source (detect, the worker's Markdown parser, chunk, embed on the FakeGateway), then the 30 questions through
-/// rag-api in process reading its snapshot from the database: <c>POST /v1/retrieve</c> recall@10 ≥ 0.8 (recall@1, @3 and
+/// kalla-api in process reading its snapshot from the database: <c>POST /v1/retrieve</c> recall@10 ≥ 0.8 (recall@1, @3 and
 /// @5 reported) and every <c>/v1/chat/completions</c> answer of an assistant over the collection cites a source. The class
 /// carries <see cref="Category"/>, so the backend job leaves it to its own job.
 /// </summary>
@@ -28,7 +28,7 @@ public sealed class EvaluationSmokeTests(RagDatabaseFixture database, FakeGatewa
     /// <summary>The trait value <c>verify.yml</c> filters on.</summary>
     public const string Category = "EvaluationSmoke";
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-eval-smoke-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-eval-smoke-");
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

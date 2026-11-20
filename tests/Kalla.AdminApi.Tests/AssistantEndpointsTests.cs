@@ -27,7 +27,7 @@ namespace Kalla.AdminApi.Tests;
 [Collection(AdminDatabaseGroup6.Name)]
 public sealed class AssistantEndpointsTests(AdminDatabaseFixture database, AssistantEndpointsTests.Host host) : IClassFixture<AssistantEndpointsTests.Host>
 {
-    private const string AdminKey = "fake-eu-key-assistants-0123456789"; // rag-admin\'s credential key
+    private const string AdminKey = "fake-eu-key-assistants-0123456789"; // kalla-admin\'s credential key
     private const string Model = "fors/chat-eu";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -57,7 +57,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database, Assis
         web.UseSetting("FakeGateway:CredentialKeys:admin:Key", AdminKey);
     });
 
-    /// <summary>The class's admin host with rag-admin's credential key, on a FakeGateway of its own.</summary>
+    /// <summary>The class's admin host with kalla-admin's credential key, on a FakeGateway of its own.</summary>
     public sealed class Host(AdminDatabaseFixture database) : AdminHost(database)
     {
         private readonly WebApplicationFactory<FakeGatewayProgram> _gateway = Gateway();

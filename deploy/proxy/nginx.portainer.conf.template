@@ -1,6 +1,6 @@
 # The Portainer stack's TLS proxy (profile proxy; M-17 C8, Decisions "Deploy configuration" D9): nginx in front of the
-# gateway, its admin, rag-api, rag-admin and Open WebUI, with the operator's certificate. rag-bootstrap fills in the
-# @placeholders@ from the stack's host names and writes rag-config/proxy/nginx.conf; it drops the blocks marked
+# gateway, its admin, kalla-api, kalla-admin and Open WebUI, with the operator's certificate. kalla-bootstrap fills in the
+# @placeholders@ from the stack's host names and writes kalla-config/proxy/nginx.conf; it drops the blocks marked
 # #gwadmin, #ragadmin or #owui when that host has no name of its own (or the openwebui profile is off). Routes and body
 # sizes as the gateway's and Ume.Rag's nginx.conf.example; every upstream but Open WebUI (plain HTTP inside the stack)
 # is re-encrypted and verified against its internal CA.
@@ -21,7 +21,7 @@ http {
     scgi_temp_path /tmp/scgi_temp;
     server_tokens off;
 
-    # One certificate for every name (a SAN or wildcard certificate): UME_RAG_PROXY_CERTS_DIR/tls.crt and tls.key.
+    # One certificate for every name (a SAN or wildcard certificate): KALLA_PROXY_CERTS_DIR/tls.crt and tls.key.
     ssl_certificate /run/proxy-certs/tls.crt;
     ssl_certificate_key /run/proxy-certs/tls.key;
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -33,15 +33,15 @@ http {
     # Docker's embedded DNS, asked again every 10 s: a stack update recreates a service with a new address on its network
     # while this proxy keeps running, and a name resolved only at start would then answer 502 until a restart. With
     # "resolve" (nginx 1.27.3 and later) each upstream follows its service's current address, and a service that isn't up
-    # yet (rag-openwebui, which depends_on can't name across profiles) doesn't stop nginx from starting.
+    # yet (kalla-openwebui, which depends_on can't name across profiles) doesn't stop nginx from starting.
     resolver 127.0.0.11 valid=10s ipv6=off;
     resolver_timeout 5s;
 
     upstream ume_gateway { zone ume_gateway 64k; server gateway:8443 resolve; keepalive 32; }
     upstream ume_admin { zone ume_admin 64k; server adminapi:8443 resolve; }
-    upstream ume_rag_api { zone ume_rag_api 64k; server rag-api:8443 resolve; keepalive 32; }
-    upstream ume_rag_admin { zone ume_rag_admin 64k; server rag-admin:8443 resolve; }
-#owui    upstream ume_rag_openwebui { zone ume_rag_openwebui 64k; server rag-openwebui:8080 resolve; }
+    upstream kalla_api { zone kalla_api 64k; server kalla-api:8443 resolve; keepalive 32; }
+    upstream kalla_admin { zone kalla_admin 64k; server kalla-admin:8443 resolve; }
+#owui    upstream kalla_openwebui { zone kalla_openwebui 64k; server kalla-openwebui:8080 resolve; }
 
     # A name this proxy doesn't serve gets no answer.
     server {
@@ -94,20 +94,20 @@ http {
 #gwadmin        }
 #gwadmin    }
 
-    # rag-api: chat completions (streamed), knowledge, MCP, the OpenAI-compatible model list.
+    # kalla-api: chat completions (streamed), knowledge, MCP, the OpenAI-compatible model list.
 #ragapi    server {
 #ragapi        listen 8443 ssl;
 #ragapi        http2 on;
 #ragapi        server_name @API_HOST@;
-#ragapi        client_max_body_size 2m;           # questions and chat history (rag-api's chat route takes up to 2 MB)
-#ragapi        # rag-api's internal routes (Open WebUI's sign-in settings) are for the stack's own network only.
+#ragapi        client_max_body_size 2m;           # questions and chat history (kalla-api's chat route takes up to 2 MB)
+#ragapi        # kalla-api's internal routes (Open WebUI's sign-in settings) are for the stack's own network only.
 #ragapi        location /internal/ { return 404; }
 #ragapi        location / {
-#ragapi            proxy_pass https://ume_rag_api;
+#ragapi            proxy_pass https://kalla_api;
 #ragapi            proxy_http_version 1.1;
 #ragapi            proxy_set_header Connection '';
 #ragapi            proxy_set_header Host $host;
-#ragapi            # List this proxy under Ume.Rag's Settings > Network (trusted proxies), or rag-api ignores the header.
+#ragapi            # List this proxy under Ume.Rag's Settings > Network (trusted proxies), or kalla-api ignores the header.
 #ragapi            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 #ragapi            proxy_buffering off;           # stream answer tokens as they arrive (SSE)
 #ragapi            proxy_read_timeout 600s;
@@ -115,33 +115,33 @@ http {
 #ragapi            proxy_connect_timeout 5s;
 #ragapi            proxy_ssl_verify on;
 #ragapi            proxy_ssl_trusted_certificate /etc/nginx/ume/rag-ca.pem;
-#ragapi            proxy_ssl_name rag-api;
+#ragapi            proxy_ssl_name kalla-api;
 #ragapi            proxy_ssl_server_name on;
 #ragapi        }
 #ragapi    }
 
-    # rag-admin: the admin UI and its API (BFF).
+    # kalla-admin: the admin UI and its API (BFF).
 #ragadmin    server {
 #ragadmin        listen 8443 ssl;
 #ragadmin        http2 on;
 #ragadmin        server_name @RAG_ADMIN_HOST@;
 #ragadmin        client_max_body_size 1m;
 #ragadmin        location / {
-#ragadmin            proxy_pass https://ume_rag_admin;
+#ragadmin            proxy_pass https://kalla_admin;
 #ragadmin            proxy_http_version 1.1;
 #ragadmin            proxy_set_header Host $host;
 #ragadmin            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 #ragadmin            proxy_connect_timeout 5s;
 #ragadmin            proxy_ssl_verify on;
 #ragadmin            proxy_ssl_trusted_certificate /etc/nginx/ume/rag-ca.pem;
-#ragadmin            proxy_ssl_name rag-admin;
+#ragadmin            proxy_ssl_name kalla-admin;
 #ragadmin            proxy_ssl_server_name on;
 #ragadmin        }
 #ragadmin        # Uploads (admin design §2.2): one file per request, up to 60 MB, passed straight through.
 #ragadmin        location ~ ^/api/upload-batches/[0-9a-fA-F-]+/files/[0-9]+$ {
 #ragadmin            client_max_body_size 60m;
 #ragadmin            proxy_request_buffering off;
-#ragadmin            proxy_pass https://ume_rag_admin;
+#ragadmin            proxy_pass https://kalla_admin;
 #ragadmin            proxy_http_version 1.1;
 #ragadmin            proxy_set_header Host $host;
 #ragadmin            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -150,7 +150,7 @@ http {
 #ragadmin            proxy_connect_timeout 5s;
 #ragadmin            proxy_ssl_verify on;
 #ragadmin            proxy_ssl_trusted_certificate /etc/nginx/ume/rag-ca.pem;
-#ragadmin            proxy_ssl_name rag-admin;
+#ragadmin            proxy_ssl_name kalla-admin;
 #ragadmin            proxy_ssl_server_name on;
 #ragadmin        }
 #ragadmin    }
@@ -160,9 +160,9 @@ http {
 #owui        listen 8443 ssl;
 #owui        http2 on;
 #owui        server_name @OPENWEBUI_HOST@;
-#owui        client_max_body_size 2m;       # the whole conversation goes to rag-api (2 MB); file uploads are off
+#owui        client_max_body_size 2m;       # the whole conversation goes to kalla-api (2 MB); file uploads are off
 #owui        location / {
-#owui            proxy_pass http://ume_rag_openwebui;
+#owui            proxy_pass http://kalla_openwebui;
 #owui            proxy_http_version 1.1;
 #owui            proxy_set_header Upgrade $http_upgrade;
 #owui            proxy_set_header Connection $ume_connection;

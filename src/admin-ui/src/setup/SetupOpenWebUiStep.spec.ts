@@ -29,7 +29,7 @@ async function resume(state: SetupState): Promise<VueWrapper> {
   return wrapper
 }
 
-/** A session whose rag-admin test passed as a platform admin, with Open WebUI run by the deployment and `openWebUi` over that. */
+/** A session whose kalla-admin test passed as a platform admin, with Open WebUI run by the deployment and `openWebUi` over that. */
 function withChat(openWebUi: Partial<SetupOpenWebUiState> = {}, adminTest = true): SetupState {
   return setupState({ latestTest: adminTest ? setupTest() : null, openWebUi: openWebUiState({ enabled: true, ...openWebUi }) })
 }
@@ -70,7 +70,7 @@ describe('setup wizard: the Open WebUI step (admin design §5.11 step 4)', () =>
     wrapper.unmount()
   })
 
-  it('says when rag-admin does not know the chat\'s address, and shows the default provider address as following the sign-in provider', async () => {
+  it('says when kalla-admin does not know the chat\'s address, and shows the default provider address as following the sign-in provider', async () => {
     const wrapper = await resume(withChat({ redirectUri: null }))
     await step(wrapper, 'openWebUi')
     expect(wrapper.get('[data-test=openwebui-no-redirect]').text()).toBe(W.noRedirectUri)

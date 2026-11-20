@@ -110,7 +110,7 @@ if (chat)
     builder.Services.AddHttpClient(FeedbackImporter.HttpClientName);
     builder.Services.AddSingleton<FeedbackImporter>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<FeedbackImporter>());
-    // Open WebUI's sign-in settings for its start wrapper (identity design §19): the shared key ring, read-only (rag-admin makes the keys),
+    // Open WebUI's sign-in settings for its start wrapper (identity design §19): the shared key ring, read-only (kalla-admin makes the keys),
     // to unprotect the wizard's stored secret.
     builder.AddRagDataProtection(readOnly: true);
     builder.Services.AddSingleton<Kalla.Infrastructure.Security.SettingsSecretProtector>();

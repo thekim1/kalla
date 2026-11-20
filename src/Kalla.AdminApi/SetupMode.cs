@@ -190,7 +190,7 @@ public enum SetupEvaluationOutcome
     /// <summary>Setup would open, but there is no setup secret (outside Development): it stays closed.</summary>
     SecretMissing = 4,
 
-    /// <summary>There is no settings row (rag-migrate creates it): setup stays closed.</summary>
+    /// <summary>There is no settings row (kalla-migrate creates it): setup stays closed.</summary>
     RowMissing = 5,
 }
 
@@ -203,8 +203,8 @@ public sealed record SetupEvaluation(SetupEvaluationOutcome Outcome, string? Non
 
 /// <summary>
 /// Open or closed (identity design §19, "Setup state"): open while an opening (a nonce and its start) is younger than one hour.
-/// An opening starts only at rag-admin's start (<see cref="EvaluateAsync"/>): when setup has never been completed (the settings row,
-/// which rag-migrate seeds, has no <c>SetupCompletedAt</c>) and no opening runs, or when <c>Setup:Reopen</c> holds a value other
+/// An opening starts only at kalla-admin's start (<see cref="EvaluateAsync"/>): when setup has never been completed (the settings row,
+/// which kalla-migrate seeds, has no <c>SetupCompletedAt</c>) and no opening runs, or when <c>Setup:Reopen</c> holds a value other
 /// than the last consumed one, which the same transaction consumes. A deployment that declares the sign-in
 /// (<see cref="SignInSettings.DeclaresSignIn"/>) counts as completed. Nothing else opens setup: a missing row, a missing value or an
 /// unreadable secret leaves it closed, and setup never creates the row. Writes run under the config version lock, so replicas
@@ -454,7 +454,7 @@ public sealed class SetupCleanup
 }
 
 /// <summary>
-/// Evaluates setup mode at rag-admin's start (<see cref="SetupMode.EvaluateAsync"/>) and, while it is open, writes the setup code to
+/// Evaluates setup mode at kalla-admin's start (<see cref="SetupMode.EvaluateAsync"/>) and, while it is open, writes the setup code to
 /// standard output with the wizard's address and when the code expires (identity design §19): never through the logger or a security
 /// event. The first try runs within the start, briefly; while the database is away it tries again in the background. A
 /// never-completed deployment gets a new opening at its next start after the hour, not by itself: setup is open only while a person
@@ -554,8 +554,8 @@ public sealed partial class SetupStartup(IServiceScopeFactory scopes, SetupSecre
         var output = console.Out;
         lock (output)
         {
-            output.WriteLine($"rag-admin: setup mode is open until {endsAt}. Setup code: {SetupCode.Compute(key, evaluation.Nonce!)}");
-            output.WriteLine("rag-admin: enter it at /setup on rag-admin's address (the admin UI's host name, https://<admin host>/setup).");
+            output.WriteLine($"kalla-admin: setup mode is open until {endsAt}. Setup code: {SetupCode.Compute(key, evaluation.Nonce!)}");
+            output.WriteLine("kalla-admin: enter it at /setup on kalla-admin's address (the admin UI's host name, https://<admin host>/setup).");
             output.Flush();
         }
     }
@@ -566,15 +566,15 @@ public sealed partial class SetupStartup(IServiceScopeFactory scopes, SetupSecre
     [LoggerMessage(LogLevel.Information, "The deployment declares the sign-in (an authority and a client secret): setup counts as completed")]
     private static partial void LogCompletedByDeployment(ILogger logger);
 
-    [LoggerMessage(LogLevel.Error, "Setup mode would open, but the setup secret ({FileName}, at least {MinLength} characters) is missing: setup stays closed until the deployment provides it and rag-admin starts again")]
+    [LoggerMessage(LogLevel.Error, "Setup mode would open, but the setup secret ({FileName}, at least {MinLength} characters) is missing: setup stays closed until the deployment provides it and kalla-admin starts again")]
     private static partial void LogSecretMissing(ILogger logger, string fileName, int minLength);
 
-    [LoggerMessage(LogLevel.Error, "The settings row is missing (rag-migrate creates it): setup mode stays closed")]
+    [LoggerMessage(LogLevel.Error, "The settings row is missing (kalla-migrate creates it): setup mode stays closed")]
     private static partial void LogRowMissing(ILogger logger);
 
     [LoggerMessage(LogLevel.Information, "Setup mode is open because the deployment sets the authority but no client secret (Oidc:ClientSecret)")]
     private static partial void LogAuthorityWithoutSecret(ILogger logger);
 
-    [LoggerMessage(LogLevel.Information, "Setup mode is open ({Kind}) until {EndsAt}; the setup code is on rag-admin's standard output")]
+    [LoggerMessage(LogLevel.Information, "Setup mode is open ({Kind}) until {EndsAt}; the setup code is on kalla-admin's standard output")]
     private static partial void LogOpen(ILogger logger, string kind, DateTimeOffset endsAt);
 }

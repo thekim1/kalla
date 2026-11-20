@@ -21,7 +21,7 @@ namespace Kalla.AdminApi.Tests;
 /// M-20 S5 (identity design §19, "Open WebUI"): Open WebUI's sign-in values, their precedence and sources, the setup wizard's
 /// back-channel test of them against a provider in the test process (the discovery document at the provider address, the token
 /// endpoint's verdict on the client), the secret rules for this target, <c>complete</c> for it (the session's passed
-/// platform-admin rag-admin test required, setup left open), and that no admin-session route writes them but the provider name.
+/// platform-admin kalla-admin test required, setup left open), and that no admin-session route writes them but the provider name.
 /// </summary>
 [Collection(AdminDatabaseGroup3.Name)]
 public sealed class SetupOpenWebUiTests(AdminDatabaseFixture database) : IAsyncLifetime
@@ -89,7 +89,7 @@ public sealed class SetupOpenWebUiTests(AdminDatabaseFixture database) : IAsyncL
         return await ReasonOf(response);
     }
 
-    /// <summary>A rag-admin test sign-in of <paramref name="role"/> in <paramref name="session"/>, through to its callback.</summary>
+    /// <summary>A kalla-admin test sign-in of <paramref name="role"/> in <paramref name="session"/>, through to its callback.</summary>
     private static async Task AdminTestAsync(HttpClient session, FakeProvider provider, string role)
     {
         provider.Claims = FakeProvider.Person("person-1", role);
@@ -149,7 +149,7 @@ public sealed class SetupOpenWebUiTests(AdminDatabaseFixture database) : IAsyncL
         (fromWizard.ClientSecret.Source, fromWizard.ClientSecret.Value, fromWizard.ClientSecret.SetAt).ShouldBe((SignInSources.Wizard, TypedSecret, DateTimeOffset.UnixEpoch));
         fromWizard.ProviderUrlFromDeployment.ShouldBeFalse();
 
-        // The defaults: the provider from rag-admin's effective authority, the deployment's before the wizard's.
+        // The defaults: the provider from kalla-admin's effective authority, the deployment's before the wizard's.
         var byDeployedAuthority = OpenWebUiSignIn.Resolve(Configuration(("Oidc:Authority", FakeProvider.Authority + "/")), new OpenWebUiOidcValues(),
             "https://wizard.test/realms/ume", () => StoredSecretValue.NotSet, null);
         byDeployedAuthority.ProviderUrl.ShouldBe(new OpenWebUiSignInValue(ProviderUrl, SignInSources.Default));
@@ -363,7 +363,7 @@ public sealed class SetupOpenWebUiTests(AdminDatabaseFixture database) : IAsyncL
 
         provider.Overrides[TokenPath] = () => TokenError("invalid_grant");
         var test = (await TestAsync(session, Values(providerName: "Chatten"))).GetProperty("testId").GetGuid();
-        // No rag-admin test in this session, then one by a person who is no platform admin: refused.
+        // No kalla-admin test in this session, then one by a person who is no platform admin: refused.
         using (var refused = await CompleteAsync(test))
         {
             refused.StatusCode.ShouldBe(HttpStatusCode.Conflict);
@@ -408,7 +408,7 @@ public sealed class SetupOpenWebUiTests(AdminDatabaseFixture database) : IAsyncL
         row.OpenWebUiOidcEncryptedClientSecret.ShouldNotContain(TypedSecret);
         row.SetupCompletedAt.ShouldBeNull();
         row.SetupNonce.ShouldBe(before.SetupNonce);
-        row.IdentityOidc.ShouldBe("{}"); // rag-admin's values are not touched
+        row.IdentityOidc.ShouldBe("{}"); // kalla-admin's values are not touched
         (await session.GetAsync("/bff/setup/state", Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
         await using (var scope = host.Services.CreateAsyncScope())
         {
@@ -436,14 +436,14 @@ public sealed class SetupOpenWebUiTests(AdminDatabaseFixture database) : IAsyncL
         await using var host = Host(provider);
         using var session = await SessionAsync(host, Admin);
 
-        // Before a passed rag-admin test: no default, and a check without a provider address is refused.
+        // Before a passed kalla-admin test: no default, and a check without a provider address is refused.
         var before = (await StateAsync(session)).GetProperty("signIn");
         before.GetProperty("providerUrl").GetProperty("value").ValueKind.ShouldBe(JsonValueKind.Null);
         before.GetProperty("configured").GetBoolean().ShouldBeFalse();
         (await RefusalAsync(session, Values(providerUrl: null))).ShouldBe(SetupTestReasons.ProviderUrlInvalid);
 
         await AdminTestAsync(session, provider, RagRoles.PlatformAdmin);
-        // A later rag-admin test that fails (the provider sends no code) leaves the default at the passed one.
+        // A later kalla-admin test that fails (the provider sends no code) leaves the default at the passed one.
         using (var started = await PostAsync(session, "/bff/setup/test", new { authority = FakeProvider.Authority, clientSecret = AdminSecret }))
         {
             var query = HttpUtility.ParseQueryString(new Uri(JsonDocument.Parse(await started.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("authorizeUrl").GetString()!).Query);
@@ -465,7 +465,7 @@ public sealed class SetupOpenWebUiTests(AdminDatabaseFixture database) : IAsyncL
         provider.Requested.Skip(count).Select(u => u.AbsolutePath).ShouldBe(["/realms/ume/.well-known/openid-configuration", "/realms/ume/certs", TokenPath]);
 
         // Saved as null, so it keeps following the sign-in provider once Finish saves the authority. Saving needs the session's latest
-        // rag-admin test to have passed, so it is passed again first.
+        // kalla-admin test to have passed, so it is passed again first.
         provider.Overrides.Clear();
         await AdminTestAsync(session, provider, RagRoles.PlatformAdmin);
         provider.Overrides[TokenPath] = () => TokenError("invalid_grant");
@@ -483,7 +483,7 @@ public sealed class SetupOpenWebUiTests(AdminDatabaseFixture database) : IAsyncL
         (await TestAsync(session, Values(clientSecret: null, providerUrl: null))).GetProperty("clientSecret").GetString().ShouldBe(SetupSecretSources.Stored);
         provider.LastTokenForm!["client_secret"].ShouldBe(TypedSecret);
 
-        // Outside a setup session nothing changes: rag-admin's authority is still unset there.
+        // Outside a setup session nothing changes: kalla-admin's authority is still unset there.
         await using var scope = host.Services.CreateAsyncScope();
         (await scope.ServiceProvider.GetRequiredService<OpenWebUiSignInReader>().ReadAsync(Ct)).ProviderUrl.Value.ShouldBeNull();
     }

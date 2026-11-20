@@ -34,7 +34,7 @@ public sealed class AuditEndpointsTests(AdminDatabaseFixture database, AdminHost
         AuditLogEntry Entry(Guid? department, DateTimeOffset at, string entityId) => new()
         {
             Timestamp = at, RecordedAt = at, Actor = "o-" + code, ActorName = "Anna Andersson", Action = action, EntityType = "source", EntityId = entityId,
-            Details = """{"before":null,"after":{"name":"Webb"}}""", Service = "rag-admin", DepartmentId = department, Classification = "public",
+            Details = """{"before":null,"after":{"name":"Webb"}}""", Service = "kalla-admin", DepartmentId = department, Classification = "public",
             ConfigVersion = 7, Reason = department is null ? null : "Testorsak",
         };
         var older = Entry(mine.Id, now.AddDays(-3), "s-older");
@@ -81,7 +81,7 @@ public sealed class AuditEndpointsTests(AdminDatabaseFixture database, AdminHost
         Ids(await platform.GetFromJsonAsync<JsonElement>($"{basePath}&from={Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(-1).ToString("O"))}", Ct))
             .ShouldBe([seed.Platform, seed.Other, seed.Mine]);
         Ids(await platform.GetFromJsonAsync<JsonElement>($"{basePath}&actor=anna", Ct)).Count().ShouldBe(4); // the name, case-insensitive
-        Ids(await platform.GetFromJsonAsync<JsonElement>($"{basePath}&actor=o-{seed.Code}&service=rag-worker", Ct)).ShouldBeEmpty();
+        Ids(await platform.GetFromJsonAsync<JsonElement>($"{basePath}&actor=o-{seed.Code}&service=kalla-worker", Ct)).ShouldBeEmpty();
         Ids(await platform.GetFromJsonAsync<JsonElement>($"{basePath}&entityType=collection", Ct)).ShouldBeEmpty();
 
         var first = await platform.GetFromJsonAsync<JsonElement>($"{basePath}&limit=3", Ct);
@@ -141,7 +141,7 @@ public sealed class AuditEndpointsTests(AdminDatabaseFixture database, AdminHost
         var missingRun = Guid.CreateVersion7();
         AuditLogEntry Entry(string type, string? id, string? details) => new()
         {
-            Timestamp = at, RecordedAt = at, Actor = "o-" + code, Action = action, EntityType = type, EntityId = id, Details = details, Service = "rag-admin",
+            Timestamp = at, RecordedAt = at, Actor = "o-" + code, Action = action, EntityType = type, EntityId = id, Details = details, Service = "kalla-admin",
         };
         // Oldest first, so the list (newest first) is the reverse of this order.
         var entries = new[]

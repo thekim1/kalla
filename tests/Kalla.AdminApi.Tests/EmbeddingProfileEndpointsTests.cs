@@ -35,7 +35,7 @@ public sealed class EmbeddingProfileEndpointsTests(GatewayClientFixture database
         web.UseSetting("FakeGateway:Models:40:Targets:0:Residency", "Eu");
         web.UseSetting("FakeGateway:Models:41:Name", "fake-denied-embed");
         web.UseSetting("FakeGateway:Models:41:Kind", "embedding");
-        web.UseSetting("FakeGateway:Models:41:KeyLevels:0", "OnPrem"); // keys up to OnPrem only: rag-admin's credential key may not
+        web.UseSetting("FakeGateway:Models:41:KeyLevels:0", "OnPrem"); // keys up to OnPrem only: kalla-admin's credential key may not
         web.UseSetting("FakeGateway:Models:41:Targets:0:Residency", "OnPrem");
     });
 

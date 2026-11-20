@@ -55,7 +55,7 @@ public sealed record AuditAlso(string Action, string EntityType, object? EntityI
 public sealed class AdminContext(RagDbContext db, IJobQueue jobs, TimeProvider time, ILoggerFactory loggers, IHttpContextAccessor http,
     ConfigLockMetrics lockMetrics)
 {
-    public const string ServiceName = "rag-admin";
+    public const string ServiceName = "kalla-admin";
 
     private readonly ILogger _security = SecurityEvents.CreateLogger(loggers);
 

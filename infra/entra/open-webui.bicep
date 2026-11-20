@@ -1,4 +1,4 @@
-// ume-rag-open-webui: the pilot Open WebUI's sign-in registration (plans/identity/design.md §12.1). Its client secret
+// kalla-open-webui: the pilot Open WebUI's sign-in registration (plans/identity/design.md §12.1). Its client secret
 // (OAUTH_CLIENT_SECRET) is created by an operator, not here (§12.2). Access is limited to the pilot users group through
 // appRoleAssignmentRequired and a default-access assignment made by a person.
 extension microsoftGraphV1
@@ -9,7 +9,7 @@ param ownerIds string[]
 var graph = loadJsonContent('graph.json')
 
 resource app 'Microsoft.Graph/applications@v1.0' = {
-  uniqueName: 'ume-rag-open-webui'
+  uniqueName: 'kalla-open-webui'
   displayName: 'Umeå kommun – Ume.Rag Open WebUI'
   signInAudience: 'AzureADMyOrg'
   web: {

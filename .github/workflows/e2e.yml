@@ -104,7 +104,7 @@ jobs:
             sleep 2
           done
           node -e '
-            const secrets = require(process.env.HOME + "/.microsoft/usersecrets/ume-rag-apphost-dev/secrets.json")
+            const secrets = require(process.env.HOME + "/.microsoft/usersecrets/kalla-apphost-dev/secrets.json")
             for (const name of ["oidc-client-secret", "openwebui-client-secret", "dev-user-password"]) {
               const value = secrets["Parameters:" + name]
               if (value) console.log("::add-mask::" + value)
@@ -121,7 +121,7 @@ jobs:
         run: find test-results/setup -name error-context.md -exec sh -c 'echo "::group::$1"; cat "$1"; echo "::endgroup::"' _ {} \; 2>/dev/null || true
       - name: Server logs of a failed setup run
         if: ${{ !cancelled() && (steps.setup-stack.outcome == 'failure' || steps.setup-tests.outcome == 'failure') }}
-        # rag-admin's output holds the setup code: the line is redacted as well as masked.
+        # kalla-admin's output holds the setup code: the line is redacted as well as masked.
         run: |
           for r in adminapi admin-ui keycloak; do
             echo "::group::$r"

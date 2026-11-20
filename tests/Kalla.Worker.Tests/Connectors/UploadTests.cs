@@ -19,7 +19,7 @@ public sealed class UploadTests : IDisposable
     private static readonly byte[] Eicar = Encoding.ASCII.GetBytes(@"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*");
     private static readonly DateTimeOffset Now = new(2026, 11, 7, 10, 0, 0, TimeSpan.Zero);
 
-    private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("ume-rag-upload-tests-");
+    private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("kalla-upload-tests-");
     private readonly FileSystemBlobStore _blobs;
 
     public UploadTests() =>

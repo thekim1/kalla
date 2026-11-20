@@ -31,18 +31,18 @@ public sealed record OpenWebUiTestDto(
 
 /// <summary>
 /// The setup test of Open WebUI's sign-in values (identity design §19, "Open WebUI"). Its provider sends the browser back to Open WebUI,
-/// never to rag-admin, so a round trip with Open WebUI's redirect URI cannot be finished here, and one with rag-admin's would need
-/// rag-admin's callback registered on Open WebUI's client. The test is therefore the back channel only: the discovery document at the
-/// provider address, fetched and checked as for rag-admin's test (https outside Development, no redirects, size and time caps; its
+/// never to kalla-admin, so a round trip with Open WebUI's redirect URI cannot be finished here, and one with kalla-admin's would need
+/// kalla-admin's callback registered on Open WebUI's client. The test is therefore the back channel only: the discovery document at the
+/// provider address, fetched and checked as for kalla-admin's test (https outside Development, no redirects, size and time caps; its
 /// issuer must give that address), its signing keys, and one token request with a made-up authorization code. RFC 6749 §5.2:
 /// a client that fails authentication gets <c>invalid_client</c> (401 with HTTP authentication); an authenticated client with an
 /// invalid code gets <c>invalid_grant</c>. <c>invalid_client</c> or any 401 fails the test
 /// (<see cref="SetupTestReasons.ClientRefused"/>; Keycloak 26.8 answers a wrong secret with 401 <c>unauthorized_client</c>, read in
 /// <c>KeycloakSignInTests</c>), only <c>invalid_grant</c> confirms the client, and any other answer passes it unverified
-/// (<see cref="SetupTestReasons.ClientUnverified"/>, or the transport's reason). The secret rules are rag-admin's: the stored secret
+/// (<see cref="SetupTestReasons.ClientUnverified"/>, or the transport's reason). The secret rules are kalla-admin's: the stored secret
 /// goes only to the provider address and client id in force, a deployment secret only to the deployment's provider. No browser leg,
 /// so no test cookie; the test row is claimed at once and no callback can take it. Inside the session the default provider address
-/// also follows the session's latest passed rag-admin test while rag-admin's authority is not saved yet (<see cref="SessionAuthorityAsync"/>).
+/// also follows the session's latest passed kalla-admin test while kalla-admin's authority is not saved yet (<see cref="SessionAuthorityAsync"/>).
 /// </summary>
 public sealed class SetupOpenWebUiTest(RagDbContext db, IConfiguration configuration, IHostEnvironment environment, TimeProvider time, SetupProviderClient provider,
     SettingsSecretProtector secrets, OpenWebUiSignInReader live, SetupTestSignIn adminTests, ILoggerFactory loggers)
@@ -122,8 +122,8 @@ public sealed class SetupOpenWebUiTest(RagDbContext db, IConfiguration configura
     }
 
     /// <summary>
-    /// The authority of <paramref name="session"/>'s latest passed rag-admin test (the effective one it ran with), or null while it has
-    /// none or the key ring cannot read it. Open WebUI's default provider address follows it while rag-admin's effective authority is
+    /// The authority of <paramref name="session"/>'s latest passed kalla-admin test (the effective one it ran with), or null while it has
+    /// none or the key ring cannot read it. Open WebUI's default provider address follows it while kalla-admin's effective authority is
     /// unset, the first run before Finish (<see cref="OpenWebUiSignIn.Resolve"/>); a later failed test leaves it at the passed one.
     /// </summary>
     public async Task<string?> SessionAuthorityAsync(SetupSession session, CancellationToken ct)
@@ -217,7 +217,7 @@ public sealed class SetupOpenWebUiTest(RagDbContext db, IConfiguration configura
 
     /// <summary>
     /// One token request with a random code, as Open WebUI's own exchange would send the client (its id, the secret in the form when it
-    /// has one, Open WebUI's redirect URI when rag-admin knows it). The code is unknown to the provider, so no token can come back.
+    /// has one, Open WebUI's redirect URI when kalla-admin knows it). The code is unknown to the provider, so no token can come back.
     /// </summary>
     private async Task<(bool? Accepted, string? Reason)> CheckClientAsync(ProviderMetadata metadata, string clientId, string? secret, CancellationToken ct)
     {

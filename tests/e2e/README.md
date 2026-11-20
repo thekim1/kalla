@@ -5,7 +5,7 @@ Playwright tests of the admin UI (admin design §10.1, §11.4; repo-and-deployme
 
 - `specs/pilot.spec.ts`: the pilot department admin's journey (admin design §5.4 steps 1–13) against the fixture website,
   with the mouse and with the keyboard only. Step 13 follows the assistant page's "Open in Open WebUI (dev)" link (the
-  seeded client's `PortalUrl`, the stack's Open WebUI) and finds the assistant in rag-api's `/v1/models` for that client.
+  seeded client's `PortalUrl`, the stack's Open WebUI) and finds the assistant in kalla-api's `/v1/models` for that client.
 - `specs/accessibility.spec.ts`: axe (WCAG 2.2 A/AA) and target size on every page in the three themes, reflow at 320 px
   and 200 % text, keyboard landmarks, skip link and focus, forced colours. The result is summarised in
   `docs/accessibility-statement.md`.
@@ -13,10 +13,10 @@ Playwright tests of the admin UI (admin design §10.1, §11.4; repo-and-deployme
   addresses, failed and passed test sign-ins in the provider's window, Open WebUI's step, the summary, Finish, the first
   sign-in, the stored values and Home's reminder of the secret's expiry, with axe on every step. Finishing closes setup, so
   each run needs a fresh setup stack; on any other stack the spec skips.
-- `specs/openwebui.spec.ts`: the stack's Open WebUI against rag-api (to-verify 47, 50, 134, 165), with an assistant the
+- `specs/openwebui.spec.ts`: the stack's Open WebUI against kalla-api (to-verify 47, 50, 134, 165), with an assistant the
   pilot journey published and a local Open WebUI account it signs up: the description in the model selector, citation
   chips and their links, Open WebUI's message ids on every completion and regeneration, no task request reaching a model,
-  and Stop ending rag-api's turn as cancelled. It reads rag-api's record in the AppHost's Postgres container
+  and Stop ending kalla-api's turn as cancelled. It reads kalla-api's record in the AppHost's Postgres container
   (`docker exec`), and Stop needs a slow answer: export `FakeGateway__Latency__TokenIntervalMs=80` and
   `FakeGateway__Latency__AnswerWords=150` before starting the stack. If the store's first account was made since Open
   WebUI last started (other than by the spec), restart Open WebUI first: making it switched sign-up off until a restart.

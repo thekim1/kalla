@@ -7,9 +7,9 @@ using Npgsql;
 namespace Kalla.Infrastructure.Persistence;
 
 /// <summary>
-/// The first hosted service of rag-api, rag-admin and rag-worker (<c>AddRagDatabase(admitAtStart: true)</c>): asks the
+/// The first hosted service of kalla-api, kalla-admin and kalla-worker (<c>AddRagDatabase(admitAtStart: true)</c>): asks the
 /// database for admission with the last migration compiled into this service (<see cref="ServiceAdmission"/>,
-/// data-model §10). A database without <c>public.ume_rag_admit</c> (development, or migrated before the function existed)
+/// data-model §10). A database without <c>public.kalla_admit</c> (development, or migrated before the function existed)
 /// is not asked; a role without a fence is admitted with nothing to do. A refusal (the schema is past a migration that
 /// stops this role, and this build does not contain it) is logged as Critical and fails the start, so the old container
 /// does not run beside the new schema.
@@ -28,7 +28,7 @@ public sealed partial class SchemaAdmissionService(
         }
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using (var exists = new NpgsqlCommand("SELECT to_regprocedure('public.ume_rag_admit(text)') IS NOT NULL", connection))
+        await using (var exists = new NpgsqlCommand("SELECT to_regprocedure('public.kalla_admit(text)') IS NOT NULL", connection))
         {
             if (await exists.ExecuteScalarAsync(cancellationToken) is not true)
             {
@@ -36,7 +36,7 @@ public sealed partial class SchemaAdmissionService(
             }
         }
 
-        await using var admit = new NpgsqlCommand("SELECT public.ume_rag_admit($1)", connection);
+        await using var admit = new NpgsqlCommand("SELECT public.kalla_admit($1)", connection);
         admit.Parameters.Add(new NpgsqlParameter<string> { TypedValue = build });
         try
         {

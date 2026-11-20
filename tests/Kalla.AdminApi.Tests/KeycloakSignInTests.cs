@@ -19,7 +19,7 @@ using FakeCatalog = fakegateway::Kalla.FakeGateway.FakeCatalog;
 namespace Kalla.AdminApi.Tests;
 
 /// <summary>
-/// The bundled realm (<c>dev/keycloak/ume-realm.json</c>) in a Keycloak container, the admin API on Postgres, and the
+/// The bundled realm (<c>dev/keycloak/fors-realm.json</c>) in a Keycloak container, the admin API on Postgres, and the
 /// mirror filled as the org sync fills it from the FakeGateway catalogue.
 /// </summary>
 public sealed class KeycloakFixture : IAsyncLifetime
@@ -36,19 +36,19 @@ public sealed class KeycloakFixture : IAsyncLifetime
 
     public KeycloakFixture()
     {
-        var realm = TestPostgres.RepositoryFile(Path.Combine("dev", "keycloak", "ume-realm.json"));
+        var realm = TestPostgres.RepositoryFile(Path.Combine("dev", "keycloak", "fors-realm.json"));
         _keycloak = new ContainerBuilder(Image)
             .WithCommand("start-dev", "--import-realm")
             .WithEnvironment("KC_BOOTSTRAP_ADMIN_USERNAME", "admin")
             .WithEnvironment("KC_BOOTSTRAP_ADMIN_PASSWORD", TestSecrets.RandomHex(16))
-            .WithEnvironment("UME_RAG_OIDC_CLIENT_SECRET", OidcClientSecret)
-            .WithEnvironment("UME_RAG_DEV_USER_PASSWORD", UserPassword)
-            .WithEnvironment("UME_RAG_API_CLIENT_SECRET", ApiClientSecret)
-            .WithEnvironment("UME_RAG_OWUI_CLIENT_SECRET", OwuiClientSecret)
+            .WithEnvironment("KALLA_OIDC_CLIENT_SECRET", OidcClientSecret)
+            .WithEnvironment("KALLA_DEV_USER_PASSWORD", UserPassword)
+            .WithEnvironment("KALLA_API_CLIENT_SECRET", ApiClientSecret)
+            .WithEnvironment("KALLA_OWUI_CLIENT_SECRET", OwuiClientSecret)
             .WithResourceMapping(new FileInfo(realm), "/opt/keycloak/data/import/")
             .WithPortBinding(Port, true)
             .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(
-                request => request.ForPort(Port).ForPath("/realms/ume/.well-known/openid-configuration"),
+                request => request.ForPort(Port).ForPath("/realms/fors/.well-known/openid-configuration"),
                 wait => wait.WithTimeout(TimeSpan.FromMinutes(5))))
             .Build();
     }
@@ -62,7 +62,7 @@ public sealed class KeycloakFixture : IAsyncLifetime
     public string OwuiClientSecret { get; } = TestSecrets.RandomHex();
 
     /// <summary>The realm's issuer as the test process reaches it.</summary>
-    public string Authority => $"http://{_keycloak.Hostname}:{_keycloak.GetMappedPublicPort(Port)}/realms/ume";
+    public string Authority => $"http://{_keycloak.Hostname}:{_keycloak.GetMappedPublicPort(Port)}/realms/fors";
 
     public async ValueTask InitializeAsync()
     {
@@ -82,7 +82,7 @@ public sealed class KeycloakFixture : IAsyncLifetime
         await Database.DisposeAsync();
     }
 
-    /// <summary>The admin API against the realm, on the admin UI's origin (a redirect URI of <c>ume-rag-admin</c>).</summary>
+    /// <summary>The admin API against the realm, on the admin UI's origin (a redirect URI of <c>kalla-admin</c>).</summary>
     public WebApplicationFactory<Program> Factory() => new WebApplicationFactory<Program>().WithWebHostBuilder(web =>
     {
         web.UseEnvironment("Development"); // plain-HTTP metadata from the container
@@ -146,25 +146,25 @@ public sealed partial class KeycloakSignInTests(KeycloakFixture keycloak) : ICla
         using var http = new HttpClient();
         using var response = await http.PostAsync($"{keycloak.Authority}/protocol/openid-connect/token", new FormUrlEncodedContent(new Dictionary<string, string>
         {
-            ["grant_type"] = "client_credentials", ["client_id"] = "ume-rag-api-dev", ["client_secret"] = keycloak.ApiClientSecret,
+            ["grant_type"] = "client_credentials", ["client_id"] = "kalla-api-dev", ["client_secret"] = keycloak.ApiClientSecret,
         }), Ct);
         response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
         var token = await AccessTokenAsync(response);
 
-        token.GetProperty("client_id").GetString().ShouldBe("ume-rag-api-dev");
+        token.GetProperty("client_id").GetString().ShouldBe("kalla-api-dev");
         token.TryGetProperty("sid", out _).ShouldBeFalse();
-        token.GetProperty("aud").GetString().ShouldBe("ume-rag-api");
+        token.GetProperty("aud").GetString().ShouldBe("kalla-api");
         Strings(token.GetProperty("roles")).ShouldBe(["Knowledge.Read.All", "Chat.Invoke.All"], ignoreOrder: true);
     }
 
     [Fact]
     public async Task A_delegated_chat_token_carries_its_scopes_and_the_api_audience()
     {
-        // ume-rag-chat-dev: public, code + PKCE, loopback redirect; Chat.Use by default, Knowledge.Read on request.
+        // kalla-chat-dev: public, code + PKCE, loopback redirect; Chat.Use by default, Knowledge.Read on request.
         const string redirect = "http://127.0.0.1:49152/callback";
         var verifier = Base64Url(RandomNumberGenerator.GetBytes(32));
         var challenge = Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
-        var authorize = $"{keycloak.Authority}/protocol/openid-connect/auth?client_id=ume-rag-chat-dev&response_type=code" +
+        var authorize = $"{keycloak.Authority}/protocol/openid-connect/auth?client_id=kalla-chat-dev&response_type=code" +
                         $"&scope={Uri.EscapeDataString("openid Knowledge.Read")}&redirect_uri={Uri.EscapeDataString(redirect)}" +
                         $"&code_challenge={challenge}&code_challenge_method=S256&state=s1";
         var callback = await LoginAtKeycloakAsync(authorize, "rag-chat-user");
@@ -174,17 +174,17 @@ public sealed partial class KeycloakSignInTests(KeycloakFixture keycloak) : ICla
         using var http = new HttpClient();
         using var response = await http.PostAsync($"{keycloak.Authority}/protocol/openid-connect/token", new FormUrlEncodedContent(new Dictionary<string, string>
         {
-            ["grant_type"] = "authorization_code", ["client_id"] = "ume-rag-chat-dev", ["code"] = code, ["redirect_uri"] = redirect, ["code_verifier"] = verifier,
+            ["grant_type"] = "authorization_code", ["client_id"] = "kalla-chat-dev", ["code"] = code, ["redirect_uri"] = redirect, ["code_verifier"] = verifier,
         }), Ct);
         response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
         var token = await AccessTokenAsync(response);
 
-        token.GetProperty("azp").GetString().ShouldBe("ume-rag-chat-dev");
+        token.GetProperty("azp").GetString().ShouldBe("kalla-chat-dev");
         token.GetProperty("scope").GetString()!.Split(' ').ShouldBeSubsetOf(["openid", "profile", "email", "Chat.Use", "Knowledge.Read"]);
         token.GetProperty("scope").GetString()!.Split(' ').ShouldContain("Chat.Use");
         token.GetProperty("scope").GetString()!.Split(' ').ShouldContain("Knowledge.Read");
         var audience = token.GetProperty("aud");
-        (audience.ValueKind == JsonValueKind.Array ? Strings(audience) : [audience.GetString()!]).ShouldContain("ume-rag-api");
+        (audience.ValueKind == JsonValueKind.Array ? Strings(audience) : [audience.GetString()!]).ShouldContain("kalla-api");
     }
 
     /// <summary>

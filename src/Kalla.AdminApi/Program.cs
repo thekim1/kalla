@@ -35,14 +35,14 @@ builder.AddRagJobQueue();
 builder.AddRagBlobStore();
 // Internal uploads are envelope-encrypted when staged (data-model §7, #181): KeyProvider:Directory holds rag-blob-internal.
 builder.AddRagBlobEnvelope();
-// API keys (identity §6.4): hashed with Security:KeyPepper as rag-api does; resolved when a key is created or rotated.
+// API keys (identity §6.4): hashed with Security:KeyPepper as kalla-api does; resolved when a key is created or rotated.
 builder.Services.AddOptions<SecurityOptions>().BindConfiguration(SecurityOptions.SectionName);
 builder.Services.AddSingleton<AdminKeyHasher>();
 builder.AddRagDataProtection();
 // Sign-in values from the deployment, the setup wizard's settings or the defaults (identity design §19); the wizard's secret encrypted.
 builder.Services.AddSingleton<SettingsSecretProtector>();
 builder.Services.AddScoped<SignInSettings>();
-// Open WebUI's sign-in values (identity design §19, "Open WebUI"): shown here, saved in setup mode, served to Open WebUI by rag-api.
+// Open WebUI's sign-in values (identity design §19, "Open WebUI"): shown here, saved in setup mode, served to Open WebUI by kalla-api.
 builder.Services.AddScoped<OpenWebUiSignInReader>();
 builder.Services.AddScoped<OpenWebUiSignInSettings>();
 // Setup mode (identity design §19): the setup code, sessions and test sign-in; evaluated at start, which writes the code to standard output.

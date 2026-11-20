@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ume-rag.local/contracts/jobs/v1/command.cancel-run.result.schema.json",
+  "$id": "https://kalla.local/contracts/jobs/v1/command.cancel-run.result.schema.json",
   "title": "cancel-run command result",
   "type": "object",
   "properties": {

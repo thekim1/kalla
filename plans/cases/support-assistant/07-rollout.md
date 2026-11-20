@@ -41,7 +41,7 @@ Not in the proof of concept: real tickets (G1), staff use (the test host, §1), 
 | 1.1 | Ume.Rag `v0.2.0` (or later) deployed against the gateway, test host first; the release bundle's smoke test passed in the release run | [`../../../docs/compose-quick-start.md`](../../../docs/compose-quick-start.md), [`../../../docs/production-setup.md`](../../../docs/production-setup.md) |
 | 1.2 | Gateway models (optional reranker: `Cohere-rerank-v5-fast` under the Foundry provider, native since gateway v0.9.1), keys, PII policy | [`01-gateway-setup.md`](01-gateway-setup.md) |
 | 1.3 | `--crawl-allow` for the intranet ranges; robots.txt allowance if needed | [`02-knowledge-base.md`](02-knowledge-base.md) §2 |
-| 1.4 | Department and admins in Keycloak realm `kalla`; organisation sync | [`02-knowledge-base.md`](02-knowledge-base.md) §5 |
+| 1.4 | Department and admins in Keycloak realm `fors`; organisation sync | [`02-knowledge-base.md`](02-knowledge-base.md) §5 |
 | 1.5 | `Settings.Chat.allowedLinkHosts` includes the intranet host | [`04-assistant.md`](04-assistant.md) §6 |
 | 1.6 | `Settings.Chat.condenseModel` set (0.6); `Chat:LongQuestionCondenseTimeout` raised to 4 s only if `gpt-6-luna` stays | [`04-assistant.md`](04-assistant.md) §2 |
 | 1.7 | `Settings.TrustedProxies` = the reverse proxy's addresses, so key allow-lists and the download limit see the client | [`05-frontend-integration.md`](05-frontend-integration.md) §2 |
@@ -118,7 +118,7 @@ grading is the gate.
 - [ ] Key expiry and rotation owner named; key stored only in the app's secret store.
 - [ ] Daily crawl runs complete; no deletion proposal left waiting.
 - [ ] Escalation links in the not-found text work from the app.
-- [ ] Runbook entry for the app: who to call when rag-api answers 5xx, and how to revoke the key.
+- [ ] Runbook entry for the app: who to call when kalla-api answers 5xx, and how to revoke the key.
 - [ ] The platform's own go-live items (backups, restore drill, R1) done for the deployment ([`../../roadmap.md`](../../roadmap.md)).
 
 ## 8. Later

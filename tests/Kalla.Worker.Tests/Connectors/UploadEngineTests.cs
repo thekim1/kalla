@@ -33,7 +33,7 @@ public sealed class UploadEngineTests(RagDatabaseFixture database, FakeGatewayFa
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-upload-engine-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-upload-engine-");
     private readonly CapturingLoggerProvider _logs = new();
 
     public async ValueTask InitializeAsync() => await database.ResetAsync();

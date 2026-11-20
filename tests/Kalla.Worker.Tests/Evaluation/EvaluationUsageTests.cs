@@ -42,7 +42,7 @@ public sealed class EvaluationUsageTests(RagDatabaseFixture database) : IAsyncLi
     private static readonly string[] SetSteps = [EvalModelClient.GenerateStep, EvalModelClient.JudgeStep, EvalSetGenerator.DedupStep];
 
     private readonly EvalGatewayFactory _gateway = new();
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-eval-usage-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-eval-usage-");
     private PlatformSettings? _previous;
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

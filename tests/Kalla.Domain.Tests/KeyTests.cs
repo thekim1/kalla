@@ -39,15 +39,15 @@ public class KeyHasherTests
     [Fact]
     public void Keys_issued_before_the_rename_stay_valid()
     {
-        // Decisions "Product names": ume-rag-sk-/ume-rag-pk- keys keep working; the hash is the whole key's, so only the
+        // Decisions "Product names": kalla-sk-/kalla-pk- keys keep working; the hash is the whole key's, so only the
         // shape check needs to know the old prefix. No key is issued with it.
         var random = new string('A', 43);
-        var legacy = "ume-rag-sk-" + random;
+        var legacy = "kalla-sk-" + random;
         KeyHasher.KindOf(legacy).ShouldBe(KeyKinds.Secret);
-        KeyHasher.KindOf("ume-rag-pk-" + random).ShouldBe(KeyKinds.Public);
+        KeyHasher.KindOf("kalla-pk-" + random).ShouldBe(KeyKinds.Public);
         Hasher.Verify(legacy, Hasher.Hash(legacy)).ShouldBeTrue();
         Hasher.Verify(legacy, Hasher.Hash("kalla-sk-" + random)).ShouldBeFalse();
-        KeyHasher.LooksLikeKey("ume-rag-sk-" + random[..42]).ShouldBeFalse();
+        KeyHasher.LooksLikeKey("kalla-sk-" + random[..42]).ShouldBeFalse();
         KeyHasher.LooksLikeKey("ume-sk-" + random).ShouldBeFalse(); // a gateway key of the old format, never ours
     }
 
@@ -89,7 +89,7 @@ public class KeyHasherTests
     [InlineData("kalla-sk-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")]
     // A gateway key (fors-sk-, 50 chars) is never a Källa key.
     [InlineData("fors-sk-0123456789abcdefghijABCDEFGHIJ0123456789abc")]
-    [InlineData("ume-rag-xk-0123456789abcdefghijABCDEFGHIJ0123456789abc")]
+    [InlineData("kalla-xk-0123456789abcdefghijABCDEFGHIJ0123456789abc")]
     public void LooksLikeKey_rejects_malformed(string? value) =>
         KeyHasher.LooksLikeKey(value).ShouldBeFalse();
 }

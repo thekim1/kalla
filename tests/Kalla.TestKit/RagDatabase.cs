@@ -13,10 +13,10 @@ namespace Kalla.TestKit;
 /// </summary>
 public class RagDatabase : IAsyncDisposable
 {
-    public const string Migrator = "ume_rag_migrator";
-    public const string Api = "ume_rag_api";
-    public const string Admin = "ume_rag_admin";
-    public const string Worker = "ume_rag_worker";
+    public const string Migrator = "kalla_migrator";
+    public const string Api = "kalla_api";
+    public const string Admin = "kalla_admin";
+    public const string Worker = "kalla_worker";
 
     private const string Password = "role-test-password";
     private static readonly string[] SecretFiles = ["migrator", "api", "admin", "worker"];

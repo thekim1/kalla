@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ume-rag.local/contracts/parser/v1/ner-request.schema.json",
+  "$id": "https://kalla.local/contracts/parser/v1/ner-request.schema.json",
   "$defs": {
     "NerText": {
       "additionalProperties": false,

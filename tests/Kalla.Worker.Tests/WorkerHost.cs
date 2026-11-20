@@ -25,7 +25,7 @@ using Kalla.Worker.Tests.Blobs;
 namespace Kalla.Worker.Tests;
 
 /// <summary>
-/// A worker as Program.cs builds it, on the test server, as <c>ume_rag_worker</c>, with short timings: heartbeat 1 s,
+/// A worker as Program.cs builds it, on the test server, as <c>kalla_worker</c>, with short timings: heartbeat 1 s,
 /// instance timeout 3 s, reaper 1 s, stop grace 5 s, no maintenance loop; the dispatcher's idle wait is the production
 /// one (30 s), so a job that only an idle lane's timeout would find shows as a slow test; and the test run's blob master
 /// keys (<see cref="TestBlobKeys"/>); with <c>engine</c> also the pipeline
@@ -116,7 +116,7 @@ internal sealed class WorkerHost : IAsyncDisposable
     private static string Invariant(int value) => value.ToString(CultureInfo.InvariantCulture);
 }
 
-/// <summary>Command jobs as the admin enqueues them (hand-off H4): <c>ume_rag_admin</c> has S I on <c>Jobs</c>.</summary>
+/// <summary>Command jobs as the admin enqueues them (hand-off H4): <c>kalla_admin</c> has S I on <c>Jobs</c>.</summary>
 internal static class Commands
 {
     public static JobRequest Command(string kind, Guid? departmentId = null, object? parameters = null, string? dedupKey = null)

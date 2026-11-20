@@ -8,7 +8,7 @@ using static Kalla.TestKit.RagDatabase;
 namespace Kalla.IntegrationTests;
 
 /// <summary>
-/// The admin test panel's client (identity design §4.1; #712): rag-migrate makes <c>admin-console</c> in every deployment,
+/// The admin test panel's client (identity design §4.1; #712): kalla-migrate makes <c>admin-console</c> in every deployment,
 /// managed by the deployment and without keys, writes nothing when nothing changed, finds it by kind and name (another managed
 /// internal client, as P2's <c>rag-internal</c>, stands beside it), and takes over an <c>admin-console</c> made by hand, revoking its
 /// keys. Its own database: the managed rows are unique per kind and name.
@@ -61,7 +61,7 @@ public sealed class AdminConsoleClientSeederTests(RagDatabaseFixture database) :
         (await AdminConsoleClientSeeder.SeedAsync(db, TimeProvider.System, Ct)).ShouldBe(AdminConsoleClientSeeder.Outcome.KeysRevoked);
         (await db.Keys.AsNoTracking().SingleAsync(k => k.ClientId == client.Id, Ct)).RevokedAt.ShouldNotBeNull();
 
-        // Before #712 a platform admin made it by hand, with a first key: rag-migrate takes it over, keeps its settings and revokes
+        // Before #712 a platform admin made it by hand, with a first key: kalla-migrate takes it over, keeps its settings and revokes
         // the key. Another (unmanaged) internal client and its key stay as they are.
         await db.Keys.Where(k => k.ClientId == client.Id).ExecuteDeleteAsync(Ct);
         await db.Clients.Where(c => c.Id == client.Id).ExecuteDeleteAsync(Ct);

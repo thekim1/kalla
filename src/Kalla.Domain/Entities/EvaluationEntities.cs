@@ -73,7 +73,7 @@ public sealed class EvaluationQuestion
 
 /// <summary>
 /// Run kinds of P1: the worker's retrieval runs (processing design §14). <c>answers</c> and <c>assistant-tests</c>
-/// (run by <c>rag-admin</c>) and <c>skill-gate</c> are P2 (data-model §15).
+/// (run by <c>kalla-admin</c>) and <c>skill-gate</c> are P2 (data-model §15).
 /// </summary>
 public static class EvaluationRunKinds
 {

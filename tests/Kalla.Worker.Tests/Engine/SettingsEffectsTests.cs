@@ -28,7 +28,7 @@ namespace Kalla.Worker.Tests.Engine;
 [Collection(RagDatabaseGroup2.Name)]
 public sealed class SettingsEffectsTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-settings-blobs-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-settings-blobs-");
     private readonly ConcurrentQueue<string> _requests = new();
     private readonly ConcurrentDictionary<string, string[]> _links = new(StringComparer.Ordinal);
     private readonly string _tag = Guid.NewGuid().ToString("N");

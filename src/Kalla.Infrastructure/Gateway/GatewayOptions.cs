@@ -19,7 +19,7 @@ public sealed class GatewayOptions
 
     /// <summary>
     /// The worker's fixed maximum (<c>Eu</c>, set with <c>CapGatewayCalls</c>; its credential key is capped there too,
-    /// identity §4.7), or null for rag-api and rag-admin, whose maximum is their credential key's residencies alone
+    /// identity §4.7), or null for kalla-api and kalla-admin, whose maximum is their credential key's residencies alone
     /// (<see cref="GatewayCeiling"/>). Set in code only: configuration does not bind it.
     /// </summary>
     public Residency? ServiceMaximum { get; internal set; }

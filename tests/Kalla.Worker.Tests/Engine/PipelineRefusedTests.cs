@@ -14,7 +14,7 @@ namespace Kalla.Worker.Tests.Engine;
 [Collection(RagDatabaseGroup2.Name)]
 public sealed class PipelineRefusedTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
-    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-refused-");
+    private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("kalla-refused-");
     private readonly CapturingLoggerProvider _logs = new();
 
     public async ValueTask InitializeAsync() => await database.ResetAsync();

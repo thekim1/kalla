@@ -8,7 +8,7 @@ using Kalla.Infrastructure.Security;
 
 namespace Kalla.AdminApi;
 
-/// <summary>Why rag-admin cannot start a sign-in (<see cref="SignInSnapshot.NotConfiguredReason"/>); logged, never answered.</summary>
+/// <summary>Why kalla-admin cannot start a sign-in (<see cref="SignInSnapshot.NotConfiguredReason"/>); logged, never answered.</summary>
 public static class SignInNotConfiguredReasons
 {
     /// <summary>Neither the deployment nor the setup wizard sets an authority.</summary>
@@ -22,7 +22,7 @@ public static class SignInNotConfiguredReasons
 }
 
 /// <summary>
-/// rag-admin's effective sign-in values at one moment (identity design §19): what the OpenID Connect options are built from and
+/// kalla-admin's effective sign-in values at one moment (identity design §19): what the OpenID Connect options are built from and
 /// what the sign-in checks read. Two snapshots are compared by a SHA-256 fingerprint of every value, the client secret included,
 /// so a changed settings row and a reloaded deployment value (a secret file) are both seen; the fingerprint never leaves the class.
 /// </summary>
@@ -107,7 +107,7 @@ public sealed class SignInSnapshot
 }
 
 /// <summary>
-/// The sign-in values rag-admin's OpenID Connect options are built from (identity design §19, "Reload"). <see cref="Configure"/>
+/// The sign-in values kalla-admin's OpenID Connect options are built from (identity design §19, "Reload"). <see cref="Configure"/>
 /// is the options' configure step for the first build and every rebuild; it takes <see cref="Current"/>, which
 /// <see cref="RefreshAsync"/> reads from the database before a sign-in challenge, callback, sign-out or <c>/bff/user</c>, before
 /// the authentication middleware creates the handler, at most once per <see cref="RefreshInterval"/>: anyone may call those paths,

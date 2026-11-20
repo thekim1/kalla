@@ -1,4 +1,4 @@
-// ume-rag-admin: the RAG admin BFF's own registration (plans/identity/design.md §1.6, §12.1), configured like the
+// kalla-admin: the RAG admin BFF's own registration (plans/identity/design.md §1.6, §12.1), configured like the
 // gateway's admin registration (docs/identity-and-roles.md, Entra ID steps 1-5) plus the rag-* roles, the group claim
 // and the acct claim. Its client secret is created by an operator, not here (§12.2).
 extension microsoftGraphV1
@@ -31,7 +31,7 @@ var roles = [
 
 var appRoles = [
   for role in roles: {
-    id: guid('ume-rag-admin', role.value)
+    id: guid('kalla-admin', role.value)
     value: role.value
     displayName: role.displayName
     description: role.description
@@ -41,7 +41,7 @@ var appRoles = [
 ]
 
 resource app 'Microsoft.Graph/applications@v1.0' = {
-  uniqueName: 'ume-rag-admin'
+  uniqueName: 'kalla-admin'
   displayName: 'Umeå kommun – Ume.Rag admin'
   signInAudience: 'AzureADMyOrg'
   web: {

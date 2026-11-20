@@ -13,7 +13,7 @@ as the record of what was asked; a new gateway session starts from the gateway's
 ---
 
 You work in the **LLM gateway** repo (github.com/thekim1/fors). The user owns it. A second project, **Ume.Rag**
-(github.com/thekim1/ume-rag-platform), a RAG and chat platform for Umeå kommun, calls this gateway for every model
+(github.com/thekim1/kalla), a RAG and chat platform for Umeå kommun, calls this gateway for every model
 call. Its pilot needs the things below from the gateway. The gateway runs only in dev today.
 
 **Start** with `git pull` on `main` (the latest release on `origin` was v0.8.9, 2026-11-03, when this was written). If this machine has no clone
@@ -99,9 +99,9 @@ Keycloak. Two requirements shape how you build it:
 - **Its own Compose project** in this repo (for example `deploy/keycloak/compose.yaml`), run on the gateway's
   production host and operated with the gateway. Its database is `keycloak` in the **gateway's Postgres** (a
   separate database and role), so the gateway's backups cover it.
-- **Realm `kalla`**, holding this repo's clients and roles (from `dev/keycloak/ume-realm.json`, without test users)
-  plus a **realm-additions file that Ume.Rag's stream B delivers** (clients `ume-rag-admin`, `open-webui`,
-  `ume-rag-api`; the `rag-*` realm roles). Turn "full scope allowed" off per client, so a token carries only its own
+- **Realm `fors`**, holding this repo's clients and roles (from `dev/keycloak/fors-realm.json`, without test users)
+  plus a **realm-additions file that Ume.Rag's stream B delivers** (clients `kalla-admin`, `open-webui`,
+  `kalla-api`; the `rag-*` realm roles). Turn "full scope allowed" off per client, so a token carries only its own
   system's roles. `departmentCodes` stays a shared user attribute. Design how the two parts are imported and kept in
   step (an import job, `kcadm`, or a documented procedure), and say which.
 - **Production mode** per Keycloak's own docs: hostname, behind the municipal reverse proxy, `/health/ready` for the
@@ -114,7 +114,7 @@ Keycloak. Two requirements shape how you build it:
 - Docs: a runbook section for account administration (create, disable, reset, OTP) and backups.
 - **Answer these before J11** (Ume.Rag `plans/identity/design.md` §16 "Open for P1", questions 1–4 and 6, numbered as
   there, full text there; added 2026-10-31):
-  - Q1: Who administers realm `kalla` in production (accounts, role grants, `departmentCodes`, OTP resets, the realm's
+  - Q1: Who administers realm `fors` in production (accounts, role grants, `departmentCodes`, OTP resets, the realm's
     own admin users and their OTP), and who holds which Keycloak admin role.
   - Q2: How Ume.Rag's realm additions are imported and kept in step with the base realm, how a later change to
     Ume.Rag's `deploy/keycloak/**` reaches production and who applies it, and how a mistake in one system's part is
@@ -130,10 +130,10 @@ Done when: the project starts locally in production mode, both systems' dev apps
 realm, and a database restore of the gateway brings Keycloak back.
 
 **Host (user, 2026-10-31):** the gateway's test/dev instance already runs on a fixed host with HTTPS (public
-certificate), EU embedding and chat models, and Keycloak. That Keycloak holds the shared realm `kalla` for the RAG pilot
+certificate), EU embedding and chat models, and Keycloak. That Keycloak holds the shared realm `fors` for the RAG pilot
 (J11), and the instance is Ume.Rag's interim J10. Ume.Rag already runs against it with interim `Eu` keys and
 `text-embedding-3-large` at 1024 dimensions (Decisions "Pilot embedding model, U-b"). Still missing: the instance on
-gateway v0.10.0 with the integration *Ume.Rag* and its three credential keys, `rag-admin`'s with the scope
+gateway v0.10.0 with the integration *Ume.Rag* and its three credential keys, `kalla-admin`'s with the scope
 `organisation.read` for the organisation and model syncs (Ume.Rag admin design §4.10; no Data API key is needed any
 more). Ask the user how to hand the keys over; never write them into either repository.
 
@@ -158,5 +158,5 @@ Ume.Rag is licensed under **EUPL-1.2** (its `LICENSE`, PR #65) and copies gatewa
 
 The RAG main session tracks this as an external dependency in `plans/roadmap.md` ("Waiting on people"). When release 1 is tagged,
 and when the Keycloak project is ready, tell the user, or open an issue labelled `main` in
-github.com/thekim1/ume-rag-platform, with the tag or commit and anything that differs from
+github.com/thekim1/kalla, with the tag or commit and anything that differs from
 `gateway-changes/design.md`.

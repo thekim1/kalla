@@ -27,7 +27,7 @@ public static class BlobStoreExtensions
     /// (<c>KeyProvider:Directory</c>, default <c>/run/keys</c>, where the Compose files mount
     /// <c>secrets/keys/rag-blob-internal</c>), the <see cref="DataProtectionBlobKeyPolicy"/>, the
     /// <see cref="IBlobEnvelope"/> over the plain store, and replaces <see cref="IBlobStore"/> by the
-    /// <see cref="EnvelopeBlobStore"/> around it. The worker calls it; rag-api calls it for citation downloads (knowledge
+    /// <see cref="EnvelopeBlobStore"/> around it. The worker calls it; kalla-api calls it for citation downloads (knowledge
     /// design §3.5) and reads with the document's level:
     /// <code>
     /// builder.AddRagBlobStore();

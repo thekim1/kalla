@@ -107,7 +107,7 @@ public sealed class GatewayKey
 
     public bool HasSystemPrompt { get; set; }
 
-    /// <summary>The gateway's: false when rag-admin's credential key and this key allow no residency in common.</summary>
+    /// <summary>The gateway's: false when kalla-admin's credential key and this key allow no residency in common.</summary>
     public bool Usable { get; set; }
 
     public DateTimeOffset SyncedAt { get; set; }

@@ -52,7 +52,7 @@
   "Infrastructure.Persistence.RagDatabaseMigrator.MigrateAsync#1": ["created integer", "dropped integer", "default_rows bigint"],
   "Infrastructure.Persistence.RagDbContext.AssistantVersionsLinking#1": ["Id uuid", "AssistantId uuid", "Number integer", "State character varying", "GatewayModel character varying", "SystemPrompt text", "QuerySteps jsonb", "NotFound jsonb", "RestoredFromVersionId uuid", "CreatedBy character varying", "CreatedAt timestamp with time zone", "UpdatedAt timestamp with time zone", "UpdatedBy character varying", "PublishedBy character varying", "PublishedAt timestamp with time zone", "CollectionLinks jsonb", "xmin xid"],
   "Infrastructure.Persistence.SchemaAdmissionService.StartAsync#1": ["?column? boolean"],
-  "Infrastructure.Persistence.SchemaAdmissionService.StartAsync#2": ["ume_rag_admit void"],
+  "Infrastructure.Persistence.SchemaAdmissionService.StartAsync#2": ["kalla_admit void"],
   "Retrieval.Postgres.RetrievalStatements.CountChunks": ["EmbeddingProfileId uuid", "CollectionId uuid", "Tags text[]", "count bigint"],
   "Retrieval.Postgres.RetrievalStatements.Documents": ["Id uuid", "Title text", "Url text", "IdentityKind character varying", "MediaType character varying", "Language character varying", "SourceModifiedAt timestamp with time zone", "FetchedAt timestamp with time zone", "PageCount integer", "SourceId uuid", "DisplayName character varying", "Visible boolean"],
   "Retrieval.Postgres.RetrievalStatements.Hits": ["HitId uuid", "Id uuid", "Ordinal integer", "HeadingPath text", "Text text", "OverlapChars smallint", "TokenCount integer", "Page integer", "PageEnd integer", "SourceModifiedAt timestamp with time zone", "DocumentType character varying", "ChunkSetId uuid"],

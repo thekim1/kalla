@@ -21,7 +21,7 @@ export function appHostSecret(name: string, environment: string): string {
   const directory = process.env.APPDATA
     ? join(process.env.APPDATA, 'Microsoft', 'UserSecrets')
     : join(homedir(), '.microsoft', 'usersecrets')
-  const secrets = JSON.parse(readFileSync(join(directory, 'ume-rag-apphost-dev', 'secrets.json'), 'utf8').replace(/^﻿/, ''))
+  const secrets = JSON.parse(readFileSync(join(directory, 'kalla-apphost-dev', 'secrets.json'), 'utf8').replace(/^﻿/, ''))
   const value: unknown = secrets[`Parameters:${name}`]
   if (typeof value !== 'string' || !value) throw new Error(`Start the AppHost to generate ${name}, or set ${environment}.`)
   return value
@@ -45,9 +45,9 @@ export async function typeSecret(field: Locator, value: string): Promise<void> {
 const appHostProject = fileURLToPath(new URL('../../src/Kalla.AppHost/Kalla.AppHost.csproj', import.meta.url))
 
 /**
- * The setup code rag-admin wrote to its output (identity design §19) on the stack of `scripts/Start-E2E.ps1 -Setup`: from
+ * The setup code kalla-admin wrote to its output (identity design §19) on the stack of `scripts/Start-E2E.ps1 -Setup`: from
  * `E2E_SETUP_CODE`, or the last "Setup code:" line of `aspire logs adminapi` (the CLI from `ASPIRE_CLI`, else `aspire` on the
- * path). Null while rag-admin has not written it yet. Never print it: the output is read here and only the code is kept.
+ * path). Null while kalla-admin has not written it yet. Never print it: the output is read here and only the code is kept.
  */
 export function setupCode(): string | null {
   if (process.env.E2E_SETUP_CODE) return process.env.E2E_SETUP_CODE
@@ -149,7 +149,7 @@ export async function eventually(check: () => Promise<boolean>, message: string,
 /** True when the locator becomes visible within a few seconds: for checks inside {@link eventually} after a reload. */
 export const visibleSoon = (locator: Locator, timeout = 8_000) => expect(locator).toBeVisible({ timeout }).then(() => true, () => false)
 
-/** The assistant slugs that rag-api lists for a client key. */
+/** The assistant slugs that kalla-api lists for a client key. */
 export async function listedModels(request: APIRequestContext, key: string): Promise<string[]> {
   const response = await request.get(`${apiUrl}/v1/models`, { headers: { Authorization: `Bearer ${key}` } })
   expect(response.status()).toBe(200)

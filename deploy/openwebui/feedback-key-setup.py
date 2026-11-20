@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The feedback service account's Open WebUI API key, minted without password sign-in (M-17 C6).
 
-rag-api's feedback import (chat design §13.3) reads Open WebUI's feedback list with this key. Open WebUI's password
+kalla-api's feedback import (chat design §13.3) reads Open WebUI's feedback list with this key. Open WebUI's password
 sign-in stays off, so this one-shot job, run in Open WebUI's own image after it starts, mints the key the way Open WebUI's
 own session does it:
 
@@ -9,7 +9,7 @@ own session does it:
   2. a 5-minute session JWT (HS256, {id, session_stamp, typ: session}) signed with Open WebUI's WEBUI_SECRET_KEY;
   3. POST /api/v1/auths/api_key with it, which mints the account's `sk-` key (a new one replaces the old);
   4. the key is checked on the feedback list (API_KEYS_ALLOWED_ENDPOINTS limits it to the feedback routes) and written
-     as OpenWebUi__AdminApiKey into the directory rag-api reads it from (mode 0640; rag-api reloads it).
+     as OpenWebUi__AdminApiKey into the directory kalla-api reads it from (mode 0640; kalla-api reloads it).
 
 A key that still works is kept, so the job runs on every deploy. A new key: delete the file and deploy again.
 Checked against Open WebUI v0.12.5 (the spike on #667): the claims and tables are Open WebUI's internals, so an Open WebUI
@@ -17,7 +17,7 @@ upgrade re-runs the boot test (deploy/tests/portainer-boot.sh) before its pin mo
 
 Environment:
   WEBUI_ADMIN_EMAIL         the service account (Open WebUI creates it on an empty store from the same variable)
-  OWUI_URL                  where this job reaches Open WebUI       [http://rag-openwebui:8080]
+  OWUI_URL                  where this job reaches Open WebUI       [http://kalla-openwebui:8080]
   OWUI_DB                   Open WebUI's SQLite store                [/data/webui.db]
   OWUI_SECRET_KEY_FILE      Open WebUI's WEBUI_SECRET_KEY            [/run/owui-secrets/webui_secret_key]
   FEEDBACK_KEY_FILE         where the key goes                       [/run/feedback/OpenWebUi__AdminApiKey]
@@ -36,7 +36,7 @@ import urllib.error
 import urllib.request
 import uuid
 
-URL = os.environ.get("OWUI_URL", "http://rag-openwebui:8080").rstrip("/")
+URL = os.environ.get("OWUI_URL", "http://kalla-openwebui:8080").rstrip("/")
 DB = os.environ.get("OWUI_DB", "/data/webui.db")
 SECRET_FILE = os.environ.get("OWUI_SECRET_KEY_FILE", "/run/owui-secrets/webui_secret_key")
 KEY_FILE = os.environ.get("FEEDBACK_KEY_FILE", "/run/feedback/OpenWebUi__AdminApiKey")
@@ -45,7 +45,7 @@ FEEDBACK_LIST = "/api/v1/evaluations/feedbacks/list"
 
 
 def log(message):
-    print(f"rag-openwebui-setup: {message}", flush=True)
+    print(f"kalla-openwebui-setup: {message}", flush=True)
 
 
 def fail(message):
@@ -112,7 +112,7 @@ def account(email):
 
 def write_key(key):
     directory = os.path.dirname(KEY_FILE)
-    # KeyPerFile skips the "ignore." prefix, so rag-api never reads the half-written file.
+    # KeyPerFile skips the "ignore." prefix, so kalla-api never reads the half-written file.
     temporary = os.path.join(directory, f"ignore.{os.path.basename(KEY_FILE)}.tmp")
     fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o640)
     with os.fdopen(fd, "w") as file:
@@ -147,7 +147,7 @@ def main():
     if not works(key):
         fail("the new key is refused on the feedback list: check API_KEYS_ALLOWED_ENDPOINTS")
     write_key(key)
-    log(f"minted the feedback key for {email}; rag-api reads it within seconds")
+    log(f"minted the feedback key for {email}; kalla-api reads it within seconds")
 
 
 if __name__ == "__main__":

@@ -14,11 +14,11 @@ namespace Kalla.TestKit;
 /// and EF's interpolated <c>SqlQuery($"…{x}")</c>, whose format string's <c>{0}</c> holes become <c>$1</c>).
 /// <see cref="DescribeAsync"/> describes each with <see cref="CommandBehavior.SchemaOnly"/> against the migrated database
 /// (Parse and Describe, nothing runs); the result columns (name and Postgres type, in order) are compared with a
-/// checked-in shapes file, regenerated with <c>UME_RAG_UPDATE_CONTRACTS=1</c>.
+/// checked-in shapes file, regenerated with <c>KALLA_UPDATE_CONTRACTS=1</c>.
 /// </summary>
 public static partial class SqlContract
 {
-    public const string UpdateVariable = "UME_RAG_UPDATE_CONTRACTS";
+    public const string UpdateVariable = "KALLA_UPDATE_CONTRACTS";
 
     /// <summary>One SQL text and where it is: <c>Type.Field</c> for a constant, <c>Type.Method#n</c> for a literal.</summary>
     public sealed record Statement(string Name, string Sql);

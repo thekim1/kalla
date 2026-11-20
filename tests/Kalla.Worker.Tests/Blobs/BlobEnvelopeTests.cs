@@ -19,7 +19,7 @@ public sealed class BlobEnvelopeTests : IDisposable
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("ume-rag-envelope-");
+    private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("kalla-envelope-");
     private readonly FileSystemBlobStore _plain;
     private readonly BlobEnvelope _envelope;
 
@@ -194,8 +194,8 @@ public sealed class BlobEnvelopeTests : IDisposable
     {
         var key = Key();
         await PutAsync(key, RandomNumberGenerator.GetBytes(10));
-        var otherKeys = Directory.CreateTempSubdirectory("ume-rag-keys-other-");
-        var empty = Directory.CreateTempSubdirectory("ume-rag-keys-none-");
+        var otherKeys = Directory.CreateTempSubdirectory("kalla-keys-other-");
+        var empty = Directory.CreateTempSubdirectory("kalla-keys-none-");
         try
         {
             TestBlobKeys.WriteKey(otherKeys.FullName, TestBlobKeys.Internal);

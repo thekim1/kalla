@@ -21,14 +21,14 @@ using FakeUsage = fakegateway::Kalla.FakeGateway.FakeUsage;
 namespace Kalla.AdminApi.Tests;
 
 /// <summary>
-/// B-42 (#580, cost-attribution §4.1): rag-admin's test panel runs every call of its turn as the assistant's gateway key, and
+/// B-42 (#580, cost-attribution §4.1): kalla-admin's test panel runs every call of its turn as the assistant's gateway key, and
 /// the retrieval test its query embedding as the knowledge base's; the FakeGateway acts as the key and records the answer
 /// under it.
 /// </summary>
 [Collection(AdminDatabaseGroup2.Name)]
 public sealed class ActingAsKeyAdminTests(AdminDatabaseFixture database)
 {
-    private const string AdminKey = "sk-ume-acting-admin-000000000000000"; // rag-admin's credential key
+    private const string AdminKey = "sk-ume-acting-admin-000000000000000"; // kalla-admin's credential key
     private static readonly Guid AssistantKey = new("019a0000-0000-7000-8000-00000000b0ab");
     private static readonly Guid CollectionKey = new("019a0000-0000-7000-8000-00000000b0ac");
 

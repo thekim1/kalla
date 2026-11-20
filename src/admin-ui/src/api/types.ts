@@ -48,11 +48,11 @@ export interface BffUser {
   sessionExpiresAt: IsoDateTime | null
   /** The session's absolute end (Admin:MaxSessionHours after sign-in); extending never goes past it. */
   sessionLimitAt?: IsoDateTime | null
-  /** False while rag-admin has no usable identity provider (identity design §19, "Reload"). */
+  /** False while kalla-admin has no usable identity provider (identity design §19, "Reload"). */
   signIn: { configured: boolean }
   /** Whether setup mode is open: the wizard at /setup takes the setup code (identity design §19, "Setup state"). */
   setup: { open: boolean }
-  /** Whether the deployment runs Open WebUI (rag-admin's `OpenWebUi:Enabled`, its `openwebui` profile); without it the UI leaves Open WebUI out. */
+  /** Whether the deployment runs Open WebUI (kalla-admin's `OpenWebUi:Enabled`, its `openwebui` profile); without it the UI leaves Open WebUI out. */
   openWebUi: { enabled: boolean }
 }
 
@@ -75,7 +75,7 @@ export interface SignInSecretStatus {
   unreadable: boolean
 }
 
-/** rag-admin's sign-in values, each with its source (`SignInSettingsDto`). */
+/** kalla-admin's sign-in values, each with its source (`SignInSettingsDto`). */
 export interface SignInSettings {
   authority: SignInValue<string | null>
   clientId: SignInValue<string>
@@ -164,7 +164,7 @@ export interface SetupTest {
 
 /**
  * What the gateway's context says of its own sign-in (`SetupGatewaySignIn`, identity design §19): `suggestedAuthority` is the gateway's
- * provider address, a suggestion for rag-admin's authority only (null while the gateway has none); `adminUrl` is the gateway admin's
+ * provider address, a suggestion for kalla-admin's authority only (null while the gateway has none); `adminUrl` is the gateway admin's
  * address for the link to its own setup.
  */
 export interface SetupGatewaySignIn {
@@ -186,7 +186,7 @@ export interface SetupState {
 }
 
 /** Which client a setup test or a client secret belongs to (`SetupTargets`). */
-export type SetupTarget = 'rag-admin' | 'open-webui'
+export type SetupTarget = 'kalla-admin' | 'open-webui'
 
 /** Open WebUI's sign-in values, each with its source (`OpenWebUiSignInDto`); `providerUrl`'s default is null while no authority is known. */
 export interface OpenWebUiSignIn {
@@ -228,7 +228,7 @@ export interface OpenWebUiTest {
   result: OpenWebUiTestResult | null
 }
 
-/** Open WebUI in `GET /bff/setup/state` (`SetupOpenWebUiState`): `redirectUri` is null while rag-admin has no `OpenWebUi:PublicUrl`. */
+/** Open WebUI in `GET /bff/setup/state` (`SetupOpenWebUiState`): `redirectUri` is null while kalla-admin has no `OpenWebUi:PublicUrl`. */
 export interface SetupOpenWebUiState {
   enabled: boolean
   signIn: OpenWebUiSignIn
@@ -1201,7 +1201,7 @@ export interface ClientSummary {
   isEnabled: boolean
   /** The client's own UI (admin design §5.4 step 13). */
   portalUrl?: string | null
-  /** The deployment's own client (identity design §5.2): made by rag-migrate, its key the deployment's. */
+  /** The deployment's own client (identity design §5.2): made by kalla-migrate, its key the deployment's. */
   isManagedByDeployment: boolean
   /** Its keys that work now (admin design §5.9). */
   activeKeys: number
@@ -1223,7 +1223,7 @@ export interface ClientAssistant {
   classification: Level
 }
 
-/** `GET /api/clients/connection`: rag-api's public address, or null when the deployment names none (admin design §5.9.1). */
+/** `GET /api/clients/connection`: kalla-api's public address, or null when the deployment names none (admin design §5.9.1). */
 export interface ClientConnection {
   apiBaseUrl: string | null
 }

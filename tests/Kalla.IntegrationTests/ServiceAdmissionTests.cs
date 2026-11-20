@@ -40,14 +40,14 @@ public sealed class ServiceAdmissionTests
             (await RagDatabaseMigrator.MigrateAsync(db, RolesSqlPath, Ct)).ShouldBeEmpty();
         }
 
-        (await Sql.ScalarAsync<long>(database.Connection(Migrator), "SELECT count(*) FROM public.ume_rag_service_fences")).ShouldBe(0);
+        (await Sql.ScalarAsync<long>(database.Connection(Migrator), "SELECT count(*) FROM public.kalla_service_fences")).ShouldBe(0);
         foreach (var role in new[] { Api, Admin, Worker })
         {
             await Sql.ExecuteAsync(database.Connection(role), ReadSettings);
         }
 
         // Asking for admission without a fence does nothing, whatever the build.
-        await Sql.ExecuteAsync(database.Connection(Admin), "SELECT public.ume_rag_admit('0')");
+        await Sql.ExecuteAsync(database.Connection(Admin), "SELECT public.kalla_admit('0')");
         await Sql.ExecuteAsync(database.Connection(Admin), ReadSettings);
     }
 
@@ -68,26 +68,26 @@ public sealed class ServiceAdmissionTests
         await Sql.ShouldBeDeniedAsync(database.Connection(Api), ReadSettings);
         await Sql.ExecuteAsync(database.Connection(Worker), ReadSettings);
         // What admission gives back: the schemas app-roles.sql granted the admin.
-        (await Sql.ListAsync(database.Connection(Migrator), "SELECT unnest(schemas) FROM public.ume_rag_service_fences WHERE role = 'ume_rag_admin'"))
+        (await Sql.ListAsync(database.Connection(Migrator), "SELECT unnest(schemas) FROM public.kalla_service_fences WHERE role = 'kalla_admin'"))
             .ShouldBe(["audit", "chat", "config", "content"]);
 
         // The previous version's build is refused and gets nothing.
         var refused = await Should.ThrowAsync<PostgresException>(() =>
-            Sql.ExecuteAsync(database.Connection(Admin), $"SELECT public.ume_rag_admit('{BeforeFence}')"));
+            Sql.ExecuteAsync(database.Connection(Admin), $"SELECT public.kalla_admit('{BeforeFence}')"));
         refused.SqlState.ShouldBe(ServiceAdmission.RefusedSqlState);
         refused.MessageText.ShouldContain(Fence);
         refused.MessageText.ShouldContain(BeforeFence);
         await Sql.ShouldBeDeniedAsync(database.Connection(Admin), ReadSettings);
 
         // A role admits only itself (session_user), and no service role reads or writes the fences.
-        await Sql.ExecuteAsync(database.Connection(Api), $"SELECT public.ume_rag_admit('{build}')");
+        await Sql.ExecuteAsync(database.Connection(Api), $"SELECT public.kalla_admit('{build}')");
         await Sql.ExecuteAsync(database.Connection(Api), ReadSettings);
         await Sql.ShouldBeDeniedAsync(database.Connection(Admin), ReadSettings);
         foreach (var role in new[] { Api, Admin, Worker })
         {
-            await Sql.ShouldBeDeniedAsync(database.Connection(role), "SELECT count(*) FROM public.ume_rag_service_fences");
-            await Sql.ShouldBeDeniedAsync(database.Connection(role), $"UPDATE public.ume_rag_service_fences SET admitted = '{build}'");
-            await Sql.ShouldBeDeniedAsync(database.Connection(role), "INSERT INTO public.ume_rag_service_fences (role, fence) VALUES ('ume_rag_worker', '0')");
+            await Sql.ShouldBeDeniedAsync(database.Connection(role), "SELECT count(*) FROM public.kalla_service_fences");
+            await Sql.ShouldBeDeniedAsync(database.Connection(role), $"UPDATE public.kalla_service_fences SET admitted = '{build}'");
+            await Sql.ShouldBeDeniedAsync(database.Connection(role), "INSERT INTO public.kalla_service_fences (role, fence) VALUES ('kalla_worker', '0')");
         }
 
         // A role never admitted stays out through another migration run, which fences nothing new.
@@ -99,9 +99,9 @@ public sealed class ServiceAdmissionTests
         await Sql.ShouldBeDeniedAsync(database.Connection(Admin), ReadSettings);
 
         // The current build is admitted and gets its schemas back, also through later migration runs.
-        await Sql.ExecuteAsync(database.Connection(Admin), $"SELECT public.ume_rag_admit('{build}')");
+        await Sql.ExecuteAsync(database.Connection(Admin), $"SELECT public.kalla_admit('{build}')");
         await Sql.ExecuteAsync(database.Connection(Admin), ReadSettings);
-        (await Sql.ScalarAsync<string>(database.Connection(Migrator), "SELECT admitted FROM public.ume_rag_service_fences WHERE role = 'ume_rag_admin'"))
+        (await Sql.ScalarAsync<string>(database.Connection(Migrator), "SELECT admitted FROM public.kalla_service_fences WHERE role = 'kalla_admin'"))
             .ShouldBe(build);
         await using (var db = TestPostgres.Context(database.Connection(Migrator)))
         {
@@ -132,7 +132,7 @@ public sealed class ServiceAdmissionTests
 
         // A fence beyond every migration of this build: the worker's start fails with one Critical line.
         await Sql.ExecuteAsync(database.Connection(Migrator),
-            "INSERT INTO public.ume_rag_service_fences (role, fence) VALUES ('ume_rag_worker', '99991231235959_FromALaterRelease')");
+            "INSERT INTO public.kalla_service_fences (role, fence) VALUES ('kalla_worker', '99991231235959_FromALaterRelease')");
         var logs = new CapturingLoggerProvider();
         using (var worker = ServiceHost(database.Connection(Worker), logs))
         {
@@ -146,7 +146,7 @@ public sealed class ServiceAdmissionTests
         critical.Message.ShouldContain(CurrentBuild(database));
 
         // Without the function (development, or a database migrated before it existed) nothing is asked.
-        await Sql.ExecuteAsync(database.Connection(Migrator), "DROP FUNCTION public.ume_rag_admit(text)");
+        await Sql.ExecuteAsync(database.Connection(Migrator), "DROP FUNCTION public.kalla_admit(text)");
         using (var worker = ServiceHost(database.Connection(Worker), new CapturingLoggerProvider()))
         {
             await worker.StartAsync(Ct);
