@@ -78,6 +78,7 @@ benchmarks/**                                 a
 docs/security-events.md                       b
 docs/accessibility-statement.md               b
 docs/**                                       a
+site/**                                       a
 
 # Stream B: application and the serving side
 src/Ume.Rag.AppHost/**                        b

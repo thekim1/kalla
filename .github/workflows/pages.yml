@@ -1,0 +1,83 @@
+name: Website
+# Builds site/ (the product page, Getting started and every Markdown page in site/content.mjs) and publishes it to GitHub
+# Pages whenever the site, the documentation or the admin UI's design tokens change on main. Pull requests that change
+# the same files build it without publishing, unless they are drafts, so a broken link in docs/ fails the pull request
+# rather than the deployment. The gateway's workflow (thekim1/llmgateway, .github/workflows/pages.yml), on our runners
+# and pins.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'docs/**'
+      - 'CHANGELOG.md'
+      - 'src/admin-ui/src/styles/tokens.css'
+      - '.github/workflows/pages.yml'
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'site/**'
+      - 'docs/**'
+      - 'CHANGELOG.md'
+      - 'src/admin-ui/src/styles/tokens.css'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Build
+        working-directory: site
+        env:
+          SITE_BASE: /ume-rag-platform/
+        run: |
+          npm ci
+          npm audit --audit-level=low
+          npm run build
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - id: pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - name: Build
+        working-directory: site
+        env:
+          SITE_BASE: ${{ steps.pages.outputs.base_path }}/
+          SITE_ORIGIN: ${{ steps.pages.outputs.origin }}
+        run: |
+          npm ci
+          npm audit --audit-level=low
+          npm run build
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site/dist
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
