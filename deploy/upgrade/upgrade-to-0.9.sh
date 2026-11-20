@@ -16,7 +16,7 @@
 #   2. stops the old project's services except Postgres;
 #   3. renames the database roles ume_rag_* to kalla_* (deploy/upgrade/0.9-rename-roles.sql, as the Postgres superuser);
 #   4. removes the old project's containers and networks (its volumes stay);
-#   5. copies the volumes <old project>_rag-{postgres-data,certs,secrets,blobs,openwebui-data} to
+#   5. copies the volumes <old project>_rag-{postgres-data,certs,secrets,blobs,openwebui-data,pgbackrest-repo,upload-copy} to
 #      kalla_kalla-{...}. The old volumes are kept: remove them once the new version runs.
 # Then re-run ./deploy/init-deployment.sh (it writes the connection strings with the new role names) and start the
 # release as usual. Back up the database and the two files a restore needs first (docs/runbook.md).
@@ -26,7 +26,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 deploy="$(cd "$here/.." && pwd)"
 old_project="ume-rag"; new_project="kalla"
 env_file="$deploy/.env"; yes=0
-volumes="postgres-data certs secrets blobs openwebui-data"
+volumes="postgres-data certs secrets blobs openwebui-data pgbackrest-repo upload-copy"
 
 usage() { sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 die() { echo "error: $*" >&2; exit 1; }

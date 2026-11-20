@@ -25,7 +25,7 @@
 - **Compose:** from the new release's directory, with the old installation running, run
   `./deploy/upgrade/upgrade-to-0.9.sh`. It renames the variables in `deploy/.env` (keeping `.env.pre-0.9`), stops the
   old project `ume-rag` except Postgres, renames the roles, removes the old containers and copies the volumes
-  `ume-rag_rag-*` to `kalla_kalla-*`. Then run `./deploy/init-deployment.sh` and start the release as usual. Remove the
+  `ume-rag_rag-*` to `kalla_kalla-*` (the backup volumes too). Then run `./deploy/init-deployment.sh` and start the release as usual. Remove the
   old volumes once it runs.
 - **Portainer** (one stack with the gateway):
   1. **Stop the stack**, and rename its variables: every `UME_RAG_*` to `KALLA_*`, then every `UME_*` to `FORS_*`

@@ -19,8 +19,8 @@ services:
       KALLA_BACKUP_S3_REGION: ${KALLA_BACKUP_S3_REGION:-}
     # kalla-bootstrap gives the repository to Postgres and the upload copy to the services' uid.
     volumes:
-      - ${KALLA_BACKUP_DIR:-rag-pgbackrest-repo}:/backup/pgbackrest
-      - ${KALLA_UPLOAD_BACKUP_DIR:-rag-upload-copy}:/backup/uploads
+      - ${KALLA_BACKUP_DIR:-kalla-pgbackrest-repo}:/backup/pgbackrest
+      - ${KALLA_UPLOAD_BACKUP_DIR:-kalla-upload-copy}:/backup/uploads
 
   kalla-postgres:
     # postgresql.conf as it is: archive_mode on, archive_command pgbackrest archive-push.
@@ -29,7 +29,7 @@ services:
       # The repository settings and passphrase, which pgBackRest appends to the image's /etc/pgbackrest/pgbackrest.conf.
       - {type: volume, source: kalla-secrets, target: /etc/pgbackrest/conf.d, read_only: true, volume: {subpath: pgbackrest}}
       # A posix repository; unused with S3.
-      - ${KALLA_BACKUP_DIR:-rag-pgbackrest-repo}:/var/lib/pgbackrest
+      - ${KALLA_BACKUP_DIR:-kalla-pgbackrest-repo}:/var/lib/pgbackrest
     # backup: archive-push and the timer's backups reach the backup target (the host firewall allows only that).
     networks: [backup]
 
@@ -51,7 +51,7 @@ services:
     pids_limit: 64
     volumes:
       - {type: volume, source: kalla-blobs, target: /data/blobs, read_only: true}
-      - ${KALLA_UPLOAD_BACKUP_DIR:-rag-upload-copy}:/backup
+      - ${KALLA_UPLOAD_BACKUP_DIR:-kalla-upload-copy}:/backup
     # No network: the copy is a host directory or a volume.
     network_mode: none
 
