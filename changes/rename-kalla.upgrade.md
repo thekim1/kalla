@@ -1,6 +1,8 @@
 - **Rolling update: no.** Every name from before the rename to Källa changes, together with the gateway's rename to
-  Fors 0.12 (its own guide, "0.12.0"): stop the old version, rename the database roles, start the new one. Back up the
-  database and the files a restore needs first, and escrow the keys again afterwards.
+  Fors 0.12.1 (its own guide, "0.12.0" and "0.12.1"; from Fors 0.11 go straight to 0.12.1, not through 0.12.0, which
+  loses the stored provider credentials and sign-in client secret, thekim1/fors#116): stop the old version, rename the
+  database roles, start the new one. Back up the database and the files a restore needs first, and escrow the keys
+  again afterwards.
 - **Renamed without a fallback:**
   - **Variables:** `UME_RAG_*` becomes `KALLA_*` (`UME_RAG_API_HOST` → `KALLA_API_HOST`, …; the rest of each name is
     unchanged), `RAG_*_IMAGE` becomes `KALLA_*_IMAGE`, and the gateway's `UME_*` becomes `FORS_*` (`UME_DOMAIN` →
