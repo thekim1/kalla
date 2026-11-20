@@ -38,15 +38,17 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Read:** data-model §8; connectors §12; `DeletedSourcePurge`, `DeleteSourceHandler` (#884).
 
 ### [ ] A-38 Evaluation questions whose expected documents are gone (#878, found in #884)
-- **Do:** a question of a knowledge base's evaluation set whose `ExpectedDocumentIds` name a document that is purged
-  (its source deleted, A-36, or the document removed, A-37) scores as a miss for ever. Say first what the design
-  holds for it (processing §13 and admin §5.5's Test questions; if it says nothing, open an issue for the main
-  session with a proposal: mark the question stale and leave it out of the score, shown as such in the admin).
-- **Paths:** `src/Ume.Rag.Worker/Evaluation/**`, `tests/**`; the admin's part is stream b's, by an issue.
-- **Done when:** a deleted source's questions no longer lower the knowledge base's score, by a test; the admin
-  shows which questions lost their documents.
-- **Waits on:** the design's answer (above).
-- **Read:** processing §13; admin §5.5; Decisions "Deleting knowledge bases, sources and assistants".
+- **Do:** processing §13.3 *A question whose expected document is gone*: an evaluation run leaves out every question
+  with an expected document whose `DeletedAt` is set or whose row is purged, counts it as `documentGone` in the run's
+  result, and sets a `human` one to `State = stale` (and back to `active` when the document is revived); `generated`
+  ones keep their retirement at the top-up. The admin's line ("Its expected document was deleted", admin §7.1) is
+  stream b's: open an issue for it with the run result's field.
+- **Paths:** `src/Ume.Rag.Worker/Evaluation/**`, `tests/Ume.Rag.Worker.Tests/**`.
+- **Done when:** a test deletes a source whose document a human and a generated question expect: the next run's
+  recall@10 is the same as without those questions, both are counted as `documentGone`, the human one is `stale`;
+  a revived document makes it `active` again.
+- **Waits on:** nothing (the design answered on #889).
+- **Read:** processing §13.3; admin §7.1; Decisions "Deleting knowledge bases, sources and assistants".
 
 ## Live (the live block, see the roadmap)
 

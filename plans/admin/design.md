@@ -1800,8 +1800,8 @@ demonstrably need custom flows (§16).
   cost), **Create more** with the forecast (processing §13.1). Generated sets run at the collection's ceiling (processing
   §13.1); the `human` gold set stays the headline metric.
 - Questions table (keyset): question, layer, expected documents (a count; the titles show in the editor), last rank,
-  state; editors add/edit/retire human questions (expected documents picked by title search, at most 10); a generated
-  question is changed by saving it as a new human question. `edit-eval-question` changes only the `human` layer
+  state (a `stale` human question says "Its expected document was deleted", processing §13.3); editors add/edit/retire
+  human questions (expected documents picked by title search, at most 10); a generated question is changed by saving it as a new human question. `edit-eval-question` changes only the `human` layer
   (`question_not_human` otherwise), so a generated question is not retired by hand.
 - Reports: latest runs (after publish, nightly, after a retrieval-settings change, on demand **Run evaluation**), each
   as the §7.2 card; the trend of recall@10 and MRR is a table of the latest 10 runs (the `TimeSeriesChart` view is

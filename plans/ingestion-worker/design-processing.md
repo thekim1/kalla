@@ -639,6 +639,12 @@ gateway's `x-ume-cost-usd` or an estimate (engine §10.6), so the real cost show
   still covers them); the growth top-up also needs the layer below `min(max, 3·D)` and the last set job at least 1 day
   old.
 - An evaluation run uses the set as it was when the run started; a top-up never runs during a run of the collection.
+- **A question whose expected document is gone** (its `DeletedAt` set: the document removed from its source, or its
+  source or knowledge base deleted; or the row purged) is left out of every run from then on, in every layer, and the
+  run counts it as `documentGone` instead of a miss, so a delete never lowers recall@10 or MRR. A `generated` one is
+  retired at the next top-up as above. A `human` one gets `State = stale` (not `RetiredAt`) at the run that finds it;
+  the editor re-points its expected documents (`edit-eval-question`, back to `active`) or retires it. A document
+  revived within its 14 days (connectors §12) makes a `stale` human question `active` again at the next run.
 
 ### 13.4 Human and other layers
 
