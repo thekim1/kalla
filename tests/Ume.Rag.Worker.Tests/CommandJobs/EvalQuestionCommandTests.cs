@@ -51,6 +51,12 @@ public sealed class EvalQuestionCommandTests(RagDatabaseFixture database) : IAsy
             update.Result.ShouldBeOfType<JobResult.Committed>();
             (await RowAsync(question)).ShouldBe("human|active|Vad kostar bygglov?||internal");
 
+            // A run made it stale (its expected document was gone, processing design §13.3): an edit makes it active again.
+            await Sql.ExecuteAsync(database.Connection(null), """UPDATE content."EvaluationQuestions" SET "State" = 'stale' WHERE "Id" = $1""", question);
+            (await _runner.RunAsync(create with { Action = QuestionAction.Update, ExpectedDocumentIds = [document] }, seed.DepartmentId)).Result
+                .ShouldBeOfType<JobResult.Committed>();
+            (await RowAsync(question)).ShouldBe($"human|active|Hur söker jag bygglov?|{document}|internal");
+
             var retire = await _runner.RunAsync(new EditEvalQuestionCommand { Action = QuestionAction.Retire, CollectionId = seed.CollectionId, QuestionId = question },
                 seed.DepartmentId);
             retire.Result.ShouldBeOfType<JobResult.Committed>();

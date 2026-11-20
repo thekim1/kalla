@@ -46,7 +46,8 @@ public sealed record EvaluationTotals(int Questions, int Found, decimal? RecallA
 
 /// <summary>
 /// The numbers of a run (processing design §13.6, §14.1, §14.8): per question the expected rank, recall@k and MRR@k
-/// over answerable questions (unanswerable ones do not count, §13.4), per layer with <c>human</c> first, wins and losses
+/// over answerable questions (unanswerable ones do not count, §13.4; nor do those whose expected document is gone, which
+/// are never searched, §13.3), per layer with <c>human</c> first, wins and losses
 /// against a compared run, the coverage-threshold proposal from the human layer (knowledge design §7: the value that
 /// misclassifies the fewest answerable and unanswerable questions), and the nightly recall alert.
 /// </summary>
@@ -81,15 +82,20 @@ public static class EvaluationScoring
             Math.Round(reciprocal / answerable.Count, Decimals));
     }
 
-    /// <summary>The run per layer present, <c>human</c> first (reports lead with the gold set, weakness review §2).</summary>
-    public static IReadOnlyList<EvaluationLayerResult> Layers(IReadOnlyList<QuestionOutcome> outcomes)
+    /// <summary>
+    /// The run per layer present, <c>human</c> first (reports lead with the gold set, weakness review §2), with the layer's
+    /// questions left out because an expected document is gone (<paramref name="gone"/>, processing design §13.3).
+    /// </summary>
+    public static IReadOnlyList<EvaluationLayerResult> Layers(IReadOnlyList<QuestionOutcome> outcomes, IReadOnlyList<EvaluationQuestionRow> gone)
     {
         ArgumentNullException.ThrowIfNull(outcomes);
+        ArgumentNullException.ThrowIfNull(gone);
         var layers = new List<EvaluationLayerResult>(2);
         foreach (var layer in new[] { EvaluationLayer.Human, EvaluationLayer.Generated })
         {
             var of = outcomes.Where(o => o.Question.Layer == layer).ToList();
-            if (of.Count == 0)
+            var goneOf = gone.Count(q => q.Layer == layer);
+            if (of.Count == 0 && goneOf == 0)
             {
                 continue;
             }
@@ -101,6 +107,7 @@ public static class EvaluationScoring
                 Questions = totals.Questions,
                 Found = totals.Found,
                 Unanswerable = of.Count(o => !o.Question.Answerable),
+                DocumentGone = goneOf,
                 RecallAtK = (double?)totals.RecallAtK,
                 Mrr = (double?)totals.Mrr,
             });

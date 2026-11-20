@@ -16,7 +16,7 @@ namespace Ume.Rag.Worker.Tests.Evaluation;
 /// <summary>
 /// A fixture collection for the evaluation tests: three live documents (one chunk each, texts unique to the test), a set
 /// whose <c>human</c> layer has a compound-only question, a plain keyword question, an answerable question whose
-/// document is not in the collection and two unanswerable questions, and one <c>generated</c> question.
+/// document is not in the index and two unanswerable questions, and one <c>generated</c> question.
 /// </summary>
 internal sealed record EvalFixture(SourceSeed Seed, Guid SetId, Guid Permit, Guid Waste, Guid Library, EvalQuestions Questions)
 {
@@ -25,7 +25,10 @@ internal sealed record EvalFixture(SourceSeed Seed, Guid SetId, Guid Permit, Gui
 
 /// <param name="CompoundOnly">Matches its document's keyword side only through the decompounder ("tillstånd" in "parkeringstillstånd").</param>
 /// <param name="Keyword">Matches its document's keyword side without the decompounder ("avfallstaxan").</param>
-/// <param name="Unreachable">Answerable, but its expected document is not in the collection: never found.</param>
+/// <param name="Unreachable">
+/// Answerable, but its expected document has no live set (its chunks are not searchable): never found. The document is not
+/// gone (a deleted or purged one leaves the question out of the run, processing design §13.3).
+/// </param>
 /// <param name="Unanswerable">No expected documents: the expected outcome is "not found".</param>
 /// <param name="Generated">An answerable question of the generated layer.</param>
 internal sealed record EvalQuestions(Guid CompoundOnly, Guid Keyword, Guid Unreachable, IReadOnlyList<Guid> Unanswerable, Guid Generated);
@@ -55,7 +58,7 @@ internal static class EvalKit
         // Texts of their own: the embedding cache and the database are shared by every test.
         var tag = Guid.NewGuid().ToString("N")[..12];
         await using var writer = new ContentFixtureWriter(database.Connection(RagDatabase.Worker), database.Connection(RagDatabase.Admin), Embed);
-        async Task<Guid> DocumentAsync(string name, string text) => (await writer.AddDocumentAsync(new FixtureDocumentSpec
+        async Task<Guid> DocumentAsync(string name, string text, string setState = "live") => (await writer.AddDocumentAsync(new FixtureDocumentSpec
         {
             CollectionId = seed.CollectionId,
             EmbeddingProfileId = EngineKit.ProfileId,
@@ -63,11 +66,13 @@ internal static class EvalKit
             Classification = seed.Classification,
             Url = $"https://site.test/{name}/{tag}",
             Title = name,
+            SetState = setState,
         }, [new FixtureChunk(text)], Ct)).Id;
 
         var permit = await DocumentAsync("parkering", $"Parkeringstillstånd för rörelsehindrade beviljas av kommunen. Ärende {tag}.");
         var waste = await DocumentAsync("avfall", $"Avfallstaxan för 2027 är beslutad av fullmäktige. Ärende {tag}.");
         var library = await DocumentAsync("bibliotek", $"Stadsbiblioteket lånar ut böcker och tidskrifter. Ärende {tag}.");
+        var unindexed = await DocumentAsync("filial", $"Filialen i Holmsund har öppet på lördagar. Ärende {tag}.", "writing");
 
         var setId = Guid.CreateVersion7();
         await Sql.ExecuteAsync(database.Connection(null),
@@ -86,7 +91,7 @@ internal static class EvalKit
         var generated = await QuestionAsync(EvaluationLayers.Generated, "Beviljas parkeringstillstånd av kommunen?", permit);
         var compound = await QuestionAsync(EvaluationLayers.Human, CompoundOnlyQuestion, permit);
         var keyword = await QuestionAsync(EvaluationLayers.Human, "Vad säger avfallstaxan?", waste);
-        var unreachable = await QuestionAsync(EvaluationLayers.Human, "Var finns stadsbiblioteket?", Guid.NewGuid());
+        var unreachable = await QuestionAsync(EvaluationLayers.Human, "Var finns stadsbiblioteket?", unindexed);
         var off1 = await QuestionAsync(EvaluationLayers.Human, "Vilken färg har stadshusets tak?");
         var off2 = await QuestionAsync(EvaluationLayers.Human, "Vem vann melodifestivalen i fjol?");
         return new EvalFixture(seed, setId, permit, waste, library, new EvalQuestions(compound, keyword, unreachable, [off1, off2], generated));

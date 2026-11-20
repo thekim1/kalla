@@ -112,7 +112,7 @@
   "Evaluation.EvaluationStore.DemoteSql": ["Id uuid", "DemoteRules text"],
   "Evaluation.EvaluationStore.NightlyRecallsSql": ["RecallAtK numeric"],
   "Evaluation.EvaluationStore.PriceSql": ["InputPerMillionUsd numeric", "OutputPerMillionUsd numeric"],
-  "Evaluation.EvaluationStore.QuestionsSql": ["Id uuid", "Layer character varying", "Question text", "ExpectedDocumentIds uuid[]"],
+  "Evaluation.EvaluationStore.QuestionsSql": ["Id uuid", "Layer character varying", "Question text", "ExpectedDocumentIds uuid[]", "Stale boolean", "DocumentGone boolean"],
   "Evaluation.EvaluationStore.RunStartedSql": ["StartedAt timestamp with time zone"],
   "Evaluation.EvaluationStore.VersionNumberSql": ["Number integer"],
   "Evaluation.Generation.EvalSetStore.ActiveSql": ["Id uuid", "Question text", "coalesce text", "ExpectedDocumentIds uuid[]", "SourceContentHash bytea", "SourceChunkId uuid", "uuid uuid"],

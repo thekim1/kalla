@@ -46,8 +46,12 @@ public sealed class EditEvalQuestionHandler(JobDatabase database, IJobQueue queu
         ON CONFLICT ("Id") DO NOTHING
         """;
 
-    private const string UpdateSql = """
-        UPDATE content."EvaluationQuestions" SET "Question" = $2, "ExpectedAnswer" = $3, "ExpectedDocumentIds" = $4 WHERE "Id" = $1
+    // An edit makes a stale question (its expected document was gone) active again; the next run checks it once more
+    // (processing design §13.3).
+    private const string UpdateSql = $"""
+        UPDATE content."EvaluationQuestions" SET "Question" = $2, "ExpectedAnswer" = $3, "ExpectedDocumentIds" = $4,
+               "State" = CASE WHEN "RetiredAt" IS NULL THEN '{EvaluationQuestionStates.Active}' ELSE "State" END
+        WHERE "Id" = $1
         """;
 
     private const string RetireSql = $"""

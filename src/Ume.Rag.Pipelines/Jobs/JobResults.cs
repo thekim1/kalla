@@ -144,6 +144,10 @@ public sealed record EvaluationRunRef
     [Range(0, int.MaxValue)]
     public required int Found { get; init; }
 
+    [Description(EvaluationLayerResult.DocumentGoneDescription)]
+    [Range(0, int.MaxValue)]
+    public int DocumentGone { get; init; }
+
     [Description("on-demand with candidateSettings: the run used the candidate settings, not the current ones.")]
     public bool Candidate { get; init; }
 
@@ -217,6 +221,10 @@ public sealed record EvaluationSearchStats
 /// <summary>One question layer of a run: recall@k and MRR@k over its answerable questions (processing design §13.6).</summary>
 public sealed record EvaluationLayerResult
 {
+    /// <summary>The contracts' description of the <c>documentGone</c> count (processing design §13.3).</summary>
+    public const string DocumentGoneDescription =
+        "Questions left out because an expected document is gone (Documents.DeletedAt set, or the row purged): not searched and not counted in recall@k, MRR@k, wins or losses (processing design §13.3).";
+
     public required EvaluationLayer Layer { get; init; }
 
     [Description("Answerable questions (with expected documents): the denominator of recall@k.")]
@@ -230,6 +238,10 @@ public sealed record EvaluationLayerResult
     [Description("Questions without expected documents (expected outcome \"not found\"); not counted in recall@k and MRR@k.")]
     [Range(0, int.MaxValue)]
     public int Unanswerable { get; init; }
+
+    [Description(DocumentGoneDescription)]
+    [Range(0, int.MaxValue)]
+    public int DocumentGone { get; init; }
 
     [Description("Found / Questions; absent without answerable questions.")]
     [Range(0.0, 1.0)]
@@ -466,6 +478,10 @@ public sealed record EvalRunResult
     [Description("Answerable questions with an expected document in the top k.")]
     [Range(0, int.MaxValue)]
     public required int Found { get; init; }
+
+    [Description(EvaluationLayerResult.DocumentGoneDescription)]
+    [Range(0, int.MaxValue)]
+    public int DocumentGone { get; init; }
 
     [Description("Questions found now and not in the compared run, and the reverse.")]
     [Range(0, int.MaxValue)]
