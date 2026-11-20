@@ -9,7 +9,7 @@ namespace Ume.Rag.AdminApi;
 /// <summary>
 /// The nightly retention of the config schema (adapted from the gateway's <c>RetentionService</c>; data-model §8): calls
 /// <c>config.rag_retention_config_step</c> (expired admin sessions, outbox rows older than 30 days) until a batch comes back
-/// smaller than the batch size. Each batch is one statement under <c>pg_try_advisory_xact_lock</c>, so several instances
+/// smaller than the batch size. It also purges deleted assistants after 30 days and deleted sources and knowledge bases once their content is gone (B-51, B-53). Each batch is one statement under <c>pg_try_advisory_xact_lock</c>, so several instances
 /// share or skip the work (repo-and-deployment §3, <c>Admin:Retention</c>). The chat step (<c>chat.rag_retention_chat_step</c>) runs after it under its own lock; the audit step joins it with its
 /// tables (P1).
 /// </summary>
