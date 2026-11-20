@@ -39,6 +39,11 @@ gateway's `v0.11.0` or later: the `v0.6.0` asset has none of them.
   terminates TLS: your own reverse proxy (routes and body sizes:
   [production-setup.md](production-setup.md#reverse-proxy-and-pki)), or the stack's optional **proxy profile** (*TLS
   proxy* below).
+  **One DNS record and one certificate are enough:** every name is one label under `UME_DOMAIN` (`llm.`,
+  `llm-admin.`, `rag.`, `rag-admin.` and, with Open WebUI, `chat.`), so a wildcard record `*.<domain>` pointing at
+  the proxy and a wildcard certificate for `*.<domain>` cover them all. Give the installation a sub-domain of its own
+  (`UME_DOMAIN=ai.example.se`, the record `*.ai.example.se`) and the wildcard touches none of your other names.
+  The services are not served under paths of one name (`example.se/admin`): each keeps a host name of its own.
 - The **embedding and chat models** on the gateway, EU-hosted for now.
 - **Open WebUI, the chat for users, is optional** and not part of the first deploy: an installation that only serves
   its API to your own applications never needs it. It takes one more client, host name and profile: *Adding Open

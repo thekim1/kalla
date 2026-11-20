@@ -40,10 +40,12 @@ host's loopback. Choose one:
 - **A reverse proxy in front** (production): `--proxy` on the gateway's script, each of the four names its own host
   name, and for Ume.Rag the proxy's routes and its address (`--proxy-address`, which the host firewall then alone
   admits to the published ports; [Reverse proxy and PKI](production-setup.md#reverse-proxy-and-pki)). The gateway's
-  address is then `https://llm.<domain>`.
-- **No proxy** (a test host): `--bind 0.0.0.0` on the gateway's script. The addresses carry the ports
-  (`https://<host>:8443`), the certificates come from each product's internal CA (the browser warns), and Ume.Rag
-  trusts the gateway's CA through `--gateway-ca-file`. Restrict the four ports in a network firewall.
+  address is then `https://llm.<domain>`. One wildcard DNS record and one wildcard certificate for `*.<domain>`
+  cover the four names.
+- **No proxy** (a test host): `--bind 0.0.0.0` on the gateway's script. One host name serves everything: the
+  addresses carry the ports (`https://<host>:8443`), the certificates come from each product's internal CA (the
+  browser warns), and Ume.Rag trusts the gateway's CA through `--gateway-ca-file`. Restrict the four ports in a
+  network firewall.
 
 The commands below are the second case. With a proxy, replace the gateway's `--bind 0.0.0.0` with `--proxy`, use the
 host names, and add `--proxy-address` to Ume.Rag's script.

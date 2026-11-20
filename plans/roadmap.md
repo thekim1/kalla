@@ -106,6 +106,7 @@ The inputs of the critical path are in its table. The other open calls:
 | Ask-a-file workspaces (P2): owned by teams and individuals, against "Organisation" (`work/main.md` M-11) | user | P2 |
 | Product calls: #333 finding 1 (`exactScanMaxChunks`, after the recall check on the test host); [`proposals/architecture-plans.md`](proposals/architecture-plans.md) items 1, 2, 4–7; the W3 grant step; a Git/Markdown connector | user | nothing in P1b |
 | #511 splitting the worker into libraries | stream b | only if it keeps growing in P2 |
+| Paths under one host name (`example.se/rag`), Decisions "Host names": not built | user | nothing; only if an organisation gets exactly one name |
 
 Every postponed decision with its stopgap and deadline: [`postponed-decisions.md`](postponed-decisions.md).
 
