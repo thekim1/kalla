@@ -116,7 +116,7 @@ internal static class IngestionConfigModel
             e.Property(x => x.SharedWith).HasMaxLength(20).HasDefaultValue(CollectionSharingLevels.Department);
             e.Property(x => x.ContactName).HasMaxLength(200);
             e.Property(x => x.ContactEmail).HasMaxLength(254);
-            e.HasIndex(x => x.Slug).IsUnique();
+            e.HasIndex(x => x.Slug).IsUnique().HasFilter("\"DeletedAt\" IS NULL"); // a deleted one's name is free at once (Decisions "Deleting knowledge bases, sources and assistants")
             e.HasIndex(x => x.DepartmentId);
             e.HasOne<EmbeddingProfile>().WithMany().HasForeignKey(x => x.EmbeddingProfileId).OnDelete(DeleteBehavior.Restrict);
             ChangeStamps(e);

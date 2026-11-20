@@ -145,6 +145,46 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     wrapper.unmount()
   })
 
+  it('deletes the source for Manage after its name is typed; an editor has no Delete (Decisions "Deleting knowledge bases, sources and assistants")', async () => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = bffUser({ roles: ['rag-department-admin'] })
+    auth.status = 'authenticated'
+    vi.spyOn(api.sources, 'get').mockResolvedValue(source)
+    vi.spyOn(api.sources, 'runs').mockResolvedValue({ items: [], next: null })
+    vi.spyOn(api.sources, 'piiReport').mockRejectedValue(new Error('x'))
+    vi.spyOn(api.collections, 'sources').mockResolvedValue([{ id: 's1', documents: 1234 } as never])
+    const remove = vi.spyOn(api.sources, 'remove').mockResolvedValue(undefined)
+    push.mockClear()
+
+    const wrapper = mount(SourceView, { props: { id: 's1' }, attachTo: document.body, global: { stubs: { RouterLink: RouterLinkStub } } })
+    await flushPromises()
+    await wrapper.get('[data-test=delete]').trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).toMatch(/Its 1\s234 documents leave the search at once/)
+    const confirm = document.body.querySelector<HTMLButtonElement>('[data-test=confirm]')!
+    // The button waits for the name.
+    expect(confirm.getAttribute('aria-disabled')).toBe('true')
+    confirm.click()
+    await flushPromises()
+    expect(remove).not.toHaveBeenCalled()
+    const name = document.body.querySelector<HTMLInputElement>('[data-test=confirm-name] input, input[data-test=confirm-name]')!
+    name.value = 'umea.se/bygga'
+    name.dispatchEvent(new Event('input'))
+    await flushPromises()
+    expect(confirm.getAttribute('aria-disabled')).not.toBe('true')
+    confirm.click()
+    await flushPromises()
+    expect(remove).toHaveBeenCalledWith('s1', '3')
+    expect(push).toHaveBeenCalledWith({ name: 'collection', params: { id: 'c1' } })
+    wrapper.unmount()
+
+    auth.user = bffUser({ roles: ['rag-editor'] })
+    const editor = mount(SourceView, { props: { id: 's1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
+    await flushPromises()
+    expect(editor.find('[data-test=delete]').exists()).toBe(false)
+  })
+
   it('polls a running run, shows its progress in place and reloads the runs when it ends (#803)', async () => {
     setActivePinia(createPinia())
     vi.useFakeTimers()

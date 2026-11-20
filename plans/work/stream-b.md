@@ -58,7 +58,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Waits on:** nothing.
 - **Read:** chat §9.9, §10.1, §10.2; decided by the user, 2026-11-19 (decisions log).
 
-### [ ] B-50 Delete a knowledge base and a source in the admin UI; their names free at once (#878)
+### [x] B-50 Delete a knowledge base and a source in the admin UI; their names free at once (#878)
 - **Do:** Decisions "Deleting knowledge bases, sources and assistants"; admin §4.5 (the collections and sources rows)
   and *Delete in the UI* (§5.5): *Delete* in the ⋯ menu of a knowledge base and of a source (`Manage`), each with the
   dialog (the counts, the name typed; for a knowledge base in use the `collection_in_use` list and no button). The

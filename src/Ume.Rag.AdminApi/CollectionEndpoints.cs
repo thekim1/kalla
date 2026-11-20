@@ -77,12 +77,14 @@ public static class CollectionEndpoints
                     var profile = await admin.Db.EmbeddingProfiles.AsNoTracking().Where(p => p.IsDefault && p.State == EmbeddingProfileStates.Active)
                         .Select(p => (Guid?)p.Id).FirstOrDefaultAsync(attempt) ?? throw AdminFaults.Of(AdminErrorCodes.NoEmbeddingProfile);
                     var slug = string.IsNullOrWhiteSpace(request.Slug) ? Slugs.From(request.Name) : request.Slug;
-                    // Slugs are never reused, also after a delete: API clients may still send an old one (admin design §4.5).
-                    if (await admin.Db.Collections.AsNoTracking().AnyAsync(c => c.Slug == slug, attempt))
+                    // Unique among the knowledge bases that are not deleted: a deleted one's name is free at once (Decisions
+                    // "Deleting knowledge bases, sources and assistants"; admin design §4.5).
+                    var live = admin.Db.Collections.AsNoTracking().Where(c => c.DeletedAt == null);
+                    if (await live.AnyAsync(c => c.Slug == slug, attempt))
                     {
                         throw AdminFaults.Field("slug", AdminErrorCodes.SlugTaken, new Dictionary<string, string>
                         {
-                            ["slug"] = slug, ["suggestion"] = await Slugs.FreeAsync(admin.Db.Collections.AsNoTracking().Select(c => c.Slug), slug, attempt),
+                            ["slug"] = slug, ["suggestion"] = await Slugs.FreeAsync(live.Select(c => c.Slug), slug, attempt),
                         });
                     }
 

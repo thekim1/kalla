@@ -149,9 +149,12 @@ export const api = {
       http.put<Collection>(`/api/collections/${id}/retrieval-settings`, { settings, version }),
     setup: (id: string) => http.get<CollectionSetup>(`/api/collections/${id}/setup`),
     addSource: (id: string, body: SourceCreate) => http.post<Source>(`/api/collections/${id}/sources`, body),
+    /** Refused with `collection_in_use` while an assistant links it or it has a source (admin design §4.5). */
+    remove: (id: string, version: string) => http.del(`/api/collections/${id}?version=${encodeURIComponent(version)}`),
   },
   sources: {
     get: (id: string) => http.get<Source>(`/api/sources/${id}`),
+    remove: (id: string, version: string) => http.del(`/api/sources/${id}?version=${encodeURIComponent(version)}`),
     sync: (id: string) => http.post<SyncStarted>(`/api/sources/${id}/sync`),
     retryFailed: (id: string) => http.post<SyncStarted>(`/api/sources/${id}/retry-failed`),
     impact: (id: string, body: { settings: Record<string, unknown> }) => http.post<SourceImpact>(`/api/sources/${id}/impact`, body),
