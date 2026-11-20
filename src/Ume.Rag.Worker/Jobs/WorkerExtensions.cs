@@ -90,7 +90,7 @@ public static class WorkerExtensions
         builder.Services.TryAddSingleton<RunStore>();
         builder.Services.TryAddSingleton<IndexWriter>();
         builder.Services.TryAddSingleton<BlobPurgeSweep>();
-        builder.Services.TryAddSingleton<DeletedSourcePurge>();
+        builder.Services.TryAddSingleton<DocumentPurge>();
         builder.Services.TryAddSingleton<HnswIndexMetrics>();
         builder.Services.TryAddSingleton(sp => new HnswIndexHealth(sp.GetRequiredService<NpgsqlDataSource>(),
             HnswIndexHealth.ConnectionString(builder.Configuration), sp.GetRequiredService<HnswIndexMetrics>(), sp.GetRequiredService<ILogger<HnswIndexHealth>>()));

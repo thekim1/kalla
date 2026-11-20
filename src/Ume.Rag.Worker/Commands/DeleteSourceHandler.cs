@@ -16,7 +16,7 @@ namespace Ume.Rag.Worker.Commands;
 /// one; then, with the job, its documents are soft-deleted as removed ones are (<c>DeletedAt</c>, <c>PurgeAfter</c> after the
 /// 14-day grace, the chunks of each live set deleted, so nothing of it is found), and its upload slots are deleted with a
 /// tombstone for each blob (<c>source.deleted</c>), which <see cref="BlobPurgeSweep"/> purges after the blob purge delay.
-/// <see cref="DeletedSourcePurge"/> removes the documents after their grace. Idempotent: a second run finds nothing left.
+/// <see cref="DocumentPurge"/> removes the documents after their grace. Idempotent: a second run finds nothing left.
 /// Refused for a source that is not deleted. Result <see cref="DeleteSourceResult"/>.
 /// </summary>
 public sealed class DeleteSourceHandler(JobDatabase database, IJobQueue queue, RunStore runs, WorkerIdentity identity, TimeProvider time) : ICommandHandler

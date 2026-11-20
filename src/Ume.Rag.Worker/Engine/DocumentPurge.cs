@@ -9,16 +9,19 @@ using Ume.Rag.Worker.Connectors.Persistence;
 namespace Ume.Rag.Worker.Engine;
 
 /// <summary>
-/// The purge of a deleted source's documents (data-model §8; Decisions "Deleting knowledge bases, sources and assistants"):
-/// documents of a source with <c>DeletedAt</c> whose <c>PurgeAfter</c> has passed (the 14-day grace
-/// <see cref="Commands.DeleteSourceHandler"/> set) are deleted, their chunk sets and chunks with them (the keys cascade), in
-/// batches of 1,000. Each document's raw blobs are tombstoned (<c>document.purged</c>), so <see cref="BlobPurgeSweep"/>
-/// removes them after the blob purge delay unless another document still has that content. Part of the nightly
-/// <see cref="Jobs.MaintenanceService"/>. First it queues <c>delete-source</c> for every deleted source that still has a
-/// document or an upload slot that is not deleted (one deleted before the admin queued the command, or a command lost), with
-/// the command's dedup key, so no deleted source keeps live content for longer than a night.
+/// The purge of soft-deleted documents (data-model §8; connectors design §13.4; Decisions "Deleting knowledge bases, sources
+/// and assistants"): every document with <c>DeletedAt</c> whose <c>PurgeAfter</c> has passed is deleted, its chunk sets and
+/// chunks with it (the keys cascade), in batches of 1,000, whether a live source no longer has it (the reconcile or
+/// <c>confirm-deletion</c> soft-deleted it) or its source was deleted (<see cref="Commands.DeleteSourceHandler"/>). A document
+/// seen again within its 14-day grace was revived (<see cref="DocumentStore.UpsertFetchedAsync"/>: <c>DeletedAt</c> cleared)
+/// and is not touched. A purged document's raw blobs are tombstoned (<c>document.purged</c>) when no other document of its
+/// level has that content (a soft-deleted one counts: it may be revived, and it tombstones them at its own purge), so
+/// <see cref="BlobPurgeSweep"/> removes them after the blob purge delay. Part of the nightly <see cref="Jobs.MaintenanceService"/>.
+/// First it queues <c>delete-source</c> for every deleted source that still has a document or an upload slot that is not
+/// deleted (one deleted before the admin queued the command, or a command lost), with the command's dedup key, so no deleted
+/// source keeps live content for longer than a night.
 /// </summary>
-public sealed class DeletedSourcePurge(JobDatabase database, IJobQueue queue, TimeProvider time)
+public sealed class DocumentPurge(JobDatabase database, IJobQueue queue, TimeProvider time)
 {
     /// <summary>What one run did.</summary>
     public sealed record Outcome(int Queued, long Purged);
@@ -38,21 +41,27 @@ public sealed class DeletedSourcePurge(JobDatabase database, IJobQueue queue, Ti
     /// <summary>The tombstone reason of a purged document's raw blobs.</summary>
     public const string TombstoneReason = "document.purged";
 
-    // raw/{level}/{contentHash} and the crawl's raw/{level}/{contentHash}.links.json.gz (RawContentWriter, PageLinks).
+    // raw/{level}/{contentHash} and the crawl's raw/{level}/{contentHash}.links.json.gz (RawContentWriter, PageLinks). The
+    // statement's reads see the documents before its delete, so the batch's own documents are left out of the "other document"
+    // check: two purged together with one content tombstone it.
     private const string PurgeSql = """
         WITH gone AS (
             DELETE FROM content."Documents" WHERE "Id" IN (
-                SELECT d."Id" FROM content."Documents" d
-                  JOIN config."Sources" s ON s."Id" = d."SourceId"
-                 WHERE s."DeletedAt" IS NOT NULL AND d."DeletedAt" IS NOT NULL AND d."PurgeAfter" <= $1
-                 ORDER BY d."PurgeAfter"
+                SELECT "Id" FROM content."Documents"
+                 WHERE "DeletedAt" IS NOT NULL AND "PurgeAfter" <= $1
+                 ORDER BY "PurgeAfter"
                  LIMIT $2
-                 FOR UPDATE OF d SKIP LOCKED)
-            RETURNING "Classification", "ContentHash"),
+                 FOR UPDATE SKIP LOCKED)
+            RETURNING "Id", "Classification", "ContentHash"),
+        unshared AS (
+            SELECT DISTINCT g."Classification", g."ContentHash" FROM gone g
+             WHERE g."ContentHash" IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM content."Documents" d
+                                WHERE d."Classification" = g."Classification" AND d."ContentHash" = g."ContentHash"
+                                  AND NOT EXISTS (SELECT 1 FROM gone x WHERE x."Id" = d."Id"))),
         keys AS (
-            SELECT DISTINCT 'raw/' || "Classification" || '/' || encode("ContentHash", 'hex') || suffix AS "Key"
-              FROM gone CROSS JOIN (VALUES (''), ('.links.json.gz')) AS s(suffix)
-             WHERE "ContentHash" IS NOT NULL),
+            SELECT 'raw/' || "Classification" || '/' || encode("ContentHash", 'hex') || suffix AS "Key"
+              FROM unshared CROSS JOIN (VALUES (''), ('.links.json.gz')) AS s(suffix)),
         tombstoned AS (
             INSERT INTO content."BlobTombstones" ("Key", "DeletedAt", "Reason")
             SELECT "Key", $1, $3 FROM keys
