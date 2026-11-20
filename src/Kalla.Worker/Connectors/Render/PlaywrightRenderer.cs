@@ -37,7 +37,7 @@ public sealed partial class PlaywrightRenderer(IOptions<RenderOptions> options, 
     private static readonly TimeSpan Poll = TimeSpan.FromMilliseconds(10);
 
     /// <summary>
-    /// The messages of Playwright's selector errors (driver 1.64.1): its CSS parser ("… while parsing css selector …"),
+    /// The messages of Playwright's selector errors (driver 1.65.1): its CSS parser ("… while parsing css selector …"),
     /// its selector parser ("Unknown engine … while parsing selector …", "Malformed selector: …") and the browser's own
     /// <c>querySelectorAll</c> ("… is not a valid selector"). The driver's <c>InvalidSelectorError</c> keeps the name
     /// <c>Error</c>, so it reaches .NET as a plain <see cref="PlaywrightException"/>: the message is all there is.

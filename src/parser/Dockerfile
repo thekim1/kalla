@@ -39,7 +39,7 @@ FROM python:3.12.16-slim-trixie@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194
 # archive. tesseract-ocr depends on tesseract-ocr-eng and -osd; they are installed but the parser only asks for `swe`.
 # LibreOffice (no GUI: Writer, Calc, Impress) converts legacy Word, Excel, PowerPoint and RTF to OOXML before Docling
 # reads them (ume_parser/legacy.py).
-ARG DEBIAN_SNAPSHOT=20261109T000000Z
+ARG DEBIAN_SNAPSHOT=20261119T000000Z
 RUN rm -f /etc/apt/sources.list.d/debian.sources \
     && printf '%s\n' \
         "Types: deb" \
@@ -60,9 +60,9 @@ RUN rm -f /etc/apt/sources.list.d/debian.sources \
         tini=0.19.0-3+b8 \
         tesseract-ocr=5.5.0-1+b1 \
         tesseract-ocr-swe=1:4.1.0-2 \
-        libreoffice-writer-nogui=4:25.2.3-2+deb13u9 \
-        libreoffice-calc-nogui=4:25.2.3-2+deb13u9 \
-        libreoffice-impress-nogui=4:25.2.3-2+deb13u9 \
+        libreoffice-writer-nogui=4:25.2.3-2+deb13u12 \
+        libreoffice-calc-nogui=4:25.2.3-2+deb13u12 \
+        libreoffice-impress-nogui=4:25.2.3-2+deb13u12 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /opt/venv /opt/venv

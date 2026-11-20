@@ -12,8 +12,8 @@ for all of them.
 
 | Item | Value |
 |---|---|
-| Base | `mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f` |
-| Playwright | `playwright-core` **1.64.1** from `package-lock.json` (`npm ci` at build time; nothing is downloaded at start). The worker's `Microsoft.Playwright` NuGet is the same exact version (the server itself checks only major.minor) |
+| Base | `mcr.microsoft.com/playwright:v1.65.1-noble@sha256:1507cbfc550a63a6b7396791ca4f00df17beb56342d2447b3f106c306f525579` |
+| Playwright | `playwright-core` **1.65.1** from `package-lock.json` (`npm ci` at build time; nothing is downloaded at start). The worker's `Microsoft.Playwright` NuGet is the same exact version (the server itself checks only major.minor) |
 | Process | `node …/playwright-core/cli.js launch-server --browser chromium --config <file>` (`start.sh`), one shared headless Chromium (the headless shell) |
 | Config | `launch-server.json` plus the path: `{ headless: true, chromiumSandbox: true, port: 3000, host: "0.0.0.0", wsPath: <path>, args: ["--force-webrtc-ip-handling-policy=disable_non_proxied_udp"] }` |
 | Secret path | environment variable **`KALLA_RENDER_WS_PATH`**, required: `/` followed by at least 16 characters of `[A-Za-z0-9_-]` (production: `/` + 64 hex characters, `init-deployment.sh`; the AppHost: 32 alphanumerics). Missing or invalid: the container exits with code 64 and says why. The path is never logged (launch-server prints its endpoint on stdout, which is discarded) |

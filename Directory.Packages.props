@@ -53,8 +53,8 @@
     <PackageVersion Include="AngleSharp" Version="1.10.1" />
     <!-- Markdown blocks for the plain-text parser (processing design §3.7); BSD-2-Clause, 1.5.1 of 2026-10-28 (7-day rule suspended, P1 README §1a). -->
     <PackageVersion Include="Markdig" Version="1.6.0" />
-    <!-- The renderer's client (connectors design §8.3): exactly the version of images/renderer's launch-server (playwright-core 1.64.1); 1.64.1 of 2026-10-22 (7-day rule suspended). -->
-    <PackageVersion Include="Microsoft.Playwright" Version="[1.64.1]" />
+    <!-- The renderer's client (connectors design §8.3): exactly the version of images/renderer's launch-server (playwright-core 1.65.1); 1.65.1 of 2026-11-13 (7-day rule suspended), whose driver has Node 26.13.1 (the image scan, 0.8.0: seven High findings in 1.64.1's Node 24.22.1). -->
+    <PackageVersion Include="Microsoft.Playwright" Version="[1.65.1]" />
   </ItemGroup>
   <ItemGroup Label="Testing">
     <PackageVersion Include="xunit.v3" Version="4.0.2" />
