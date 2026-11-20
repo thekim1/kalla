@@ -18,7 +18,10 @@ off on purpose are in [`postponed-decisions.md`](postponed-decisions.md).
 The RAG platform is **Källa** (written **Kalla** where only ASCII fits) and the LLM gateway is **Fors**; the working
 names Ume.Rag and Ume.LlmGateway go. The rename of code, images, documents and deployment names is stream b's work
 (the other machine's agent) and comes with an upgrade path for existing deployments ("One deployment bootstrap").
-This answers N1.
+The names on the wire change too, in both products in one step (no backward compatibility before production): Källa's
+own Chat API members `ume.*` become `kalla.*` (`kalla.topics`, `kalla.escalation`, `kalla.follow_ups`, …), and the
+gateway's `x-ume-*` headers, `/v1/ume/context` and the `ume.*` model facts become `x-fors-*`, `/v1/fors/context` and
+`fors.*`; the two renames land together. The rename comes before `v0.9.0`. This answers N1.
 
 *From:* decided by user, 2026-11-20.
 
