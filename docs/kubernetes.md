@@ -40,7 +40,7 @@ volume (NFS, CephFS, Azure Files, Longhorn RWX).
        --datastores --backup-target s3://s3.example.se/kalla --backup-s3-credentials-file s3.cred [--renderer]
    ```
 
-   `--domain` gives the host names `rag.<domain>` and `kalla-admin.<domain>` (`--api-host` and `--admin-host` name
+   `--domain` gives the host names `rag.<domain>` and `rag-admin.<domain>` (`--api-host` and `--admin-host` name
    others). Leave out `--datastores` and the backup options if you bring your own Postgres (below), and `--renderer`
    without the renderer component. `--ca-file FILE` adds a CA the services must trust (a gateway or sign-in provider
    with a certificate from your own CA). Sign-in is set in the setup wizard after the first deploy (*Sign-in*, below);

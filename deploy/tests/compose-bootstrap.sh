@@ -6,7 +6,7 @@
 #   - the gateway's inputs from host directories (a fake gateway on this host): its CA is in the trust store of kalla-api,
 #     kalla-admin and kalla-worker, the manifest's keys reach each service, and a key set by hand wins
 #   - without the gateway in the stack the TLS proxy (profile proxy) has no gateway blocks and the checklist names none;
-#     the log ends at the setup wizard, https://kalla-admin.<domain>/setup
+#     the log ends at the setup wizard, https://rag-admin.<domain>/setup
 #   - the overlays' inputs: the backup target's repo.conf and passphrase (compose.backup.yaml), the repository and the
 #     upload copy owned by Postgres and the services' uid, the 24 GB Postgres settings (compose.host-24g.yaml), and
 #     ClamAV's 24 GB confs with freshclam's proxy (compose.clamav-conf.yaml)
@@ -93,9 +93,9 @@ conf="$(cat_in kalla-config proxy/nginx.conf)"
 for h in rag chat; do grep -q "server_name $h\.boot\.test;" <<< "$conf" || fail "the proxy has no block for $h.boot.test"; done
 ! grep -q 'server_name llm' <<< "$conf" || fail "the proxy has a gateway block without the gateway"
 ! grep -qE 'FORS_GATEWAY_HOST|FORS_ADMIN_HOST|gateway.s CA' "$log" || fail "the checklist names the gateway: $(cat "$log")"
-grep -q '^kalla-bootstrap: sign-in is set in the setup wizard: https://kalla-admin\.boot\.test/setup, ' "$log" \
-  || fail "kalla-bootstrap's log does not point at https://kalla-admin.boot.test/setup"
-ok "no gateway blocks and no gateway note; the log points at https://kalla-admin.boot.test/setup"
+grep -q '^kalla-bootstrap: sign-in is set in the setup wizard: https://rag-admin\.boot\.test/setup, ' "$log" \
+  || fail "kalla-bootstrap's log does not point at https://rag-admin.boot.test/setup"
+ok "no gateway blocks and no gateway note; the log points at https://rag-admin.boot.test/setup"
 
 echo "== the overlays' inputs"
 cat_in kalla-secrets pgbackrest/repo.conf | grep -qx 'repo1-type=posix' || fail "no posix repository in repo.conf"

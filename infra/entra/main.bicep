@@ -3,7 +3,7 @@
 // group -> app role assignments and group membership are manual steps (README.md), not resources here.
 extension microsoftGraphV1
 
-@description('Host name of the RAG admin UI, without scheme or path, e.g. kalla-admin.example.se.')
+@description('Host name of the RAG admin UI, without scheme or path, e.g. rag-admin.example.se.')
 param ragAdminHost string
 
 @description('Host name of the pilot Open WebUI, without scheme or path.')

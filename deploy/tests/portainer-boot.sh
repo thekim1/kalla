@@ -15,7 +15,7 @@
 #     and the feature oidc-authority
 #   - kalla-api: /health/ready = 200 (TLS verified against kalla-bootstrap's CA), /version (with --version), /v1/models =
 #     401 without a key and 200 with Open WebUI's key, which the stack generated and registered by itself
-#   - all five host names come from FORS_DOMAIN alone (llm., llm-admin., rag., kalla-admin. and chat.boot.test; no
+#   - all five host names come from FORS_DOMAIN alone (llm., llm-admin., rag., rag-admin. and chat.boot.test; no
 #     UME_*_HOST): adminapi's Gateway__BaseUrl is https://llm.boot.test; kalla-api's public URL is https://rag.boot.test
 #     for citation links and for kalla-admin; Open WebUI's WEBUI_URL is https://chat.boot.test
 #   - kalla-admin: / = 200 with the admin UI's index.html
@@ -26,9 +26,9 @@
 #     code (400 setup_code_invalid) and gives a setup session for the right one; GET /bff/setup/state answers first_run,
 #     the redirect URI for llm-admin.boot.test and every sign-in value from the code's defaults (no authority)
 #   - then kalla-admin's setup wizard (identity design §19): no Oidc value either, so setup is open. kalla-bootstrap's last
-#     lines point at https://kalla-admin.boot.test:<proxy port>/setup; kalla-admin's output has the setup code; through kalla-proxy,
+#     lines point at https://rag-admin.boot.test:<proxy port>/setup; kalla-admin's output has the setup code; through kalla-proxy,
 #     /bff/user says sign-in is not configured and setup is open; the setup session as for the gateway; GET
-#     /bff/setup/state answers first_run, the redirect URI for kalla-admin.boot.test, every sign-in value from the code's
+#     /bff/setup/state answers first_run, the redirect URI for rag-admin.boot.test, every sign-in value from the code's
 #     defaults (no authority), the gateway's block once kalla-admin has read its context (no suggested authority, since
 #     completing the gateway's wizard needs a real provider; the gateway admin's address https://llm-admin.boot.test
 #     from Admin__GatewayAdminUrl) and Open WebUI's block without a provider. Neither setup code is ever printed:
@@ -102,7 +102,7 @@ mkdir -p "$work/proxy-certs"
 docker run --rm --network none -v "$work/proxy-certs:/c" --entrypoint sh \
   docker.io/alpine/openssl@sha256:59c5cb51e536d40587667229468b007a2a6cae1705397e59e5f7774c08b74029 -c \
   'openssl req -x509 -newkey rsa:2048 -nodes -keyout /c/tls.key -out /c/tls.crt -days 2 -subj /CN=boot.test \
-     -addext "subjectAltName=DNS:llm.boot.test,DNS:llm-admin.boot.test,DNS:rag.boot.test,DNS:kalla-admin.boot.test,DNS:chat.boot.test" \
+     -addext "subjectAltName=DNS:llm.boot.test,DNS:llm-admin.boot.test,DNS:rag.boot.test,DNS:rag-admin.boot.test,DNS:chat.boot.test" \
      >/dev/null 2>&1 && chmod 644 /c/tls.key /c/tls.crt'
 cat > "$work/test.env" <<EOF
 COMPOSE_PROFILES=clamav,openwebui,proxy
@@ -221,9 +221,9 @@ grep -q '^kalla-bootstrap: every setting it checks is in place$' <<< "$log" \
   || { sed -n '/^kalla-bootstrap: still to do/,$p' <<< "$log" | sed 's/^/  /'; fail "kalla-bootstrap's checklist is not empty"; }
 ok "kalla-bootstrap's checklist is empty: the gateway credential keys came from the manifest (M-17 C7), nothing pasted"
 # No client secret in the stack: kalla-bootstrap can't see the database, so it points at the wizard on every run.
-grep -qF "kalla-bootstrap: sign-in is set in the setup wizard: https://kalla-admin.boot.test:$proxy_port/setup, " <<< "$log" \
-  || fail "kalla-bootstrap's log does not point at the setup wizard on https://kalla-admin.boot.test:$proxy_port/setup"
-ok "kalla-bootstrap points at the setup wizard (https://kalla-admin.boot.test:$proxy_port/setup, through kalla-proxy); no client secret was typed into the stack"
+grep -qF "kalla-bootstrap: sign-in is set in the setup wizard: https://rag-admin.boot.test:$proxy_port/setup, " <<< "$log" \
+  || fail "kalla-bootstrap's log does not point at the setup wizard on https://rag-admin.boot.test:$proxy_port/setup"
+ok "kalla-bootstrap points at the setup wizard (https://rag-admin.boot.test:$proxy_port/setup, through kalla-proxy); no client secret was typed into the stack"
 
 echo "== the gateway credential keys from the manifest (M-17 C7)"
 # Neither variables file sets FORS_INTEGRATION_MANIFEST, so the gateway's bootstrap got the stack file's default.
@@ -336,7 +336,7 @@ done <<'CHECKS'
 llm.boot.test /health/ready the gateway
 llm-admin.boot.test / the gateway's admin
 rag.boot.test /health/ready kalla-api
-kalla-admin.boot.test / kalla-admin
+rag-admin.boot.test / kalla-admin
 chat.boot.test /health Open WebUI
 CHECKS
 ok "kalla-proxy answers each of the five host names, all from FORS_DOMAIN, with the operator's certificate (verified upstream TLS)"
@@ -421,8 +421,8 @@ ok "kalla-admin's output says setup mode is open and has a setup code (not shown
 # Through kalla-proxy, as a browser reaches it, with a cookie jar and the admin UI's antiforgery headers
 # (src/admin-ui/src/api/client.ts): X-Requested-With and the RAG-XSRF-TOKEN cookie as X-XSRF-TOKEN.
 jar="$work/setup-cookies"; : > "$jar"
-setup_url="https://kalla-admin.boot.test:$proxy_port"
-admin_ui() { curl -sS --max-time 15 --cacert "$work/proxy-certs/tls.crt" --resolve "kalla-admin.boot.test:$proxy_port:127.0.0.1" \
+setup_url="https://rag-admin.boot.test:$proxy_port"
+admin_ui() { curl -sS --max-time 15 --cacert "$work/proxy-certs/tls.crt" --resolve "rag-admin.boot.test:$proxy_port:127.0.0.1" \
   -c "$jar" -b "$jar" "$@"; }
 user="$(admin_ui -H 'Accept: application/json' "$setup_url/bff/user")" || fail "kalla-admin's /bff/user did not answer through kalla-proxy"
 jq -e '.isAuthenticated == false and .signIn.configured == false and .setup.open == true' >/dev/null <<< "$user" \
@@ -450,7 +450,7 @@ setup_state() {
   [ "$(tail -n 1 <<< "$answer")" = 200 ]
 }
 setup_state || fail "GET /bff/setup/state did not answer 200 with the setup session"
-jq -e '.kind == "first_run" and .redirectUris.signIn == "https://kalla-admin.boot.test/signin-oidc"
+jq -e '.kind == "first_run" and .redirectUris.signIn == "https://rag-admin.boot.test/signin-oidc"
     and .signIn.authority.value == null and .signIn.authority.source == "default"
     and .signIn.clientSecret.set == false' >/dev/null <<< "$state" \
   || fail "GET /bff/setup/state: $(jq -c '{kind, redirectUris, authority: .signIn.authority, clientSecret: .signIn.clientSecret}' <<< "$state")"
@@ -462,7 +462,7 @@ jq -e '.openWebUi.enabled == true and .openWebUi.signIn.configured == false and 
     and .openWebUi.signIn.clientSecret.source == "default"
     and .openWebUi.redirectUri == "https://chat.boot.test/oauth/oidc/login/callback"' >/dev/null <<< "$state" \
   || fail "GET /bff/setup/state's Open WebUI block: $(jq -c '.openWebUi | {enabled, redirectUri, configured: .signIn.configured, providerUrl: .signIn.providerUrl, clientSecret: .signIn.clientSecret}' <<< "$state")"
-ok "GET /bff/setup/state: first_run, redirect URI https://kalla-admin.boot.test/signin-oidc, every value the code's default (no authority); Open WebUI without a provider"
+ok "GET /bff/setup/state: first_run, redirect URI https://rag-admin.boot.test/signin-oidc, every value the code's default (no authority); Open WebUI without a provider"
 # The gateway's block (SetupModeEndpoints.cs, SetupGatewaySignIn) is null until kalla-admin has read its own gateway context
 # with the feature oidc-authority: at its start, or ContextInterval (5 minutes) after a first read that found the gateway
 # not up yet. Then no suggested authority (the gateway's wizard is not completed: that needs a real provider) and the

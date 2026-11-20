@@ -41,10 +41,10 @@ metadata:
 spec:
   ingressClassName: nginx
   tls:
-    - hosts: [kalla-admin.example.se]       # change
+    - hosts: [rag-admin.example.se]       # change
       secretName: kalla-admin-public-tls
   rules:
-    - host: kalla-admin.example.se          # change
+    - host: rag-admin.example.se          # change
       http:
         paths:
           - path: /

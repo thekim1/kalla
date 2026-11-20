@@ -25,11 +25,13 @@
 - **Compose:** from the new release's directory, with the old installation running, run
   `./deploy/upgrade/upgrade-to-0.9.sh`. It renames the variables in `deploy/.env` (keeping `.env.pre-0.9`), stops the
   old project `ume-rag` except Postgres, renames the roles, removes the old containers and copies the volumes
-  `ume-rag_rag-*` to `kalla_kalla-*` (the backup volumes too). Then run `./deploy/init-deployment.sh` and start the release as usual. Remove the
-  old volumes once it runs.
+  `ume-rag_rag-*` to `kalla_kalla-*` (the backup volumes too). Then run `./deploy/init-deployment.sh` and start the
+  release as usual. Remove the old volumes once it runs.
 - **Portainer** (one stack with the gateway):
-  1. **Stop the stack**, and rename its variables: every `UME_RAG_*` to `KALLA_*`, then every `UME_*` to `FORS_*`
-     (with Fors's own defaults to keep, its guide, *Portainer*).
+  1. **Stop the stack**, and rename its variables: every `UME_RAG_*` to `KALLA_*`, every `RAG_*_IMAGE` to
+     `KALLA_*_IMAGE`, then every `UME_*` to `FORS_*` (with Fors's own defaults to keep, its guide, *Portainer*). A
+     stack that declares its sign-in (`KALLA_OIDC_CLIENT_SECRET`) and names no client adds
+     `KALLA_OIDC_CLIENT_ID=ume-rag-admin`.
   2. **Update the stack** with the release's `compose.portainer.yaml`, with *Prune services* on. `kalla-bootstrap`
      copies the volumes `rag-certs`, `rag-secrets`, `rag-blobs`, `rag-openwebui-data` and `rag-postgres-data` into the
      `kalla-*` volumes once (its log says so); it stops instead when the old database is still open. `kalla-migrate`

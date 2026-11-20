@@ -58,13 +58,13 @@ services:
     restart: "no"
     entrypoint: [/bin/sh, /config/bootstrap.sh]
     environment:
-      # The host names: each KALLA_*_HOST, else its default under FORS_DOMAIN (rag., kalla-admin., chat.). Without the
+      # The host names: each KALLA_*_HOST, else its default under FORS_DOMAIN (rag., rag-admin., chat.). Without the
       # domain the admin's name is empty (bootstrap.sh gives it kalla-api's) and so is Open WebUI's. kalla-api, kalla-admin and
       # kalla-openwebui repeat the same expressions below. With neither the domain nor kalla-api's name, that name is empty
       # and bootstrap.sh stops with "Set FORS_DOMAIN or KALLA_API_HOST" (never ":?" inside a default: some Compose
       # versions evaluate it even when the outer variable is set).
       KALLA_API_HOST: ${KALLA_API_HOST:-${FORS_DOMAIN:+rag.}${FORS_DOMAIN:-}}
-      KALLA_ADMIN_HOST: ${KALLA_ADMIN_HOST:-${FORS_DOMAIN:+kalla-admin.}${FORS_DOMAIN:-}}
+      KALLA_ADMIN_HOST: ${KALLA_ADMIN_HOST:-${FORS_DOMAIN:+rag-admin.}${FORS_DOMAIN:-}}
       #@joined # The TLS proxy's host names (profile proxy): the gateway's two, by the expressions of the gateway's own bootstrap.
       #@joined FORS_GATEWAY_HOST: ${FORS_GATEWAY_HOST:-${FORS_DOMAIN:+llm.}${FORS_DOMAIN:-}}
       #@joined FORS_ADMIN_HOST: ${FORS_ADMIN_HOST:-${FORS_DOMAIN:+llm-admin.}${FORS_DOMAIN:-}}

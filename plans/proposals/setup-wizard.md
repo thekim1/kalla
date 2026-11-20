@@ -242,14 +242,14 @@ The values are then in force (§4.6), and the wizard hands over to the normal si
 
 ### 4.8 Host names (W7)
 
-- **`FORS_DOMAIN`** (for example `example.se`) gives the defaults `rag.<domain>`, `kalla-admin.<domain>` and
+- **`FORS_DOMAIN`** (for example `example.se`) gives the defaults `rag.<domain>`, `rag-admin.<domain>` and
   `chat.<domain>`; the gateway's `llm.<domain>` and `llm-admin.<domain>` follow when its stack file takes the same
   variable (§6, WG1). Each `UME_*_HOST` still overrides its own name. Nested defaults
   (`${KALLA_API_HOST:-rag.${FORS_DOMAIN:?…}}`) resolve in Compose v5 (checked by the reviewer with `compose config`);
   Portainer's bundled Compose is checked by the boot-only run in S0.
 - **Either the domain or the names:** a stack that sets `KALLA_API_HOST` and no domain keeps today's rule (the
   admin's name falls back to the API's); the default under the domain applies only when the domain is set, so no name
-  ends as `kalla-admin.`. The expression is written once per use in the template (seven places) and tested by S0.
+  ends as `rag-admin.`. The expression is written once per use in the template (seven places) and tested by S0.
 - Compose: `init-deployment.sh --domain`. **Kubernetes keeps its host names in the Ingress** (Kustomize can't derive
   them from one value); `FORS_DOMAIN` is for Portainer and Compose.
 - The names stay deploy-time: they must be in DNS, in the operator's certificate and in the provider's redirect URIs
@@ -279,7 +279,7 @@ logic of its own beyond where a variable is written.
 
 **After stage 1** (Källa and Open WebUI): fill **5** values, none of them a secret of Källa or Open WebUI:
 `FORS_OIDC_AUTHORITY`, `FORS_GATEWAY_HOST`, `FORS_GATEWAY_PUBLIC_URL`, `FORS_ADMIN_HOST` (the gateway's four) and
-`FORS_DOMAIN`. Deploy, copy the setup code from kalla-admin's log, open `https://kalla-admin.<domain>/setup`. The wizard
+`FORS_DOMAIN`. Deploy, copy the setup code from kalla-admin's log, open `https://rag-admin.<domain>/setup`. The wizard
 shows the redirect URIs, takes the two client secrets, tests each sign-in and tells the deployer whether they are a
 platform admin. Then the checklist, as now.
 

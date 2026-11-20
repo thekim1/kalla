@@ -12,7 +12,7 @@
 #   docker compose --env-file deploy/.env up -d --wait
 #
 # Options (each sets the variable it names):
-#   --domain DOMAIN          FORS_DOMAIN: kalla-api, kalla-admin and Open WebUI are rag., kalla-admin. and chat.DOMAIN
+#   --domain DOMAIN          FORS_DOMAIN: kalla-api, kalla-admin and Open WebUI are rag., rag-admin. and chat.DOMAIN
 #   --api-host HOST, --admin-host HOST
 #                            KALLA_API_HOST, KALLA_ADMIN_HOST: a name of its own instead
 #   --gateway-url URL        KALLA_GATEWAY_URL: the gateway's https URL (required)
@@ -184,7 +184,7 @@ tmp="$(mktemp "$env_file.XXXXXX")"
 } > "$tmp"
 chmod 600 "$tmp"; mv -f "$tmp" "$env_file"
 
-admin="$(get KALLA_ADMIN_HOST)"; [ -n "$admin" ] || admin="${val[FORS_DOMAIN]:+kalla-admin.$(get FORS_DOMAIN)}"
+admin="$(get KALLA_ADMIN_HOST)"; [ -n "$admin" ] || admin="${val[FORS_DOMAIN]:+rag-admin.$(get FORS_DOMAIN)}"
 api="$(get KALLA_API_HOST)"; [ -n "$api" ] || api="${val[FORS_DOMAIN]:+rag.$(get FORS_DOMAIN)}"
 # The setup wizard's address, as kalla-bootstrap gives it (#874): through the TLS proxy (profile proxy) when kalla-admin has
 # a host name of its own, else on kalla-admin's port.

@@ -79,7 +79,7 @@
 #
 # Required variable: one, the gateway's too
 #   FORS_DOMAIN                the base domain (for example example.se): the host names default to llm.<domain> and
-#                             llm-admin.<domain> (the gateway's), rag.<domain> (kalla-api), kalla-admin.<domain>
+#                             llm-admin.<domain> (the gateway's), rag.<domain> (kalla-api), rag-admin.<domain>
 #                             (kalla-admin) and, with the openwebui profile, chat.<domain>. Each KALLA_*_HOST (Optional, below)
 #                             overrides its name; without FORS_DOMAIN, FORS_GATEWAY_HOST and KALLA_API_HOST are
 #                             required instead
@@ -118,7 +118,7 @@
 #   KALLA_OIDC_GROUPS_PLATFORM_ADMIN  the break-glass group(s) for the first platform admin (';'-separated), for an
 #                             identity provider whose tokens carry groups instead of the role rag-platform-admin in the
 #                             roles claim; the other roles' groups are set in RAG's admin (Settings, Role groups)
-#   KALLA_API_HOST (rag.<domain>), KALLA_ADMIN_HOST (kalla-admin.<domain>; without FORS_DOMAIN, kalla-api's name)
+#   KALLA_API_HOST (rag.<domain>), KALLA_ADMIN_HOST (rag-admin.<domain>; without FORS_DOMAIN, kalla-api's name)
 #   KALLA_API_PORT (8543), KALLA_ADMIN_PORT (9543), KALLA_*_BIND (0.0.0.0)
 #   KALLA_CRAWL_ALLOW (private CIDRs the crawler may fetch). The residency ceiling is each credential key's own
 #                             residencies in the gateway (register M2: OnPrem and Eu)
@@ -294,7 +294,7 @@ services:
 
   migrations:
     <<: *hardened
-    image: ${MIGRATIONS_IMAGE:?Set MIGRATIONS_IMAGE}
+    image: ${MIGRATIONS_IMAGE:-ghcr.io/thekim1/fors/migrations:0.12.0@sha256:0f46d967e779343c7535c9d21d1ef36e59a812887c66b3a6a8dd984b40bfaa78}
     user: "1654:1654"
     restart: "no"
     environment:
@@ -317,7 +317,7 @@ services:
 
   gateway:
     <<: *hardened
-    image: ${GATEWAY_IMAGE:?Set GATEWAY_IMAGE}
+    image: ${GATEWAY_IMAGE:-ghcr.io/thekim1/fors/gateway:0.12.0@sha256:18c90cfa99406cbd9abaab906b2b6ebeb73863f37a8bc36036cf764b5d7e10cb}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -359,7 +359,7 @@ services:
 
   adminapi:
     <<: *hardened
-    image: ${ADMINAPI_IMAGE:?Set ADMINAPI_IMAGE}
+    image: ${ADMINAPI_IMAGE:-ghcr.io/thekim1/fors/adminapi:0.12.0@sha256:7edb596278e912996e30a93f11afbffb30279259e7d6899059ae4441d0a982bf}
     user: "1654:1654"
     restart: unless-stopped
     ports: ["${FORS_ADMIN_BIND:-0.0.0.0}:${FORS_ADMIN_PORT:-9443}:8443"]
@@ -414,7 +414,7 @@ services:
   dataapi:
     <<: *hardened
     profiles: [data]
-    image: ${DATAAPI_IMAGE:-fors/dataapi:latest}
+    image: ${DATAAPI_IMAGE:-ghcr.io/thekim1/fors/dataapi:0.12.0@sha256:1334a44caa602283754162ffa63fc84e2c6d6e9241062fc9e170d932a54817a2}
     user: "1654:1654"
     restart: unless-stopped
     ports: ["${FORS_DATA_BIND:-0.0.0.0}:${FORS_DATA_PORT:-10443}:8443"]
@@ -451,13 +451,13 @@ services:
     restart: "no"
     entrypoint: [/bin/sh, /config/bootstrap.sh]
     environment:
-      # The host names: each KALLA_*_HOST, else its default under FORS_DOMAIN (rag., kalla-admin., chat.). Without the
+      # The host names: each KALLA_*_HOST, else its default under FORS_DOMAIN (rag., rag-admin., chat.). Without the
       # domain the admin's name is empty (bootstrap.sh gives it kalla-api's) and so is Open WebUI's. kalla-api, kalla-admin and
       # kalla-openwebui repeat the same expressions below. With neither the domain nor kalla-api's name, that name is empty
       # and bootstrap.sh stops with "Set FORS_DOMAIN or KALLA_API_HOST" (never ":?" inside a default: some Compose
       # versions evaluate it even when the outer variable is set).
       KALLA_API_HOST: ${KALLA_API_HOST:-${FORS_DOMAIN:+rag.}${FORS_DOMAIN:-}}
-      KALLA_ADMIN_HOST: ${KALLA_ADMIN_HOST:-${FORS_DOMAIN:+kalla-admin.}${FORS_DOMAIN:-}}
+      KALLA_ADMIN_HOST: ${KALLA_ADMIN_HOST:-${FORS_DOMAIN:+rag-admin.}${FORS_DOMAIN:-}}
       # The TLS proxy's host names (profile proxy): the gateway's two, by the expressions of the gateway's own bootstrap.
       FORS_GATEWAY_HOST: ${FORS_GATEWAY_HOST:-${FORS_DOMAIN:+llm.}${FORS_DOMAIN:-}}
       FORS_ADMIN_HOST: ${FORS_ADMIN_HOST:-${FORS_DOMAIN:+llm-admin.}${FORS_DOMAIN:-}}

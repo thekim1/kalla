@@ -72,7 +72,7 @@ describe('setup wizard: the setup code (admin design §5.11 step 1)', () => {
     expect(session).toHaveBeenCalledWith('abcde-FGHIJ-klmno')
     expect(state).toHaveBeenCalledTimes(2)
     expect(heading(wrapper)).toBe(L.steps.addresses)
-    expect(wrapper.get('[data-test=redirect-sign-in]').text()).toContain('https://kalla-admin.example.org/signin-oidc')
+    expect(wrapper.get('[data-test=redirect-sign-in]').text()).toContain('https://rag-admin.example.org/signin-oidc')
     expect(wrapper.get('[data-test=window-ends]').text()).toContain('(in 50 min)')
     wrapper.unmount()
   })

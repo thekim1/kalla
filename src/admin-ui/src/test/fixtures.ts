@@ -147,7 +147,7 @@ export function setupState(overrides: Partial<SetupState> = {}, now: number = Da
     endsAt: new Date(now + 50 * 60_000).toISOString(),
     sessionExpiresAt: new Date(now + 25 * 60_000).toISOString(),
     signIn: signInSettings(),
-    redirectUris: { signIn: 'https://kalla-admin.example.org/signin-oidc', signOutCallback: 'https://kalla-admin.example.org/signout-callback-oidc' },
+    redirectUris: { signIn: 'https://rag-admin.example.org/signin-oidc', signOutCallback: 'https://rag-admin.example.org/signout-callback-oidc' },
     deployment: { gatewayBaseUrl: 'https://gateway.example.org', apiPublicUrl: null, platformAdminGroups: [] },
     gateway: null,
     latestTest: null,

@@ -415,7 +415,7 @@ jobs:
         # manifest's file.
         run: bash deploy/tests/portainer-rerun.sh
       - name: The Portainer stack's host names default under FORS_DOMAIN
-        # Setup wizard S0: offline, every place a host name is used renders rag., kalla-admin. and chat.<domain> from
+        # Setup wizard S0: offline, every place a host name is used renders rag., rag-admin. and chat.<domain> from
         # FORS_DOMAIN, each KALLA_*_HOST overrides its own, the names alone work as before (never a name ending in a dot),
         # and with neither the stack refuses to render, naming both.
         run: bash deploy/tests/portainer-hosts.sh

@@ -31,7 +31,7 @@ gateway's `v0.11.0` or later: the `v0.6.0` asset has none of them.
 - An **OIDC provider** (the shared Keycloak realm, AD FS or Entra ID) with clients for the gateway's admin
   (`fors-admin`) and Källa's admin (`kalla-admin`). The clients must exist
   before you set up sign-in. Their redirect URIs: `https://llm-admin.<domain>/signin-oidc` and
-  `/signout-callback-oidc` for `fors-admin`, `https://kalla-admin.<domain>/signin-oidc` and `/signout-callback-oidc` for
+  `/signout-callback-oidc` for `fors-admin`, `https://rag-admin.<domain>/signin-oidc` and `/signout-callback-oidc` for
   `kalla-admin` (the two setup wizards show them,
   ready to copy). The client secrets are entered in the setup wizards, not in the stack.
 - **Host names** and **real certificates** for the gateway API, the gateway admin, kalla-api and Källa's admin. The
@@ -40,7 +40,7 @@ gateway's `v0.11.0` or later: the `v0.6.0` asset has none of them.
   [production-setup.md](production-setup.md#reverse-proxy-and-pki)), or the stack's optional **proxy profile** (*TLS
   proxy* below).
   **One DNS record and one certificate are enough:** every name is one label under `FORS_DOMAIN` (`llm.`,
-  `llm-admin.`, `rag.`, `kalla-admin.` and, with Open WebUI, `chat.`), so a wildcard record `*.<domain>` pointing at
+  `llm-admin.`, `rag.`, `rag-admin.` and, with Open WebUI, `chat.`), so a wildcard record `*.<domain>` pointing at
   the proxy and a wildcard certificate for `*.<domain>` cover them all. Give the installation a sub-domain of its own
   (`FORS_DOMAIN=ai.example.se`, the record `*.ai.example.se`) and the wildcard touches none of your other names.
   The services are not served under paths of one name (`example.se/admin`): each keeps a host name of its own.
@@ -59,7 +59,7 @@ to the services and verifies them against their internal CAs, so nothing else ne
    and `tls.key`, readable by uid 101 (`chown 101 tls.key && chmod 0400 tls.key`), and set
    `KALLA_PROXY_CERTS_DIR` to it (default `/etc/kalla/proxy-certs`). Without it `kalla-proxy` doesn't start.
 2. Give each service a host name of its own. `FORS_DOMAIN` names them all: the gateway API `llm.<domain>`, the
-   gateway's admin `llm-admin.<domain>`, kalla-api `rag.<domain>`, its admin `kalla-admin.<domain>` and, with the profile
+   gateway's admin `llm-admin.<domain>`, kalla-api `rag.<domain>`, its admin `rag-admin.<domain>` and, with the profile
    `openwebui`, Open WebUI `chat.<domain>` (`FORS_GATEWAY_HOST`, `FORS_ADMIN_HOST`, `KALLA_API_HOST`, `KALLA_ADMIN_HOST` and
    `KALLA_OPENWEBUI_HOST` override one each). A name shared with another service gets no route, and `kalla-bootstrap`'s
    checklist says which. The public URLs are then plain `https://<host>`, which is their default: leave
@@ -108,12 +108,12 @@ read the CA only at start.
    comments mark CHANGE, your domain. It is not a secret:
 
    ```text
-   FORS_DOMAIN=example.se        # llm., llm-admin., rag. and kalla-admin.example.se
+   FORS_DOMAIN=example.se        # llm., llm-admin., rag. and rag-admin.example.se
    ```
 
    `FORS_DOMAIN` gives the host names: the gateway API `llm.<domain>` (its public URL `https://llm.<domain>`), the
    gateway's admin `llm-admin.<domain>`, kalla-api `rag.<domain>` (its public URL `https://rag.<domain>`) and Källa's
-   admin `kalla-admin.<domain>`. To use another name for one, set `FORS_GATEWAY_HOST`,
+   admin `rag-admin.<domain>`. To use another name for one, set `FORS_GATEWAY_HOST`,
    `FORS_ADMIN_HOST`, `KALLA_API_HOST` or `KALLA_ADMIN_HOST`; for a public address with a
    port, `FORS_GATEWAY_PUBLIC_URL`, `FORS_ADMIN_PUBLIC_URL` (Källa's admin links to the gateway's admin there) or
    `KALLA_API_PUBLIC_URL`. The file lists each, commented out. A stack that sets the names and no `FORS_DOMAIN` works
@@ -171,7 +171,7 @@ read the CA only at start.
      is valid for one hour. Treat it like a password: whoever holds it chooses the sign-in provider while setup is open.
      If the hour ends before you finish, restart kalla-admin (*Containers*, select, *Restart*): a setup that was never
      finished opens again with a new code.
-   - **Open** `https://kalla-admin.<domain>/setup`, at the public address users will use: the wizard builds the redirect
+   - **Open** `https://rag-admin.<domain>/setup`, at the public address users will use: the wizard builds the redirect
      URIs from the address you open it at.
    - **The wizard's steps:**
      1. *Setup code*: paste the code.
@@ -213,7 +213,7 @@ read the CA only at start.
    update the stack. The services pick them up within seconds. **Address list** of a credential key: the services reach
    the gateway over the stack's internal network `llm`, whose subnet Docker chose
    (`docker network inspect <stack>_llm`); allow that subnet, or leave the list empty.
-9. **Check** in Källa's admin (`https://kalla-admin.example.se`): *Models* (side menu) shows the gateway's
+9. **Check** in Källa's admin (`https://rag-admin.example.se`): *Models* (side menu) shows the gateway's
    version and features with `act-as-key`, a recent organisation sync without a *degraded* reason, and the models.
    Then **create the embedding profile** (*Home* asks for it until one exists): *Models → Embedding profiles → Create
    profile*, pick the gateway's embedding model. The ceiling and the input limit come from the model; the test
@@ -428,7 +428,7 @@ then void), or use the gateway's wizard (*First deploy* step 4).
 **Optional, afterwards: the one-value form.** Set `FORS_DOMAIN` to your domain and remove each of these lines whose
 value is exactly its default under it: `FORS_GATEWAY_HOST` (`llm.<domain>`), `FORS_ADMIN_HOST` (`llm-admin.<domain>`),
 `FORS_GATEWAY_PUBLIC_URL` (`https://llm.<domain>`, no port), `KALLA_API_HOST` (`rag.<domain>`), `KALLA_ADMIN_HOST`
-(`kalla-admin.<domain>`), `KALLA_OPENWEBUI_HOST` (`chat.<domain>`) and `KALLA_API_PUBLIC_URL`
+(`rag-admin.<domain>`), `KALLA_OPENWEBUI_HOST` (`chat.<domain>`) and `KALLA_API_PUBLIC_URL`
 (`https://rag.<domain>`). Keep a line whose value differs (another name, a port). `FORS_INTEGRATION_MANIFEST` may go
 too: the default names the same integration and keys, which exist, so nothing is created, and a manifest without an
 owner leaves the integration's team as it is. Update the stack. `kalla-bootstrap`'s log has no `issuing certificate` for
@@ -466,7 +466,7 @@ sign-in that broke.
 1. Set `KALLA_SETUP_REOPEN` to a new value (for example today's date) and update the stack.
 2. kalla-admin opens the wizard once, for one hour, and prints a new setup code in its log (*Containers → kalla-admin →
    Logs*). The current sign-in keeps working until you finish.
-3. Open `https://kalla-admin.<domain>/setup`, enter the code, change what you need (a stored secret is never shown: type
+3. Open `https://rag-admin.<domain>/setup`, enter the code, change what you need (a stored secret is never shown: type
    the new one, and its expiry date), test the sign-in and finish.
 
 The value is used once: a restart doesn't open the wizard again, and an abandoned re-open ends after the hour. The next

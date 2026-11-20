@@ -5,7 +5,7 @@
 # (kalla-bootstrap's three names, kalla-api's Knowledge__PublicBaseUrl, kalla-admin's Admin__ApiPublicUrl, kalla-openwebui's
 # WEBUI_URL and OPENID_REDIRECT_URI) for:
 #
-#   - only FORS_DOMAIN: rag.<domain>, kalla-admin.<domain>, chat.<domain>
+#   - only FORS_DOMAIN: rag.<domain>, rag-admin.<domain>, chat.<domain>
 #   - only KALLA_API_HOST: as before the domain (kalla-admin's name empty, so kalla-bootstrap gives it kalla-api's; Open
 #     WebUI's empty, its URLs on localhost); never a name ending in a dot
 #   - the three KALLA_*_HOST, no domain; the domain and one override
@@ -68,7 +68,7 @@ expect() {
   if [ "$got" = "$want" ]; then ok "$name: $got"; else fail "$name: got $got, expected $want"; fi
 }
 
-expect "only FORS_DOMAIN" rag.example.se kalla-admin.example.se chat.example.se https://rag.example.se https://chat.example.se \
+expect "only FORS_DOMAIN" rag.example.se rag-admin.example.se chat.example.se https://rag.example.se https://chat.example.se \
   FORS_DOMAIN=example.se
 expect "only KALLA_API_HOST" rag.kommun.se "" "" https://rag.kommun.se https://localhost \
   KALLA_API_HOST=rag.kommun.se
@@ -78,7 +78,7 @@ expect "the three names, no domain" rag.kommun.se admin.kommun.se ai.kommun.se h
   KALLA_API_HOST=rag.kommun.se KALLA_ADMIN_HOST=admin.kommun.se KALLA_OPENWEBUI_HOST=ai.kommun.se
 expect "the domain and an admin override" rag.example.se admin.kommun.se chat.example.se https://rag.example.se \
   https://chat.example.se FORS_DOMAIN=example.se KALLA_ADMIN_HOST=admin.kommun.se
-expect "the domain and a public URL" rag.example.se kalla-admin.example.se chat.example.se https://rag.example.se:8543 \
+expect "the domain and a public URL" rag.example.se rag-admin.example.se chat.example.se https://rag.example.se:8543 \
   https://chat.example.se FORS_DOMAIN=example.se KALLA_API_PUBLIC_URL=https://rag.example.se:8543
 
 # gateway_values: the gateway's names and addresses from $work/out.json, as a JSON array: the gateway bootstrap's

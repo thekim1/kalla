@@ -4,7 +4,7 @@
 // file of ../requests/ shared with stream_probe.py. k6 reads a response only once it has ended, so it measures the
 // whole stream; time to first token comes from stream_probe.py, which run.sh starts next to this script.
 //
-//   BASE_URL  e.g. https://kalla-api.example.se (without /v1)     MODEL     assistant slug (FakeGateway model in a dry run)
+//   BASE_URL  e.g. https://rag-api.example.se (without /v1)     MODEL     assistant slug (FakeGateway model in a dry run)
 //   REQUEST   path of a request file (mounted at /requests)     KEY       bearer key (optional)
 //   HEADERS   JSON object of extra headers                      RATE      messages per second    DURATION  e.g. 10m
 //   OUT       results file, e.g. /results/phase1.k6.json        VUS       pre-allocated clients [60]

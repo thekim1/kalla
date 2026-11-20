@@ -32,15 +32,15 @@ images=()
 for v in KALLA_API_IMAGE KALLA_ADMIN_IMAGE KALLA_MIGRATIONS_IMAGE KALLA_POSTGRES_IMAGE; do
   [ -z "${!v:-}" ] || images+=(--set "$v=${!v}")
 done
-./deploy/init-deployment.sh --rolling --profiles '' --domain test --api-host rag.test --admin-host kalla-admin.test \
+./deploy/init-deployment.sh --rolling --profiles '' --domain test --api-host rag.test --admin-host rag-admin.test \
   --gateway-url https://llm.test --oidc-authority https://login.microsoftonline.com/common/v2.0 \
   ${images[@]+"${images[@]}"} --yes >/dev/null
 mkdir -p edge
-for h in rag.test kalla-admin.test; do
+for h in rag.test rag-admin.test; do
   openssl req -x509 -newkey rsa:2048 -nodes -keyout "edge/$h.key" -out "edge/$h.crt" -days 1 -subj "/CN=$h" \
     -addext "subjectAltName=DNS:$h" >/dev/null 2>&1
 done
-sed -e "s/@API_HOST@/rag.test/g" -e "s/@ADMIN_HOST@/kalla-admin.test/g" -e "s/@UPSTREAM@/$upstream/g" \
+sed -e "s/@API_HOST@/rag.test/g" -e "s/@ADMIN_HOST@/rag-admin.test/g" -e "s/@UPSTREAM@/$upstream/g" \
   -e "s/@API_PORT@/8543/g" -e "s/@ADMIN_PORT@/9543/g" -e "s/@API_B_PORT@/8544/g" -e "s/@ADMIN_B_PORT@/9544/g" \
   -e 's/#rolling //' -e '/^#owui/d' deploy/proxy/nginx.conf.example > edge/example.conf
 grep -q "server $upstream:8544;" edge/example.conf || { echo "error: the example does not list the second kalla-api slot" >&2; exit 1; }
@@ -67,7 +67,7 @@ load="$repo/deploy/tests/rolling-load.py"; stop="$work/stop"; pids=()
 # kalla-api refuses the missing key (401), or throttles an address that sent too many refused credentials (429).
 python3 "$load" rag.test "$port" /v1/chat/completions 401,429 16 "$stop" POST 127.0.0.1 > "$work/post.txt" 2>&1 & pids+=($!)
 python3 "$load" rag.test "$port" /v1/models 401,429 8 "$stop" GET 127.0.0.1 > "$work/get.txt" 2>&1 & pids+=($!)
-python3 "$load" kalla-admin.test "$port" / 200 4 "$stop" GET 127.0.0.1 > "$work/admin.txt" 2>&1 & pids+=($!)
+python3 "$load" rag-admin.test "$port" / 200 4 "$stop" GET 127.0.0.1 > "$work/admin.txt" 2>&1 & pids+=($!)
 sleep 5
 COMPOSE_PROJECT_NAME="$project" ./deploy/rolling-update.sh --force
 sleep 5

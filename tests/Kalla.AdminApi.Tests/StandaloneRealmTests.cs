@@ -19,7 +19,7 @@ public sealed class StandaloneRealmFixture : IAsyncLifetime
             [Path.Combine("deploy", "keycloak", "rag-additions.json")],
             new Dictionary<string, string>
             {
-                ["KALLA_ADMIN_PUBLIC_HOST"] = "kalla-admin.example.invalid",
+                ["KALLA_ADMIN_PUBLIC_HOST"] = "rag-admin.example.invalid",
                 ["KALLA_OPENWEBUI_HOST"] = "chat.example.invalid",
                 ["KALLA_OIDC_CLIENT_SECRET"] = TestSecrets.RandomHex(),
                 ["KALLA_OPENWEBUI_OIDC_CLIENT_SECRET"] = TestSecrets.RandomHex(),

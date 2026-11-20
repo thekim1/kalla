@@ -46,7 +46,7 @@ done
 san() { openssl x509 -in "$1" -noout -ext subjectAltName | tr -d ' \n'; }
 [[ "$(san "$c/postgres/postgres.crt")" == *DNS:postgres,DNS:localhost* ]] || fail "postgres' certificate is not for the host postgres"
 [[ "$(san "$c/api/api.crt")" == *DNS:rag.example.se* ]] || fail "kalla-api's certificate lacks rag.example.se"
-[[ "$(san "$c/admin/admin.crt")" == *DNS:kalla-admin.example.se* ]] || fail "kalla-admin's certificate lacks kalla-admin.example.se"
+[[ "$(san "$c/admin/admin.crt")" == *DNS:rag-admin.example.se* ]] || fail "kalla-admin's certificate lacks rag-admin.example.se"
 [ "$(cat "$s/api/Gateway__Key")" = api-key ] || fail "kalla-api's credential key"
 [ ! -e "$s/admin/Gateway__Key" ] && [ ! -e "$s/worker/Gateway__Key" ] || fail "a credential key nobody gave"
 grep -q 'no credential key for admin worker' "$t/first.log" || fail "the missing keys are not named"

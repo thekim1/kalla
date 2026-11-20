@@ -137,7 +137,7 @@ grep -q 'FORS_GATEWAY_HOST is not a host name, so the proxy has no gateway block
 conf="$(in_helper -v "${project}_kalla-config:/f:ro" "$helper" -c 'cat /f/proxy/nginx.conf')"
 grep -q 'server_name rag.example.se;' <<< "$conf" || fail "the proxy lost kalla-api's block"
 # The example's FORS_DOMAIN gives kalla-admin and Open WebUI their names (no KALLA_*_HOST set).
-grep -q 'server_name kalla-admin.example.se;' <<< "$conf" || fail "the proxy has no kalla-admin block under FORS_DOMAIN"
+grep -q 'server_name rag-admin.example.se;' <<< "$conf" || fail "the proxy has no kalla-admin block under FORS_DOMAIN"
 grep -q 'server_name chat.example.se;' <<< "$conf" || fail "the proxy has no Open WebUI block under FORS_DOMAIN"
 grep -q 'llm.example.se\|@GATEWAY_HOST@' <<< "$conf" && fail "nginx.conf still has a gateway block"
 grep -q 'server_name llm-admin\.example\.se;' <<< "$conf" || fail "the proxy lost the gateway admin's block with a bad FORS_GATEWAY_HOST"

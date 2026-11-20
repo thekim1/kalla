@@ -11,7 +11,7 @@
 #
 # Required variable: one, the gateway's too
 #   FORS_DOMAIN                the base domain (for example example.se): the host names default to llm.<domain> and
-#                             llm-admin.<domain> (the gateway's), rag.<domain> (kalla-api), kalla-admin.<domain>
+#                             llm-admin.<domain> (the gateway's), rag.<domain> (kalla-api), rag-admin.<domain>
 #                             (kalla-admin) and, with the openwebui profile, chat.<domain>. Each KALLA_*_HOST (Optional, below)
 #                             overrides its name; without FORS_DOMAIN, FORS_GATEWAY_HOST and KALLA_API_HOST are
 #                             required instead
@@ -50,7 +50,7 @@
 #   KALLA_OIDC_GROUPS_PLATFORM_ADMIN  the break-glass group(s) for the first platform admin (';'-separated), for an
 #                             identity provider whose tokens carry groups instead of the role rag-platform-admin in the
 #                             roles claim; the other roles' groups are set in RAG's admin (Settings, Role groups)
-#   KALLA_API_HOST (rag.<domain>), KALLA_ADMIN_HOST (kalla-admin.<domain>; without FORS_DOMAIN, kalla-api's name)
+#   KALLA_API_HOST (rag.<domain>), KALLA_ADMIN_HOST (rag-admin.<domain>; without FORS_DOMAIN, kalla-api's name)
 #   KALLA_API_PORT (8543), KALLA_ADMIN_PORT (9543), KALLA_*_BIND (0.0.0.0)
 #   KALLA_CRAWL_ALLOW (private CIDRs the crawler may fetch). The residency ceiling is each credential key's own
 #                             residencies in the gateway (register M2: OnPrem and Eu)

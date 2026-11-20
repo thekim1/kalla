@@ -11,7 +11,7 @@
 #       --datastores --backup-target s3://s3.example.se/kalla --backup-s3-credentials-file s3.cred [--renderer]
 #
 #   --namespace NS     namespace of the overlay (created if missing)
-#   --domain DOMAIN    the base domain: kalla-api's and kalla-admin's host names default to rag.DOMAIN and kalla-admin.DOMAIN
+#   --domain DOMAIN    the base domain: kalla-api's and kalla-admin's host names default to rag.DOMAIN and rag-admin.DOMAIN
 #   --api-host HOST, --admin-host HOST
 #                      the public host names when they are not the domain's defaults (the admin's defaults to kalla-api's
 #                      without --domain); they go into the two services' certificates
@@ -91,7 +91,7 @@ command -v openssl >/dev/null || die "openssl is required"
 [ "$generate_only" = 1 ] || [ -n "$ns" ] || die "--namespace is required"
 if [ -n "$domain" ]; then
   [[ "$domain" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || die "--domain takes a domain name such as example.se: $domain"
-  api_host="${api_host:-rag.$domain}"; admin_host="${admin_host:-kalla-admin.$domain}"
+  api_host="${api_host:-rag.$domain}"; admin_host="${admin_host:-rag-admin.$domain}"
 fi
 [ -n "$api_host" ] || die "--domain or --api-host is required (the host names go into the services' certificates)"
 case "$oidc_refuse_guests" in ""|true|false) ;; *) die "--oidc-refuse-guests must be true or false";; esac

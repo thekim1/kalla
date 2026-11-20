@@ -134,8 +134,10 @@ jobs:
         run: |
           [[ "$FROM" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::'$FROM' is not X.Y.Z"; exit 1; }
           bash scripts/ci/release-asset.sh "v$FROM" compose.portainer.yaml "dist/from-$FROM/compose.portainer.yaml"
+          # Before 0.9.0, the upgrade is 0.9.0's steps (the upgrade job below).
+          rename=(); [ "$(printf '%s\n' "$FROM" 0.9.0 | sort -V | head -n1)" = 0.9.0 ] || rename=(--rename-0.9)
           bash deploy/tests/portainer-upgrade-boot.sh "dist/from-$FROM/compose.portainer.yaml" dist/compose.portainer.yaml \
-            --from-env "deploy/tests/fixtures/stack-$FROM.env" --version "$VERSION"
+            --from-env "deploy/tests/fixtures/stack-$FROM.env" --version "$VERSION" ${rename[@]+"${rename[@]}"}
 
   e2e:
     # Optional (Decisions "E2E optional on release (user, 2026-11-06)"): a tag push runs them when the repository
@@ -393,8 +395,10 @@ jobs:
           bash deploy/tests/portainer-boot.sh dist/compose.portainer.yaml --version "${{ steps.version.outputs.version }}"
       - name: Upgrade the oldest supported release's Portainer stack
         # docs/portainer.md, "Upgrade": the UPGRADE_FROM stack (its release asset, its variables) is booted, then this
-        # release's file is applied over it with nothing added, changed or stopped by hand. From 0.6.0 it skips 0.7.0
-        # and crosses DropMessageParentId, for which kalla-migrate must stop the old kalla-api and kalla-admin itself.
+        # release's file is applied over it. From before 0.9.0 that is 0.9.0's steps (--rename-0.9: stop the stack,
+        # rename its variables, update it, rename the roles in both Postgres, deploy again), so nothing is fenced; the
+        # one-step upgrade with nothing added, changed or stopped by hand (and --expect-fenced kalla_api --expect-fenced
+        # kalla_admin, as from 0.6.0 across DropMessageParentId) applies again once UPGRADE_FROM is 0.9.0 or later.
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -404,7 +408,7 @@ jobs:
           bash scripts/ci/release-asset.sh "v$UPGRADE_FROM" compose.portainer.yaml "dist-from/$UPGRADE_FROM/compose.portainer.yaml"
           bash deploy/tests/portainer-upgrade-boot.sh "dist-from/$UPGRADE_FROM/compose.portainer.yaml" dist/compose.portainer.yaml \
             --from-env "deploy/tests/fixtures/stack-$UPGRADE_FROM.env" \
-            --version "${{ steps.version.outputs.version }}" --expect-fenced kalla_api --expect-fenced kalla_admin
+            --version "${{ steps.version.outputs.version }}" --rename-0.9
           if [ "$GITHUB_EVENT_NAME" != push ]; then docker logout ghcr.io; fi
       - name: The other images' SBOMs
         # Started above, beside the boot tests; normally done by now.

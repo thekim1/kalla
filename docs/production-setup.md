@@ -129,7 +129,7 @@ digest for one pushed to a registry, `--set KALLA_API_IMAGE=ghcr.io/<owner>/kall
 ### 2. `init-deployment.sh`
 
 ```bash
-./deploy/init-deployment.sh --api-host kalla-api.intern.umea.se --admin-host kalla-admin.intern.umea.se \
+./deploy/init-deployment.sh --api-host kalla-api.intern.umea.se --admin-host rag-admin.intern.umea.se \
   --gateway-url https://llm.intern.umea.se --set KALLA_TRUST_DIR=/etc/kalla/trust \
   --gateway-credential-key-file api=kalla-api.key --gateway-credential-key-file admin=kalla-admin.key \
   --gateway-credential-key-file worker=kalla-worker.key \
@@ -172,7 +172,7 @@ options name and keeps every other variable in `deploy/.env` (an empty one, and 
 
 | Option | Default | Effect |
 |---|---|---|
-| `--domain DOMAIN` | – | `FORS_DOMAIN`: kalla-api, kalla-admin and Open WebUI are `rag.DOMAIN`, `kalla-admin.DOMAIN` and `chat.DOMAIN` |
+| `--domain DOMAIN` | – | `FORS_DOMAIN`: kalla-api, kalla-admin and Open WebUI are `rag.DOMAIN`, `rag-admin.DOMAIN` and `chat.DOMAIN` |
 | `--api-host HOST`, `--admin-host HOST` | under `--domain`; without it the admin shares kalla-api's name | `KALLA_API_HOST`, `KALLA_ADMIN_HOST`: a name of its own instead; in the listener certificates and kalla-api's public URL `https://<api host>` |
 | `--gateway-url URL` | asked for (required) | Fors (HTTPS): `KALLA_GATEWAY_URL` |
 | `--gateway-ca-file FILE` | – | The gateway's CA certificate, which the services then trust (a gateway on this host: `<gateway>/deploy/certs/ca.pem`). The script copies it to `deploy/gateway-ca/ca.pem` and sets `KALLA_GATEWAY_CA_DIR` to that directory; only the certificate is copied, since the gateway's directory also holds its private keys. Give it again when the gateway gets a new CA. Not needed for a gateway with a public certificate |
@@ -598,7 +598,7 @@ and [portainer.md](portainer.md) for a first deploy and each upgrade step by ste
    with a GitHub user and a token holding `read:packages`, and pick it when you create the stack. The gateway's images
    are public.
 3. **Variables:** `FORS_DOMAIN`, which names the gateway API and its admin `llm.` and `llm-admin.<domain>`, and
-   kalla-api, its admin and Open WebUI `rag.`, `kalla-admin.` and `chat.<domain>` (or `FORS_GATEWAY_HOST`,
+   kalla-api, its admin and Open WebUI `rag.`, `rag-admin.` and `chat.<domain>` (or `FORS_GATEWAY_HOST`,
    `KALLA_API_HOST` and the other host variables instead), and `COMPOSE_PROFILES=clamav` (add `openwebui` for the
    chat, `render` for JavaScript pages). The credential keys come from the stack file's default manifest (leave the
    gateway's `FORS_INTEGRATION_MANIFEST` unset), or are issued by hand and set as the three `KALLA_*_GATEWAY_KEY`. No
@@ -630,7 +630,7 @@ the host reaches them; `KALLA_API_BIND` and `KALLA_ADMIN_BIND` (`--set`) publish
 `127.0.0.1`. Open WebUI's plain-HTTP port is published on `127.0.0.1:3000` (`KALLA_OPENWEBUI_BIND`).
 
 **The names.** Each service has a host name of its own; none is served under a path of a shared name. With
-`--domain` they are `rag.<domain>`, `kalla-admin.<domain>` and `chat.<domain>` (the gateway's: `llm.` and
+`--domain` they are `rag.<domain>`, `rag-admin.<domain>` and `chat.<domain>` (the gateway's: `llm.` and
 `llm-admin.<domain>`), all one label under the domain, so **one wildcard DNS record (`*.<domain>`) and one wildcard
 certificate cover them**: ask for a sub-domain of the installation's own (`ai.example.se`, the record
 `*.ai.example.se`) instead of a record per service. A test host needs no name beyond its own: without a proxy the

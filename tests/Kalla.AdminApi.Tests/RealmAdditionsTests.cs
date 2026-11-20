@@ -207,7 +207,7 @@ public sealed class RealmAdditionsFixture : IAsyncLifetime
         {
             ["GATEWAY_CLIENT_SECRET"] = TestSecrets.RandomHex(),
             ["FORS_KEYCLOAK_REALM"] = "fors",
-            ["KALLA_ADMIN_PUBLIC_HOST"] = "kalla-admin.example.invalid",
+            ["KALLA_ADMIN_PUBLIC_HOST"] = "rag-admin.example.invalid",
             ["KALLA_OPENWEBUI_HOST"] = "chat.example.invalid",
             ["KALLA_OIDC_CLIENT_SECRET"] = OidcClientSecret,
             ["KALLA_OPENWEBUI_OIDC_CLIENT_SECRET"] = TestSecrets.RandomHex(),
@@ -295,7 +295,7 @@ public sealed partial class RealmAdditionsTests(RealmAdditionsFixture keycloak) 
 
         // The local file (a test realm only) adds the AppHost URIs and keeps the pilot's.
         Strings(all["kalla-admin"].GetProperty("redirectUris")).ShouldBe(
-            ["https://kalla-admin.example.invalid/signin-oidc", "https://localhost:5174/signin-oidc", "https://localhost:7402/signin-oidc"], ignoreOrder: true);
+            ["https://rag-admin.example.invalid/signin-oidc", "https://localhost:5174/signin-oidc", "https://localhost:7402/signin-oidc"], ignoreOrder: true);
         Strings(all["open-webui"].GetProperty("redirectUris")).ShouldBe(
             ["https://chat.example.invalid/oauth/oidc/login/callback", "http://localhost:8080/oauth/oidc/login/callback"], ignoreOrder: true);
 

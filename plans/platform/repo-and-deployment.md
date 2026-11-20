@@ -767,7 +767,7 @@ missing one stops the run. The script's header (`--help`) is the option list and
 
 | Option | Sets | Notes |
 |---|---|---|
-| `--domain DOMAIN` | `FORS_DOMAIN` | the host names default to `rag.`, `kalla-admin.` and `chat.` under it |
+| `--domain DOMAIN` | `FORS_DOMAIN` | the host names default to `rag.`, `rag-admin.` and `chat.` under it |
 | `--api-host HOST`, `--admin-host HOST` | `KALLA_API_HOST`, `KALLA_ADMIN_HOST` | a name of its own instead; without the domain, kalla-admin's name defaults to kalla-api's. The names go into the two services' certificates |
 | `--gateway-url URL` | `KALLA_GATEWAY_URL` | required, an `https://` URL |
 | `--gateway-ca-file FILE` | `KALLA_GATEWAY_CA_DIR` (`deploy/gateway-ca`) | the gateway's CA certificate (a gateway on this host: `deploy/certs/ca.pem` of its directory), copied alone to `deploy/gateway-ca/ca.pem`; a file that holds a private key is refused, and the gateway's certificate directory, which holds its keys, is never mounted. Not needed for a gateway with a public certificate |

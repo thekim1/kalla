@@ -30,7 +30,7 @@ For the gateway operator, on the gateway host:
    gateway's secrets, readable only by the operator:
 
    ```bash
-   KALLA_ADMIN_PUBLIC_HOST=kalla-admin.intern.umea.se      # the admin UI's host
+   KALLA_ADMIN_PUBLIC_HOST=rag-admin.intern.umea.se      # the admin UI's host
    KALLA_OPENWEBUI_HOST=chat.intern.umea.se              # Open WebUI's host
    KALLA_OIDC_CLIENT_SECRET=<the admin API's Oidc:ClientSecret>
    KALLA_OPENWEBUI_OIDC_CLIENT_SECRET=<Open WebUI's OIDC client secret>

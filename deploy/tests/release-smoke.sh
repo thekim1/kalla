@@ -11,7 +11,7 @@
 #   - kalla-api: /v1/models = 401 without a key           (a 404 is reported as not built, any other answer fails)
 #   - kalla-admin: / = 200 with the admin UI's index.html
 #   - the setup wizard (Decisions "Setup wizard"), as deploy/tests/portainer-boot.sh checks it: kalla-bootstrap's log
-#     points at https://kalla-admin.smoke.test:<admin port>/setup, kalla-admin's output has a setup code (never printed: masked in GitHub
+#     points at https://rag-admin.smoke.test:<admin port>/setup, kalla-admin's output has a setup code (never printed: masked in GitHub
 #     Actions and cut from the logs a failure prints), and /bff/user says sign-in is not configured and setup is open
 #   - a Swedish compound query through the API          (no query endpoint exists yet; reported, not run)
 #   - pgbackrest stanza-create and check in kalla-postgres
@@ -97,7 +97,7 @@ for svc in api admin worker; do printf 'smoke-%s-key\n' "$svc" > "$work/keys/$sv
 # and no --domain, as the Compose quick start gives them: then the gateway admin's address renders empty, which
 # kalla-admin must take as unset (#865); the Compose bootstrap test and the Portainer boot test cover the domain form.
 init_deployment() {
-  "$deploy/init-deployment.sh" --api-host kalla-api.smoke.test --admin-host kalla-admin.smoke.test \
+  "$deploy/init-deployment.sh" --api-host rag-api.smoke.test --admin-host rag-admin.smoke.test \
     --gateway-url https://llm.smoke.test \
     --gateway-credential-key-file api="$work/keys/api" --gateway-credential-key-file admin="$work/keys/admin" \
     --gateway-credential-key-file worker="$work/keys/worker" \
@@ -157,9 +157,9 @@ ok "kalla-admin / = 200 (the admin UI)"
 
 echo "== the setup wizard (identity design §19)"
 dc logs --no-color --no-log-prefix kalla-bootstrap \
-  | grep -qF "kalla-bootstrap: sign-in is set in the setup wizard: https://kalla-admin.smoke.test:$admin_port/setup " \
-  || fail "kalla-bootstrap's log does not point at the setup wizard on https://kalla-admin.smoke.test:$admin_port/setup"
-ok "kalla-bootstrap points at the setup wizard (https://kalla-admin.smoke.test:$admin_port/setup); no sign-in value was given"
+  | grep -qF "kalla-bootstrap: sign-in is set in the setup wizard: https://rag-admin.smoke.test:$admin_port/setup " \
+  || fail "kalla-bootstrap's log does not point at the setup wizard on https://rag-admin.smoke.test:$admin_port/setup"
+ok "kalla-bootstrap points at the setup wizard (https://rag-admin.smoke.test:$admin_port/setup); no sign-in value was given"
 setup_code() {
   dc logs --no-color --no-log-prefix kalla-admin 2>/dev/null | sed -n 's/^kalla-admin: setup mode is open until .*\. Setup code: //p' | tail -n 1
 }
@@ -168,8 +168,8 @@ setup_code_seen="$(setup_code)"
 if [ -n "$setup_code_seen" ] && [ -n "${GITHUB_ACTIONS:-}" ]; then echo "::add-mask::$setup_code_seen"; fi
 [ -n "$setup_code_seen" ] || fail "kalla-admin's output has no 'setup mode is open until … Setup code:' line"
 grep -qE '^[0-9A-Z]{5}(-[0-9A-Z]{5}){3}-[0-9A-Z]{6}$' <<< "$setup_code_seen" || fail "kalla-admin's setup code is not in the form XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX"
-user="$(https --resolve "kalla-admin.smoke.test:$admin_port:127.0.0.1" -H 'Accept: application/json' \
-  "https://kalla-admin.smoke.test:$admin_port/bff/user")" || fail "kalla-admin's /bff/user did not answer"
+user="$(https --resolve "rag-admin.smoke.test:$admin_port:127.0.0.1" -H 'Accept: application/json' \
+  "https://rag-admin.smoke.test:$admin_port/bff/user")" || fail "kalla-admin's /bff/user did not answer"
 jq -e '.isAuthenticated == false and .signIn.configured == false and .setup.open == true' >/dev/null <<< "$user" \
   || fail "kalla-admin's /bff/user is not signed out, sign-in not configured and setup open: $(jq -c '{isAuthenticated, signIn, setup}' <<< "$user")"
 ok "kalla-admin's output has a setup code (not shown); /bff/user: sign-in not configured and setup open"
