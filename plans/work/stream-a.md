@@ -25,7 +25,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Read:** Decisions "Deleting knowledge bases, sources and assistants"; data-model §8; connectors §12 (soft
   delete and purge); admin §4.5.
 
-### [ ] A-37 Purge documents removed from a source that still exists (#878, found in #884)
+### [x] A-37 Purge documents removed from a source that still exists (#878, found in #884; #891)
 - **Do:** data-model §8 and connectors §12: a document that was soft-deleted because its source no longer has it
   (`DeletedAt`, `PurgeAfter` +14 days) is deleted after `PurgeAfter` with its chunk sets and chunks, and its raw
   blobs tombstoned, as `DeletedSourcePurge` does for a deleted source's. Designed, never built (#884's design
@@ -37,7 +37,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Waits on:** nothing.
 - **Read:** data-model §8; connectors §12; `DeletedSourcePurge`, `DeleteSourceHandler` (#884).
 
-### [ ] A-38 Evaluation questions whose expected documents are gone (#878, found in #884)
+### [x] A-38 Evaluation questions whose expected documents are gone (#878, found in #884; #892)
 - **Do:** processing §13.3 *A question whose expected document is gone*: an evaluation run leaves out every question
   with an expected document whose `DeletedAt` is set or whose row is purged, counts it as `documentGone` in the run's
   result, and sets a `human` one to `State = stale` (and back to `active` when the document is revived); `generated`
