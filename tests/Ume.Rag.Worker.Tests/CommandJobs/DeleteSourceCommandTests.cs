@@ -14,7 +14,7 @@ namespace Ume.Rag.Worker.Tests.CommandJobs;
 /// A-36 (#878; Decisions "Deleting knowledge bases, sources and assistants"; data-model §8): <c>delete-source</c> cancels the
 /// deleted source's running run, soft-deletes its documents and the chunks of their live sets, and deletes its upload slots
 /// with a tombstone per blob; another source is untouched, a repeat finds nothing, and a source that is not deleted is
-/// refused. <see cref="DeletedSourcePurge"/> removes the documents, their sets and chunks after the 14-day grace and
+/// refused. <see cref="DocumentPurge"/> removes the documents, their sets and chunks after the 14-day grace and
 /// tombstones their raw blobs.
 /// </summary>
 [Collection(RagDatabaseGroup2.Name)]
@@ -90,17 +90,20 @@ public sealed class DeleteSourceCommandTests(RagDatabaseFixture database) : IAsy
         (await CommandSeeds.ResultAsync(database, repeat.Job.Id)).GetProperty("documents").GetInt32().ShouldBe(0);
 
         // The purge: nothing within the grace; after it, the documents with their sets and chunks, and their raw blobs tombstoned.
+        // It purges every soft-deleted document past its grace, so the counts include other tests' documents.
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow.AddDays(13));
-        (await Purge(clock).RunAsync(Ct)).Purged.ShouldBe(0);
+        await Purge(clock).RunAsync(Ct);
+        (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM content."Documents" WHERE "SourceId" = $1""", seed.SourceId))
+            .ShouldBe(2);
         var hash = await Sql.ScalarAsync<byte[]>(database.Connection(null), """SELECT "ContentHash" FROM content."Documents" WHERE "Id" = $1""", first);
         clock.Advance(TimeSpan.FromDays(2));
-        (await Purge(clock).RunAsync(Ct)).Purged.ShouldBe(2);
+        (await Purge(clock).RunAsync(Ct)).Purged.ShouldBeGreaterThanOrEqualTo(2);
         (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM content."Documents" WHERE "SourceId" = $1""", seed.SourceId))
             .ShouldBe(0);
         (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM content."ChunkSets" WHERE "Id" = ANY($1)""",
             new[] { firstSet, secondSet })).ShouldBe(0);
         (await Sql.ScalarAsync<string>(database.Connection(null), """SELECT "Reason" FROM content."BlobTombstones" WHERE "Key" = $1""",
-            $"raw/{Classification.Public}/{Convert.ToHexStringLower(hash)}")).ShouldBe(DeletedSourcePurge.TombstoneReason);
+            $"raw/{Classification.Public}/{Convert.ToHexStringLower(hash)}")).ShouldBe(DocumentPurge.TombstoneReason);
         (await CommandSeeds.VisibleChunksAsync(database, keptSet)).ShouldBe(2);
     }
 
@@ -124,7 +127,7 @@ public sealed class DeleteSourceCommandTests(RagDatabaseFixture database) : IAsy
             JobDedupKeys.DeleteSource(live.SourceId))).ShouldBe(0);
     }
 
-    private DeletedSourcePurge Purge(TimeProvider clock) => new(database.Database(RagDatabase.Worker), database.Queue(RagDatabase.Worker), clock);
+    private DocumentPurge Purge(TimeProvider clock) => new(database.Database(RagDatabase.Worker), database.Queue(RagDatabase.Worker), clock);
 
     /// <summary>A live upload slot of the source for the document; returns its id and hash.</summary>
     private async Task<(Guid Slot, byte[] Sha)> SlotAsync(SourceSeed seed, Guid document)

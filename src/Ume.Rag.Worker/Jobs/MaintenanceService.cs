@@ -10,8 +10,8 @@ namespace Ume.Rag.Worker.Jobs;
 /// (repo-and-deployment §3, data-model §4.4, §8): run-item partitions, then terminal jobs older than 7 days in batches of
 /// 1,000. Rows still in <c>RunItems_default</c> afterwards mean maintenance lagged: a warning and the
 /// <c>rag.partitions.default_rows</c> gauge. Then the engine's sweeps: chunk sets never swapped or past the rollback window
-/// (<see cref="IndexWriter.SweepOrphansAsync"/>), a deleted source's documents past their grace (<see cref="DeletedSourcePurge"/>,
-/// whose raw blobs it tombstones) and the blob-tombstone purge (<see cref="BlobPurgeSweep"/>). The nightly
+/// (<see cref="IndexWriter.SweepOrphansAsync"/>), soft-deleted documents past their grace, of a live source or a deleted one
+/// (<see cref="DocumentPurge"/>, which tombstones their raw blobs) and the blob-tombstone purge (<see cref="BlobPurgeSweep"/>). The nightly
 /// drift sweep runs at 01:30 on the same instance (<see cref="DriftSweepService"/>, registered with the engine). Then every
 /// collection's keyword statistics are checked (<see cref="KeywordStatistics.CheckAllAsync"/>, knowledge design §6.2), and the
 /// content retention step removes the rows without blobs past their age (<see cref="ContentMaintenance.DeleteExpiredContentAsync"/>,
@@ -26,7 +26,7 @@ public sealed partial class MaintenanceService(
     TimeProvider time,
     ILogger<MaintenanceService> logger,
     KeywordStatistics? keywords = null,
-    DeletedSourcePurge? sourcePurge = null) : BackgroundService
+    DocumentPurge? documentPurge = null) : BackgroundService
 {
     public static readonly TimeOnly RunAt = new(2, 0);
 
@@ -87,16 +87,16 @@ public sealed partial class MaintenanceService(
             LogStepFailed(logger, ex, "orphan chunk sets");
         }
 
-        if (sourcePurge is not null)
+        if (documentPurge is not null)
         {
             try
             {
-                var outcome = await sourcePurge.RunAsync(cancellationToken);
-                LogSourceDocumentsPurged(logger, outcome.Queued, outcome.Purged);
+                var outcome = await documentPurge.RunAsync(cancellationToken);
+                LogDocumentsPurged(logger, outcome.Queued, outcome.Purged);
             }
             catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {
-                LogStepFailed(logger, ex, "deleted sources' documents");
+                LogStepFailed(logger, ex, "deleted documents");
             }
         }
 
@@ -174,8 +174,8 @@ public sealed partial class MaintenanceService(
     [LoggerMessage(LogLevel.Information, "Removed {Count} chunk sets never swapped or past the rollback window")]
     private static partial void LogOrphansSwept(ILogger logger, long count);
 
-    [LoggerMessage(LogLevel.Information, "Deleted sources: {Queued} delete-source commands queued for content left live, {Purged} documents purged past their grace")]
-    private static partial void LogSourceDocumentsPurged(ILogger logger, int queued, long purged);
+    [LoggerMessage(LogLevel.Information, "Document purge: {Queued} delete-source commands queued for deleted sources' content left live, {Purged} documents purged past their grace")]
+    private static partial void LogDocumentsPurged(ILogger logger, int queued, long purged);
 
     [LoggerMessage(LogLevel.Information, "Blob purge: {Purged} blobs purged, {Kept} tombstones dropped for keys referenced again")]
     private static partial void LogPurged(ILogger logger, long purged, long kept);
