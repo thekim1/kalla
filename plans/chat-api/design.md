@@ -238,6 +238,7 @@ namespace, so it cannot collide with a later OpenAI member; OpenAI's own `metada
 | `ume.follow_ups` | integer 0–5; the most follow-up questions to suggest (§9.8); 0 = none; otherwise 400 `invalid_request`, `param` `ume.follow_ups` |
 | `ume.escalation` | `true` or `false`; `true` asks for the escalation hand-off (§9.9); `false` or absent = none; any other value → 400 `invalid_request`, `param` `ume.escalation` |
 | `ume.general_knowledge` | `off`, `supplement`, `fallback` or `open`, lower case as stored (#726): the turn runs at the **stricter** of this level and the assistant's own (`QuerySteps.answer.generalKnowledge`, strictest first in that order), so a request never loosens what the assistant's admins set (§7.3, admin V36). Absent or `null`: the assistant's level. Any other value → 400 `invalid_request`, `param` `ume.general_knowledge`. The **effective** level is what §6.2's routing, §7.3's frame and §10.4 use, and what logs and metrics record |
+| `ume.topics` | an array of 1–20 strings, each in the chunk tag format (processing §7): the turn searches only chunks that carry one of them, **inside** what the assistant's links allow (Decisions "Topics per request"). A link with topics keeps the topics that are also asked for, and is left out of the turn when none is; a link without topics is searched for the asked topics only. So a request narrows and never widens what the assistant's admins linked, as `ume.general_knowledge`. Absent, `null` or `[]`: the links as they are. Not an array, more than 20 values, or a value that is not a string in the tag format → 400 `invalid_request`, `param` `ume.topics`. A topic no link can match is no error: it matches nothing, and a turn left with no link to search ends `not-found` (§10.1). The narrowed links are what the turn's one retrieval uses (knowledge §4.2), so citations, related documents (§9.7) and coverage follow them |
 | any other member of `ume` | 400 `unsupported_parameter`, `param` `ume.<name>`: the namespace is ours, so a typo fails instead of silently doing nothing |
 | client kind `open-webui` | `ume` is ignored, not validated: Open WebUI renders neither chunk, gets its sources as `source` events (§9.3), and its own follow-up generation stays off (§4.3) |
 
@@ -263,6 +264,7 @@ The member is parsed with the rest of the body (§4.1 step 2), so a refusal come
 | `related_documents` | present when asked with 1 or more (§9.7; absent for 0); `[]` when nothing qualifies |
 | `follow_ups` | present when asked with 1 or more (§9.8; absent for 0); `[]` when skipped, timed out or failed |
 | `escalation` | present when asked with `true` (§9.9; absent otherwise): the hand-off object for `not-found`, `answered-general` and `unavailable`, `null` for `answered` |
+| `topics` | present when `ume.topics` was asked with one or more: the asked topics that at least one link searched, in the request's order. A topic missing here matched no link, which is how a client sees a mistyped or removed topic; `[]` when none did |
 
 **Delivery.** Without streaming, `ume` is a top-level member of the `chat.completion` object, written when the
 follow-up call has returned or its budget has run out. When streaming, it comes in `chat.completion.chunk` objects with
@@ -1489,6 +1491,11 @@ Unit (`Ume.Rag.Api.Tests`) and API tests against FakeGateway (scripted answers p
   the call carries `x-ume-step: escalation`, the condense ceiling and the assistant's key; its input holds the last
   user message, the search query only when condensed, and no answer text (FakeGateway's recorded request); nothing of
   the summary in logs, traces or the writer's turn (telemetry scan test, §17).
+- **Topics per request**: an assistant with one link without topics and one with `vpn`, `skrivare`: `ume.topics`
+  `["vpn"]` finds only chunks tagged `vpn` in both, `["konton"]` searches the first link only, and `ume.topics` in
+  the answer lists what was searched; `["okänt"]` ends `not-found` with `topics: []`; `[]` and absent answer as
+  today; a 21st value, a number or a value outside the tag format → 400 with `param` `ume.topics`; a request can
+  not reach a tag the link does not have (the link's `vpn` with `["skrivare-intern"]` finds nothing of it).
 - **Source dates**: a crawled page with a stated date gives `modified` and `checked` on its related-documents entry
   and the label "(2026-03-02, kontrollerad 2026-11-18)"; one without a date gives only `checked` and
   "(kontrollerad 2026-11-18)"; an English turn says "checked"; an upload gives `modified` (its upload time when the

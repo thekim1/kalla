@@ -90,6 +90,21 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Read:** Decisions "Deleting knowledge bases, sources and assistants"; admin §4.5, §5.5; identity §4.3;
   data-model §2.1, §2.2, §8.
 
+### [ ] B-52 Narrow a chat turn by topic: `ume.topics` (F8)
+- **Do:** chat §3.8: the request member `ume.topics` (an array of 1–20 tag-format strings; 400 `invalid_request`
+  with `param` `ume.topics` otherwise; absent, `null` and `[]` change nothing; ignored for Open WebUI) and the
+  answer's `ume.topics` (the asked topics that a link searched); the narrowing of the published version's links
+  (a link with topics: the common ones, out of the turn when none; a link without: the asked ones), passed as
+  `RetrievalRequest.Topics` so the topic links, the coverage counts and the floor see the narrowed links
+  (knowledge §4.2, §6.2); a turn with no link left ends `not-found` without a search.
+- **Paths:** `src/Ume.Rag.Api/**`, `src/Ume.Rag.Answering/**`, `src/Ume.Rag.Domain/**` (b's), `tests/**`; the
+  OpenAPI document and `docs/` where the `ume` members are listed.
+- **Done when:** chat §18.9's *Topics per request* tests pass, with the negative proof that a request cannot
+  reach a tag its link does not have; the Open WebUI recorded fixture is unchanged.
+- **Waits on:** nothing.
+- **Read:** Decisions "Topics per request"; chat §3.8, §18.9; knowledge §4.2, §6.2; processing §7 (the tag
+  format); admin V11.
+
 ## Live (the live block, see the roadmap)
 
 
