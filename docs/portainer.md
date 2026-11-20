@@ -307,15 +307,15 @@ and kalla-api accepts no Open WebUI user without the profile.
 
 ## Upgrade
 
-From 0.5.x or later to this release, **in one update**, with the rename to Källa and Fors in it: stop the stack,
-rename its variables, paste this release's stack file over the old one and update the stack, rename the database roles
-in a console, and redeploy. No release in between has to be installed first. Where a migration can't run beside the old
+From 0.5.x or later to this release, **in one update**, with the rename to Källa and Fors in it: stop the services,
+rename the database roles in the two old databases' consoles, stop the stack, rename its variables, and paste this
+release's stack file over the old one and update the stack once. No release in between has to be installed first. Where a migration can't run beside the old
 version of a service (0.6.0's `RemoveWorkerConcurrency` and the old admin), `kalla-migrate` keeps that service out of
 the database until its new version starts. Plan a window of about half an hour: the stack is down from step 7 to
 step 9, and the gateway moves to Fors `v0.12.1`. The release tests this path by booting 0.6.0's stack with its
-variables, renaming them as in step 7 and applying the new file over it.
+variables, renaming the roles and the variables as in steps 7 and 8 and applying the new file over it once.
 
-**Names in this section:** steps 2 to 6 name the variables by their new names; until step 7 your stack still has
+**Names in this section:** steps 2 to 6 name the variables by their new names; until step 8 your stack still has
 the old ones (`UME_RAG_X` for `KALLA_X`, `UME_X` for `FORS_X`), and the old services and volumes `rag-*`,
 `ume-certs` and `ume-secrets`.
 
@@ -369,7 +369,14 @@ the old ones (`UME_RAG_X` for `KALLA_X`, `UME_X` for `FORS_X`), and the old serv
 
 **The update**
 
-7. **Stop the stack and rename its variables** (in Portainer's *Advanced mode* the variables are one text to edit):
+7. **Stop the services and rename the roles in both databases.** In *Containers*, stop every container of the stack
+   except `postgres` and `rag-postgres` (a role that is connected cannot be renamed). Open a console (`/bin/sh`) on
+   `rag-postgres` and run `PGPASSWORD="$(cat /run/postgres-secrets/bootstrap_password)" psql -U postgres -d postgres
+   -f -`, paste the content of [`deploy/upgrade/0.9-rename-roles.sql`](../deploy/upgrade/0.9-rename-roles.sql) and end
+   with Ctrl-D. Do the same on `postgres` with the statement of the gateway's guide (*0.12.0*, *Portainer*, step 3).
+   **From here the old stack no longer starts** (its services sign in with the old role names): going back is the
+   backup of step 1, or renaming the roles back.
+8. **Stop the stack and rename its variables** (in Portainer's *Advanced mode* the variables are one text to edit):
    every `UME_RAG_*` becomes `KALLA_*`, every `RAG_*_IMAGE` becomes `KALLA_*_IMAGE`, then every `UME_*` becomes
    `FORS_*`, in that order, so that none becomes `FORS_RAG_*`. Write the old defaults you relied on as values: a stack
    that declares Källa's sign-in (`KALLA_OIDC_CLIENT_SECRET`) and names no `KALLA_OIDC_CLIENT_ID` adds
@@ -384,25 +391,25 @@ the old ones (`UME_RAG_X` for `KALLA_X`, `UME_X` for `FORS_X`), and the old serv
    `KALLA_CLAMAV_MODE`, `KALLA_EMBEDDING_MODEL` and the other `KALLA_EMBEDDING_*`,
    `KALLA_GATEWAY_MAX_RESIDENCY`, `KALLA_GATEWAY_INTEGRATION_API_URL`, `FORS_ORGANISATION_NAME` and the four group
    variables of step 4 (`KALLA_OIDC_GROUPS_PLATFORM_ADMIN` stays).
-8. **Edit the stack:** paste the new file over the old one (keep the stack name) and update it with *Re-pull image
+9. **Edit the stack:** paste the new file over the old one (keep the stack name) and update it once, with *Re-pull image
    and redeploy* and *Prune services* on. The gateway's `bootstrap` copies `ume-certs` and `ume-secrets` into
    `fors-certs` and `fors-secrets` once, and `kalla-bootstrap` copies `rag-certs`, `rag-secrets`, `rag-blobs`,
-   `rag-openwebui-data` and `rag-postgres-data` into the `kalla-*` volumes once; its log says *copied the database;
-   rename its roles before kalla-migrate can sign in*. If the copy fails part-way (a full disk), free the space and
-   update the stack again: the copy is done again from the start. The gateway's `migrations` and `kalla-migrate` then
-   fail to sign in, because the roles don't have their new names yet: that is expected.
-9. **Rename the roles and redeploy.** Open a console (`/bin/sh`) on `kalla-postgres` and run
-   `PGPASSWORD="$(cat /run/postgres-secrets/bootstrap_password)" psql -U postgres -d postgres -f -`, paste the content
-   of [`deploy/upgrade/0.9-rename-roles.sql`](../deploy/upgrade/0.9-rename-roles.sql) and end with Ctrl-D. Do the
-   same on the gateway's `postgres` with the statement of the gateway's guide (*0.12.0*, *Portainer*, step 3). Then
-   redeploy the stack. In order: the gateway's `bootstrap`, which also writes
-   `adminapi/Setup__Secret`; the gateway's `migrations` (its migrations, then the integration manifest);
-   `kalla-bootstrap`, which writes `admin/Setup__Secret` and Open WebUI's client secret as files for kalla-api and
-   kalla-admin; `kalla-migrate` (from 0.5.x thirteen migrations, from 0.6.0 eight, from 0.8.0 three; it creates the managed clients *Open
-   WebUI*, while its profile is on, and `admin-console`); then the services. From 0.5.x `kalla-migrate`'s log has
-   *Migration …RemoveWorkerConcurrency stops the services of role kalla_admin*: the old kalla-admin answers errors for
-   the seconds until it is replaced. Open WebUI starts through a wrapper that asks kalla-api for its sign-in settings,
-   and `kalla-openwebui-setup` mints the feedback key a minute after Open WebUI starts.
+   `rag-openwebui-data` and `rag-postgres-data` into the `kalla-*` volumes once; its log says *copied the database*. If
+   the copy fails part-way (a full disk), free the space and update the stack again: the copy is done again from the
+   start. The roles already have their new names, so nothing fails on the way. In order: the gateway's `bootstrap`,
+   which also writes `adminapi/Setup__Secret`; the gateway's `migrations` (its migrations, then the integration
+   manifest); `kalla-bootstrap`, which writes `admin/Setup__Secret` and Open WebUI's client secret as files for
+   kalla-api and kalla-admin; `kalla-migrate` (from 0.5.x thirteen migrations, from 0.6.0 eight, from 0.8.0 three; it
+   creates the managed clients *Open WebUI*, while its profile is on, and `admin-console`); then the services. From
+   0.5.x `kalla-migrate`'s log has *Migration …RemoveWorkerConcurrency stops the services of role kalla_admin*: the old
+   kalla-admin answers errors for the seconds until it is replaced. Open WebUI starts through a wrapper that asks
+   kalla-api for its sign-in settings, and `kalla-openwebui-setup` mints the feedback key a minute after Open WebUI
+   starts.
+
+   **If you updated before renaming the roles** (the order of the gateway's own guide, right for a gateway alone): the
+   gateway's `migrations` fails to sign in, and `kalla-bootstrap` and `kalla-postgres` wait for it. Rename the
+   gateway's roles on `postgres` as in step 7 and update the stack again: `kalla-bootstrap` copies the volumes and
+   `kalla-postgres` starts. Then rename Källa's roles on `kalla-postgres` and update a third time.
 
 **After the update**
 
@@ -444,8 +451,8 @@ the old ones (`UME_RAG_X` for `KALLA_X`, `UME_X` for `FORS_X`), and the old serv
     Fors 0.13).
 
 **Tested and not:** the release boots 0.6.0's stack (its file and variables, `clamav` and `openwebui`, no gateway
-keys, no identity provider), stops it, renames its variables as in step 7, applies the new file, renames the roles in
-both databases as in step 9 and redeploys: every service comes back healthy on the new images, and the database, the
+keys, no identity provider), stops its services, renames the roles in both databases as in step 7, stops it, renames
+its variables as in step 8 and applies the new file once: every service comes back healthy on the new images, and the database, the
 CA, the pepper and the Data Protection certificate are kept in the new volumes. The step from 0.5.1 was tested before
 0.8.0 (#817, 2026-11-17) but is in no release's own run: one of 0.5.1's images is no longer on ghcr.io. Sign-in after the upgrade, a hand-made Open WebUI client and keys issued by
 hand are not part of that test, and Portainer's own *Update the stack* is not run by it.

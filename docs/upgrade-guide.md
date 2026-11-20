@@ -68,21 +68,30 @@ and the release preparation folds the notes in here and writes the release's *Ro
   `ume-rag_rag-*` to `kalla_kalla-*` (the backup volumes too). A run that stopped part-way is safe to repeat: a
   volume whose copy did not finish is copied again. Then run `./deploy/init-deployment.sh` and start the release as
   usual. Remove the old volumes once it runs.
-- **Portainer** (one stack with the gateway):
-  1. **Stop the stack**, and rename its variables: every `UME_RAG_*` to `KALLA_*`, every `RAG_*_IMAGE` to
-     `KALLA_*_IMAGE`, then every `UME_*` to `FORS_*` (with Fors's own defaults to keep, its guide, *Portainer*). A
-     stack that declares its sign-in (`KALLA_OIDC_CLIENT_SECRET`) and names no client adds
-     `KALLA_OIDC_CLIENT_ID=ume-rag-admin`.
-  2. **Update the stack** with the release's `compose.portainer.yaml`, with *Prune services* on. `kalla-bootstrap`
-     copies the volumes `rag-certs`, `rag-secrets`, `rag-blobs`, `rag-openwebui-data` and `rag-postgres-data` into the
+- **Portainer** (one stack with the gateway; every step in [portainer.md](portainer.md), *Upgrade*): rename the roles
+  first, then update once.
+  1. **Stop the services, not the databases:** in *Containers*, every container of the stack except `postgres` and
+     `rag-postgres` (a role that is connected cannot be renamed).
+  2. **Rename the roles in both databases**, in a console (`/bin/sh`) on the old containers: on `rag-postgres` run
+     `PGPASSWORD="$(cat /run/postgres-secrets/bootstrap_password)" psql -U postgres -d postgres -f -`, paste the
+     content of `deploy/upgrade/0.9-rename-roles.sql` and end with Ctrl-D; on `postgres` the same with Fors's
+     statement (its guide, *0.12.0*, *Portainer*, step 3). From here the old stack no longer starts: going back is the
+     backup, or renaming the roles back.
+  3. **Stop the stack**, and rename its variables: every `UME_RAG_*` to `KALLA_*`, every `RAG_*_IMAGE` to
+     `KALLA_*_IMAGE`, then every `UME_*` to `FORS_*`. Write the old defaults you relied on as values:
+     `KALLA_OIDC_CLIENT_ID=ume-rag-admin` for a stack that declares its sign-in (`KALLA_OIDC_CLIENT_SECRET`) and names
+     no client, `FORS_OIDC_CLIENT_ID=ume-admin` where `FORS_OIDC_AUTHORITY` is set and names no client, and
+     `FORS_DATA_AUDIENCE=ume-data-api` unless it is set.
+  4. **Update the stack once** with the release's `compose.portainer.yaml`, with *Prune services* on. The gateway's
+     bootstrap copies `ume-certs` and `ume-secrets` into `fors-certs` and `fors-secrets`, and `kalla-bootstrap` copies
+     the volumes `rag-certs`, `rag-secrets`, `rag-blobs`, `rag-openwebui-data` and `rag-postgres-data` into the
      `kalla-*` volumes once (its log says so); it stops instead when the old database is still open. If the copy fails
      part-way (a full disk), free the space and update the stack again: the copy is done again from the start.
-     `kalla-migrate` then fails to sign in, because the roles do not have their new names yet.
-  3. **Rename the roles:** open a console (`/bin/sh`) on `kalla-postgres` and run
-     `PGPASSWORD="$(cat /run/postgres-secrets/bootstrap_password)" psql -U postgres -d postgres -f -`, then paste
-     the content of `deploy/upgrade/0.9-rename-roles.sql` and end with Ctrl-D. Do the same for the gateway's `postgres`
-     (Fors's guide), then **redeploy the stack**.
-  4. Remove the old `rag-*` volumes once the stack runs.
+  5. Remove the old `rag-*`, `ume-certs` and `ume-secrets` volumes once the stack runs.
+
+  **If you updated before renaming the roles** (the gateway's own guide has that order, right for a gateway alone):
+  the gateway's `migrations` fails to sign in, and `kalla-bootstrap` and `kalla-postgres` wait for it. Rename the
+  gateway's roles on `postgres`, update again, rename Källa's on `kalla-postgres`, and update a third time.
 - **Kubernetes** (read through, not run: no Kubernetes installation has been upgraded yet). The Secrets, ConfigMaps,
   Deployments, Services, Ingresses, NetworkPolicies and the migration Job `rag-*` and `ume-rag-*` become `kalla-*`.
   The data stays where it is: the blob claim keeps its name `rag-blobs`, and the StatefulSet `postgres` keeps its name
