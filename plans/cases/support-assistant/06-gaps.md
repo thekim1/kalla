@@ -37,7 +37,7 @@ M-8; issue #424). Their sections keep only what was asked and what was built.
 
 - **Asked.** Requirement 4: the next-best articles next to the answer, for a client other than Open WebUI, which got
   only the cited documents while `/v1/retrieve` stays closed to it (knowledge §2.3).
-- **Done** in #433 (M-7): `ume.related_documents` (request 0–10), from the answer's own retrieval, one entry per
+- **Done** in #433 (M-7): `kalla.related_documents` (request 0–10), from the answer's own retrieval, one entry per
   document with `document_id`, `title`, `url`, `collection`, `rank`, `cited` and `number`; `[]` unless the outcome is
   `answered` (chat §3.8, §9.7; `src/Kalla.Answering/Chat/RelatedDocuments.cs`). How the app reads it:
   [`05-frontend-integration.md`](05-frontend-integration.md) §5.
@@ -45,16 +45,16 @@ M-8; issue #424). Their sections keep only what was asked and what was built.
 ## SA-2 Outcome signal
 
 - **Asked.** Not-found, unavailable and general-knowledge answers were ordinary completions; the app should style them.
-- **Done** in #433 with SA-1: `ume.outcome` (`answered`, `answered-general`, `not-found`, `unavailable`) and
-  `ume.degraded` in every answer that sent `ume` (chat §3.8; `src/Kalla.Answering/Chat/RelatedDocuments.cs:25-26`,
+- **Done** in #433 with SA-1: `kalla.outcome` (`answered`, `answered-general`, `not-found`, `unavailable`) and
+  `kalla.degraded` in every answer that sent `kalla` (chat §3.8; `src/Kalla.Answering/Chat/RelatedDocuments.cs:25-26`,
   names in `src/Kalla.Answering/Chat/ChatPlan.cs:22-28`). No header.
 
 ## SA-3 Suggested follow-up questions
 
 - **Asked.** Requirement 5: one-click next questions when a ticket is vague.
-- **Done** in #434 (M-8): `ume.follow_ups` (request 0–5), one call on `Settings.Chat.condenseModel` after an
+- **Done** in #434 (M-8): `kalla.follow_ups` (request 0–5), one call on `Settings.Chat.condenseModel` after an
   `answered` or `answered-general` answer, budget `Chat:FollowUpTimeout` 2 s, `[]` on failure, never stored; in a
-  second streamed `ume` chunk, so time to first token and the related documents do not wait (chat §9.8, §3.8;
+  second streamed `kalla` chunk, so time to first token and the related documents do not wait (chat §9.8, §3.8;
   `src/Kalla.Answering/Chat/FollowUps.cs`, `src/Kalla.Api/ChatStreaming.cs:84-93`). Measured 1.1–1.3 s on
   `claude-haiku-5-5`, 1.4–2.6 s on `gpt-6-luna` (chat §22; [`04-assistant.md`](04-assistant.md) §2).
 
@@ -75,7 +75,7 @@ M-8; issue #424). Their sections keep only what was asked and what was built.
   built (identity §7.1). An `integration` key is one subject for all users.
 - **Why.** Per-person rate limits, audit, feedback ownership, department or group audiences, and later stored
   conversations per person.
-- **Sketch.** Build identity §7 as designed (JWT bearer on realm `ume`, audience `ume-rag-api`, client by `azp`, scope
+- **Sketch.** Build identity §7 as designed (JWT bearer on realm `kalla`, audience `ume-rag-api`, client by `azp`, scope
   `Chat.Use`); the app exchanges or forwards the user's token (OBO later, identity §9). Realm additions for the app's
   client scopes.
 - **Size L.** Designed for P2; pulling it forward is a roadmap call, not a new decision.

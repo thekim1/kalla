@@ -858,7 +858,7 @@
           "fors": {
             "$ref": "#/components/schemas/ModelFacts"
           },
-          "ume": {
+          "kalla": {
             "$ref": "#/components/schemas/ModelFacts",
             "deprecated": true,
             "description": "A copy of fors under its name before the rename to Fors; listed until 0.13."

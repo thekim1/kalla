@@ -89,7 +89,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         }
 
         // The published level runs, public included: V36 is a confirmed warning at publish (#445, chat design §7.3). A request's
-        // ume.general_knowledge only tightens it (§3.8); the routing, the frame and the plan read this effective level.
+        // kalla.general_knowledge only tightens it (§3.8); the routing, the frame and the plan read this effective level.
         var settings = resolved.Settings(assistant);
         if (chat.Kalla?.GeneralKnowledge is { } requested)
         {
@@ -316,7 +316,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
     }
 
     /// <summary>
-    /// The answer's <c>ume</c> member as the first <c>ume</c> chunk carries it (§3.8): <c>follow_ups</c> is <c>[]</c> there when
+    /// The answer's <c>kalla</c> member as the first <c>kalla</c> chunk carries it (§3.8): <c>follow_ups</c> is <c>[]</c> there when
     /// they were asked for and are skipped before any call (counted <c>skipped</c>), and left for the second chunk when a call follows.
     /// </summary>
     public KallaAnswer Kalla(ChatPlan plan, IReadOnlyList<PromptSource> cited, KallaRequest asked)
@@ -378,7 +378,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
     }
 
     /// <summary>
-    /// The second <c>ume</c> chunk (§3.8 Delivery): the follow-up call (when <paramref name="followUps"/> is above zero) and the
+    /// The second <c>kalla</c> chunk (§3.8 Delivery): the follow-up call (when <paramref name="followUps"/> is above zero) and the
     /// escalation summary's call (when pending) at the same time, so the wait is the longer budget, not their sum.
     /// </summary>
     public async Task<KallaLater> LaterAsync(ChatPlan plan, KallaRequest? asked, string question, int followUps, string delivered,

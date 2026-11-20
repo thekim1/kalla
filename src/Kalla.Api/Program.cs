@@ -65,7 +65,7 @@ if (knowledge)
         {
             document.Info.Title = "Källa Knowledge API";
             document.Info.Description = "Retrieval over Umeå kommun's published collections. Authenticate with an internal client's API key " +
-                "(Authorization: Bearer ume-rag-sk-…). Citation links of uploaded documents carry a signed download grant (?grant=…), valid " +
+                "(Authorization: Bearer kalla-sk-…). Citation links of uploaded documents carry a signed download grant (?grant=…), valid " +
                 "7 days (1 hour for sensitive) and re-checked on every use. Request bodies are limited to 16 KB; downloads to 120 a minute per address.";
             return Task.CompletedTask;
         }));

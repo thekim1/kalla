@@ -71,7 +71,7 @@ public static class ChatEndpoints
                 ParsedChat parsed;
                 using (body)
                 {
-                    // §3.8: Open WebUI renders no ume chunk, so its requests ignore the member without validating it.
+                    // §3.8: Open WebUI renders no kalla chunk, so its requests ignore the member without validating it.
                     parsed = ChatRequestParser.Parse(body.RootElement, readKalla: who.Client.Kind != "open-webui");
                 }
 
@@ -120,9 +120,9 @@ public static class ChatEndpoints
                         return null;
                     }
 
-                    var ume = service.Kalla(plan, cited, asked);
-                    metrics.Kalla(asked, ume, who);
-                    return ume;
+                    var kalla = service.Kalla(plan, cited, asked);
+                    metrics.Kalla(asked, kalla, who);
+                    return kalla;
                 }
                 try
                 {
@@ -130,18 +130,18 @@ public static class ChatEndpoints
                     {
                         var answer = await service.CompleteAsync(who, parsed, usage, ct);
                         await Enqueue(answer.Plan!, answer.Cited, answer.PromptTokens, answer.CompletionTokens);
-                        var ume = Kalla(answer.Plan!, answer.Cited);
+                        var kalla = Kalla(answer.Plan!, answer.Cited);
                         // §3.8, §9.8, §9.9: the JSON answer is written when the follow-up and escalation calls have returned or their
                         // budgets have run out (both at once).
                         var count = service.FollowUpCount(answer.Plan!, parsed.Kalla);
-                        if (ume is not null && (count > 0 || service.EscalationPending(answer.Plan!, parsed.Kalla)))
+                        if (kalla is not null && (count > 0 || service.EscalationPending(answer.Plan!, parsed.Kalla)))
                         {
                             var calls = await service.LaterAsync(answer.Plan!, parsed.Kalla, parsed.Question, count, answer.Content, answer.Cited, ct);
-                            ume = ume with { FollowUps = calls.FollowUps ?? ume.FollowUps, Escalation = calls.Escalation ?? ume.Escalation };
+                            kalla = kalla with { FollowUps = calls.FollowUps ?? kalla.FollowUps, Escalation = calls.Escalation ?? kalla.Escalation };
                             await EnqueueUsage(); // the calls came after the turn's write
                         }
 
-                        return Json(answer, ume);
+                        return Json(answer, kalla);
                     }
 
                     var plan = await service.PlanAsync(who, parsed, usage, ct);
@@ -239,8 +239,8 @@ public static class ChatEndpoints
         };
     }
 
-    /// <summary>The <c>chat.completion</c> object (§3.3); with <paramref name="ume"/> (§3.8) a top-level <c>ume</c> member after <c>usage</c>.</summary>
-    private static IResult Json(ChatCompletion answer, KallaAnswer? ume)
+    /// <summary>The <c>chat.completion</c> object (§3.3); with <paramref name="kalla"/> (§3.8) a top-level <c>kalla</c> member after <c>usage</c>.</summary>
+    private static IResult Json(ChatCompletion answer, KallaAnswer? kalla)
     {
         var body = new
         {
@@ -265,7 +265,7 @@ public static class ChatEndpoints
             },
             usage = new { prompt_tokens = answer.PromptTokens, completion_tokens = answer.CompletionTokens, total_tokens = answer.PromptTokens + answer.CompletionTokens },
         };
-        return ume is null ? Results.Json(body) : Results.Json(new { body.id, body.@object, body.created, body.model, body.choices, body.usage, ume });
+        return kalla is null ? Results.Json(body) : Results.Json(new { body.id, body.@object, body.created, body.model, body.choices, body.usage, kalla });
     }
 
     /// <summary>The description Open WebUI shows (§3.1): the assistant's description and its contact.</summary>
@@ -328,7 +328,7 @@ public static class ChatEndpoints
 /// <summary>
 /// <c>rag.chat.requests</c> (chat design §17) for completed turns: <c>outcome</c> (<c>answered</c>, <c>answered-general</c>,
 /// <c>not-found</c>, <c>unavailable</c>), <c>level</c>, <c>client_kind</c>, <c>stream</c>, <c>conversational</c>; for answers
-/// with the <c>ume</c> extension (§3.8) <c>rag.chat.ume</c> (<c>members</c>, <c>client_kind</c>) and
+/// with the <c>kalla</c> extension (§3.8) <c>rag.chat.ume</c> (<c>members</c>, <c>client_kind</c>) and
 /// <c>rag.chat.related_documents</c> (entries per answer that asked for the list, §9.7).
 /// </summary>
 public sealed class ChatMetrics
@@ -342,7 +342,7 @@ public sealed class ChatMetrics
         ArgumentNullException.ThrowIfNull(meters);
         var meter = meters.Create(Microsoft.Extensions.Hosting.Extensions.TelemetryName);
         _requests = meter.CreateCounter<long>("rag.chat.requests", description: "Chat turns by outcome");
-        _ume = meter.CreateCounter<long>("rag.chat.ume", description: "Chat answers with the ume extension by the members asked for");
+        _ume = meter.CreateCounter<long>("rag.chat.kalla", description: "Chat answers with the kalla extension by the members asked for");
         _related = meter.CreateHistogram<int>("rag.chat.related_documents", description: "Related documents listed per answer that asked for them");
     }
 
@@ -357,7 +357,7 @@ public sealed class ChatMetrics
         });
     }
 
-    /// <summary>One answer with a <c>ume</c> member: <c>members</c> is <c>outcome</c> (only), <c>related</c>, <c>follow_ups</c> or <c>both</c>.</summary>
+    /// <summary>One answer with a <c>kalla</c> member: <c>members</c> is <c>outcome</c> (only), <c>related</c>, <c>follow_ups</c> or <c>both</c>.</summary>
     public void Kalla(KallaRequest asked, KallaAnswer answer, RagPrincipal who)
     {
         ArgumentNullException.ThrowIfNull(asked);

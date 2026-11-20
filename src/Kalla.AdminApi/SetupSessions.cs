@@ -124,7 +124,7 @@ public sealed class SetupSessions(RagDbContext db, TimeProvider time, SetupSecre
 /// </summary>
 public sealed class SetupGateMiddleware(RequestDelegate next)
 {
-    private const string StatusKey = "ume.setupStatus";
+    private const string StatusKey = "kalla.setupStatus";
 
     public async Task InvokeAsync(HttpContext http, SetupMode setup, SetupCleanup cleanup)
     {

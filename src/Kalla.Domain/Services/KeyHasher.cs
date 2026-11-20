@@ -8,17 +8,23 @@ public sealed record GeneratedKey(string PlainText, string Prefix, string Hash, 
 
 /// <summary>
 /// Generates and verifies keys, adapted from the gateway's <c>VirtualKeyHasher</c> (identity design §6.1). Format:
-/// <c>ume-rag-sk-</c> (secret) or <c>ume-rag-pk-</c> (public widget key) + 43 base62 chars (~256 bits). Stored as
+/// <c>kalla-sk-</c> (secret) or <c>kalla-pk-</c> (public widget key) + 43 base62 chars (~256 bits). Stored as
 /// HMAC-SHA256(pepper, key) with Källa's own pepper, so a database leak alone cannot authenticate and neither system
-/// accepts the other's keys.
+/// accepts the other's keys. Keys issued before the rename to Källa (<c>ume-rag-sk-</c>, <c>ume-rag-pk-</c>) stay valid: the
+/// prefix only labels the kind, and the hash is the whole key's (Decisions "Product names").
 /// </summary>
 public sealed class KeyHasher
 {
-    public const string SecretPrefix = "ume-rag-sk-";
-    public const string PublicPrefix = "ume-rag-pk-";
+    public const string SecretPrefix = "kalla-sk-";
+    public const string PublicPrefix = "kalla-pk-";
+
+    /// <summary>The prefixes of keys issued before the rename, still accepted (never issued).</summary>
+    public const string LegacySecretPrefix = "ume-rag-sk-";
+    public const string LegacyPublicPrefix = "ume-rag-pk-";
+
     private const string Base62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     private const int RandomChars = 43;
-    private const int DisplayPrefixLength = 15; // "ume-rag-sk-" + 4 chars
+    private const int DisplayChars = 4; // the prefix + 4 chars are shown (Prefix column)
     private static readonly System.Buffers.SearchValues<char> Base62Values = System.Buffers.SearchValues.Create(Base62);
 
     private readonly byte[] _pepper;
@@ -49,7 +55,7 @@ public sealed class KeyHasher
         }
 
         var key = prefix + new string(chars);
-        return new GeneratedKey(key, key[..DisplayPrefixLength], Hash(key), kind);
+        return new GeneratedKey(key, key[..(prefix.Length + DisplayChars)], Hash(key), kind);
     }
 
     public string Hash(string key)
@@ -73,11 +79,14 @@ public sealed class KeyHasher
 
     /// <summary>The kind its prefix claims (<c>sk</c> or <c>pk</c>), or null when <paramref name="value"/> is not shaped like a key.</summary>
     public static string? KindOf(string? value) =>
-        value is null || value.Length != SecretPrefix.Length + RandomChars || value.AsSpan(SecretPrefix.Length).IndexOfAnyExcept(Base62Values) >= 0
-            ? null
-            : value.StartsWith(SecretPrefix, StringComparison.Ordinal) ? KeyKinds.Secret
-            : value.StartsWith(PublicPrefix, StringComparison.Ordinal) ? KeyKinds.Public
-            : null;
+        value is null ? null
+        : Shaped(value, SecretPrefix) || Shaped(value, LegacySecretPrefix) ? KeyKinds.Secret
+        : Shaped(value, PublicPrefix) || Shaped(value, LegacyPublicPrefix) ? KeyKinds.Public
+        : null;
+
+    private static bool Shaped(string value, string prefix) =>
+        value.Length == prefix.Length + RandomChars && value.StartsWith(prefix, StringComparison.Ordinal) &&
+        value.AsSpan(prefix.Length).IndexOfAnyExcept(Base62Values) < 0;
 
     public static bool LooksLikeKey(string? value) => KindOf(value) is not null;
 }

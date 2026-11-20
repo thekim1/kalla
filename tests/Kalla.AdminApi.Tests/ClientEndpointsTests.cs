@@ -128,7 +128,7 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database, ClientEn
         client.GetProperty("assistants").GetArrayLength().ShouldBe(0);
         var created = body.GetProperty("key");
         var secret = created.GetProperty("secret").GetString()!;
-        secret.ShouldStartWith("ume-rag-sk-");
+        secret.ShouldStartWith("kalla-sk-");
         var key = created.GetProperty("key");
         var keyId = key.GetProperty("id").GetGuid();
         key.GetProperty("clientId").GetGuid().ShouldBe(clientId);
@@ -210,7 +210,7 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database, ClientEn
             var other = new Client { Name = "Other " + code, Kind = ClientKinds.Internal, ClassificationCeiling = Classification.Internal, UpdatedAt = now };
             ApiKey Key(Client owner, string name) => new()
             {
-                ClientId = owner.Id, Name = name, Prefix = "ume-rag-sk-" + name[..4], KeyHash = Guid.NewGuid().ToString("N"), CreatedAt = now.AddDays(-2),
+                ClientId = owner.Id, Name = name, Prefix = "kalla-sk-" + name[..4], KeyHash = Guid.NewGuid().ToString("N"), CreatedAt = now.AddDays(-2),
             };
 
             // Active: one. Not active: revoked, disabled, expired, in a rotation's grace period, and another client's key.
@@ -400,7 +400,7 @@ public sealed class ClientEndpointsTests(AdminDatabaseFixture database, ClientEn
 
             var key = new ApiKey
             {
-                ClientId = managed.Id, Name = "deployment " + code, Prefix = "ume-rag-sk-" + code[..4], KeyHash = Guid.NewGuid().ToString("N"), CreatedAt = DateTimeOffset.UtcNow,
+                ClientId = managed.Id, Name = "deployment " + code, Prefix = "kalla-sk-" + code[..4], KeyHash = Guid.NewGuid().ToString("N"), CreatedAt = DateTimeOffset.UtcNow,
             };
             db.Keys.Add(key);
             await db.SaveChangesAsync(Ct);

@@ -337,7 +337,7 @@ Added to `deploy/compose.prod.yaml` (admin API block `:136-146`, Data API block 
 Decided by user, 2026-11-11 (#580). The gateway-side source of truth is the gateway's own design, `docs/integrations.md`
 in `~/git/llmgateway`, with its ADRs 020 and 021: phases 1–3, the credential bound, `organisation.read`, member
 groups and the contract document are released in **gateway v0.10.0** (2026-11-12; #81–#85). Ume.Rag pins **v0.10.1** (#86: a refusal of the assigned key is always `403`, §5.7). The contract Ume.Rag builds against is the gateway's **`docs/openapi/integrations.json`** (OpenAPI 3.1:
-`/v1/fors/context`, the `ume` facts on `/v1/models`, the request headers, `/integration/v1`), held to the real answers
+`/v1/fors/context`, the `kalla` facts on `/v1/models`, the request headers, `/integration/v1`), held to the real answers
 by the gateway's tests and changed by addition only (fields, features, scopes, enum values); a client ignores what it
 does not know. `/v1` is snake_case, `/integration/v1` camelCase. This section states only what Ume.Rag relies on; where it and the
 gateway's document differ, the gateway's document wins and this section is a bug to report. Which call runs as which
@@ -458,7 +458,7 @@ neither is accounted as a model request. The admin's sync is admin §4.10.
   set it on `rag-admin`'s credential key only) they are every department and team, inactive ones included with
   `is_active: false`, and each department with its `member_groups` (feature `member-groups`, #85). The `ETag` changes
   when a department or team changes.
-- **`GET /v1/models`** gains under `ume` (phase 1): `kind`, `residencies` (an alias) or `residency` (a model),
+- **`GET /v1/models`** gains under `kalla` (phase 1): `kind`, `residencies` (an alias) or `residency` (a model),
   `context_window`, `max_output_tokens`, `features` and `pricing` (`input_per_million_usd`,
   `cached_input_per_million_usd`, `output_per_million_usd`). For an alias the limits are the smallest of its targets.
   With `x-fors-on-behalf-of` (phase 2) it lists the assigned key's models within both keys' residencies (§5.3) and the
@@ -563,7 +563,7 @@ element. They guard the paths Ume.Rag depends on, next to the routing change of 
 
 ### 7.3 Model facts on `GET /v1/models` (gateway integration phase 1)
 
-The model limits and features Ume.Rag needs come from `GET /v1/models` under `ume` (§5.5), not from the Data API
+The model limits and features Ume.Rag needs come from `GET /v1/models` under `kalla` (§5.5), not from the Data API
 catalogue: `context_window`, `max_output_tokens` (a new nullable `ModelDeployment.MaxOutputTokens` in the gateway),
 `features` (tags incl. `tools`), `kind`, the residencies and `pricing`. The admin's sync fills
 `GatewayModels.ContextWindow`, `MaxOutputTokens` and `SupportsTools` from them and the manual entries go (admin §4.10;
@@ -733,7 +733,7 @@ contract and the integration contract of §5 (built against the gateway's publis
 
 **P1a, before release 1** (Decisions "P1a plan answers", "Interim gateway for P1a"): Ume.Rag calls the gateway as it
 is (v0.8.5), on an interim **test/dev gateway instance** on a fixed host (HTTPS, public certificate) with EU-hosted
-embedding and chat models; it is the interim J10, and the same host's Keycloak holds the shared realm `ume` (J11).
+embedding and chat models; it is the interim J10, and the same host's Keycloak holds the shared realm `kalla` (J11).
 Address and keys live only in user secrets or `deploy/.env` and secret files, never in the repository. Everything is
 EU-hosted until on-prem hardware exists (register M2): the pilot embedding profile is `text-embedding-3-large` at 1024
 dimensions, requested with `dimensions`. Ume.Rag already behaves as for release 1: every call carries

@@ -1,7 +1,7 @@
 namespace Kalla.Answering;
 
 /// <summary>
-/// A chat request's <c>ume.topics</c> applied to an assistant's links (Decisions "Topics per request"; chat design §3.8,
+/// A chat request's <c>kalla.topics</c> applied to an assistant's links (Decisions "Topics per request"; chat design §3.8,
 /// knowledge design §4.2). A request narrows and never widens: a link with topics keeps the ones also asked for and is left out
 /// when none is; a link without topics is searched for the asked topics only.
 /// </summary>
@@ -28,7 +28,7 @@ public static class TopicNarrowing
         return common.Count > 0 ? common : null;
     }
 
-    /// <summary>The asked topics that at least one of <paramref name="links"/> searches, in the request's order (§3.8, the answer's <c>ume.topics</c>).</summary>
+    /// <summary>The asked topics that at least one of <paramref name="links"/> searches, in the request's order (§3.8, the answer's <c>kalla.topics</c>).</summary>
     public static IReadOnlyList<string> Searched(IEnumerable<IReadOnlyList<string>> links, IReadOnlyList<string> asked)
     {
         ArgumentNullException.ThrowIfNull(links);

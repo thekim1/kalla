@@ -27,7 +27,7 @@ tickets only**: real ticket text waits for G1 (0.2).
 | P2 | The documents: the Word, PDF and Markdown files copied to the machine; intranet pages crawled if the intranet is reachable from it, else saved as PDF or HTML and uploaded | the source inventory (0.5) |
 | P3 | DoIT knowledge base `support` (`internal`): upload source, crawl source if reachable; preview, first sync, run reports, personal-data report ([`02-knowledge-base.md`](02-knowledge-base.md) §5) | main session |
 | P4 | Assistant `support`: the instructions of [`04-assistant.md`](04-assistant.md) §3, `generalKnowledge` `fallback`, a not-found text with the real escalation links; condense model per [`01-gateway-setup.md`](01-gateway-setup.md) §1 (local stack) | main session |
-| P5 | About twenty anonymised tickets in the test panel, then through `POST /v1/chat/completions` with `"ume": {"related_documents": 5, "follow_ups": 3}` on an `integration` client and key ([`05-frontend-integration.md`](05-frontend-integration.md) §2, §8) | tickets from support, anonymised |
+| P5 | About twenty anonymised tickets in the test panel, then through `POST /v1/chat/completions` with `"kalla": {"related_documents": 5, "follow_ups": 3}` on an `integration` client and key ([`05-frontend-integration.md`](05-frontend-integration.md) §2, §8) | tickets from support, anonymised |
 | P6 | Generated evaluation set and a first retrieval report (processing §13, §14) | – |
 | P7 | Show it: the admin test panel and Open WebUI work today; a throwaway demo page (answer, citation links, related documents, follow-up chips, outcome) is optional and is not the frontend team's app | the user's choice |
 | P8 | Findings back into this plan: instruction text, noise selectors or a site profile, articles the misses point to, the condense model | main session |
@@ -41,7 +41,7 @@ Not in the proof of concept: real tickets (G1), staff use (the test host, §1), 
 | 1.1 | Ume.Rag `v0.2.0` (or later) deployed against the gateway, test host first; the release bundle's smoke test passed in the release run | [`../../../docs/compose-quick-start.md`](../../../docs/compose-quick-start.md), [`../../../docs/production-setup.md`](../../../docs/production-setup.md) |
 | 1.2 | Gateway models (optional reranker: `Cohere-rerank-v5-fast` under the Foundry provider, native since gateway v0.9.1), keys, PII policy | [`01-gateway-setup.md`](01-gateway-setup.md) |
 | 1.3 | `--crawl-allow` for the intranet ranges; robots.txt allowance if needed | [`02-knowledge-base.md`](02-knowledge-base.md) §2 |
-| 1.4 | Department and admins in Keycloak realm `ume`; organisation sync | [`02-knowledge-base.md`](02-knowledge-base.md) §5 |
+| 1.4 | Department and admins in Keycloak realm `kalla`; organisation sync | [`02-knowledge-base.md`](02-knowledge-base.md) §5 |
 | 1.5 | `Settings.Chat.allowedLinkHosts` includes the intranet host | [`04-assistant.md`](04-assistant.md) §6 |
 | 1.6 | `Settings.Chat.condenseModel` set (0.6); `Chat:LongQuestionCondenseTimeout` raised to 4 s only if `gpt-6-luna` stays | [`04-assistant.md`](04-assistant.md) §2 |
 | 1.7 | `Settings.TrustedProxies` = the reverse proxy's addresses, so key allow-lists and the download limit see the client | [`05-frontend-integration.md`](05-frontend-integration.md) §2 |

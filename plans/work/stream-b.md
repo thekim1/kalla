@@ -28,13 +28,13 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Waits on:** nothing.
 - **Read:** Decisions "Source dates on citations"; knowledge §10.1, §10.4; chat §9.3, §9.7, §18.9.
 
-### [x] B-48 Escalation hand-off: `ume.escalation` (F3, #857)
-- **Do:** chat §9.9: the request member `ume.escalation` (§3.8, `true`/`false`, 400 otherwise); for `not-found`,
+### [x] B-48 Escalation hand-off: `kalla.escalation` (F3, #857)
+- **Do:** chat §9.9: the request member `kalla.escalation` (§3.8, `true`/`false`, 400 otherwise); for `not-found`,
   `answered-general` and `unavailable` the object `reason`, `contacts` (the version's `NotFound.links`, else
   `Settings.Chat`'s) and `summary`, `null` for `answered` and conversational turns; the summary call (`Escalation.cs`
   beside `FollowUps.cs`: the condense model at the condense ceiling as the assistant's key, `x-fors-step: escalation`,
   `max_tokens` 200, `Chat:EscalationTimeout` 2,000 ms, run at the same time as the follow-up call) with its input,
-  language and accept rule; the second `ume` chunk carries `follow_ups` and `escalation` (§3.8 Delivery);
+  language and accept rule; the second `kalla` chunk carries `follow_ups` and `escalation` (§3.8 Delivery);
   `Settings.Chat.Prompts.escalation` with its locked lines (`PromptTexts`, V38 ≤ 2,000, the prompt texts endpoint's
   section `escalation`, `labels.ts`'s section and member names); `rag.chat.escalation` and the `escalation` token
   step (§17); the FakeGateway's script per step already covers `escalation`.
@@ -50,7 +50,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 ### [x] B-49 The unavailable text ends with the platform's links when the assistant has none (#860's deviation)
 - **Do:** chat §10.2: the "search is temporarily unavailable" text ends with the contact links by §10.1's rule (the
   version's `NotFound.links`, else `Settings.Chat`'s), as the not-found and general-knowledge texts and as
-  `ume.escalation`'s `contacts` (§9.9) already do. Today `FixedTexts.Unavailable` gets only the assistant's links,
+  `kalla.escalation`'s `contacts` (§9.9) already do. Today `FixedTexts.Unavailable` gets only the assistant's links,
   so the text and `contacts` differ when only the platform has links.
 - **Paths:** `src/Kalla.Answering/**`, `tests/**`.
 - **Done when:** a test shows an unavailable turn of an assistant without links ending with the platform's links,
@@ -90,15 +90,15 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Read:** Decisions "Deleting knowledge bases, sources and assistants"; admin §4.5, §5.5; identity §4.3;
   data-model §2.1, §2.2, §8.
 
-### [x] B-52 Narrow a chat turn by topic: `ume.topics` (F8)
-- **Do:** chat §3.8: the request member `ume.topics` (an array of 1–20 tag-format strings; 400 `invalid_request`
-  with `param` `ume.topics` otherwise; absent, `null` and `[]` change nothing; ignored for Open WebUI) and the
-  answer's `ume.topics` (the asked topics that a link searched); the narrowing of the published version's links
+### [x] B-52 Narrow a chat turn by topic: `kalla.topics` (F8)
+- **Do:** chat §3.8: the request member `kalla.topics` (an array of 1–20 tag-format strings; 400 `invalid_request`
+  with `param` `kalla.topics` otherwise; absent, `null` and `[]` change nothing; ignored for Open WebUI) and the
+  answer's `kalla.topics` (the asked topics that a link searched); the narrowing of the published version's links
   (a link with topics: the common ones, out of the turn when none; a link without: the asked ones), passed as
   `RetrievalRequest.Topics` so the topic links, the coverage counts and the floor see the narrowed links
   (knowledge §4.2, §6.2); a turn with no link left ends `not-found` without a search.
 - **Paths:** `src/Kalla.Api/**`, `src/Kalla.Answering/**`, `src/Kalla.Domain/**` (b's), `tests/**`; the
-  OpenAPI document and `docs/` where the `ume` members are listed.
+  OpenAPI document and `docs/` where the `kalla` members are listed.
 - **Done when:** chat §18.9's *Topics per request* tests pass, with the negative proof that a request cannot
   reach a tag its link does not have; the Open WebUI recorded fixture is unchanged.
 - **Waits on:** nothing.

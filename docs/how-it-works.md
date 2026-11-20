@@ -85,9 +85,9 @@ Each app has an information class ceiling and says whether it keeps chat history
 
 **Keys** belong to an app:
 
-- A key looks like `ume-rag-sk-` followed by 43 characters. It is shown once when it is created. Ume.Rag stores only a
+- A key looks like `kalla-sk-` followed by 43 characters. It is shown once when it is created. Ume.Rag stores only a
   keyed hash of it, so a lost key cannot be read back from the database; platform admins can reveal it in the admin UI,
-  and every reveal is in the audit log. The admin UI shows its first characters (`ume-rag-sk-AbC1`) to tell keys apart.
+  and every reveal is in the audit log. The admin UI shows its first characters (`kalla-sk-AbC1`) to tell keys apart.
 - A key can be limited to some assistants or knowledge bases, to IP ranges and to a number of requests per minute,
   and it can expire. A department admin manages the keys of their department's teams.
 - **Rotate** makes a new key with the same limits, and the old one stops at once or after 24 hours. **Revoke** stops

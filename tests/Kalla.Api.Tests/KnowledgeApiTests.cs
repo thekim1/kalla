@@ -54,7 +54,7 @@ public sealed class KnowledgeApiTests(KnowledgeFixture db) : IClassFixture<Knowl
         var uses = context.KeyLastUse.AsNoTracking().Where(u => u.KeyId == keyId && u.LastUsedAt >= started);
 
         // A refused key records nothing.
-        using (var refused = await Client("ume-rag-sk-" + new string('x', 40)).GetAsync(new Uri("/v1/collections", UriKind.Relative), Ct))
+        using (var refused = await Client("kalla-sk-" + new string('x', 40)).GetAsync(new Uri("/v1/collections", UriKind.Relative), Ct))
         {
             refused.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
         }
@@ -177,7 +177,7 @@ public sealed class KnowledgeApiTests(KnowledgeFixture db) : IClassFixture<Knowl
         missing.Headers.WwwAuthenticate.ShouldContain(h => h.Scheme == "Bearer");
         (await Json(missing))["code"]!.GetValue<string>().ShouldBe("missing_key");
 
-        using var wrong = Client("ume-rag-sk-" + new string('x', 43));
+        using var wrong = Client("kalla-sk-" + new string('x', 43));
         using var invalid = await wrong.GetAsync(new Uri("/v1/collections", UriKind.Relative), Ct);
         invalid.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
         (await Json(invalid))["code"]!.GetValue<string>().ShouldBe("invalid_key");

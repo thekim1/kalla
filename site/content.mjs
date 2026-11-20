@@ -53,7 +53,7 @@ client = OpenAI(
 reply = client.chat.completions.create(
     model="bygglov",                     # an assistant, by its slug
     messages=[{"role": "user", "content": "Behöver jag bygglov för en altan?"}],
-    extra_body={"ume": {"related_documents": 5, "follow_ups": 3}},
+    extra_body={"kalla": {"related_documents": 5, "follow_ups": 3}},
 )
 print(reply.choices[0].message.content)  # cited: … [1]` },
   { id: 'node', label: 'Node.js', code: `import OpenAI from "openai";

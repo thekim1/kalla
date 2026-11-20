@@ -91,7 +91,7 @@ BEGIN
         RAISE EXCEPTION 'seed-url-list: ume_seed.profile (the embedding profile name) is required';
     END IF;
 
-    IF key_hash IS NOT NULL AND (key_hash !~ '^[0-9a-f]{64}$' OR key_prefix IS NULL OR key_prefix !~ '^ume-rag-sk-[0-9A-Za-z]{4}$') THEN
+    IF key_hash IS NOT NULL AND (key_hash !~ '^[0-9a-f]{64}$' OR key_prefix IS NULL OR key_prefix !~ '^kalla-sk-[0-9A-Za-z]{4}$') THEN
         RAISE EXCEPTION 'seed-url-list: ume_seed.key_hash must be 64 lower-case hex digits and ume_seed.key_prefix a secret key''s 15-character prefix';
     END IF;
 

@@ -146,7 +146,7 @@ public sealed partial class ChatApiTests
 
     /// <summary>
     /// A follow-up question (condensed: it points back with "det") after one earlier turn, as a stream or JSON, with
-    /// <paramref name="followUps"/> follow-up suggestions asked for (none: no <c>ume</c> member).
+    /// <paramref name="followUps"/> follow-up suggestions asked for (none: no <c>kalla</c> member).
     /// </summary>
     private static Task<HttpResponseMessage> AskFollowUp(HttpClient client, bool stream, int followUps = 2)
     {
@@ -156,7 +156,7 @@ public sealed partial class ChatApiTests
             new { role = "user", content = "Gäller det även en hög altan?" },
         };
         object body = followUps > 0
-            ? new { model = "bygg", stream, messages, ume = JsonDocument.Parse($$"""{"follow_ups":{{followUps}}}""").RootElement.Clone() }
+            ? new { model = "bygg", stream, messages, kalla = JsonDocument.Parse($$"""{"follow_ups":{{followUps}}}""").RootElement.Clone() }
             : new { model = "bygg", stream, messages };
         return client.PostAsJsonAsync("/v1/chat/completions", body, Ct);
     }
@@ -233,7 +233,7 @@ public sealed partial class ChatApiTests
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var wire = await response.Content.ReadAsStringAsync(Ct);
         var events = Events(wire);
-        events.Count(e => e.TryGetProperty("ume", out var ume) && ume.TryGetProperty("follow_ups", out var f) && f.GetArrayLength() > 0).ShouldBe(1);
+        events.Count(e => e.TryGetProperty("kalla", out var kalla) && kalla.TryGetProperty("follow_ups", out var f) && f.GetArrayLength() > 0).ShouldBe(1);
 
         // §8.3, §9.1: every call answered with its cost; the stream was asked for its cost, and its comment never reaches the client.
         var byStep = calls.ToDictionary(c => c.Step!, StringComparer.Ordinal);

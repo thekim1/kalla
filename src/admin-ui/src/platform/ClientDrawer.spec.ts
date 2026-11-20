@@ -15,7 +15,7 @@ const client: Client = {
   version: '7', assistants: [{ id: 'a1', name: 'Bygglovsassistenten', departmentId: 'd1', published: true, slug: 'bygglov', classification: 'internal' }],
 }
 const key: ApiKey = {
-  id: 'k1', clientId: client.id, clientName: client.name, teamId: null, kind: 'sk', name: 'Webb key', description: null, prefix: 'ume-rag-sk-ab12', status: 'active',
+  id: 'k1', clientId: client.id, clientName: client.name, teamId: null, kind: 'sk', name: 'Webb key', description: null, prefix: 'kalla-sk-ab12', status: 'active',
   assistantIds: [], collectionIds: [], allowedIpRanges: [], requestsPerMinute: null, isEnabled: true, createdAt: '2026-11-13T10:00:00Z', createdBy: null,
   expiresAt: '2027-01-31T22:59:59Z', revokedAt: null, graceUntil: null, rotatedToKeyId: null, lastUsedAt: null,
 }
@@ -52,7 +52,7 @@ describe('An app\'s drawer (admin design §5.9, §5.9.1)', () => {
     const rows = wrapper.get('[data-test=client-keys]').findAll('tbody tr')
     expect(rows).toHaveLength(2)
     expect(rows[0]!.text()).toContain('Webb key')
-    expect(rows[0]!.text()).toContain('ume-rag-sk-ab12')
+    expect(rows[0]!.text()).toContain('kalla-sk-ab12')
     expect(rows[0]!.text()).toContain(L.keyStatus.active)
     expect(rows[0]!.find('[data-test=rotate-k1]').exists()).toBe(true)
     expect(rows[1]!.text()).toContain(L.keyStatus.revoked)
@@ -141,7 +141,7 @@ describe('An app\'s drawer (admin design §5.9, §5.9.1)', () => {
 
   it('shows a revealed secret once and opens the key form in place for a new key', async () => {
     vi.spyOn(api.clients, 'get').mockResolvedValue(client)
-    vi.spyOn(api.keys, 'reveal').mockResolvedValue({ secret: 'ume-rag-sk-shown' })
+    vi.spyOn(api.keys, 'reveal').mockResolvedValue({ secret: 'kalla-sk-shown' })
     vi.spyOn(api.organisation, 'departments').mockResolvedValue([])
     vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: [], total: 0 })
     vi.spyOn(api.collections, 'list').mockResolvedValue({ items: [], total: 0 })
@@ -150,9 +150,9 @@ describe('An app\'s drawer (admin design §5.9, §5.9.1)', () => {
     await wrapper.get('[data-test=reveal-k1]').trigger('click')
     await flushPromises()
     expect(api.keys.reveal).toHaveBeenCalledWith('k1')
-    expect(wrapper.get('[data-test=client-keys] [data-test=secret]').text()).toContain('ume-rag-sk-shown')
+    expect(wrapper.get('[data-test=client-keys] [data-test=secret]').text()).toContain('kalla-sk-shown')
     // The call to try now carries the key that is on screen.
-    expect(wrapper.get('[data-test=connect-example] [data-test=copy-value]').text()).toContain('Bearer ume-rag-sk-shown')
+    expect(wrapper.get('[data-test=connect-example] [data-test=copy-value]').text()).toContain('Bearer kalla-sk-shown')
     // Shown once: closing the drawer drops it from the component's state.
     await wrapper.setProps({ open: false })
     expect((wrapper.vm as unknown as { secret: string | null }).secret).toBeNull()

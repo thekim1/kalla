@@ -20,7 +20,7 @@ crawl, the gold set and the test host) is ahead. The [changelog](../CHANGELOG.md
   reranker. The knowledge API (`POST /v1/retrieve`) offers it without an answer.
 - **Chat.** An OpenAI-compatible chat API (`POST /v1/chat/completions`) for Open WebUI and other clients. An assistant
   is a model; its answers cite numbered sources with each document's date and when it was last checked. When the
-  sources have no answer, it says so and gives the assistant's contact links. The optional `ume` member adds the
+  sources have no answer, it says so and gives the assistant's contact links. The optional `kalla` member adds the
   outcome, related documents, follow-up questions and an escalation hand-off.
 - **Administration.** An admin UI for knowledge bases, sources, assistants, apps and keys, costs and settings, with a
   setup wizard for sign-in. Departments own their knowledge bases and assistants.

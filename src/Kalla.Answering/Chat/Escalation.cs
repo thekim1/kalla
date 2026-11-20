@@ -17,7 +17,7 @@ public sealed record EscalationContact(
 public sealed record EscalationAnswer(string Reason, IReadOnlyList<EscalationContact> Contacts, string? Summary);
 
 /// <summary>
-/// The <c>ume.escalation</c> member's value (§3.8): the hand-off object, or JSON <c>null</c> for a turn that needs none (an
+/// The <c>kalla.escalation</c> member's value (§3.8): the hand-off object, or JSON <c>null</c> for a turn that needs none (an
 /// <c>answered</c> or conversational turn). A wrapper, so the member is written as <c>null</c> by serializers that leave out null
 /// members (the stream's), and so <c>summary</c> is written as <c>null</c> too; the names are fixed whatever the naming policy.
 /// </summary>

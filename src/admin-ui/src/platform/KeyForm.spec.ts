@@ -6,7 +6,7 @@ import { KEY_FORM, PLATFORM } from '@/utils/labels'
 import KeyForm from './KeyForm.vue'
 
 const key: ApiKey = {
-  id: 'k1', clientId: 'c1', clientName: 'Webb', teamId: 't1', kind: 'sk', name: 'Webb key', description: 'Sök på umea.se', prefix: 'ume-rag-sk-ab12', status: 'active',
+  id: 'k1', clientId: 'c1', clientName: 'Webb', teamId: 't1', kind: 'sk', name: 'Webb key', description: 'Sök på umea.se', prefix: 'kalla-sk-ab12', status: 'active',
   assistantIds: ['a1'], collectionIds: [], allowedIpRanges: ['10.0.0.0/8'], requestsPerMinute: 60, isEnabled: true, createdAt: '2026-11-13T10:00:00Z', createdBy: null,
   expiresAt: new Date('2027-01-31T23:59:59').toISOString(), revokedAt: null, graceUntil: null, rotatedToKeyId: null, lastUsedAt: null,
 }
@@ -34,7 +34,7 @@ const restrictions = (wrapper: VueWrapper) => wrapper.get('[data-test=key-restri
 
 describe('Key form (admin design §5.9, §5.9.1)', () => {
   it('asks a new key for its name only, with the restrictions collapsed', async () => {
-    const create = vi.spyOn(api.keys, 'create').mockResolvedValue({ key, secret: 'ume-rag-sk-new' })
+    const create = vi.spyOn(api.keys, 'create').mockResolvedValue({ key, secret: 'kalla-sk-new' })
     const wrapper = mountForm({ apiKey: null })
     await flushPromises()
     expect(restrictions(wrapper).open).toBe(false)
@@ -47,12 +47,12 @@ describe('Key form (admin design §5.9, §5.9.1)', () => {
       clientId: 'c1', teamId: null, name: 'Webb key', description: null, expiresAt: null, scopes: { assistantIds: [], collectionIds: [] },
       allowedIpRanges: [], requestsPerMinute: null, isEnabled: true,
     })
-    expect(wrapper.emitted('saved')?.[0]).toEqual([{ key, secret: 'ume-rag-sk-new' }])
+    expect(wrapper.emitted('saved')?.[0]).toEqual([{ key, secret: 'kalla-sk-new' }])
     wrapper.unmount()
   })
 
   it('creates a key with its restrictions: the team, the app\'s assistants only, the expiry as an ISO instant and the limits', async () => {
-    const create = vi.spyOn(api.keys, 'create').mockResolvedValue({ key, secret: 'ume-rag-sk-new' })
+    const create = vi.spyOn(api.keys, 'create').mockResolvedValue({ key, secret: 'kalla-sk-new' })
     const wrapper = mountForm({ apiKey: null })
     await flushPromises()
     const teams = [...(wrapper.get('#kf-teamId').element as HTMLSelectElement).options].map((o) => [o.value, o.text])

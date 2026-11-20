@@ -21,7 +21,7 @@ Gateway facts are from `~/git/llmgateway` at `origin/main` v0.9.2 (`df6bf5e`), r
 
 | | Inbound | Outbound |
 |---|---|---|
-| Whose key | Ume.Rag's own (`ume-rag-sk-…`) | the gateway's (`fors-sk-…`) |
+| Whose key | Ume.Rag's own (`kalla-sk-…`) | the gateway's (`fors-sk-…`) |
 | Who presents it | an app that calls an assistant through rag-api | Ume.Rag, when it calls a model |
 | What it decides | who may use the assistant, from where, how often | who pays, which budget counts, which models are allowed |
 | Section | §3 | §4–§6 |

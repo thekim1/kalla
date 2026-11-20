@@ -240,7 +240,7 @@ public static class SetupModeEndpoints
 /// <summary>Requires the setup session (<see cref="SetupSessions.FindAsync"/>) and keeps it for the endpoint; else <c>setup_session_required</c>.</summary>
 public sealed class SetupSessionFilter : IEndpointFilter
 {
-    private const string SessionKey = "ume.setupSession";
+    private const string SessionKey = "kalla.setupSession";
 
     public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
     {

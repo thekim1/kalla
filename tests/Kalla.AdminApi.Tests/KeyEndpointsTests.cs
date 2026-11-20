@@ -92,7 +92,7 @@ public sealed class KeyEndpointsTests(AdminDatabaseFixture database)
         var body = await Json(created);
         var secret = body.GetProperty("secret").GetString()!;
         var id = body.GetProperty("key").GetProperty("id").GetGuid();
-        secret.ShouldStartWith("ume-rag-sk-");
+        secret.ShouldStartWith("kalla-sk-");
         body.GetProperty("key").GetProperty("prefix").GetString().ShouldBe(secret[..15]);
         body.GetProperty("key").GetProperty("status").GetString().ShouldBe("active");
         body.GetProperty("key").GetProperty("clientName").GetString().ShouldBe("Integration " + code);
@@ -151,7 +151,7 @@ public sealed class KeyEndpointsTests(AdminDatabaseFixture database)
         using var rotated = await admin.PostAsJsonAsync($"/api/keys/{id}/rotate", new { mode = "Grace24Hours" }, Ct);
         rotated.StatusCode.ShouldBe(HttpStatusCode.OK, await rotated.Content.ReadAsStringAsync(Ct));
         var body = await Json(rotated);
-        body.GetProperty("secret").GetString()!.ShouldStartWith("ume-rag-sk-");
+        body.GetProperty("secret").GetString()!.ShouldStartWith("kalla-sk-");
         body.GetProperty("previous").GetProperty("status").GetString().ShouldBe("in-grace-period");
         var replacement = body.GetProperty("key").GetProperty("id").GetGuid();
         body.GetProperty("previous").GetProperty("rotatedToKeyId").GetGuid().ShouldBe(replacement);

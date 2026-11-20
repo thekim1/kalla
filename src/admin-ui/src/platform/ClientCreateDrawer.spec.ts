@@ -34,7 +34,7 @@ const client: Client = {
   id: '0199-client', name: 'Pilot', kind: 'open-webui', oAuthClientId: null, classificationCeiling: 'internal', storesHistory: true, clientRetentionDays: 90,
   allowedOrigins: [], toolPolicy: 'none', portalUrl: null, isEnabled: true, isManagedByDeployment: false, updatedAt: '2026-11-13T10:00:00Z', updatedBy: null, version: '1', assistants: [],
 }
-const key = { id: 'k1', name: 'Pilot key', prefix: 'ume-rag-sk-ab', status: 'active' } as ApiKey
+const key = { id: 'k1', name: 'Pilot key', prefix: 'kalla-sk-ab', status: 'active' } as ApiKey
 const assistant = (id: string, name: string, classification: AssistantSummary['classification'], published = true): AssistantSummary =>
   assistantSummary({ id, slug: name.toLowerCase(), name, classification, published, publishedVersion: published ? 1 : null, publishedAt: published ? '2026-11-01T09:00:00Z' : null })
 const assistants = [assistant('a1', 'Bygglov', 'public'), assistant('a2', 'Personal', 'internal', false), assistant('a3', 'Journal', 'sensitive')]
@@ -121,7 +121,7 @@ describe('Add app (admin design §5.9, §5.9.1)', () => {
 
   it('creates the client with its first key, then shows the secret once with how to connect and the id under Details', async () => {
     const made = { ...client, kind: 'integration', classificationCeiling: 'public' as const, storesHistory: false, clientRetentionDays: null }
-    const create = vi.spyOn(api.clients, 'create').mockResolvedValue({ client: made, key: { key, secret: 'ume-rag-sk-secret' } })
+    const create = vi.spyOn(api.clients, 'create').mockResolvedValue({ client: made, key: { key, secret: 'kalla-sk-secret' } })
     const wrapper = await open()
     await pick(wrapper, 'integration')
     await wrapper.get('#client-new-name').setValue('Pilot')
@@ -138,7 +138,7 @@ describe('Add app (admin design §5.9, §5.9.1)', () => {
     })
     expect(wrapper.emitted('created')?.[0]).toEqual([made])
     const result = wrapper.get('[data-test=client-created]')
-    expect(result.get('[data-test=secret]').text()).toContain('ume-rag-sk-secret')
+    expect(result.get('[data-test=secret]').text()).toContain('kalla-sk-secret')
     expect(result.get('[data-test=client-id]').text()).toContain('0199-client')
     expect(result.find('[data-test=connect-example]').exists()).toBe(true)
 
@@ -181,7 +181,7 @@ describe('Add app (admin design §5.9, §5.9.1)', () => {
         { id: 'a1', name: 'Bygglov', departmentId: 'd1', published: true, slug: 'bygglov', classification: 'public' },
       ],
     }
-    const create = vi.spyOn(api.clients, 'create').mockResolvedValue({ client: made, key: { key, secret: 'ume-rag-sk-secret' } })
+    const create = vi.spyOn(api.clients, 'create').mockResolvedValue({ client: made, key: { key, secret: 'kalla-sk-secret' } })
     const wrapper = await open()
     await pick(wrapper, 'integration')
     await wrapper.get('#client-new-name').setValue('Webb')
@@ -215,12 +215,12 @@ describe('Add app (admin design §5.9, §5.9.1)', () => {
     // How to connect: the address, the key, each model name, and a call with the first published assistant.
     const result = wrapper.get('[data-test=how-to-connect]')
     expect(result.get('[data-test=connect-address] [data-test=copy-value]').text()).toBe('https://rag.example.se/v1')
-    expect(result.get('[data-test=secret]').text()).toContain('ume-rag-sk-secret')
+    expect(result.get('[data-test=secret]').text()).toContain('kalla-sk-secret')
     expect(result.get('[data-test=connect-models]').findAll('[data-test=copy-value]').map((m) => m.text())).toEqual(['personal', 'bygglov'])
     expect(result.get('[data-test=connect-models]').text()).toContain(L.connect.notPublished)
     const example = result.get('[data-test=connect-example] [data-test=copy-value]').text()
     expect(example).toContain('curl https://rag.example.se/v1/chat/completions')
-    expect(example).toContain('Authorization: Bearer ume-rag-sk-secret')
+    expect(example).toContain('Authorization: Bearer kalla-sk-secret')
     expect(example).toContain('"model":"bygglov"')
     expect(result.find('[data-test=stack-lines]').exists()).toBe(false)
     wrapper.unmount()

@@ -23,7 +23,7 @@ namespace Kalla.Api.Tests;
 /// <summary>
 /// Follow-up suggestions through the chat role (chat design §3.8, §9.8, §17, §18.6, §18.9; M-8) on the knowledge fixture: one
 /// <c>follow-ups</c> call after a model answer at the condense ceiling, its output through the accept rule, the second
-/// <c>ume</c> chunk before usage and <c>[DONE]</c>, the budget on fake time, the skips without a call, the failures as
+/// <c>kalla</c> chunk before usage and <c>[DONE]</c>, the budget on fake time, the skips without a call, the failures as
 /// <c>[]</c>, and nothing of the suggestions in logs, traces, metrics or the stored turn. The FakeGateway answers through a
 /// recording handler that can fail, hold or script the <c>follow-ups</c> call.
 /// </summary>
@@ -172,7 +172,7 @@ public sealed partial class ChatApiTests
         return listener;
     }
 
-    private static string[] FollowUpList(JsonElement ume) => [.. ume.GetProperty("follow_ups").EnumerateArray().Select(f => f.GetString()!)];
+    private static string[] FollowUpList(JsonElement kalla) => [.. kalla.GetProperty("follow_ups").EnumerateArray().Select(f => f.GetString()!)];
 
     private static List<JsonElement> Events(string body)
     {
@@ -197,8 +197,8 @@ public sealed partial class ChatApiTests
         calls.ShouldNotContain(c => c.Step == FollowUps.Step); // not asked: no call
         calls.Clear();
 
-        var (body, ume) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"related_documents":2,"follow_ups":3}"""));
-        Members(ume).ShouldBe(["outcome", "degraded", "related_documents", "follow_ups"]);
+        var (body, kalla) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"related_documents":2,"follow_ups":3}"""));
+        Members(kalla).ShouldBe(["outcome", "degraded", "related_documents", "follow_ups"]);
         var call = calls.Where(c => c.Step == FollowUps.Step).ShouldHaveSingleItem();
         calls.Select(c => c.Step).Where(s => s is not null).ShouldBe(["chat-answer", FollowUps.Step]); // after the answer
         call.Ceiling.ShouldBe("Eu");
@@ -218,7 +218,7 @@ public sealed partial class ChatApiTests
         titles.ShouldContain("Altan och uteplats");
 
         // The FakeGateway's default answer through the accept rule: the first three lines.
-        FollowUpList(ume).ShouldBe([.. FakeChatScripts.DefaultFollowUps(user).Split('\n').Take(3)]);
+        FollowUpList(kalla).ShouldBe([.. FakeChatScripts.DefaultFollowUps(user).Split('\n').Take(3)]);
         body.GetProperty("usage").GetRawText().ShouldBe(plainUsage); // the answer call's only
         outcomes.ShouldBe([FollowUps.Used]);
         tokens.Where(t => t.Contains("/follow-ups/", StringComparison.Ordinal)).Select(t => t[..t.LastIndexOf('/')]).ShouldBe(
@@ -234,8 +234,8 @@ public sealed partial class ChatApiTests
             change: s => WithAssistant(s, a => a with { Classification = Domain.Classification.Public }));
         using var client = Client(api, db.IntegrationKey);
 
-        var (_, ume) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"follow_ups":2}"""));
-        FollowUpList(ume).Length.ShouldBe(2);
+        var (_, kalla) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"follow_ups":2}"""));
+        FollowUpList(kalla).Length.ShouldBe(2);
         calls.Single(c => c.Step == "chat-answer").Ceiling.ShouldBe("External");
         calls.Single(c => c.Step == FollowUps.Step).Ceiling.ShouldBe("Eu"); // the condense ceiling, never wider
     }
@@ -253,12 +253,12 @@ public sealed partial class ChatApiTests
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var events = Events(await response.Content.ReadAsStringAsync(Ct));
         var final = events.FindIndex(e => FinishReason(e) == "stop");
-        var umeChunks = events.Select((e, i) => (e, i)).Where(x => x.e.TryGetProperty("ume", out _)).ToList();
-        umeChunks.Select(x => x.i).ShouldBe([final + 1, final + 2]);
-        Members(umeChunks[0].e.GetProperty("ume")).ShouldBe(["outcome", "degraded", "related_documents"]);
-        Members(umeChunks[1].e.GetProperty("ume")).ShouldBe(["follow_ups"]);
-        FollowUpList(umeChunks[1].e.GetProperty("ume")).Length.ShouldBe(2);
-        (umeChunks[1].e.GetProperty("object").GetString(), umeChunks[1].e.GetProperty("choices").GetArrayLength(), umeChunks[1].e.GetProperty("id").GetString())
+        var kallaChunks = events.Select((e, i) => (e, i)).Where(x => x.e.TryGetProperty("kalla", out _)).ToList();
+        kallaChunks.Select(x => x.i).ShouldBe([final + 1, final + 2]);
+        Members(kallaChunks[0].e.GetProperty("kalla")).ShouldBe(["outcome", "degraded", "related_documents"]);
+        Members(kallaChunks[1].e.GetProperty("kalla")).ShouldBe(["follow_ups"]);
+        FollowUpList(kallaChunks[1].e.GetProperty("kalla")).Length.ShouldBe(2);
+        (kallaChunks[1].e.GetProperty("object").GetString(), kallaChunks[1].e.GetProperty("choices").GetArrayLength(), kallaChunks[1].e.GetProperty("id").GetString())
             .ShouldBe(("chat.completion.chunk", 0, events[0].GetProperty("id").GetString()));
         events[final + 3].GetProperty("usage").GetRawText().ShouldBe(plain[^1].GetProperty("usage").GetRawText()); // the answer call's only
         events.Count.ShouldBe(final + 4);
@@ -267,7 +267,7 @@ public sealed partial class ChatApiTests
     [Fact]
     public async Task A_follow_up_call_that_outlasts_its_budget_ends_the_stream_with_none_once_the_budget_has_run_out()
     {
-        // The first ume chunk is out before the call returns; [DONE] follows when the fake clock passes the budget, no wall-clock wait.
+        // The first kalla chunk is out before the call returns; [DONE] follows when the fake clock passes the budget, no wall-clock wait.
         var calls = new ConcurrentQueue<GatewayCall>();
         var outcomes = new ConcurrentQueue<string>();
         var tokens = new ConcurrentQueue<string>();
@@ -283,7 +283,7 @@ public sealed partial class ChatApiTests
             Content = JsonContent.Create(new
             {
                 model = "bygg", stream = true, messages = new[] { new { role = "user", content = AltanQuestion } },
-                ume = JsonDocument.Parse("""{"related_documents":2,"follow_ups":3}""").RootElement.Clone(),
+                kalla = JsonDocument.Parse("""{"related_documents":2,"follow_ups":3}""").RootElement.Clone(),
             }),
         };
         using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, Ct);
@@ -298,20 +298,20 @@ public sealed partial class ChatApiTests
                 first.Add(line);
             }
 
-            if (line.Contains("\"ume\"", StringComparison.Ordinal))
+            if (line.Contains("\"kalla\"", StringComparison.Ordinal))
             {
                 break;
             }
         }
 
-        var firstUme = JsonDocument.Parse(first[^1]["data: ".Length..]).RootElement.GetProperty("ume");
+        var firstUme = JsonDocument.Parse(first[^1]["data: ".Length..]).RootElement.GetProperty("kalla");
         Members(firstUme).ShouldBe(["outcome", "degraded", "related_documents"]);
         await started.Task.WaitAsync(Ct); // the follow-up call is out and waiting
         var start = time.GetUtcNow();
         time.Advance(FollowUpBudget);
 
         var rest = Events(await reader.ReadToEndAsync(Ct));
-        var second = rest.ShouldHaveSingleItem().GetProperty("ume");
+        var second = rest.ShouldHaveSingleItem().GetProperty("kalla");
         Members(second).ShouldBe(["follow_ups"]);
         FollowUpList(second).ShouldBeEmpty();
         (time.GetUtcNow() - start).ShouldBe(FollowUpBudget);
@@ -340,9 +340,9 @@ public sealed partial class ChatApiTests
         using var listener = FollowUpCounter(api, outcomes, tokens);
         using var client = Client(api, db.IntegrationKey);
 
-        var (body, ume) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"follow_ups":3}"""));
+        var (body, kalla) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"follow_ups":3}"""));
         body.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString()!.ShouldStartWith("Testsvar på");
-        FollowUpList(ume).ShouldBeEmpty();
+        FollowUpList(kalla).ShouldBeEmpty();
         calls.Count(c => c.Step == FollowUps.Step).ShouldBe(1); // never retried
         outcomes.ShouldBe([outcome]);
         if (fault == FollowUpFault.Residency)
@@ -362,8 +362,8 @@ public sealed partial class ChatApiTests
         await using var api = FollowUpHost(calls, new FakeTimeProvider(DateTimeOffset.UtcNow), logs, FollowUpFault.Output, Output);
         using var client = Client(api, db.IntegrationKey);
 
-        var (_, ume) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"follow_ups":5}"""));
-        FollowUpList(ume).ShouldBe(["Hur söker jag bygglov för ett plank?"]);
+        var (_, kalla) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"follow_ups":5}"""));
+        FollowUpList(kalla).ShouldBe(["Hur söker jag bygglov för ett plank?"]);
     }
 
     [Theory]
@@ -399,9 +399,9 @@ public sealed partial class ChatApiTests
         using var response = await AskUme(client, question, """{"follow_ups":3}""", stream: true, usage: true);
         response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
         var events = Events(await response.Content.ReadAsStringAsync(Ct));
-        var ume = events.Where(e => e.TryGetProperty("ume", out _)).ShouldHaveSingleItem().GetProperty("ume");
-        Members(ume).ShouldBe(["outcome", "degraded", "follow_ups"]);
-        FollowUpList(ume).ShouldBeEmpty();
+        var kalla = events.Where(e => e.TryGetProperty("kalla", out _)).ShouldHaveSingleItem().GetProperty("kalla");
+        Members(kalla).ShouldBe(["outcome", "degraded", "follow_ups"]);
+        FollowUpList(kalla).ShouldBeEmpty();
         calls.ShouldNotContain(c => c.Step == FollowUps.Step);
         outcomes.ShouldBe([FollowUps.Skipped]);
         if (kind == "on-prem")
@@ -426,15 +426,15 @@ public sealed partial class ChatApiTests
         using var client = Client(api, db.IntegrationKey);
 
         const string Moon = "Hur långt är det till månen i kilometer?";
-        var (body, ume) = await KallaAnswerAsync(await AskUme(client, Moon, """{"follow_ups":2}"""));
-        ume.GetProperty("outcome").GetString().ShouldBe("answered-general");
+        var (body, kalla) = await KallaAnswerAsync(await AskUme(client, Moon, """{"follow_ups":2}"""));
+        kalla.GetProperty("outcome").GetString().ShouldBe("answered-general");
         var content = body.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString()!;
         content.ShouldStartWith(FixedTexts.GeneralCaveatSv);
         content.ShouldEndWith(ContactLinks);
         var user = calls.Single(c => c.Step == FollowUps.Step).Body.GetProperty("messages")[1].GetProperty("content").GetString()!;
         var answer = content[(FixedTexts.GeneralCaveatSv.Length + 2)..^ContactLinks.Length];
         user.ShouldBe("Fråga: " + Moon + "\n\nSvar: " + answer.Trim()); // no caveat, no contact links, no Källor (no documents in the prompt)
-        FollowUpList(ume).Length.ShouldBe(2);
+        FollowUpList(kalla).Length.ShouldBe(2);
     }
 
     [Fact]
@@ -508,7 +508,7 @@ public sealed partial class ChatApiTests
                 Content = JsonContent.Create(new
                 {
                     model = "bygg", stream, messages = new[] { new { role = "user", content = AltanQuestion } },
-                    ume = JsonDocument.Parse("""{"related_documents":2,"follow_ups":2}""").RootElement.Clone(),
+                    kalla = JsonDocument.Parse("""{"related_documents":2,"follow_ups":2}""").RootElement.Clone(),
                 }),
             };
             request.Headers.Add("traceparent", $"00-{trace}-{ActivitySpanId.CreateRandom()}-01");

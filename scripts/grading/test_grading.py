@@ -24,7 +24,7 @@ import grading
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests" / "fixtures" / "grading"
 SCRIPT = Path(__file__).resolve().parent / "grading.py"
-KEY = "ume-rag-sk-test-6f1c0e9d2b7a4c58a1e3"
+KEY = "kalla-sk-test-6f1c0e9d2b7a4c58a1e3"
 SLUG = "bygglov"
 ALTAN = "https://www.umea.se/bygga/bygglov/altan"
 AVGIFT = "https://www.umea.se/bygga/avgifter"
@@ -316,7 +316,7 @@ class AnswerTests(unittest.TestCase):
         self.assertEqual(read_csv(self.out)["q-egen"]["outcome"], "not-found")
 
     def test_wrong_key_aborts_the_run(self) -> None:
-        self.key_file.write_text("ume-rag-sk-wrong", encoding="utf-8")
+        self.key_file.write_text("kalla-sk-wrong", encoding="utf-8")
         with FakeServer() as base:
             code, _, err = self.answer(base)
         self.assertEqual(code, 2)
@@ -375,7 +375,7 @@ class AnswerTests(unittest.TestCase):
                 self.assertIn("Bearer ***", written)
                 for text in (result.stdout, result.stderr, written):
                     self.assertNotIn(KEY, text)
-                    self.assertNotIn(KEY[len("ume-rag-sk-") :], text)
+                    self.assertNotIn(KEY[len("kalla-sk-") :], text)
 
     def test_missing_key_is_refused(self) -> None:
         with mock_env(grading.KEY_ENV, None), self.assertRaises(SystemExit) as raised:

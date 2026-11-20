@@ -87,7 +87,7 @@ public sealed partial class AdminTestPanel(
         var knowledge = new KnowledgeService(source, policy, retrieval.Engine, retrieval.Hydrator, retrieval.Embedder, _counter, dataSource, new NoDownloadLinks(),
             loggers.CreateLogger<KnowledgeService>());
         var chat = new ChatService(source, policy, knowledge, gateway, chatOptions, serviceCeiling, time, loggers.CreateLogger<ChatService>());
-        // §4.9 (#726): an asked level tightens the version's as a chat request's ume.general_knowledge does (chat §3.8).
+        // §4.9 (#726): an asked level tightens the version's as a chat request's kalla.general_knowledge does (chat §3.8).
         var parsed = new ParsedChat(assistant.Slug, request.Question.Trim(), [.. request.History.Select(m => new ChatMessageIn(m.Role, m.Text))], false, true, null)
         {
             Kalla = request.GeneralKnowledge is { } level ? new KallaRequest(0, 0, GeneralKnowledgeLevels.Parse(level)) : null,
@@ -355,7 +355,7 @@ public sealed record AssistantTestRequest : AdminRequest
 
     /// <summary>
     /// A general-knowledge level for the test (#726); the turn runs at the stricter of it and the target version's level, as a
-    /// chat request's <c>ume.general_knowledge</c> (chat §3.8). Omitted or null: the version's level.
+    /// chat request's <c>kalla.general_knowledge</c> (chat §3.8). Omitted or null: the version's level.
     /// </summary>
     [AllowedValues(null, GeneralKnowledgeLevels.Off, GeneralKnowledgeLevels.Supplement, GeneralKnowledgeLevels.Fallback, GeneralKnowledgeLevels.Open)]
     public string? GeneralKnowledge { get; init; }

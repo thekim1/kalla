@@ -36,7 +36,7 @@ public sealed class OpenWebUiClientSeederTests(RagDatabaseFixture database) : IC
                 "https://chat.example.invalid"));
         var first = client.Keys.ShouldHaveSingleItem();
         Hasher.Verify(Key('A'), first.KeyHash).ShouldBeTrue();
-        first.Prefix.ShouldBe("ume-rag-sk-AAAA");
+        first.Prefix.ShouldBe("kalla-sk-AAAA");
 
         // Every deploy runs it again: nothing changed, nothing written, the config version stays.
         var version = await VersionAsync();
@@ -59,7 +59,7 @@ public sealed class OpenWebUiClientSeederTests(RagDatabaseFixture database) : IC
         after.Single(k => k.Id == first.Id).RevokedAt.ShouldBeNull();
         after.Single(k => k.Id != first.Id).RevokedAt.ShouldNotBeNull();
 
-        // A key that is not an ume-rag-sk- key is refused before anything is written; so is another client's key.
+        // A key that is not an kalla-sk- key is refused before anything is written; so is another client's key.
         await Should.ThrowAsync<InvalidOperationException>(() => OpenWebUiClientSeeder.SeedAsync(db, Hasher, "sk-not-ours", null, TimeProvider.System, Ct));
         var other = new Client { Name = "Integration " + Guid.NewGuid().ToString("N")[..6], Kind = ClientKinds.Integration, ClassificationCeiling = Classification.Public };
         db.Clients.Add(other);

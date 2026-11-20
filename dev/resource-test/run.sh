@@ -117,7 +117,7 @@ seeded="$(UME_RAG_DEV_DB="Host=localhost;Port=7412;Username=postgres;Password=$p
   UME_RAG_DEV_KEY_PEPPER="$(secret key-pepper)" \
   python3 -I "$root/scripts/dev/seed_url_list.py" --profile dev-embedding --urls-file "$out/urls.txt" --api-key \
     --collection-slug "$slug" --docker "$pg")"
-grep -o 'ume-rag-sk-[A-Za-z0-9]*' <<< "$seeded" > "$key_file"
+grep -o 'kalla-sk-[A-Za-z0-9]*' <<< "$seeded" > "$key_file"
 collection="$(sed -n 's/^ *collection: \([0-9a-f-]*\).*/\1/p' <<< "$seeded")"
 source_id="$(sed -n 's/^ *source: \([0-9a-f-]*\).*/\1/p' <<< "$seeded")"
 [[ -s "$key_file" && -n "$collection" && -n "$source_id" ]] || { echo "run.sh: the seed printed no key, collection or source" >&2; exit 1; }

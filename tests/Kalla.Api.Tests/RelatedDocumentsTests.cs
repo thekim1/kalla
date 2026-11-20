@@ -5,7 +5,7 @@ using Kalla.Domain.Retrieval;
 namespace Kalla.Api.Tests;
 
 /// <summary>
-/// The <c>ume</c> extension's pure parts (chat design §3.8, §9.7, §18.6, §18.9; M-7): the request member's parsing and
+/// The <c>kalla</c> extension's pure parts (chat design §3.8, §9.7, §18.6, §18.9; M-7): the request member's parsing and
 /// refusals, and <see cref="RelatedDocuments"/> from a retrieval result.
 /// </summary>
 public sealed class RelatedDocumentsTests
@@ -14,18 +14,18 @@ public sealed class RelatedDocumentsTests
     private static readonly Guid Taxa = Guid.NewGuid();
     private static readonly Guid Plank = Guid.NewGuid();
 
-    private static JsonElement Body(string ume) =>
-        JsonDocument.Parse($$"""{"model":"bygg","messages":[{"role":"user","content":"Behöver jag bygglov?"}],"ume":{{ume}}}""").RootElement.Clone();
+    private static JsonElement Body(string kalla) =>
+        JsonDocument.Parse($$"""{"model":"bygg","messages":[{"role":"user","content":"Behöver jag bygglov?"}],"kalla":{{kalla}}}""").RootElement.Clone();
 
-    private static ChatException Refused(string ume) => Should.Throw<ChatException>(() => ChatRequestParser.Parse(Body(ume)));
+    private static ChatException Refused(string kalla) => Should.Throw<ChatException>(() => ChatRequestParser.Parse(Body(kalla)));
 
     [Theory]
     [InlineData("""{}""", 0, 0)]
     [InlineData("""{"related_documents":5}""", 5, 0)]
     [InlineData("""{"related_documents":0,"follow_ups":0}""", 0, 0)]
     [InlineData("""{"related_documents":10,"follow_ups":5}""", 10, 5)]
-    public void The_ume_member_is_parsed_with_its_counts(string ume, int related, int followUps) =>
-        ChatRequestParser.Parse(Body(ume)).Kalla.ShouldBe(new KallaRequest(related, followUps));
+    public void The_ume_member_is_parsed_with_its_counts(string kalla, int related, int followUps) =>
+        ChatRequestParser.Parse(Body(kalla)).Kalla.ShouldBe(new KallaRequest(related, followUps));
 
     [Theory]
     [InlineData("""{"general_knowledge":"off"}""", GeneralKnowledge.Off)]
@@ -34,8 +34,8 @@ public sealed class RelatedDocumentsTests
     [InlineData("""{"general_knowledge":"open"}""", GeneralKnowledge.Open)]
     [InlineData("""{"general_knowledge":null}""", null)]
     [InlineData("""{}""", null)]
-    public void The_ume_member_carries_the_requested_general_knowledge_level(string ume, GeneralKnowledge? expected) =>
-        ChatRequestParser.Parse(Body(ume)).Kalla!.GeneralKnowledge.ShouldBe(expected);
+    public void The_ume_member_carries_the_requested_general_knowledge_level(string kalla, GeneralKnowledge? expected) =>
+        ChatRequestParser.Parse(Body(kalla)).Kalla!.GeneralKnowledge.ShouldBe(expected);
 
     [Theory]
     [InlineData(GeneralKnowledge.Fallback, null, GeneralKnowledge.Fallback)]
@@ -55,28 +55,28 @@ public sealed class RelatedDocumentsTests
     }
 
     [Theory]
-    [InlineData("\"x\"", "invalid_request", "ume")]
-    [InlineData("[]", "invalid_request", "ume")]
-    [InlineData("5", "invalid_request", "ume")]
-    [InlineData("""{"related_documents":11}""", "invalid_request", "ume.related_documents")]
-    [InlineData("""{"related_documents":-1}""", "invalid_request", "ume.related_documents")]
-    [InlineData("""{"related_documents":2.5}""", "invalid_request", "ume.related_documents")]
-    [InlineData("""{"related_documents":"3"}""", "invalid_request", "ume.related_documents")]
-    [InlineData("""{"related_documents":null}""", "invalid_request", "ume.related_documents")]
-    [InlineData("""{"follow_ups":6}""", "invalid_request", "ume.follow_ups")]
-    [InlineData("""{"follow_ups":true}""", "invalid_request", "ume.follow_ups")]
-    [InlineData("""{"general_knowledge":"loose"}""", "invalid_request", "ume.general_knowledge")]
-    [InlineData("""{"general_knowledge":"Off"}""", "invalid_request", "ume.general_knowledge")]
-    [InlineData("""{"general_knowledge":""}""", "invalid_request", "ume.general_knowledge")]
-    [InlineData("""{"general_knowledge":1}""", "invalid_request", "ume.general_knowledge")]
-    [InlineData("""{"general_knowledge":false}""", "invalid_request", "ume.general_knowledge")]
-    [InlineData("""{"general_knowledge":["off"]}""", "invalid_request", "ume.general_knowledge")]
-    [InlineData("""{"generalKnowledge":"off"}""", "unsupported_parameter", "ume.generalKnowledge")]
-    [InlineData("""{"foo":1}""", "unsupported_parameter", "ume.foo")]
-    [InlineData("""{"related_documents":3,"relatedDocuments":3}""", "unsupported_parameter", "ume.relatedDocuments")]
-    public void An_invalid_ume_member_is_refused_with_its_param(string ume, string code, string param)
+    [InlineData("\"x\"", "invalid_request", "kalla")]
+    [InlineData("[]", "invalid_request", "kalla")]
+    [InlineData("5", "invalid_request", "kalla")]
+    [InlineData("""{"related_documents":11}""", "invalid_request", "kalla.related_documents")]
+    [InlineData("""{"related_documents":-1}""", "invalid_request", "kalla.related_documents")]
+    [InlineData("""{"related_documents":2.5}""", "invalid_request", "kalla.related_documents")]
+    [InlineData("""{"related_documents":"3"}""", "invalid_request", "kalla.related_documents")]
+    [InlineData("""{"related_documents":null}""", "invalid_request", "kalla.related_documents")]
+    [InlineData("""{"follow_ups":6}""", "invalid_request", "kalla.follow_ups")]
+    [InlineData("""{"follow_ups":true}""", "invalid_request", "kalla.follow_ups")]
+    [InlineData("""{"general_knowledge":"loose"}""", "invalid_request", "kalla.general_knowledge")]
+    [InlineData("""{"general_knowledge":"Off"}""", "invalid_request", "kalla.general_knowledge")]
+    [InlineData("""{"general_knowledge":""}""", "invalid_request", "kalla.general_knowledge")]
+    [InlineData("""{"general_knowledge":1}""", "invalid_request", "kalla.general_knowledge")]
+    [InlineData("""{"general_knowledge":false}""", "invalid_request", "kalla.general_knowledge")]
+    [InlineData("""{"general_knowledge":["off"]}""", "invalid_request", "kalla.general_knowledge")]
+    [InlineData("""{"generalKnowledge":"off"}""", "unsupported_parameter", "kalla.generalKnowledge")]
+    [InlineData("""{"foo":1}""", "unsupported_parameter", "kalla.foo")]
+    [InlineData("""{"related_documents":3,"relatedDocuments":3}""", "unsupported_parameter", "kalla.relatedDocuments")]
+    public void An_invalid_ume_member_is_refused_with_its_param(string kalla, string code, string param)
     {
-        var refused = Refused(ume);
+        var refused = Refused(kalla);
         (refused.Status, refused.Code, refused.Param).ShouldBe((400, code, param));
     }
 
@@ -85,8 +85,8 @@ public sealed class RelatedDocumentsTests
     [InlineData("""{"foo":1,"related_documents":99}""")]
     [InlineData("""{"related_documents":5}""")]
     [InlineData("""{"general_knowledge":"loose"}""")]
-    public void A_client_that_does_not_read_ume_ignores_it_without_validation(string ume) =>
-        ChatRequestParser.Parse(Body(ume), readKalla: false).Kalla.ShouldBeNull();
+    public void A_client_that_does_not_read_ume_ignores_it_without_validation(string kalla) =>
+        ChatRequestParser.Parse(Body(kalla), readKalla: false).Kalla.ShouldBeNull();
 
     private static RetrievedChunk Chunk(int rank, Guid document, string title, string? url = null, string? grant = null, int? page = null, string collection = "bygg") =>
         new(rank, Guid.NewGuid(), document, [], "text", "Bygglov › " + title, page, page, 1.0 / rank, new ChunkScores(null, null, null, null, null, null), null, Guid.Empty,
@@ -209,10 +209,10 @@ public sealed class RelatedDocumentsTests
     public void The_ume_member_names_are_fixed_and_absent_members_are_left_out()
     {
         // Snake case and the default names give the same member, so the JSON answer and the stream chunk agree.
-        var ume = new KallaAnswer("answered", false, [new RelatedDocument(Altan, "Altan", "https://www.umea.se/bygga/altan", "bygg", 1, false, null)], null);
+        var kalla = new KallaAnswer("answered", false, [new RelatedDocument(Altan, "Altan", "https://www.umea.se/bygga/altan", "bygg", 1, false, null)], null);
         foreach (var options in new[] { new JsonSerializerOptions(), new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower } })
         {
-            JsonSerializer.Serialize(ume, options).ShouldBe(
+            JsonSerializer.Serialize(kalla, options).ShouldBe(
                 $$"""{"outcome":"answered","degraded":false,"related_documents":[{"document_id":"{{Altan}}","title":"Altan","url":"https://www.umea.se/bygga/altan","collection":"bygg","rank":1,"cited":false}]}""");
         }
 

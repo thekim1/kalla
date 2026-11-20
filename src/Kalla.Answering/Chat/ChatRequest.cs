@@ -39,16 +39,16 @@ public sealed record ParsedChat(string Model, string Question, IReadOnlyList<Cha
 {
     public string PromptQuestion { get; init; } = Question;
 
-    /// <summary>The request's <c>ume</c> object (§3.8), or null: absent, <c>null</c>, or a client that does not read it (Open WebUI).</summary>
+    /// <summary>The request's <c>kalla</c> object (§3.8), or null: absent, <c>null</c>, or a client that does not read it (Open WebUI).</summary>
     public KallaRequest? Kalla { get; init; }
 }
 
 /// <summary>
-/// The <c>ume</c> extension asked for (chat design §3.8): how many related documents to list (§9.7) and the most follow-up
+/// The <c>kalla</c> extension asked for (chat design §3.8): how many related documents to list (§9.7) and the most follow-up
 /// questions to suggest (§9.8); 0 is none. <see cref="GeneralKnowledge"/> is a stricter general-knowledge level for the turn
 /// (null: the assistant's own; <see cref="GeneralKnowledgeLevels.Effective"/>). <see cref="Escalation"/> asks for the escalation
 /// hand-off (§9.9). <see cref="Topics"/> narrows the assistant's links for the turn (Decisions "Topics per request"; null: the links
-/// as they are). Any object, <c>{}</c> included, gives the answer's <c>ume</c> with its outcome.
+/// as they are). Any object, <c>{}</c> included, gives the answer's <c>kalla</c> with its outcome.
 /// </summary>
 public sealed record KallaRequest(int RelatedDocuments, int FollowUps, GeneralKnowledge? GeneralKnowledge = null, bool Escalation = false,
     IReadOnlyList<string>? Topics = null)
@@ -56,12 +56,12 @@ public sealed record KallaRequest(int RelatedDocuments, int FollowUps, GeneralKn
     public const int MaxRelatedDocuments = 10;
     public const int MaxFollowUps = 5;
 
-    /// <summary>The most values of <c>ume.topics</c> (§3.8).</summary>
+    /// <summary>The most values of <c>kalla.topics</c> (§3.8).</summary>
     public const int MaxTopics = 20;
 }
 
 /// <summary>
-/// Parses and checks the request body (chat design §3.2): unknown members are ignored, except inside <c>ume</c> (§3.8); a fixed list of members is refused;
+/// Parses and checks the request body (chat design §3.2): unknown members are ignored, except inside <c>kalla</c> (§3.8); a fixed list of members is refused;
 /// text content parts only; the last message must be <c>user</c>; <c>system</c>/<c>developer</c>/<c>tool</c> messages are
 /// ignored; the question gets its query form (normalised as the knowledge API normalises queries) and its prompt form.
 /// </summary>
@@ -77,7 +77,7 @@ public static partial class ChatRequestParser
     private static readonly HashSet<string> Roles = new(StringComparer.Ordinal) { "system", "developer", "user", "assistant", "tool" };
 
     /// <summary>
-    /// The parsed body. <paramref name="readKalla"/> false (an Open WebUI client, §3.8) ignores <c>ume</c> without validating it.
+    /// The parsed body. <paramref name="readKalla"/> false (an Open WebUI client, §3.8) ignores <c>kalla</c> without validating it.
     /// </summary>
     public static ParsedChat Parse(JsonElement body, bool readKalla = true)
     {
@@ -114,7 +114,7 @@ public static partial class ChatRequestParser
             throw new ChatException(400, "unsupported_parameter", "Only the text response format is supported.", "response_format");
         }
 
-        var ume = readKalla && body.TryGetProperty("ume", out var u) ? Kalla(u) : null;
+        var kalla = readKalla && body.TryGetProperty("kalla", out var u) ? Kalla(u) : null;
 
         if (!body.TryGetProperty("messages", out var messages) || messages.ValueKind != JsonValueKind.Array || messages.GetArrayLength() is < 1 or > MaxMessages)
         {
@@ -171,7 +171,7 @@ public static partial class ChatRequestParser
             }
         }
 
-        return new ParsedChat(model, question, history, stream, usage, maxTokens) { PromptQuestion = PromptForm(last.Text), Kalla = ume };
+        return new ParsedChat(model, question, history, stream, usage, maxTokens) { PromptQuestion = PromptForm(last.Text), Kalla = kalla };
     }
 
     /// <summary>
@@ -211,29 +211,29 @@ public static partial class ChatRequestParser
     }
 
     /// <summary>
-    /// The <c>ume</c> object (§3.8): <c>null</c> is none; not an object is 400 <c>invalid_request</c>; <c>related_documents</c>
+    /// The <c>kalla</c> object (§3.8): <c>null</c> is none; not an object is 400 <c>invalid_request</c>; <c>related_documents</c>
     /// 0–10 and <c>follow_ups</c> 0–5 as integers, <c>escalation</c> a boolean, <c>general_knowledge</c> one of the level values or <c>null</c>, and
     /// <c>topics</c> <c>null</c> or an array of at most 20 strings in the tag format, else 400
     /// <c>invalid_request</c>; any other member is 400 <c>unsupported_parameter</c> (the namespace is ours, so a typo fails
     /// instead of doing nothing).
     /// </summary>
-    private static KallaRequest? Kalla(JsonElement ume)
+    private static KallaRequest? Kalla(JsonElement kalla)
     {
-        if (ume.ValueKind == JsonValueKind.Null)
+        if (kalla.ValueKind == JsonValueKind.Null)
         {
             return null;
         }
 
-        if (ume.ValueKind != JsonValueKind.Object)
+        if (kalla.ValueKind != JsonValueKind.Object)
         {
-            throw Invalid("ume must be an object.", "ume");
+            throw Invalid("kalla must be an object.", "kalla");
         }
 
         var (related, followUps) = (0, 0);
         GeneralKnowledge? generalKnowledge = null;
         var escalation = false;
         IReadOnlyList<string>? topics = null;
-        foreach (var member in ume.EnumerateObject())
+        foreach (var member in kalla.EnumerateObject())
         {
             switch (member.Name)
             {
@@ -251,14 +251,14 @@ public static partial class ChatRequestParser
                     {
                         JsonValueKind.True => true,
                         JsonValueKind.False => false,
-                        _ => throw Invalid("ume.escalation must be true or false.", "ume.escalation"),
+                        _ => throw Invalid("kalla.escalation must be true or false.", "kalla.escalation"),
                     };
                     break;
                 case "topics":
                     topics = KallaTopics(member);
                     break;
                 default:
-                    throw new ChatException(400, "unsupported_parameter", $"ume.{member.Name} is not supported.", "ume." + member.Name);
+                    throw new ChatException(400, "unsupported_parameter", $"kalla.{member.Name} is not supported.", "kalla." + member.Name);
             }
         }
 
@@ -266,8 +266,8 @@ public static partial class ChatRequestParser
     }
 
     /// <summary>
-    /// <c>ume.topics</c> (§3.8): <c>null</c> and <c>[]</c> are none; an array of at most 20 strings in the chunk tag format (processing
-    /// §7), a repeated one kept once in its first place; anything else 400 <c>invalid_request</c> with <c>param</c> <c>ume.topics</c>.
+    /// <c>kalla.topics</c> (§3.8): <c>null</c> and <c>[]</c> are none; an array of at most 20 strings in the chunk tag format (processing
+    /// §7), a repeated one kept once in its first place; anything else 400 <c>invalid_request</c> with <c>param</c> <c>kalla.topics</c>.
     /// </summary>
     private static List<string>? KallaTopics(JsonProperty member)
     {
@@ -276,8 +276,8 @@ public static partial class ChatRequestParser
             return null;
         }
 
-        var invalid = Invalid($"ume.topics must be an array of at most {KallaRequest.MaxTopics} topics (lower case letters, digits and '-', 1–50 characters).",
-            "ume.topics");
+        var invalid = Invalid($"kalla.topics must be an array of at most {KallaRequest.MaxTopics} topics (lower case letters, digits and '-', 1–50 characters).",
+            "kalla.topics");
         if (member.Value.ValueKind != JsonValueKind.Array || member.Value.GetArrayLength() > KallaRequest.MaxTopics)
         {
             throw invalid;
@@ -300,18 +300,18 @@ public static partial class ChatRequestParser
         return topics.Count > 0 ? topics : null;
     }
 
-    /// <summary><c>ume.general_knowledge</c>: <c>null</c> is none; a level value exactly as stored (lower case), else 400.</summary>
+    /// <summary><c>kalla.general_knowledge</c>: <c>null</c> is none; a level value exactly as stored (lower case), else 400.</summary>
     private static GeneralKnowledge? KallaLevel(JsonProperty member) => member.Value.ValueKind switch
     {
         JsonValueKind.Null => null,
         JsonValueKind.String when GeneralKnowledgeLevels.All.Contains(member.Value.GetString()!) => GeneralKnowledgeLevels.Parse(member.Value.GetString()),
-        _ => throw Invalid($"ume.{member.Name} must be one of {string.Join(", ", GeneralKnowledgeLevels.All)}.", "ume." + member.Name),
+        _ => throw Invalid($"kalla.{member.Name} must be one of {string.Join(", ", GeneralKnowledgeLevels.All)}.", "kalla." + member.Name),
     };
 
     private static int KallaCount(JsonProperty member, int max) =>
         member.Value.ValueKind == JsonValueKind.Number && member.Value.TryGetInt32(out var count) && count >= 0 && count <= max
             ? count
-            : throw Invalid($"ume.{member.Name} must be an integer from 0 to {max}.", "ume." + member.Name);
+            : throw Invalid($"kalla.{member.Name} must be an integer from 0 to {max}.", "kalla." + member.Name);
 
     /// <summary>A string, or text parts joined with a newline; any other part is refused (answered 6).</summary>
     private static string Content(JsonElement message)

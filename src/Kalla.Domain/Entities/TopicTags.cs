@@ -5,7 +5,7 @@ namespace Kalla.Domain.Entities;
 
 /// <summary>
 /// Chunk tags (processing design §7): lower case, NFC, <c>[\p{L}\p{N}-]{1,50}</c>. An assistant's link topics (at most 20 per
-/// link, V11) and a chat request's <c>ume.topics</c> (chat design §3.8) are in this format.
+/// link, V11) and a chat request's <c>kalla.topics</c> (chat design §3.8) are in this format.
 /// </summary>
 public static partial class TopicTags
 {

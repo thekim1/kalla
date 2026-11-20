@@ -4,8 +4,8 @@ using Kalla.Domain.Services;
 
 namespace Kalla.Domain.Tests;
 
-// Copied from the gateway's tests/Fors.Domain.Tests/KeyTests.cs, adapted to the ume-rag-sk-/ume-rag-pk- format,
-// the 15-character display prefix and a client instead of the gateway's per-key model policies (identity design §6.1).
+// Copied from the gateway's tests/Fors.Domain.Tests/KeyTests.cs, adapted to the kalla-sk-/kalla-pk- format,
+// the 13-character display prefix (the prefix and 4 characters), the ume-rag-* keys issued before the rename, and a client instead of the gateway's per-key model policies (identity design §6.1).
 public class KeyHasherTests
 {
     private static readonly KeyHasher Hasher = new(new byte[32]);
@@ -15,9 +15,9 @@ public class KeyHasherTests
     {
         var key = Hasher.Generate();
 
-        key.PlainText.ShouldStartWith("ume-rag-sk-");
-        key.PlainText.Length.ShouldBe(54);
-        key.Prefix.ShouldBe(key.PlainText[..15]);
+        key.PlainText.ShouldStartWith("kalla-sk-");
+        key.PlainText.Length.ShouldBe(52);
+        key.Prefix.ShouldBe(key.PlainText[..13]);
         key.Kind.ShouldBe(KeyKinds.Secret);
         key.Hash.ShouldBe(Hasher.Hash(key.PlainText));
         key.Hash.ShouldNotContain(key.PlainText);
@@ -29,11 +29,26 @@ public class KeyHasherTests
     {
         var key = Hasher.Generate(KeyKinds.Public);
 
-        key.PlainText.ShouldStartWith("ume-rag-pk-");
+        key.PlainText.ShouldStartWith("kalla-pk-");
         key.Kind.ShouldBe(KeyKinds.Public);
         KeyHasher.KindOf(key.PlainText).ShouldBe(KeyKinds.Public);
         KeyHasher.KindOf(Hasher.Generate().PlainText).ShouldBe(KeyKinds.Secret);
         Should.Throw<ArgumentOutOfRangeException>(() => Hasher.Generate("xx"));
+    }
+
+    [Fact]
+    public void Keys_issued_before_the_rename_stay_valid()
+    {
+        // Decisions "Product names": ume-rag-sk-/ume-rag-pk- keys keep working; the hash is the whole key's, so only the
+        // shape check needs to know the old prefix. No key is issued with it.
+        var random = new string('A', 43);
+        var legacy = "ume-rag-sk-" + random;
+        KeyHasher.KindOf(legacy).ShouldBe(KeyKinds.Secret);
+        KeyHasher.KindOf("ume-rag-pk-" + random).ShouldBe(KeyKinds.Public);
+        Hasher.Verify(legacy, Hasher.Hash(legacy)).ShouldBeTrue();
+        Hasher.Verify(legacy, Hasher.Hash("kalla-sk-" + random)).ShouldBeFalse();
+        KeyHasher.LooksLikeKey("ume-rag-sk-" + random[..42]).ShouldBeFalse();
+        KeyHasher.LooksLikeKey("ume-sk-" + random).ShouldBeFalse(); // a gateway key of the old format, never ours
     }
 
     [Fact]
@@ -70,8 +85,8 @@ public class KeyHasherTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("sk-openai-123")]
-    [InlineData("ume-rag-sk-short")]
-    [InlineData("ume-rag-sk-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")]
+    [InlineData("kalla-sk-short")]
+    [InlineData("kalla-sk-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")]
     // A gateway key (fors-sk-, 50 chars) is never a Källa key.
     [InlineData("fors-sk-0123456789abcdefghijABCDEFGHIJ0123456789abc")]
     [InlineData("ume-rag-xk-0123456789abcdefghijABCDEFGHIJ0123456789abc")]
@@ -87,7 +102,7 @@ public class KeyStatusAndRotationTests
     private static ApiKey NewKey() => new()
     {
         Name = "Bygglov-app",
-        Prefix = "ume-rag-sk-abcd",
+        Prefix = "kalla-sk-abcd",
         KeyHash = "hash",
         ClientId = Guid.NewGuid(),
         TeamId = Guid.NewGuid(),

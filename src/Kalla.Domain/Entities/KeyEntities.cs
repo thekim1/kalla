@@ -67,10 +67,10 @@ public sealed class Client
 /// <summary>Key kinds; the stored kind must match the key's prefix (identity design §6.1).</summary>
 public static class KeyKinds
 {
-    /// <summary>Secret key, <c>ume-rag-sk-</c>.</summary>
+    /// <summary>Secret key, <c>kalla-sk-</c>.</summary>
     public const string Secret = "sk";
 
-    /// <summary>Public widget key, <c>ume-rag-pk-</c> (P2).</summary>
+    /// <summary>Public widget key, <c>kalla-pk-</c> (P2).</summary>
     public const string Public = "pk";
 }
 
@@ -120,7 +120,7 @@ public sealed class ApiKey
     public required string Name { get; set; }
     public string? Description { get; set; }
 
-    /// <summary>Non-secret identifying prefix, e.g. <c>ume-rag-sk-AbC1</c>, shown in UI and logs.</summary>
+    /// <summary>Non-secret identifying prefix, e.g. <c>kalla-sk-AbC1</c>, shown in UI and logs.</summary>
     public required string Prefix { get; set; }
 
     /// <summary>Hex HMAC-SHA256 of the full key with the server-side pepper.</summary>

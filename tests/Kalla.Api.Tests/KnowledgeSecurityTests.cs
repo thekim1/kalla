@@ -233,7 +233,7 @@ public sealed class KnowledgeSecurityTests(KnowledgeFixture db) : IClassFixture<
         var (api, logs) = Host(settings: [("Api:AuthFailuresPerMinute", "3")]);
         using var _ = api;
         using var valid = Client(api, db.InternalKey);
-        using var wrong = Client(api, "ume-rag-sk-" + new string('w', 43));
+        using var wrong = Client(api, "kalla-sk-" + new string('w', 43));
         var collections = new Uri("/v1/collections", UriKind.Relative);
         // The config monitor's first load is a full reload, which clears the key cache (KeyStore.ApplyAsync). Wait for it, so
         // it can't land after the key below is cached and make the last request miss the cache (#187).
@@ -367,7 +367,7 @@ public sealed class KnowledgeSecurityTests(KnowledgeFixture db) : IClassFixture<
     {
         var (api, logs) = AddressedHost(BehindProxy(), ("Api:AuthFailuresPerMinute", "2"));
         using var _ = api;
-        using var wrong = Client(api, "ume-rag-sk-" + new string('w', 43));
+        using var wrong = Client(api, "kalla-sk-" + new string('w', 43));
 
         var statuses = new List<HttpStatusCode>();
         for (var i = 0; i < 4; i++)

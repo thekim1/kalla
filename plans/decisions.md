@@ -19,8 +19,8 @@ The RAG platform is **Källa** (written **Kalla** where only ASCII fits) and the
 names Ume.Rag and Fors go. The rename of code, images, documents and deployment names is stream b's work
 (the other machine's agent) and comes with an upgrade path for existing deployments ("One deployment bootstrap").
 The names on the wire change too, in both products in one step (no backward compatibility before production): Källa's
-own Chat API members `ume.*` become `kalla.*` (`kalla.topics`, `kalla.escalation`, `kalla.follow_ups`, …), and the
-gateway's `x-fors-*` headers, `/v1/fors/context` and the `ume.*` model facts become `x-fors-*`, `/v1/fors/context` and
+own Chat API members `kalla.*` become `kalla.*` (`kalla.topics`, `kalla.escalation`, `kalla.follow_ups`, …), and the
+gateway's `x-fors-*` headers, `/v1/fors/context` and the `kalla.*` model facts become `x-fors-*`, `/v1/fors/context` and
 `fors.*`; the two renames land together. The rename comes before `v0.9.0`. This answers N1.
 
 *From:* decided by user, 2026-11-20.
@@ -486,7 +486,7 @@ built later. Ume.Rag's realm part needs only the `departmentCodes` and `teamCode
 
 ### P1 pilot sign-in
 
-The pilot uses the gateway's Keycloak (its own Compose project on the gateway's production host, defined in the gateway repo): one realm `ume` with both systems' clients and roles, `departmentCodes` shared, *full scope allowed* off on every client. Ume.Rag delivers `rag-additions.json`, applied by keycloak-config-cli after the gateway's base file (`no-delete`), which holds password policy, brute-force protection and the user profile. The gateway operator administers the realm. Accounts are local (LDAP to AD later), without OTP; MFA returns with brokered Entra ID or AD.
+The pilot uses the gateway's Keycloak (its own Compose project on the gateway's production host, defined in the gateway repo): one realm `kalla` with both systems' clients and roles, `departmentCodes` shared, *full scope allowed* off on every client. Ume.Rag delivers `rag-additions.json`, applied by keycloak-config-cli after the gateway's base file (`no-delete`), which holds password policy, brute-force protection and the user profile. The gateway operator administers the realm. Accounts are local (LDAP to AD later), without OTP; MFA returns with brokered Entra ID or AD.
 Keycloak's database is `keycloak` in the gateway's Postgres, under its backups; each repo keeps its own dev Keycloak in
 its AppHost. `ume-rag-api` is an audience only. Detail: `identity/design.md` §11.2.
 
@@ -503,8 +503,8 @@ products are separate Compose projects with the same layout, and Ume.Rag's ports
 
 ### Key service
 
-Master keys are protected files (file key provider) while no `sensitive` data exists; Azure Key Vault is the target, adopted later with a re-wrap. Long-lived keys are escrowed offline. `public` blobs are not encrypted. Client keys are `ume-rag-sk-…`
-(secret) and `ume-rag-pk-…` (public). Detail: `postponed-decisions.md` K1.
+Master keys are protected files (file key provider) while no `sensitive` data exists; Azure Key Vault is the target, adopted later with a re-wrap. Long-lived keys are escrowed offline. `public` blobs are not encrypted. Client keys are `kalla-sk-…`
+(secret) and `kalla-pk-…` (public). Detail: `postponed-decisions.md` K1.
 
 *From:* log rows 9, 30, 55; decided by user, 2026-10-30.
 
@@ -550,7 +550,7 @@ The gateway never depends on Ume.Rag; any key may send a residency ceiling. Rele
 
 ### Interim gateway for P1a
 
-A test/dev gateway on a fixed HTTPS host with EU embedding and chat models is the interim gateway (J10); its Keycloak holds the shared realm `ume` (J11). FakeGateway serves CI and tests. Its address and keys are only in user secrets, `deploy/.env` and secret files, never in the repository. Detail: `gateway-changes/design.md` §13.4.
+A test/dev gateway on a fixed HTTPS host with EU embedding and chat models is the interim gateway (J10); its Keycloak holds the shared realm `kalla` (J11). FakeGateway serves CI and tests. Its address and keys are only in user secrets, `deploy/.env` and secret files, never in the repository. Detail: `gateway-changes/design.md` §13.4.
 
 *From:* log rows 78, 83; decided by user, 2026-10-31.
 
@@ -814,16 +814,16 @@ the not-found text; with `fallback` and `open`, coverage `low` gets an answer wi
 caveat, stored as `answered-general` and counted apart from not-found. "Search unavailable" is the fixed text at every
 level. On a `public` assistant a level other than `off` is a warning and needs
 explicit confirmation on publish, restore and a level change to `public` (V36). A client other than Open WebUI may
-ask for a level per chat request (`ume.general_knowledge`); the turn runs at the stricter of the request's level and
+ask for a level per chat request (`kalla.general_knowledge`); the turn runs at the stricter of the request's level and
 the assistant's, so a request only tightens and V36 keeps holding (#726). The admin's test panel takes the same
 optional level. Detail: `chat-api/design.md` §3.8, §7.3, §10.4; `admin/design.md` §4.6, §4.9.
 
 *From:* log rows 103, 111; decided by user, 2026-11-07; the per-request level by user, 2026-11-15 (#726).
 *Also:* "General knowledge on a public assistant"
 
-### Related documents and the `ume` chat extension
+### Related documents and the `kalla` chat extension
 
-A client other than Open WebUI may add `ume` to a chat request to get the turn's `outcome` and `degraded`, plus on
+A client other than Open WebUI may add `kalla` to a chat request to get the turn's `outcome` and `degraded`, plus on
 request `related_documents` (1–10, from the same retrieval, empty on coverage `low`) and `follow_ups` (1–5, one
 condense-model call within 2 s, never stored, lines with markers, links or personal data dropped), and
 `general_knowledge`, a stricter general-knowledge level for the turn (Decisions "General knowledge per assistant"),
@@ -835,7 +835,7 @@ dates (Decisions "Source dates on citations"). Detail: `chat-api/design.md` §3.
 
 ### Escalation hand-off
 
-A client other than Open WebUI may ask for `ume.escalation`. When the turn ends `not-found`, `answered-general` or
+A client other than Open WebUI may ask for `kalla.escalation`. When the turn ends `not-found`, `answered-general` or
 `unavailable`, the answer then carries the escalation route: the reason, the assistant's contact links (its not-found
 links, else the platform's), and a short hand-off summary of the user's problem for a second-line ticket. The summary
 comes from one condense-model call at the condense ceiling, as the step `escalation` on the assistant's gateway key, within
@@ -859,10 +859,10 @@ sitemap `lastmod`. An upload has no `checked`. The citation label shows both, in
 
 ### Topics per request
 
-A client other than Open WebUI may send `ume.topics` with a chat request: the turn then searches only chunks that
+A client other than Open WebUI may send `kalla.topics` with a chat request: the turn then searches only chunks that
 carry one of those topics, inside what the assistant's links allow. A link with topics keeps the ones also asked
 for, and is left out when none is; a link without topics is searched for the asked topics. A request narrows and
-never widens. A topic that matches no link is not an error: the answer's `ume.topics` lists the ones that were
+never widens. A topic that matches no link is not an error: the answer's `kalla.topics` lists the ones that were
 searched, and a turn with nothing left to search ends `not-found`. Detail: `chat-api/design.md` §3.8;
 `knowledge-api/design.md` §4.2.
 

@@ -106,7 +106,7 @@ public sealed record AdminActor(
 public sealed partial class AdminClientAddresses(IServiceScopeFactory scopes, TimeProvider time, IOptions<AdminOptions> options,
     ILogger<AdminClientAddresses> logger)
 {
-    public const string ItemKey = "ume.clientAddress";
+    public const string ItemKey = "kalla.clientAddress";
     private static readonly TimeSpan CacheFor = TimeSpan.FromSeconds(30);
     private ImmutableArray<IPNetwork> _trusted = [];
     private DateTimeOffset _readAt = DateTimeOffset.MinValue;

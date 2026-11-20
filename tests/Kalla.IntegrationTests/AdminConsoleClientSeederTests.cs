@@ -21,7 +21,7 @@ public sealed class AdminConsoleClientSeederTests(RagDatabaseFixture database) :
 
     private static ApiKey Key(Guid clientId, string name) => new()
     {
-        ClientId = clientId, Name = name, Prefix = "ume-rag-sk-" + name[..4].ToUpperInvariant(), KeyHash = Guid.NewGuid().ToString("N"), CreatedAt = DateTimeOffset.UtcNow,
+        ClientId = clientId, Name = name, Prefix = "kalla-sk-" + name[..4].ToUpperInvariant(), KeyHash = Guid.NewGuid().ToString("N"), CreatedAt = DateTimeOffset.UtcNow,
     };
 
     [Fact]

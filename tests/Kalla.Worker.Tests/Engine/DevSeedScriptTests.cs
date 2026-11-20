@@ -273,7 +273,7 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
     /// <summary>The Python script's key hash (<c>key_hash</c> in <c>seed_url_list.py</c>) has the same test vector.</summary>
     [Fact]
     public void The_key_hasher_matches_the_python_scripts_test_vector() =>
-        Hasher("dev-seed-vector-pepper-0123456789abcdef").Hash("ume-rag-sk-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg")
+        Hasher("dev-seed-vector-pepper-0123456789abcdef").Hash("kalla-sk-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg")
             .ShouldBe("f2edf7e535b369dedbb773f85b74b5f2b2ef36cf126281929f0c75d2ca0624bf");
 
     /// <summary>The script's parameters with names unique to the test.</summary>

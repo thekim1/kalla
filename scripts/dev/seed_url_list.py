@@ -21,7 +21,7 @@ source gets piiMode report, as a source on the municipality's own published site
 --api-key also creates, until the admin's key endpoints (J7) exist, what a /v1/retrieve call on rag-api needs: the
 public level's data-protection row (when missing), an internal client with ceiling public (by --client-name) and a
 secret key of that client scoped to the collection. The key is generated here (secrets, the KeyHasher format
-ume-rag-sk- + 43 base62) and only its HMAC-SHA256 with the AppHost's key pepper reaches the database; the pepper comes
+kalla-sk- + 43 base62) and only its HMAC-SHA256 with the AppHost's key pepper reaches the database; the pepper comes
 from the UME_RAG_DEV_KEY_PEPPER environment variable (the key-pepper parameter in the Aspire dashboard), never from the
 command line. The plaintext key is printed once, to stdout, when the key is created; a re-run that finds a usable key
 of the client for the collection says so and prints nothing secret. Nothing writes the key to a file.
@@ -52,10 +52,10 @@ LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "[::1]"})
 MAX_URLS = 5000  # UrlListSettings.Urls
 MAX_URL_LENGTH = 2048
 ENV_PEPPER = "UME_RAG_DEV_KEY_PEPPER"
-KEY_PREFIX = "ume-rag-sk-"  # KeyHasher.SecretPrefix
+KEY_PREFIX = "kalla-sk-"  # KeyHasher.SecretPrefix
 KEY_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"  # KeyHasher's base62
 KEY_RANDOM_CHARS = 43
-KEY_DISPLAY_PREFIX = 15  # "ume-rag-sk-" + 4 characters
+KEY_DISPLAY_PREFIX = 15  # "kalla-sk-" + 4 characters
 MIN_PEPPER_BYTES = 32  # KeyHasher and Security:KeyPepper
 NPGSQL_KEYS = {
     "host": "host",

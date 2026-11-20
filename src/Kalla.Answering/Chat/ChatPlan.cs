@@ -52,7 +52,7 @@ public sealed record ChatPlan(Guid MessageId, string Model, DateTimeOffset Creat
     public string? Query { get; init; }
 
     /// <summary>
-    /// With <c>ume.topics</c> (§3.8): the asked topics that at least one link searched, in the request's order (the retrieval's
+    /// With <c>kalla.topics</c> (§3.8): the asked topics that at least one link searched, in the request's order (the retrieval's
     /// when it ran, else the published links' narrowing); null without.
     /// </summary>
     public IReadOnlyList<string>? SearchedTopics { get; init; }

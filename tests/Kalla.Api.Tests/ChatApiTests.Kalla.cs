@@ -12,7 +12,7 @@ using Kalla.TestKit;
 namespace Kalla.Api.Tests;
 
 /// <summary>
-/// The <c>ume</c> extension through the chat role (chat design §3.8, §9.7, §17, §18.6, §18.9; M-7) on the knowledge fixture:
+/// The <c>kalla</c> extension through the chat role (chat design §3.8, §9.7, §17, §18.6, §18.9; M-7) on the knowledge fixture:
 /// refusals and Open WebUI's ignored member, the outcome of every turn kind, related documents from the turn's own retrieval
 /// (no extra embedding, gateway call or SQL statement), the stream's chunk order and the metrics. The wire itself is pinned by
 /// the <c>*-ume-*</c> golden files.
@@ -21,37 +21,37 @@ public sealed partial class ChatApiTests
 {
     private const string AltanQuestion = "Behöver jag bygglov för en altan högre än 1,2 meter?";
 
-    private static Task<HttpResponseMessage> AskUme(HttpClient client, string question, string ume, bool stream = false, bool usage = false) =>
+    private static Task<HttpResponseMessage> AskUme(HttpClient client, string question, string kalla, bool stream = false, bool usage = false) =>
         client.PostAsJsonAsync("/v1/chat/completions", new
         {
             model = "bygg", stream, stream_options = usage ? new { include_usage = true } : null, messages = new[] { new { role = "user", content = question } },
-            ume = JsonDocument.Parse(ume).RootElement.Clone(),
+            kalla = JsonDocument.Parse(kalla).RootElement.Clone(),
         }, Ct);
 
-    /// <summary>The JSON answer's <c>ume</c> member (it must be there).</summary>
+    /// <summary>The JSON answer's <c>kalla</c> member (it must be there).</summary>
     private static async Task<(JsonElement Body, JsonElement Kalla)> KallaAnswerAsync(HttpResponseMessage response)
     {
         response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
-        return (body, body.GetProperty("ume"));
+        return (body, body.GetProperty("kalla"));
     }
 
     private static string[] Members(JsonElement element) => [.. element.EnumerateObject().Select(p => p.Name)];
 
     [Theory]
-    [InlineData("\"x\"", "invalid_request", "ume")]
-    [InlineData("""{"related_documents":11}""", "invalid_request", "ume.related_documents")]
-    [InlineData("""{"follow_ups":6}""", "invalid_request", "ume.follow_ups")]
-    [InlineData("""{"general_knowledge":"loose"}""", "invalid_request", "ume.general_knowledge")]
-    [InlineData("""{"foo":1}""", "unsupported_parameter", "ume.foo")]
-    public async Task An_invalid_ume_from_an_integration_client_is_refused_before_any_model_call(string ume, string code, string param)
+    [InlineData("\"x\"", "invalid_request", "kalla")]
+    [InlineData("""{"related_documents":11}""", "invalid_request", "kalla.related_documents")]
+    [InlineData("""{"follow_ups":6}""", "invalid_request", "kalla.follow_ups")]
+    [InlineData("""{"general_knowledge":"loose"}""", "invalid_request", "kalla.general_knowledge")]
+    [InlineData("""{"foo":1}""", "unsupported_parameter", "kalla.foo")]
+    public async Task An_invalid_ume_from_an_integration_client_is_refused_before_any_model_call(string kalla, string code, string param)
     {
         var calls = new ConcurrentQueue<GatewayCall>();
         using var logs = new CapturingLoggerProvider();
         await using var api = LongHost(calls, LongFault.None, new FakeTimeProvider(DateTimeOffset.UtcNow), logs);
         using var client = Client(api, db.IntegrationKey);
 
-        using var response = await AskUme(client, AltanQuestion, ume);
+        using var response = await AskUme(client, AltanQuestion, kalla);
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         var error = (await response.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("error");
         (error.GetProperty("code").GetString(), error.GetProperty("type").GetString(), error.GetProperty("param").GetString())
@@ -66,15 +66,15 @@ public sealed partial class ChatApiTests
     [InlineData("""{"general_knowledge":"loose"}""")]
     [InlineData("""{"topics":[1]}""")]
     [InlineData("""{"topics":["okänt"]}""")]
-    public async Task Open_webui_requests_ignore_ume_without_validating_it(string ume)
+    public async Task Open_webui_requests_ignore_ume_without_validating_it(string kalla)
     {
         await using var api = WireHost(null, openWebUi: true, Upstream.Fake);
         using var client = Client(api, db.IntegrationKey);
         AsOpenWebUiUser(client);
 
-        using var response = await AskUme(client, AltanQuestion, ume);
+        using var response = await AskUme(client, AltanQuestion, kalla);
         response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
-        (await response.Content.ReadFromJsonAsync<JsonElement>(Ct)).TryGetProperty("ume", out _).ShouldBeFalse();
+        (await response.Content.ReadFromJsonAsync<JsonElement>(Ct)).TryGetProperty("kalla", out _).ShouldBeFalse();
     }
 
     [Fact]
@@ -84,12 +84,12 @@ public sealed partial class ChatApiTests
         using var client = Client(api, db.IntegrationKey);
         using (var absent = await Ask(client, AltanQuestion))
         {
-            (await absent.Content.ReadFromJsonAsync<JsonElement>(Ct)).TryGetProperty("ume", out _).ShouldBeFalse();
+            (await absent.Content.ReadFromJsonAsync<JsonElement>(Ct)).TryGetProperty("kalla", out _).ShouldBeFalse();
         }
 
         using var none = await AskUme(client, AltanQuestion, "null");
         none.StatusCode.ShouldBe(HttpStatusCode.OK);
-        (await none.Content.ReadFromJsonAsync<JsonElement>(Ct)).TryGetProperty("ume", out _).ShouldBeFalse();
+        (await none.Content.ReadFromJsonAsync<JsonElement>(Ct)).TryGetProperty("kalla", out _).ShouldBeFalse();
     }
 
     [Fact]
@@ -97,9 +97,9 @@ public sealed partial class ChatApiTests
     {
         await using var api = Host();
         using var client = Client(api, db.IntegrationKey);
-        var (_, ume) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, "{}"));
-        Members(ume).ShouldBe(["outcome", "degraded"]);
-        (ume.GetProperty("outcome").GetString(), ume.GetProperty("degraded").GetBoolean()).ShouldBe(("answered", false));
+        var (_, kalla) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, "{}"));
+        Members(kalla).ShouldBe(["outcome", "degraded"]);
+        (kalla.GetProperty("outcome").GetString(), kalla.GetProperty("degraded").GetBoolean()).ShouldBe(("answered", false));
     }
 
     [Fact]
@@ -110,9 +110,9 @@ public sealed partial class ChatApiTests
         await using var api = LongHost(calls, LongFault.None, new FakeTimeProvider(DateTimeOffset.UtcNow), logs);
         using var client = Client(api, db.IntegrationKey);
 
-        var (body, ume) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"related_documents":10}"""));
-        ume.GetProperty("outcome").GetString().ShouldBe("answered");
-        var related = ume.GetProperty("related_documents").EnumerateArray().ToList();
+        var (body, kalla) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"related_documents":10}"""));
+        kalla.GetProperty("outcome").GetString().ShouldBe("answered");
+        var related = kalla.GetProperty("related_documents").EnumerateArray().ToList();
         related.Select(d => d.GetProperty("document_id").GetGuid()).ShouldBeUnique();
         related.Select(d => d.GetProperty("rank").GetInt32()).ShouldBe(Enumerable.Range(1, related.Count));
 
@@ -159,9 +159,9 @@ public sealed partial class ChatApiTests
     {
         await using var api = GeneralHost(level);
         using var client = Client(api, db.IntegrationKey);
-        var (_, ume) = await KallaAnswerAsync(await AskUme(client, "Hur långt är det till månen i kilometer?", """{"related_documents":5}"""));
-        (ume.GetProperty("outcome").GetString(), ume.GetProperty("degraded").GetBoolean()).ShouldBe((outcome, false));
-        ume.GetProperty("related_documents").GetArrayLength().ShouldBe(0);
+        var (_, kalla) = await KallaAnswerAsync(await AskUme(client, "Hur långt är det till månen i kilometer?", """{"related_documents":5}"""));
+        (kalla.GetProperty("outcome").GetString(), kalla.GetProperty("degraded").GetBoolean()).ShouldBe((outcome, false));
+        kalla.GetProperty("related_documents").GetArrayLength().ShouldBe(0);
     }
 
     [Theory]
@@ -172,14 +172,14 @@ public sealed partial class ChatApiTests
     [InlineData("fallback", """{"general_knowledge":"off"}""", "not-found")]
     [InlineData("off", """{"general_knowledge":"fallback"}""", "not-found")]
     [InlineData("off", """{"general_knowledge":"open"}""", "not-found")]
-    public async Task A_requested_general_knowledge_level_only_tightens_the_assistants(string level, string ume, string outcome)
+    public async Task A_requested_general_knowledge_level_only_tightens_the_assistants(string level, string kalla, string outcome)
     {
-        // #726 (§3.8): the turn runs at the stricter of ume.general_knowledge and the assistant's level; absent or null is the assistant's.
+        // #726 (§3.8): the turn runs at the stricter of kalla.general_knowledge and the assistant's level; absent or null is the assistant's.
         await using var api = GeneralHost(level);
         using var client = Client(api, db.IntegrationKey);
         var before = await WrittenAsync(api, null);
 
-        var (body, answer) = await KallaAnswerAsync(await AskUme(client, "Hur långt är det till månen i kilometer?", ume));
+        var (body, answer) = await KallaAnswerAsync(await AskUme(client, "Hur långt är det till månen i kilometer?", kalla));
         answer.GetProperty("outcome").GetString().ShouldBe(outcome);
         var content = body.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString()!;
         if (outcome == "not-found")
@@ -230,9 +230,9 @@ public sealed partial class ChatApiTests
     {
         await using var api = GeneralHost("off", embeddingModel: "fake-wrong-residency-embed");
         using var client = Client(api, db.IntegrationKey);
-        var (_, ume) = await KallaAnswerAsync(await AskUme(client, "Kvantgravitation xyzzy plutonium?", """{"related_documents":5}"""));
-        ume.GetProperty("outcome").GetString().ShouldBe("unavailable");
-        ume.GetProperty("related_documents").GetArrayLength().ShouldBe(0);
+        var (_, kalla) = await KallaAnswerAsync(await AskUme(client, "Kvantgravitation xyzzy plutonium?", """{"related_documents":5}"""));
+        kalla.GetProperty("outcome").GetString().ShouldBe("unavailable");
+        kalla.GetProperty("related_documents").GetArrayLength().ShouldBe(0);
     }
 
     [Fact]
@@ -240,9 +240,9 @@ public sealed partial class ChatApiTests
     {
         await using var api = GeneralHost("off", embeddingModel: "fake-wrong-residency-embed");
         using var client = Client(api, db.IntegrationKey);
-        var (_, ume) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"related_documents":5}"""));
-        (ume.GetProperty("outcome").GetString(), ume.GetProperty("degraded").GetBoolean()).ShouldBe(("answered", true));
-        ume.GetProperty("related_documents").GetArrayLength().ShouldBeGreaterThan(0);
+        var (_, kalla) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"related_documents":5}"""));
+        (kalla.GetProperty("outcome").GetString(), kalla.GetProperty("degraded").GetBoolean()).ShouldBe(("answered", true));
+        kalla.GetProperty("related_documents").GetArrayLength().ShouldBeGreaterThan(0);
     }
 
     [Fact]
@@ -250,9 +250,9 @@ public sealed partial class ChatApiTests
     {
         await using var api = Host();
         using var client = Client(api, db.IntegrationKey);
-        var (_, ume) = await KallaAnswerAsync(await AskUme(client, "Hej!", """{"related_documents":5}"""));
-        (ume.GetProperty("outcome").GetString(), ume.GetProperty("degraded").GetBoolean()).ShouldBe(("answered", false));
-        ume.GetProperty("related_documents").GetArrayLength().ShouldBe(0);
+        var (_, kalla) = await KallaAnswerAsync(await AskUme(client, "Hej!", """{"related_documents":5}"""));
+        (kalla.GetProperty("outcome").GetString(), kalla.GetProperty("degraded").GetBoolean()).ShouldBe(("answered", false));
+        kalla.GetProperty("related_documents").GetArrayLength().ShouldBe(0);
     }
 
     [Fact]
@@ -263,9 +263,9 @@ public sealed partial class ChatApiTests
         await using var api = LongHost(calls, LongFault.Error, new FakeTimeProvider(DateTimeOffset.UtcNow), logs);
         using var client = Client(api, db.IntegrationKey);
 
-        var (_, ume) = await KallaAnswerAsync(await AskUme(client, Long("Hur långt är det till månen i kilometer räknat från Umeå?", 2400), """{"related_documents":5}"""));
-        ume.GetProperty("outcome").GetString().ShouldBe("answered");
-        ume.GetProperty("related_documents").GetArrayLength().ShouldBeGreaterThan(0);
+        var (_, kalla) = await KallaAnswerAsync(await AskUme(client, Long("Hur långt är det till månen i kilometer räknat från Umeå?", 2400), """{"related_documents":5}"""));
+        kalla.GetProperty("outcome").GetString().ShouldBe("answered");
+        kalla.GetProperty("related_documents").GetArrayLength().ShouldBeGreaterThan(0);
     }
 
     [Fact]
@@ -274,25 +274,25 @@ public sealed partial class ChatApiTests
         await using var api = Host();
         using var client = Client(api, db.IntegrationKey);
 
-        // Without a condense model, follow-ups asked for are skipped before any call: [] in the first and only ume chunk (§3.8, §9.8).
+        // Without a condense model, follow-ups asked for are skipped before any call: [] in the first and only kalla chunk (§3.8, §9.8).
         using var response = await AskUme(client, AltanQuestion, """{"related_documents":3,"follow_ups":2}""", stream: true, usage: true);
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var lines = (await response.Content.ReadAsStringAsync(Ct)).Split("\n\n", StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()).ToList();
         lines[^1].ShouldBe("data: [DONE]");
         var events = lines.SkipLast(1).Select(l => JsonDocument.Parse(l["data: ".Length..]).RootElement.Clone()).ToList();
         var final = events.FindIndex(e => FinishReason(e) == "stop");
-        var umeChunks = events.Select((e, i) => (e, i)).Where(x => x.e.TryGetProperty("ume", out _)).ToList();
-        var (chunk, at) = umeChunks.ShouldHaveSingleItem();
+        var kallaChunks = events.Select((e, i) => (e, i)).Where(x => x.e.TryGetProperty("kalla", out _)).ToList();
+        var (chunk, at) = kallaChunks.ShouldHaveSingleItem();
         at.ShouldBe(final + 1);
         events[at + 1].TryGetProperty("usage", out _).ShouldBeTrue();
         at.ShouldBe(events.Count - 2);
 
         (chunk.GetProperty("object").GetString(), chunk.GetProperty("choices").GetArrayLength(), chunk.GetProperty("id").GetString())
             .ShouldBe(("chat.completion.chunk", 0, events[0].GetProperty("id").GetString()));
-        var ume = chunk.GetProperty("ume");
-        Members(ume).ShouldBe(["outcome", "degraded", "related_documents", "follow_ups"]);
-        ume.GetProperty("follow_ups").GetArrayLength().ShouldBe(0);
-        ume.GetProperty("related_documents").GetArrayLength().ShouldBeInRange(1, 3);
+        var kalla = chunk.GetProperty("kalla");
+        Members(kalla).ShouldBe(["outcome", "degraded", "related_documents", "follow_ups"]);
+        kalla.GetProperty("follow_ups").GetArrayLength().ShouldBe(0);
+        kalla.GetProperty("related_documents").GetArrayLength().ShouldBeInRange(1, 3);
     }
 
     [Fact]
@@ -321,14 +321,14 @@ public sealed partial class ChatApiTests
         };
         ActivitySource.AddActivityListener(listener);
 
-        async Task<(int Statements, string[] Calls)> Turn(string? ume)
+        async Task<(int Statements, string[] Calls)> Turn(string? kalla)
         {
             calls.Clear();
             var trace = ActivityTraceId.CreateRandom();
-            var extension = ume is null ? (JsonElement?)null : JsonDocument.Parse(ume).RootElement.Clone();
+            var extension = kalla is null ? (JsonElement?)null : JsonDocument.Parse(kalla).RootElement.Clone();
             using var request = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions")
             {
-                Content = JsonContent.Create(new { model = "bygg", messages = new[] { new { role = "user", content = AltanQuestion } }, ume = extension }),
+                Content = JsonContent.Create(new { model = "bygg", messages = new[] { new { role = "user", content = AltanQuestion } }, kalla = extension }),
             };
             request.Headers.Add("traceparent", $"00-{trace}-{ActivitySpanId.CreateRandom()}-01");
             using var response = await client.SendAsync(request, Ct);
@@ -354,7 +354,7 @@ public sealed partial class ChatApiTests
         {
             InstrumentPublished = (instrument, l) =>
             {
-                if (instrument.Name is "rag.chat.ume" or "rag.chat.related_documents" && ReferenceEquals(instrument.Meter.Scope, meters))
+                if (instrument.Name is "rag.chat.kalla" or "rag.chat.related_documents" && ReferenceEquals(instrument.Meter.Scope, meters))
                 {
                     l.EnableMeasurementEvents(instrument);
                 }
@@ -375,19 +375,19 @@ public sealed partial class ChatApiTests
         listener.Start();
         using var client = Client(api, db.IntegrationKey);
 
-        foreach (var (ume, stream) in new[]
+        foreach (var (kalla, stream) in new[]
                  {
                      ("{}", false), ("""{"related_documents":2}""", true), ("""{"follow_ups":2}""", false), ("""{"related_documents":1,"follow_ups":1}""", false),
                  })
         {
-            using var response = await AskUme(client, AltanQuestion, ume, stream);
+            using var response = await AskUme(client, AltanQuestion, kalla, stream);
             response.StatusCode.ShouldBe(HttpStatusCode.OK);
             await response.Content.ReadAsStringAsync(Ct);
         }
 
         using (var plain = await Ask(client, AltanQuestion))
         {
-            plain.StatusCode.ShouldBe(HttpStatusCode.OK); // without ume: not counted
+            plain.StatusCode.ShouldBe(HttpStatusCode.OK); // without kalla: not counted
         }
 
         var kind = Domain.Entities.ClientKinds.Integration;

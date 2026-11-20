@@ -13,16 +13,16 @@ namespace Kalla.Api;
 /// caveat line of a degraded or general-knowledge answer, then the model's text through the <see cref="AnswerTransducer"/>: for Open WebUI one
 /// <c>source</c> event per cited document just before the text that first cites it, for other clients <c>delta.annotations</c>
 /// (<c>url_citation</c>), then the contact links of a general-knowledge answer. A fixed text (not found, unavailable) is one content chunk without a model call. The events come from
-/// <see cref="ChatAnswer"/>, the same answer path the JSON answer folds. With <paramref name="ume"/> (§3.8) the first <c>ume</c> chunk
+/// <see cref="ChatAnswer"/>, the same answer path the JSON answer folds. With <paramref name="kalla"/> (§3.8) the first <c>kalla</c> chunk
 /// follows the final chunk, made from the documents the answer cited, at once; with <paramref name="later"/> (§9.8, §9.9) the writer
-/// keeps the delivered text and a second <c>ume</c> chunk with <c>follow_ups</c> and <c>escalation</c> follows when their calls return or their
+/// keeps the delivered text and a second <c>kalla</c> chunk with <c>follow_ups</c> and <c>escalation</c> follows when their calls return or their
 /// budget runs out; then the usage chunk and <c>[DONE]</c>. After the first byte an error is one error chunk and <c>[DONE]</c>,
-/// and no <c>ume</c> chunk; after a disconnect nothing more is written. A turn that ends in either of those calls
+/// and no <c>kalla</c> chunk; after a disconnect nothing more is written. A turn that ends in either of those calls
 /// <paramref name="aborted"/> instead of <paramref name="finished"/>, once the answer is disposed (its broken-off stream
 /// recorded, chat design §8.3), so its usage is still written (§12.1).
 /// </summary>
 public sealed class ChatSse(ChatAnswer answer, bool openWebUi, bool includeUsage,
-    Func<IReadOnlyList<PromptSource>, int, int, ValueTask>? finished = null, Func<IReadOnlyList<PromptSource>, KallaAnswer>? ume = null,
+    Func<IReadOnlyList<PromptSource>, int, int, ValueTask>? finished = null, Func<IReadOnlyList<PromptSource>, KallaAnswer>? kalla = null,
     Func<IReadOnlyList<PromptSource>, string, CancellationToken, Task<KallaLater>>? later = null,
     Func<string, IReadOnlyList<PromptSource>, ValueTask>? aborted = null) : IResult
 {
@@ -92,9 +92,9 @@ public sealed class ChatSse(ChatAnswer answer, bool openWebUi, bool includeUsage
                     // A client that left while the gateway's stream ended did not get the answer: the turn is cancelled (B-48).
                     ct.ThrowIfCancellationRequested();
                     await WriteAsync(response, Chunk(new { }, end.FinishReason), ct);
-                    if (ume is not null)
+                    if (kalla is not null)
                     {
-                        await KallaAsync(response, id, created, ume(answer.Cited), ct);
+                        await KallaAsync(response, id, created, kalla(answer.Cited), ct);
                     }
 
                     if (later is not null)
@@ -189,11 +189,11 @@ public sealed class ChatSse(ChatAnswer answer, bool openWebUi, bool includeUsage
     }
 
     /// <summary>
-    /// A <c>ume</c> chunk (§3.8): a <c>chat.completion.chunk</c> with <c>choices: []</c> and the <c>ume</c> member, the usage
+    /// A <c>kalla</c> chunk (§3.8): a <c>chat.completion.chunk</c> with <c>choices: []</c> and the <c>kalla</c> member, the usage
     /// chunk's shape. <paramref name="value"/> holds the members this chunk delivers; each member goes in exactly one chunk.
     /// </summary>
     private Task KallaAsync(HttpResponse response, string id, long created, object value, CancellationToken ct) =>
-        WriteAsync(response, new { id, @object = "chat.completion.chunk", created, model = Plan.Model, choices = Array.Empty<object>(), ume = value }, ct);
+        WriteAsync(response, new { id, @object = "chat.completion.chunk", created, model = Plan.Model, choices = Array.Empty<object>(), kalla = value }, ct);
 
     private async Task UsageAsync(HttpResponse response, string id, long created, int prompt, int completion, CancellationToken ct)
     {

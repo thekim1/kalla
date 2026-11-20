@@ -60,7 +60,7 @@ waits on anything but the user. In order:
 2. **The next release (0.9.0) has its content** (*State*): the support chatbot's F3 and F4, deletes, the demo seed,
    the host-only Compose fix. It needs the preparation, a dry run with `e2e=true` (the browser tests ran on
    `thekim1`'s machine after the demo seed, #882, not in CI), and the user's go-ahead for the tag.
-3. **Open queue items without an input:** stream b's **B-52** (`ume.topics`, F8) and **B-53** (the purge of deleted
+3. **Open queue items without an input:** stream b's **B-52** (`kalla.topics`, F8) and **B-53** (the purge of deleted
    sources' and knowledge bases' rows); stream a's **A-37** (the 14-day purge of documents removed from a living
    source, designed and never built) and **A-38** (evaluation questions whose expected documents are gone, which
    starts with what the design says). `thekim1`'s machine has been taking both streams' items; say on the issue
@@ -224,7 +224,7 @@ On `~/research/rag`, as the main session, beside `thekim1`'s machine building st
   the old rag-api and rag-admin) and `ContinueRuns` (additive); *Rolling update: no*.
 - **What a deployer types in Portainer:** 1 value since 0.7.0 (`UME_DOMAIN`, no secret).
 - **On `main` after `faa001dd`, unreleased** (notes in `changes/`, 13 files): source dates on citations (B-47) and
-  the escalation hand-off `ume.escalation` (B-48), with the unavailable text's links (B-49); delete a knowledge
+  the escalation hand-off `kalla.escalation` (B-48), with the unavailable text's links (B-49); delete a knowledge
   base, a source (B-50, A-36: the worker's `delete-source` and the nightly purge) and an assistant (B-51), names
   free at once; the dev seed's demo knowledge base and *Demo-assistent* (#877); rag-admin starting without a domain
   (#865); the Geist fonts (#871); the wildcard guidance. Also the website (GitHub Pages, #868, #870). **Migrations

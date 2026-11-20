@@ -16,7 +16,7 @@ totals  reads the CSV after the reviewers graded it and computes the four go-liv
         <= 10 %, off-topic questions answered "not found" >= 80 %. Exit 0 when every measure passes, 1 when one fails,
         2 when the file is not completely or not consistently graded.
 
-The API key (an integration key, ume-rag-sk-...) comes from --key-file or the UME_RAG_API_KEY environment variable,
+The API key (an integration key, kalla-sk-...) comes from --key-file or the UME_RAG_API_KEY environment variable,
 never from an argument; it is never printed or written, and any server text that echoes it is redacted.
 """
 
@@ -660,7 +660,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     answer.add_argument(
         "--key-file",
         type=Path,
-        help=f"file holding the integration key (ume-rag-sk-...); else ${KEY_ENV}; never printed",
+        help=f"file holding the integration key (kalla-sk-...); else ${KEY_ENV}; never printed",
     )
     answer.add_argument(
         "--not-found-text",

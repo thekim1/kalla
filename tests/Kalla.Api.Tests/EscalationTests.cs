@@ -9,14 +9,14 @@ namespace Kalla.Api.Tests;
 /// </summary>
 public sealed class EscalationTests
 {
-    private static JsonElement Body(string ume) =>
-        JsonDocument.Parse($$"""{"model":"bygg","messages":[{"role":"user","content":"VPN-klienten ger fel 809."}],"ume":{{ume}}}""").RootElement.Clone();
+    private static JsonElement Body(string kalla) =>
+        JsonDocument.Parse($$"""{"model":"bygg","messages":[{"role":"user","content":"VPN-klienten ger fel 809."}],"kalla":{{kalla}}}""").RootElement.Clone();
 
     [Theory]
     [InlineData("""{"escalation":true}""", true)]
     [InlineData("""{"escalation":false}""", false)]
     [InlineData("""{}""", false)]
-    public void The_member_is_a_boolean(string ume, bool expected) => ChatRequestParser.Parse(Body(ume)).Kalla!.Escalation.ShouldBe(expected);
+    public void The_member_is_a_boolean(string kalla, bool expected) => ChatRequestParser.Parse(Body(kalla)).Kalla!.Escalation.ShouldBe(expected);
 
     [Theory]
     [InlineData("\"yes\"")]
@@ -25,7 +25,7 @@ public sealed class EscalationTests
     public void Anything_but_true_or_false_is_refused(string value)
     {
         var refused = Should.Throw<ChatException>(() => ChatRequestParser.Parse(Body($$"""{"escalation":{{value}}}""")));
-        (refused.Status, refused.Code, refused.Param).ShouldBe((400, "invalid_request", "ume.escalation"));
+        (refused.Status, refused.Code, refused.Param).ShouldBe((400, "invalid_request", "kalla.escalation"));
     }
 
     [Theory]

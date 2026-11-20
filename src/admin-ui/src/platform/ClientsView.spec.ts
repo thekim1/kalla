@@ -55,7 +55,7 @@ describe('Apps and keys page (admin design §5.9, §5.9.1)', () => {
     setActivePinia(createPinia())
     route.query = { tab: 'keys' }
     const key = (id: string, name: string, clientId: string, clientName: string, status: string, lastUsedAt: string | null = null) =>
-      ({ id, name, clientId, clientName, status, prefix: `ume-rag-sk-${id}`, expiresAt: null, lastUsedAt }) as ApiKey
+      ({ id, name, clientId, clientName, status, prefix: `kalla-sk-${id}`, expiresAt: null, lastUsedAt }) as ApiKey
     vi.spyOn(api.clients, 'list').mockResolvedValue([])
     const list = vi.spyOn(api.keys, 'list').mockResolvedValue([
       key('k1', 'Webb key', 'c1', 'Webb', 'active', new Date().toISOString()), key('k2', 'Old key', 'c2', 'Intranät', 'revoked'),
@@ -73,7 +73,7 @@ describe('Apps and keys page (admin design §5.9, §5.9.1)', () => {
     const rows = () => wrapper.get('[data-test=all-keys]').findAll('tbody tr')
     expect(rows()).toHaveLength(2)
     expect(rows()[0]!.text()).toContain('Webb')
-    expect(rows()[0]!.text()).toContain('ume-rag-sk-k1')
+    expect(rows()[0]!.text()).toContain('kalla-sk-k1')
     expect(rows()[0]!.text()).not.toContain(L.neverUsed)
     expect(rows()[1]!.text()).toContain(L.keyStatus.revoked)
     expect(rows()[1]!.text()).toContain(L.neverUsed)

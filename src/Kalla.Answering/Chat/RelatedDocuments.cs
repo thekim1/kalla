@@ -4,7 +4,7 @@ using Kalla.Domain.Retrieval;
 namespace Kalla.Answering.Chat;
 
 /// <summary>
-/// One entry of <c>ume.related_documents</c> (chat design §3.8, §9.7): the document, its title and link by the citation rule,
+/// One entry of <c>kalla.related_documents</c> (chat design §3.8, §9.7): the document, its title and link by the citation rule,
 /// its collection's slug, its 1-based position in the list, whether the answer cites it with which display number, and the
 /// citation's dates (knowledge §10.1: <c>modified</c> by the source's own date, <c>checked</c> for a crawled page; each
 /// omitted when null).
@@ -21,7 +21,7 @@ public sealed record RelatedDocument(
     [property: JsonPropertyName("checked"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? Checked = null);
 
 /// <summary>
-/// The answer's <c>ume</c> member (chat design §3.8): the turn's outcome and whether its sources came from keyword search only,
+/// The answer's <c>kalla</c> member (chat design §3.8): the turn's outcome and whether its sources came from keyword search only,
 /// then <c>related_documents</c>, <c>follow_ups</c>, <c>escalation</c> and <c>topics</c> when asked for (absent otherwise). The names are fixed
 /// here, so the JSON answer and the stream's chunk write the same member whatever their serializer's naming policy.
 /// </summary>
@@ -34,11 +34,11 @@ public sealed record KallaAnswer(
     [property: JsonPropertyName("topics"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Topics = null)
 {
     /// <summary>
-    /// The <c>ume</c> member of <paramref name="plan"/>'s answer, once it has ended (<paramref name="cited"/> complete), as the
-    /// first <c>ume</c> chunk carries it (§3.8). Follow-up suggestions asked for are <c>[]</c> here when they are skipped before
+    /// The <c>kalla</c> member of <paramref name="plan"/>'s answer, once it has ended (<paramref name="cited"/> complete), as the
+    /// first <c>kalla</c> chunk carries it (§3.8). Follow-up suggestions asked for are <c>[]</c> here when they are skipped before
     /// any call; with <paramref name="followUpsPending"/> the call is still to come and <c>follow_ups</c> is left for it.
     /// <paramref name="escalation"/> is the escalation member when it goes in this chunk (null: not asked, or its summary call
-    /// is still to come). With <c>ume.topics</c> asked, <c>topics</c> is <see cref="ChatPlan.SearchedTopics"/>.
+    /// is still to come). With <c>kalla.topics</c> asked, <c>topics</c> is <see cref="ChatPlan.SearchedTopics"/>.
     /// </summary>
     public static KallaAnswer For(ChatPlan plan, IReadOnlyList<PromptSource> cited, KallaRequest asked, bool followUpsPending, EscalationMember? escalation = null)
     {
@@ -52,7 +52,7 @@ public sealed record KallaAnswer(
 }
 
 /// <summary>
-/// The second <c>ume</c> chunk (§3.8 Delivery): the members whose calls ran after the answer, <c>follow_ups</c> (§9.8) and
+/// The second <c>kalla</c> chunk (§3.8 Delivery): the members whose calls ran after the answer, <c>follow_ups</c> (§9.8) and
 /// <c>escalation</c> (§9.9); each absent when it went in the first chunk or was not asked for.
 /// </summary>
 public sealed record KallaLater(
@@ -60,7 +60,7 @@ public sealed record KallaLater(
     [property: JsonPropertyName("escalation"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] EscalationMember? Escalation);
 
 /// <summary>
-/// <c>ume.related_documents</c> (chat design §9.7), from the retrieval the answer was built from: no second search, no
+/// <c>kalla.related_documents</c> (chat design §9.7), from the retrieval the answer was built from: no second search, no
 /// embedding, no SQL statement, no model call.
 /// </summary>
 public static class RelatedDocuments

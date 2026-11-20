@@ -66,7 +66,7 @@ public static class DevSeeder
 
     /// <summary>
     /// The client <see cref="DevClientName"/> (<c>open-webui</c>, ceiling <c>internal</c>, no history) with the key
-    /// <c>ume-rag-sk-</c> + <paramref name="devKey"/> (the AppHost's <c>dev-key</c> parameter, 43 base62 characters), hashed
+    /// <c>kalla-sk-</c> + <paramref name="devKey"/> (the AppHost's <c>dev-key</c> parameter, 43 base62 characters), hashed
     /// with the deployment's pepper as every key (identity §6.1): the development deployment's own Open WebUI client, made and
     /// kept by <see cref="OpenWebUiClientSeeder"/> as a deployment's is (identity §5.2). <paramref name="portalUrl"/>
     /// (<c>Seed:DevClientPortalUrl</c>, the AppHost's Open WebUI) is the client's <c>PortalUrl</c>, the assistant page's "Open

@@ -21,7 +21,7 @@ namespace Kalla.Api.Tests;
 /// The escalation hand-off through the chat role (chat design §3.8, §9.9, §17, §18.9; Decisions "Escalation hand-off") on the
 /// knowledge fixture: the route for not-found and general-knowledge turns, <c>null</c> for an answered one, one
 /// <c>escalation</c> call at the condense ceiling from the user's message, its output through the accept rule, the second
-/// <c>ume</c> chunk shared with the follow-ups (both calls at once), the skips without a call, the failures as a null summary,
+/// <c>kalla</c> chunk shared with the follow-ups (both calls at once), the skips without a call, the failures as a null summary,
 /// and nothing of the summary in logs or the stored turn.
 /// </summary>
 public sealed partial class ChatApiTests
@@ -170,10 +170,10 @@ public sealed partial class ChatApiTests
         using var listener = EscalationCounter(api, counted);
         using var client = Client(api, db.IntegrationKey);
 
-        var (body, ume) = await KallaAnswerAsync(await AskUme(client, Moon, """{"escalation":true}"""));
-        ume.GetProperty("outcome").GetString().ShouldBe("not-found");
-        Members(ume).ShouldBe(["outcome", "degraded", "escalation"]);
-        var escalation = ume.GetProperty("escalation");
+        var (body, kalla) = await KallaAnswerAsync(await AskUme(client, Moon, """{"escalation":true}"""));
+        kalla.GetProperty("outcome").GetString().ShouldBe("not-found");
+        Members(kalla).ShouldBe(["outcome", "degraded", "escalation"]);
+        var escalation = kalla.GetProperty("escalation");
         Members(escalation).ShouldBe(["reason", "contacts", "summary"]);
         escalation.GetProperty("reason").GetString().ShouldBe("not-found");
         Contacts(escalation).ShouldBe([("IT-support, 090-16 10 00", "https://www.umea.se/it")]); // the link's title is the assistant's own
@@ -201,9 +201,9 @@ public sealed partial class ChatApiTests
         await using var api = EscalationHost(calls, new FakeTimeProvider(DateTimeOffset.UtcNow), logs);
         using var client = Client(api, db.IntegrationKey);
 
-        var (_, ume) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"escalation":true}"""));
-        ume.GetProperty("outcome").GetString().ShouldBe("answered");
-        ume.GetProperty("escalation").ValueKind.ShouldBe(JsonValueKind.Null);
+        var (_, kalla) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"escalation":true}"""));
+        kalla.GetProperty("outcome").GetString().ShouldBe("answered");
+        kalla.GetProperty("escalation").ValueKind.ShouldBe(JsonValueKind.Null);
         calls.ShouldNotContain(c => c.Step == Escalation.Step);
 
         // Not asked (false or absent): no member at all.
@@ -224,12 +224,12 @@ public sealed partial class ChatApiTests
         response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
         var events = Events(await response.Content.ReadAsStringAsync(Ct));
         var final = events.FindIndex(e => FinishReason(e) == "stop");
-        var umeChunks = events.Select((e, i) => (e, i)).Where(x => x.e.TryGetProperty("ume", out _)).ToList();
-        umeChunks.Select(x => x.i).ShouldBe([final + 1, final + 2]);
+        var kallaChunks = events.Select((e, i) => (e, i)).Where(x => x.e.TryGetProperty("kalla", out _)).ToList();
+        kallaChunks.Select(x => x.i).ShouldBe([final + 1, final + 2]);
         events[final + 3].TryGetProperty("usage", out _).ShouldBeTrue();
-        umeChunks[0].e.GetProperty("ume").GetProperty("outcome").GetString().ShouldBe("answered-general");
-        Members(umeChunks[0].e.GetProperty("ume")).ShouldBe(["outcome", "degraded"]);
-        var later = umeChunks[1].e.GetProperty("ume");
+        kallaChunks[0].e.GetProperty("kalla").GetProperty("outcome").GetString().ShouldBe("answered-general");
+        Members(kallaChunks[0].e.GetProperty("kalla")).ShouldBe(["outcome", "degraded"]);
+        var later = kallaChunks[1].e.GetProperty("kalla");
         Members(later).ShouldBe(["follow_ups", "escalation"]);
         FollowUpList(later).Length.ShouldBe(2);
         var escalation = later.GetProperty("escalation");
@@ -255,8 +255,8 @@ public sealed partial class ChatApiTests
 
         using var response = await AskUme(client, Moon, """{"escalation":true}""", stream: true, usage: true);
         response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
-        var ume = Events(await response.Content.ReadAsStringAsync(Ct)).Where(e => e.TryGetProperty("ume", out _)).ShouldHaveSingleItem().GetProperty("ume");
-        var escalation = ume.GetProperty("escalation");
+        var kalla = Events(await response.Content.ReadAsStringAsync(Ct)).Where(e => e.TryGetProperty("kalla", out _)).ShouldHaveSingleItem().GetProperty("kalla");
+        var escalation = kalla.GetProperty("escalation");
         escalation.GetProperty("reason").GetString().ShouldBe("not-found");
         Contacts(escalation).Length.ShouldBe(1);
         escalation.GetProperty("summary").ValueKind.ShouldBe(JsonValueKind.Null);
@@ -273,15 +273,15 @@ public sealed partial class ChatApiTests
             chatSettings: ""","notFound":{"links":[{"title":"Kontaktcenter","url":"https://www.umea.se/kontakt"}]}"""))
         {
             using var client = Client(api, db.IntegrationKey);
-            var (_, ume) = await KallaAnswerAsync(await AskUme(client, Moon, """{"escalation":true}"""));
-            Contacts(ume.GetProperty("escalation")).ShouldBe([("Kontaktcenter", "https://www.umea.se/kontakt")]);
+            var (_, kalla) = await KallaAnswerAsync(await AskUme(client, Moon, """{"escalation":true}"""));
+            Contacts(kalla.GetProperty("escalation")).ShouldBe([("Kontaktcenter", "https://www.umea.se/kontakt")]);
         }
 
         await using (var api = EscalationHost(calls, new FakeTimeProvider(DateTimeOffset.UtcNow), logs, notFound: null))
         {
             using var client = Client(api, db.IntegrationKey);
-            var (_, ume) = await KallaAnswerAsync(await AskUme(client, Moon, """{"escalation":true}"""));
-            Contacts(ume.GetProperty("escalation")).ShouldBeEmpty();
+            var (_, kalla) = await KallaAnswerAsync(await AskUme(client, Moon, """{"escalation":true}"""));
+            Contacts(kalla.GetProperty("escalation")).ShouldBeEmpty();
         }
     }
 
@@ -305,9 +305,9 @@ public sealed partial class ChatApiTests
                 chatSettings: platformLinks, embeddingModel: "fake-wrong-residency-embed");
             using var client = Client(api, db.IntegrationKey);
 
-            var (body, ume) = await KallaAnswerAsync(await AskUme(client, question, """{"escalation":true}"""));
-            ume.GetProperty("outcome").GetString().ShouldBe("unavailable");
-            var escalation = ume.GetProperty("escalation");
+            var (body, kalla) = await KallaAnswerAsync(await AskUme(client, question, """{"escalation":true}"""));
+            kalla.GetProperty("outcome").GetString().ShouldBe("unavailable");
+            var escalation = kalla.GetProperty("escalation");
             escalation.GetProperty("reason").GetString().ShouldBe("unavailable");
             Contacts(escalation).ShouldBe([(title, url)]);
             body.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString()
@@ -325,8 +325,8 @@ public sealed partial class ChatApiTests
         using var listener = EscalationCounter(api, counted);
         using var client = Client(api, db.IntegrationKey);
 
-        var (_, ume) = await KallaAnswerAsync(await AskUme(client, Moon, """{"escalation":true}"""));
-        var escalation = ume.GetProperty("escalation");
+        var (_, kalla) = await KallaAnswerAsync(await AskUme(client, Moon, """{"escalation":true}"""));
+        var escalation = kalla.GetProperty("escalation");
         escalation.GetProperty("summary").ValueKind.ShouldBe(JsonValueKind.Null);
         Contacts(escalation).Length.ShouldBe(1); // the route still comes
         counted.ShouldBe(["not-found/timeout"]);
@@ -343,8 +343,8 @@ public sealed partial class ChatApiTests
             "Användaren frågar om avståndet till " + Marker + " och vill ha hjälp.");
         using var client = Client(api, db.IntegrationKey);
 
-        var (_, ume) = await KallaAnswerAsync(await AskUme(client, Moon, """{"escalation":true}"""));
-        ume.GetProperty("escalation").GetProperty("summary").GetString()!.ShouldContain(Marker);
+        var (_, kalla) = await KallaAnswerAsync(await AskUme(client, Moon, """{"escalation":true}"""));
+        kalla.GetProperty("escalation").GetProperty("summary").GetString()!.ShouldContain(Marker);
         logs.Text.ShouldNotContain(Marker);
     }
 }

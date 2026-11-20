@@ -50,9 +50,9 @@ public sealed partial class ChatApiTests
         WireMatchesAsync(name, stream, usage, openWebUi, question, level, upstream, null, update: true);
 
     /// <summary>
-    /// The <c>ume</c> extension on the wire (chat design §3.8, §18.9; M-7): the JSON answer's top-level <c>ume</c> and the
-    /// stream's <c>ume</c> chunk after the final chunk and before usage and <c>[DONE]</c>, for each outcome, a degraded answer,
-    /// and no chunk after an error. An Open WebUI client's request with an invalid <c>ume</c> streams byte for byte as the one
+    /// The <c>kalla</c> extension on the wire (chat design §3.8, §18.9; M-7): the JSON answer's top-level <c>kalla</c> and the
+    /// stream's <c>kalla</c> chunk after the final chunk and before usage and <c>[DONE]</c>, for each outcome, a degraded answer,
+    /// and no chunk after an error. An Open WebUI client's request with an invalid <c>kalla</c> streams byte for byte as the one
     /// without (the recorded <c>sse-cited-owui</c>, never rewritten from here).
     /// </summary>
     [Theory]
@@ -65,27 +65,27 @@ public sealed partial class ChatApiTests
     [InlineData("sse-ume-mid-stream-error", true, true, false, "Behöver jag bygglov för en altan högre än 1,2 meter?", null, Upstream.MidStreamError,
         """{"related_documents":5}""")]
     [InlineData("sse-cited-owui", true, false, true, "Behöver jag bygglov för en altan högre än 1,2 meter?", null, Upstream.Fake, """{"foo":1,"related_documents":99}""")]
-    public Task The_ume_wire_matches_its_golden_file(string name, bool stream, bool usage, bool openWebUi, string question, string? level, Upstream upstream, string ume) =>
-        WireMatchesAsync(name, stream, usage, openWebUi, question, level, upstream, JsonDocument.Parse(ume).RootElement.Clone(), update: !openWebUi);
+    public Task The_ume_wire_matches_its_golden_file(string name, bool stream, bool usage, bool openWebUi, string question, string? level, Upstream upstream, string kalla) =>
+        WireMatchesAsync(name, stream, usage, openWebUi, question, level, upstream, JsonDocument.Parse(kalla).RootElement.Clone(), update: !openWebUi);
 
     /// <summary>
     /// Follow-up suggestions on the wire (chat design §3.8, §9.8; M-8), with a condense model and FakeGateway's default
     /// <c>follow-ups</c> answer: the JSON answer's <c>follow_ups</c> after <c>related_documents</c>, and in the stream a second
-    /// <c>ume</c> chunk with <c>follow_ups</c> alone after the first, before usage and <c>[DONE]</c>; a fixed text gets
-    /// <c>[]</c> in its only <c>ume</c> chunk, without a call.
+    /// <c>kalla</c> chunk with <c>follow_ups</c> alone after the first, before usage and <c>[DONE]</c>; a fixed text gets
+    /// <c>[]</c> in its only <c>kalla</c> chunk, without a call.
     /// </summary>
     [Theory]
     [InlineData("json-ume-follow-ups", false, false, "Behöver jag bygglov för en altan högre än 1,2 meter?", """{"related_documents":2,"follow_ups":3}""")]
     [InlineData("sse-ume-follow-ups", true, true, "Behöver jag bygglov för en altan högre än 1,2 meter?", """{"related_documents":2,"follow_ups":3}""")]
     [InlineData("sse-ume-follow-ups-not-found", true, true, "Hur långt är det till månen i kilometer?", """{"follow_ups":3}""")]
-    public Task The_follow_up_wire_matches_its_golden_file(string name, bool stream, bool usage, string question, string ume) =>
-        WireMatchesAsync(name, stream, usage, false, question, null, Upstream.Fake, JsonDocument.Parse(ume).RootElement.Clone(), update: true, condenseModel: true);
+    public Task The_follow_up_wire_matches_its_golden_file(string name, bool stream, bool usage, string question, string kalla) =>
+        WireMatchesAsync(name, stream, usage, false, question, null, Upstream.Fake, JsonDocument.Parse(kalla).RootElement.Clone(), update: true, condenseModel: true);
 
     /// <summary>
-    /// One request against <see cref="WireHost"/> compared with its golden file; the request carries <paramref name="ume"/> only
+    /// One request against <see cref="WireHost"/> compared with its golden file; the request carries <paramref name="kalla"/> only
     /// when given, so the files without it pin today's bytes. <paramref name="update"/> lets <c>UME_RAG_UPDATE_GOLDEN=1</c> write the file.
     /// </summary>
-    private async Task WireMatchesAsync(string name, bool stream, bool usage, bool openWebUi, string question, string? level, Upstream upstream, JsonElement? ume,
+    private async Task WireMatchesAsync(string name, bool stream, bool usage, bool openWebUi, string question, string? level, Upstream upstream, JsonElement? kalla,
         bool update, bool condenseModel = false)
     {
         await using var api = WireHost(level, openWebUi, upstream, condenseModel);
@@ -97,8 +97,8 @@ public sealed partial class ChatApiTests
 
         var streamOptions = usage ? new { include_usage = true } : null;
         var messages = new[] { new { role = "user", content = question } };
-        object request = ume is { } extension
-            ? new { model = "bygg", stream, stream_options = streamOptions, messages, ume = extension }
+        object request = kalla is { } extension
+            ? new { model = "bygg", stream, stream_options = streamOptions, messages, kalla = extension }
             : new { model = "bygg", stream, stream_options = streamOptions, messages };
         using var response = await client.PostAsJsonAsync("/v1/chat/completions", request, Ct);
         var wire = new StringBuilder();
@@ -142,7 +142,7 @@ public sealed partial class ChatApiTests
         wire = ChatIdPattern().Replace(wire, "chatcmpl-00000000000000000000000000000000");
         wire = CreatedPattern().Replace(wire, "\"created\":0");
         wire = RequestIdPattern().Replace(wire, "\"request_id\":\"MASKED\"");
-        // The fixture's document ids, collection slugs and download grants (the ume related documents) change per run.
+        // The fixture's document ids, collection slugs and download grants (the kalla related documents) change per run.
         wire = UuidPattern().Replace(wire, "00000000-0000-0000-0000-000000000000");
         wire = SlugPattern().Replace(wire, "\"c-MASKED\"");
         wire = GrantPattern().Replace(wire, "grant=g1.MASKED");

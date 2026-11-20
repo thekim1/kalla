@@ -18,13 +18,13 @@ week or two, **L** several weeks.
 | # | Feature | Size | Builds on |
 |---|---|---|---|
 | F1 | Exact identifier search for error codes and product names | M | retrieval, RRF fusion |
-| F2 | Ticket triage as structured output (`ume.triage`) | S–M | the `ume` extension, the condense model |
-| F3 | Escalation hand-off (`ume.escalation`) | S | `ume.outcome`, the assistant's contact links |
+| F2 | Ticket triage as structured output (`kalla.triage`) | S–M | the `kalla` extension, the condense model |
+| F3 | Escalation hand-off (`kalla.escalation`) | S | `kalla.outcome`, the assistant's contact links |
 | F4 | Freshness on every source (updated and checked dates) | S | crawl freshness, citations |
-| F5 | Operational notices (`ume.notices`) | M | a short-interval crawl of the IT status page, retrieval |
+| F5 | Operational notices (`kalla.notices`) | M | a short-interval crawl of the IT status page, retrieval |
 | F6 | Downvotes traced to the cited documents | M | feedback import, citations |
 | F7 | Content-gap report from outcomes | M | `Messages.Outcome`, daily totals |
-| F8 | Narrow by topic per request (`ume.topics`) | S | topics in retrieval |
+| F8 | Narrow by topic per request (`kalla.topics`) | S | topics in retrieval |
 | F9 | Owner digest for knowledge at risk | S–M | run reports, deletion proposals, document states |
 | F10 | Cost per outcome | S | `AssistantDailyUsage` per step, outcomes |
 
@@ -47,22 +47,22 @@ first, below), and **F5** and **F9** last.
 - **Eneo:** has no keyword search in the answer path (`keyword_search` has no callers; grep `tsvector\|ts_rank\|pg_trgm`
   finds only audit indexes).
 
-### F2. Ticket triage as structured output: `ume.triage` (S–M)
+### F2. Ticket triage as structured output: `kalla.triage` (S–M)
 
 - **User value:** with the answer, the app gets `{category, system, urgency_hint, missing: ["device", "error text"]}`.
   The frontend pre-fills the ticket fields and asks for the missing facts.
 - **Fit:** in `Kalla.Answering`, one call on the condense model, run like `FollowUps.cs` (its own budget, second
-  `ume` chunk, `[]` on failure, never stored). It uses the same personal-data and no-link filters, with a category list
+  `kalla` chunk, `[]` on failure, never stored). It uses the same personal-data and no-link filters, with a category list
   set per assistant version. It runs on the assistant's gateway key, so its cost is attributed per step.
 - **Eneo:** has no structured answer metadata in the conversation API (grep `triage`: only a help-assistant template;
   `response_format\|json_schema` in `B/conversations`, `B/assistants`: only OpenAPI deprecation flags).
 
-### F3. Escalation hand-off: `ume.escalation` (S)
+### F3. Escalation hand-off: `kalla.escalation` (S)
 
 - **User value:** when the outcome is `not-found` or `answered-general`, the app gets the escalation route (queue
   name, link from the assistant's not-found contacts) and a short hand-off summary to paste into the second-line
   ticket. Nobody retypes the ticket.
-- **Fit:** reuses `NotFound` contact links (chat §10.1), `ume.outcome` and the condense model for the summary. The
+- **Fit:** reuses `NotFound` contact links (chat §10.1), `kalla.outcome` and the condense model for the summary. The
   output filter's `allowedLinkHosts` keeps the links honest. Ticket-system write-back stays "later" (`07-rollout.md`).
 - **Eneo:** lacks it (grep `ticket\|escalat\|handoff\|servicedesk\|topdesk\|jira\|servicenow`: hits only in module
   login and template text, `B/modules/module.py:37`).
@@ -77,13 +77,13 @@ first, below), and **F5** and **F9** last.
 - **Eneo:** lacks it (no dates in `frontend/apps/web-next/src/features/chat/activity-sources.tsx`, `answer-links.tsx`;
   grep `updated\|modified\|ago` there).
 
-### F5. Operational notices: `ume.notices` (M)
+### F5. Operational notices: `kalla.notices` (M)
 
 - **User value:** during an outage ("Teams down since 08:10"), every matching question first gets the notice and the
   status link, before stale self-help steps.
 - **Fit:** a `notice` knowledge base kept fresh by a short-interval crawl of the IT status page (the URL-list source
   with a 5-minute schedule) or by admin-entered items with an expiry. A matching notice (topics or keyword hit) is
-  returned in `ume.notices` and placed in the prompt as data. Reuses the source types, the scheduler, topics and the
+  returned in `kalla.notices` and placed in the prompt as data. Reuses the source types, the scheduler, topics and the
   output filter.
 - **Eneo:** lacks it (grep `incident\|outage\|announcement\|banner\|maintenance\|motd`: only a connection banner and
   a crawl notice in `frontend/apps/web-next/src/features/knowledge/notices.tsx`).
@@ -111,12 +111,12 @@ first, below), and **F5** and **F9** last.
   report (grep `content.?gap\|knowledge.?gap`). Insights Q&A over stored conversations (`analysis_router.py:667`) is a
   manual, partial substitute.
 
-### F8. Narrow by topic per request: `ume.topics` (S)
+### F8. Narrow by topic per request: `kalla.topics` (S)
 
 - **User value:** the support app has a "Printers / Teams / Accounts" selector, and the search stays inside that topic.
   This raises precision on short tickets.
 - **Fit:** topics are already GIN-indexed tags in the retrieval SQL (`SearchScope.cs:26-30`). A request may only
-  narrow the assistant's linked topics, never widen them, the same rule as `ume.general_knowledge`.
+  narrow the assistant's linked topics, never widen them, the same rule as `kalla.general_knowledge`.
 - **Eneo:** has no metadata or tag filter at search time (`B/info_blobs/source_metadata.py:1-7`). The TOOL mode's
   `within=` narrows to one source chosen by the model, not by the client (`B/internal_mcp/knowledge.py:706-709`).
 

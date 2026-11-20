@@ -27,8 +27,8 @@ export function appHostSecret(name: string, environment: string): string {
   return value
 }
 
-/** The seeded Open WebUI (dev) client's key (DevSeeder: ume-rag-sk- + the AppHost's dev-key). */
-export const devClientKey = () => `ume-rag-sk-${appHostSecret('dev-key', 'E2E_DEV_KEY')}`
+/** The seeded Open WebUI (dev) client's key (DevSeeder: kalla-sk- + the AppHost's dev-key). */
+export const devClientKey = () => `kalla-sk-${appHostSecret('dev-key', 'E2E_DEV_KEY')}`
 
 /**
  * Types a secret into a field without a locator `fill`, whose value would show in the call log of a failed assertion. The

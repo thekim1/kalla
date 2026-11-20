@@ -277,7 +277,7 @@ public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
         result.GetProperty("gateway").GetProperty("inputTokens").GetInt32().ShouldBeGreaterThan(0);
         result.GetProperty("generalKnowledge").GetString().ShouldBe("fallback"); // nothing asked: the version's level
 
-        // #726 (§4.9): an asked level only tightens the version's, as a chat request's ume.general_knowledge does (chat §3.8).
+        // #726 (§4.9): an asked level only tightens the version's, as a chat request's kalla.general_knowledge does (chat §3.8).
         foreach (var (asked, outcome, effective) in new[] { ("open", "answered-general", "fallback"), ("supplement", "not-found", "supplement"), ("off", "not-found", "off") })
         {
             using var tested = await editor.PostAsJsonAsync($"/api/assistants/{assistant.Id}/test",

@@ -344,7 +344,7 @@ public sealed class IngestionSchemaTests(RagDatabaseFixture database)
     [Fact]
     public async Task The_dev_seeder_adds_the_open_webui_client_and_its_key_once()
     {
-        // repo-and-deployment §4 "Seed": client Open WebUI (dev) at ceiling internal with key ume-rag-sk- + dev-key (#164).
+        // repo-and-deployment §4 "Seed": client Open WebUI (dev) at ceiling internal with key kalla-sk- + dev-key (#164).
         await using var db = TestPostgres.Context(database.Connection(Migrator));
         var hasher = new Domain.Services.KeyHasher(System.Text.Encoding.UTF8.GetBytes(new string('p', 32)));
         var devKey = new string('D', 43);
@@ -358,7 +358,7 @@ public sealed class IngestionSchemaTests(RagDatabaseFixture database)
         client.IsManagedByDeployment.ShouldBeTrue(); // the development deployment's own Open WebUI client (identity §5.2)
         var key = client.Keys.ShouldHaveSingleItem();
         hasher.Verify(Domain.Services.KeyHasher.SecretPrefix + devKey, key.KeyHash).ShouldBeTrue();
-        key.Prefix.ShouldBe("ume-rag-sk-DDDD");
+        key.Prefix.ShouldBe("kalla-sk-DDDD");
         await Should.ThrowAsync<InvalidOperationException>(() => DevSeeder.SeedDevClientAsync(db, hasher, "too-short", null, TimeProvider.System, Ct));
     }
 

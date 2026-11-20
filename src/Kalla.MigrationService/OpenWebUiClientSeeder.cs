@@ -9,7 +9,7 @@ namespace Kalla.MigrationService;
 
 /// <summary>
 /// The deployment's own Open WebUI client (identity design §5.2; M-17 C4, Decisions "Deploy configuration"): the deployment
-/// generates an <c>ume-rag-sk-</c> key (<c>rag-bootstrap</c> in the Portainer stack, <c>init-deployment.sh</c> with Compose,
+/// generates an <c>kalla-sk-</c> key (<c>rag-bootstrap</c> in the Portainer stack, <c>init-deployment.sh</c> with Compose,
 /// the AppHost's dev key) and gives it to Open WebUI and, as <c>OpenWebUi:ApiKey</c>, to rag-migrate. This makes sure, on every
 /// run, that the <c>open-webui</c> client marked <see cref="Client.IsManagedByDeployment"/> under its name exists (found by kind and
 /// name, #712; the name is not editable) and that exactly that key is active on it; any other key of it is revoked (a new key from
@@ -45,7 +45,7 @@ public static class OpenWebUiClientSeeder
         ArgumentNullException.ThrowIfNull(clock);
         if (KeyHasher.KindOf(key) != KeyKinds.Secret)
         {
-            throw new InvalidOperationException("OpenWebUi:ApiKey must be an ume-rag-sk- key: the prefix and 43 base62 characters.");
+            throw new InvalidOperationException("OpenWebUi:ApiKey must be an kalla-sk- key: the prefix and 43 base62 characters.");
         }
 
         var hash = hasher.Hash(key);

@@ -139,14 +139,14 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
         var models = json.RootElement.GetProperty("data").EnumerateArray().ToDictionary(m => m.GetProperty("id").GetString()!, m => m.Clone());
 
-        var alias = models["fors/chat-standard"].GetProperty("ume");
+        var alias = models["fors/chat-standard"].GetProperty("kalla");
         alias.GetProperty("type").GetString().ShouldBe("alias");
         alias.GetProperty("kind").GetString().ShouldBe("Chat");
         var deployment = models["bge-m3"];
         deployment.GetProperty("owned_by").GetString().ShouldBe("fake-onprem");
-        deployment.GetProperty("ume").GetProperty("type").GetString().ShouldBe("model");
-        deployment.GetProperty("ume").GetProperty("kind").GetString().ShouldBe("Embedding");
-        deployment.GetProperty("ume").GetProperty("residency").GetString().ShouldBe("OnPrem");
+        deployment.GetProperty("kalla").GetProperty("type").GetString().ShouldBe("model");
+        deployment.GetProperty("kalla").GetProperty("kind").GetString().ShouldBe("Embedding");
+        deployment.GetProperty("kalla").GetProperty("residency").GetString().ShouldBe("OnPrem");
     }
 
     [Fact]
@@ -563,9 +563,9 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
         return json.RootElement.GetProperty("data").EnumerateArray().ToDictionary(
             m => m.GetProperty("id").GetString()!,
-            m => m.GetProperty("ume").TryGetProperty("residencies", out var list)
+            m => m.GetProperty("kalla").TryGetProperty("residencies", out var list)
                 ? list.EnumerateArray().Select(r => r.GetString()!).ToArray()
-                : [m.GetProperty("ume").GetProperty("residency").GetString()!]);
+                : [m.GetProperty("kalla").GetProperty("residency").GetString()!]);
     }
 
     private async Task<List<float[]>> EmbedAsync(string body)

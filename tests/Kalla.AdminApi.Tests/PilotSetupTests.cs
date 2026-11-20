@@ -122,7 +122,7 @@ public sealed class PilotSetupTests(AdminDatabaseFixture database) : IDisposable
             HttpStatusCode.Created);
         var clientId = client.GetProperty("client").GetProperty("id").GetGuid();
         var key = await Ok(await admin.PostAsJsonAsync("/api/keys", new { clientId, name = "Open WebUI" }, Ct), HttpStatusCode.Created);
-        key.GetProperty("secret").GetString()!.ShouldStartWith("ume-rag-sk-");
+        key.GetProperty("secret").GetString()!.ShouldStartWith("kalla-sk-");
 
         // 3. The pilot collection, published.
         var collection = await Ok(await admin.PostAsJsonAsync("/api/collections", new { name = "Umeå kommun " + code, departmentId = department, classification = "public" }, Ct),

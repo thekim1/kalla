@@ -110,7 +110,7 @@ order this plan recommends them:
 ## 5. Steps
 
 1. A platform admin checks the department exists in the organisation sync and grants the support admins
-   `rag-department-admin` in Keycloak realm `ume` (admin §3.1; identity §11.2).
+   `rag-department-admin` in Keycloak realm `kalla` (admin §3.1; identity §11.2).
 2. The department admin creates the knowledge base: name, contact, level `internal` (admin §5.4 step 2).
 3. Adds the crawl source; preflight checks reachability, robots and sitemap (admin §5.4 steps 3–4).
 4. Previews up to five pages and files and checks the extracted text, sections and chunks (admin §5.4 step 5); adds

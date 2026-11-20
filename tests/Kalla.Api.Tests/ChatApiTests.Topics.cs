@@ -9,7 +9,7 @@ using Kalla.TestKit;
 namespace Kalla.Api.Tests;
 
 /// <summary>
-/// <c>ume.topics</c> through the chat role (chat design §3.8, §18.9 <i>Topics per request</i>; Decisions "Topics per request") on
+/// <c>kalla.topics</c> through the chat role (chat design §3.8, §18.9 <i>Topics per request</i>; Decisions "Topics per request") on
 /// the knowledge fixture, whose altan page carries the tag <c>altan</c> and whose upload and section pages carry none.
 /// </summary>
 public sealed partial class ChatApiTests
@@ -27,28 +27,28 @@ public sealed partial class ChatApiTests
         using var client = Client(api, db.IntegrationKey);
 
         // Without topics the whole link brings the section collection's pages beside the altan page.
-        var (_, ume) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"related_documents":10}"""));
-        ume.GetProperty("related_documents").GetArrayLength().ShouldBeGreaterThan(1);
+        var (_, kalla) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"related_documents":10}"""));
+        kalla.GetProperty("related_documents").GetArrayLength().ShouldBeGreaterThan(1);
 
         // "altan": the topic link keeps it, the whole link is searched for it; only the altan page carries it.
-        (_, ume) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"topics":["altan"],"related_documents":10}"""));
-        ume.GetProperty("outcome").GetString().ShouldBe("answered");
-        ume.GetProperty("topics").EnumerateArray().Select(t => t.GetString()).ShouldBe(["altan"]);
-        ume.GetProperty("related_documents").GetArrayLength().ShouldBe(1);
+        (_, kalla) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"topics":["altan"],"related_documents":10}"""));
+        kalla.GetProperty("outcome").GetString().ShouldBe("answered");
+        kalla.GetProperty("topics").EnumerateArray().Select(t => t.GetString()).ShouldBe(["altan"]);
+        kalla.GetProperty("related_documents").GetArrayLength().ShouldBe(1);
 
         // "konton": no topic link has it, so only the whole link is searched (for it), and nothing there carries it.
-        (_, ume) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"topics":["konton","altan"]}"""));
-        ume.GetProperty("topics").EnumerateArray().Select(t => t.GetString()).ShouldBe(["konton", "altan"]);
-        (_, ume) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"topics":["konton"]}"""));
-        ume.GetProperty("topics").EnumerateArray().Select(t => t.GetString()).ShouldBe(["konton"]);
-        ume.GetProperty("outcome").GetString().ShouldBe("not-found");
+        (_, kalla) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"topics":["konton","altan"]}"""));
+        kalla.GetProperty("topics").EnumerateArray().Select(t => t.GetString()).ShouldBe(["konton", "altan"]);
+        (_, kalla) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"topics":["konton"]}"""));
+        kalla.GetProperty("topics").EnumerateArray().Select(t => t.GetString()).ShouldBe(["konton"]);
+        kalla.GetProperty("outcome").GetString().ShouldBe("not-found");
 
         // [] and null change nothing: the answer carries no topics.
         foreach (var none in new[] { """{"topics":[]}""", """{"topics":null}""", "{}" })
         {
-            (_, ume) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, none));
-            ume.TryGetProperty("topics", out _).ShouldBeFalse();
-            ume.GetProperty("outcome").GetString().ShouldBe("answered");
+            (_, kalla) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, none));
+            kalla.TryGetProperty("topics", out _).ShouldBeFalse();
+            kalla.GetProperty("outcome").GetString().ShouldBe("answered");
         }
     }
 
@@ -62,10 +62,10 @@ public sealed partial class ChatApiTests
         await using var api = LongHost(calls, LongFault.None, new FakeTimeProvider(DateTimeOffset.UtcNow), logs, links: TopicLinks("skrivare"));
         using var client = Client(api, db.IntegrationKey);
 
-        var (_, ume) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"topics":["altan"],"related_documents":10}"""));
-        ume.GetProperty("outcome").GetString().ShouldBe("not-found");
-        ume.GetProperty("topics").EnumerateArray().Select(t => t.GetString()).ShouldBe(["altan"]); // searched by the whole link
-        ume.GetProperty("related_documents").GetArrayLength().ShouldBe(0);
+        var (_, kalla) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"topics":["altan"],"related_documents":10}"""));
+        kalla.GetProperty("outcome").GetString().ShouldBe("not-found");
+        kalla.GetProperty("topics").EnumerateArray().Select(t => t.GetString()).ShouldBe(["altan"]); // searched by the whole link
+        kalla.GetProperty("related_documents").GetArrayLength().ShouldBe(0);
         calls.ShouldNotContain(c => c.Step == "chat-answer"); // the not-found text, no answer call
     }
 
@@ -78,9 +78,9 @@ public sealed partial class ChatApiTests
             links: [new CollectionLink(db.PublicCollection, ["altan"]), new CollectionLink(db.SectionCollection, ["plank"])]);
         using var client = Client(api, db.IntegrationKey);
 
-        var (_, ume) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"topics":["okänt"]}"""));
-        ume.GetProperty("outcome").GetString().ShouldBe("not-found");
-        ume.GetProperty("topics").GetArrayLength().ShouldBe(0);
+        var (_, kalla) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, """{"topics":["okänt"]}"""));
+        kalla.GetProperty("outcome").GetString().ShouldBe("not-found");
+        kalla.GetProperty("topics").GetArrayLength().ShouldBe(0);
         calls.ShouldBeEmpty(); // no condense, no query embedding, no answer call
     }
 
@@ -91,17 +91,17 @@ public sealed partial class ChatApiTests
     [InlineData("""{"topics":["två ord"]}""")]
     [InlineData("""{"topics":[""]}""")]
     [InlineData("""{"topics":["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u"]}""")]
-    public async Task Invalid_topics_are_refused_before_any_model_call(string ume)
+    public async Task Invalid_topics_are_refused_before_any_model_call(string kalla)
     {
         var calls = new ConcurrentQueue<GatewayCall>();
         using var logs = new CapturingLoggerProvider();
         await using var api = LongHost(calls, LongFault.None, new FakeTimeProvider(DateTimeOffset.UtcNow), logs);
         using var client = Client(api, db.IntegrationKey);
 
-        using var response = await AskUme(client, AltanQuestion, ume);
+        using var response = await AskUme(client, AltanQuestion, kalla);
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         var error = (await response.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("error");
-        (error.GetProperty("code").GetString(), error.GetProperty("param").GetString()).ShouldBe(("invalid_request", "ume.topics"));
+        (error.GetProperty("code").GetString(), error.GetProperty("param").GetString()).ShouldBe(("invalid_request", "kalla.topics"));
         calls.ShouldBeEmpty();
     }
 
@@ -114,8 +114,8 @@ public sealed partial class ChatApiTests
         using var client = Client(api, db.IntegrationKey);
 
         var topics = JsonSerializer.Serialize(Enumerable.Range(0, 19).Select(i => "t" + i).Append("altan"));
-        var (_, ume) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, $$"""{"topics":{{topics}}}"""));
-        ume.GetProperty("outcome").GetString().ShouldBe("answered");
-        ume.GetProperty("topics").GetArrayLength().ShouldBe(20); // the whole link searches every asked topic
+        var (_, kalla) = await KallaAnswerAsync(await AskUme(client, AltanQuestion, $$"""{"topics":{{topics}}}"""));
+        kalla.GetProperty("outcome").GetString().ShouldBe("answered");
+        kalla.GetProperty("topics").GetArrayLength().ShouldBe(20); // the whole link searches every asked topic
     }
 }

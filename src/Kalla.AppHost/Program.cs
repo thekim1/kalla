@@ -486,9 +486,9 @@ if (File.Exists(Path.Combine(builder.AppHostDirectory, "..", "admin-ui", "packag
 
 // Open WebUI against rag-api (P1a item 15; chat design §4.3), OpenWebUi:Enabled (default true) in run mode. It connects with
 // the development deployment's own Open WebUI client (identity §5.2, M-17 C4): with Seed:Enabled the seeded "Open WebUI
-// (dev)" (DevSeeder.DevClientId, key ume-rag-sk- + dev-key); without it (e.g. the pilot stack run with Seed:Enabled=false,
+// (dev)" (DevSeeder.DevClientId, key kalla-sk- + dev-key); without it (e.g. the pilot stack run with Seed:Enabled=false,
 // #236) the key from the secret parameter openwebui-api-key (user secrets Parameters:openwebui-api-key, a whole
-// ume-rag-sk- key), which rag-migrate registers as that client (OpenWebUi__ApiKey). rag-api trusts the managed client's users.
+// kalla-sk- key), which rag-migrate registers as that client (OpenWebUi__ApiKey). rag-api trusts the managed client's users.
 // It forwards each user as an HS256 JWT that rag-api checks (identity §5.2). Local accounts sign in (the first is Open WebUI's admin); the pilot signs in
 // over OIDC through rag-openwebui in deploy/compose.rag.yaml (item 18). Same pin as that file; update both together.
 const string OpenWebUiImage = "ghcr.io/open-webui/open-webui";
@@ -506,7 +506,7 @@ if (builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue("OpenWe
     ReferenceExpression openWebUiApiKey;
     if (seeded)
     {
-        openWebUiApiKey = ReferenceExpression.Create($"ume-rag-sk-{devKey}");
+        openWebUiApiKey = ReferenceExpression.Create($"kalla-sk-{devKey}");
     }
     else
     {

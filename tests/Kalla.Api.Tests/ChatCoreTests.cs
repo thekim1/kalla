@@ -39,7 +39,7 @@ public sealed class ChatCoreTests
         // #712: rag-api disposes the body's JsonDocument right after parsing, so nothing parsed may point into it.
         ParsedChat parsed;
         using (var document = JsonDocument.Parse("""
-            {"model":"bygg","stream":true,"ume":{"related_documents":2,"follow_ups":1},
+            {"model":"bygg","stream":true,"kalla":{"related_documents":2,"follow_ups":1},
              "messages":[{"role":"user","content":"Hej"},{"role":"assistant","content":"Hej!"},{"role":"user","content":"Behöver jag bygglov?"}]}
             """))
         {

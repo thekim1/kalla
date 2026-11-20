@@ -1,6 +1,6 @@
 # RAG's part of the shared Keycloak realm
 
-The pilot's Keycloak realm `ume` is shared with the LLM gateway (identity design §11.2, Decisions "Gateway release 1
+The pilot's Keycloak realm `kalla` is shared with the LLM gateway (identity design §11.2, Decisions "Gateway release 1
 and shared Keycloak as built"). The gateway repo owns the Keycloak project (`deploy/keycloak` there, Keycloak 26.8.1)
 and the base realm file `realm/10-gateway.json`. Ume.Rag delivers one additions file. The gateway's `realm-import`
 job (keycloak-config-cli) applies the base file and then every file in the operator's additions directory, in name

@@ -17,7 +17,7 @@ Everything is IPv4: the Compose networks have no IPv6 (`deploy/host/docker-user-
 | Component | Where | What it is to Ume.Rag |
 |---|---|---|
 | **RAG host** | one Linux host, Docker Compose project `ume-rag` (`deploy/compose.rag.yaml` and its overlays) | `rag-postgres`, `rag-api`, `rag-admin`, `rag-worker`, `rag-parser`; `rag-clamav` (profile `clamav`, on by default); with the profile `render`, `rag-renderer`; with the profile `openwebui`, `rag-openwebui`; with the profile `proxy`, `rag-proxy` |
-| **Gateway host** | the LLM gateway's host, run by the gateway team | the gateway (every model call, and the admin's organisation and model syncs), and in the pilot the **shared Keycloak** (realm `ume`). Ume.Rag reaches each by URL only |
+| **Gateway host** | the LLM gateway's host, run by the gateway team | the gateway (every model call, and the admin's organisation and model syncs), and in the pilot the **shared Keycloak** (realm `kalla`). Ume.Rag reaches each by URL only |
 | **Reverse proxy** | in front of the RAG host (and the gateway host): the municipal one, or the stack's own `rag-proxy` (profile `proxy`) | terminates public TLS and re-encrypts to the RAG listeners |
 | **Identity provider** | the shared Keycloak (pilot), a standalone Keycloak, or Entra ID / AD FS directly | OIDC for the admin UI and Open WebUI |
 | **Crawled sites** | municipal hosts (private ranges) and public web sites | read by `rag-worker` over HTTP(S) |
@@ -95,7 +95,7 @@ repo-and-deployment §6.1: "Nothing else is published").
 
 | Listener | Host port (default) | Container port | Protocol | Who connects | Purpose | Required | Configured by |
 |---|---|---|---|---|---|---|---|
-| `rag-api` | `${UME_RAG_API_BIND}:${UME_RAG_API_PORT}`, `0.0.0.0:8543` | 8443 | HTTPS (TLS: internal CA, or your PKI's certificate in `UME_RAG_PKI_DIR`) | the reverse proxy only, on behalf of: API and MCP clients with `ume-rag-sk-` keys, staff browsers following citation download links | chat, retrieval, MCP (`Rag__Roles: knowledge,chat,mcp`), health | yes | `UME_RAG_API_PORT`, `UME_RAG_API_BIND` (`init-deployment.sh --set`) |
+| `rag-api` | `${UME_RAG_API_BIND}:${UME_RAG_API_PORT}`, `0.0.0.0:8543` | 8443 | HTTPS (TLS: internal CA, or your PKI's certificate in `UME_RAG_PKI_DIR`) | the reverse proxy only, on behalf of: API and MCP clients with `kalla-sk-` keys, staff browsers following citation download links | chat, retrieval, MCP (`Rag__Roles: knowledge,chat,mcp`), health | yes | `UME_RAG_API_PORT`, `UME_RAG_API_BIND` (`init-deployment.sh --set`) |
 | `rag-admin` | `${UME_RAG_ADMIN_BIND}:${UME_RAG_ADMIN_PORT}`, `0.0.0.0:9543` | 8443 | HTTPS (as above) | the reverse proxy only, on behalf of admins' browsers | admin UI and its BFF, OIDC redirects `/signin-oidc` and `/signout-callback-oidc`, uploads, health | yes | `UME_RAG_ADMIN_PORT`, `UME_RAG_ADMIN_BIND` |
 | `rag-api-b`, `rag-admin-b` (only with `--rolling`) | `${UME_RAG_API_BIND}:${UME_RAG_API_B_PORT}`, `${UME_RAG_ADMIN_BIND}:${UME_RAG_ADMIN_B_PORT}`, `0.0.0.0:8544` and `:9544` | 8443 | as rag-api and rag-admin | the reverse proxy only | the second slots of [updates without downtime](zero-downtime-updates.md) | yes | `--rolling` |
 | `rag-openwebui` (profile `openwebui`) | `${UME_RAG_OPENWEBUI_BIND}:${UME_RAG_OPENWEBUI_PORT}`, `127.0.0.1:3000` | 8080 | **plain HTTP**: the proxy terminates TLS | the reverse proxy only, on behalf of staff browsers | the chat UI, OIDC callback `/oauth/oidc/login/callback` | optional | `UME_RAG_OPENWEBUI_PORT`, `UME_RAG_OPENWEBUI_BIND` |
@@ -265,7 +265,7 @@ address (the host) answers at the IP level (connectors design §8.3).
 ### 5.1 Pilot: shared Keycloak and gateway on the gateway host
 
 Decisions "P1 pilot sign-in" and "Gateway release 1 and shared Keycloak as built": Keycloak runs on the gateway's
-host, realm `ume`, and RAG's clients come from `deploy/keycloak/rag-additions.json`.
+host, realm `kalla`, and RAG's clients come from `deploy/keycloak/rag-additions.json`.
 
 - `UME_RAG_OIDC_AUTHORITY=https://<keycloak host>/realms/ume`; `UME_RAG_GATEWAY_URL=https://<gateway host>`.
 - RAG host egress: `llm` → `<gateway host>:443` and `<keycloak host>:443`; `rag-crawl` → `<gateway host>:443`;

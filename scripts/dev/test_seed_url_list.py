@@ -176,12 +176,12 @@ class ApiKeyTests(unittest.TestCase):
 
     def test_the_key_has_the_key_hashers_format(self) -> None:
         key = seed_url_list.generate_key()
-        self.assertRegex(key, r"^ume-rag-sk-[0-9A-Za-z]{43}$")
+        self.assertRegex(key, r"^kalla-sk-[0-9A-Za-z]{43}$")
         self.assertNotEqual(key, seed_url_list.generate_key())
 
     def test_the_hash_matches_the_key_hashers_test_vector(self) -> None:
         # The same vector is asserted against KeyHasher.Hash in DevSeedScriptTests.
-        key = "ume-rag-sk-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg"
+        key = "kalla-sk-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg"
         self.assertEqual(
             "f2edf7e535b369dedbb773f85b74b5f2b2ef36cf126281929f0c75d2ca0624bf",
             seed_url_list.key_hash("dev-seed-vector-pepper-0123456789abcdef", key),
@@ -191,7 +191,7 @@ class ApiKeyTests(unittest.TestCase):
         output = "Key,Value\nclient,c1 (created)\napi_key,k1 dev seed: pilot-public (created)\napi_key_state,created\n"
         code, out, _, run = self.run_seed(output, {"UME_RAG_DEV_KEY_PEPPER": PEPPER})
         self.assertEqual(0, code)
-        keys = re.findall(r"ume-rag-sk-[0-9A-Za-z]{43}", out)
+        keys = re.findall(r"kalla-sk-[0-9A-Za-z]{43}", out)
         self.assertEqual(1, len(keys))
         key = keys[0]
         stdin, env, command = run.call_args.kwargs["input"], run.call_args.kwargs["env"], run.call_args.args[0]
@@ -207,7 +207,7 @@ class ApiKeyTests(unittest.TestCase):
         output = "Key,Value\napi_key,k1 dev seed: pilot-public (existing; not printed again)\napi_key_state,existing\n"
         code, out, _, _ = self.run_seed(output, {"UME_RAG_DEV_KEY_PEPPER": PEPPER})
         self.assertEqual(0, code)
-        self.assertNotRegex(out, r"ume-rag-sk-[0-9A-Za-z]{43}")
+        self.assertNotRegex(out, r"kalla-sk-[0-9A-Za-z]{43}")
         self.assertIn("(existing; not printed again)", out)
 
     def test_the_pepper_must_be_set_and_long_enough(self) -> None:
@@ -226,7 +226,7 @@ class ApiKeyTests(unittest.TestCase):
             code = seed_url_list.main(["--connection", LOCAL, "--profile", "p", "https://example.org/a"])
         self.assertEqual(0, code)
         self.assertIn("SELECT set_config('ume_seed.key_hash', '', false);", run.call_args.kwargs["input"])
-        self.assertNotIn("ume-rag-sk-", out.getvalue())
+        self.assertNotIn("kalla-sk-", out.getvalue())
 
 
 if __name__ == "__main__":

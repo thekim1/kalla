@@ -117,5 +117,5 @@ Trade-offs to bring to it:
 - [ ] Optional: the embedding deployment's `ContextWindow`. The first set-up guide
       said to leave it empty because the gateway checked whole batches; release 1 checks embeddings per input
       (Decisions "Gateway release 1 …"), so this can be revisited (unverified on the deployed gateway).
-- [ ] Keycloak realm `ume`: a client for the frontend's own sign-in, made by the realm's administrator (the gateway
+- [ ] Keycloak realm `kalla`: a client for the frontend's own sign-in, made by the realm's administrator (the gateway
       operator for the pilot; Decisions "Gateway release 1 …" Q1/Q6). See [`05-frontend-integration.md`](05-frontend-integration.md) §1.

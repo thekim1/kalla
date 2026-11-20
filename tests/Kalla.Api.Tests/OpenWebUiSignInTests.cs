@@ -155,7 +155,7 @@ public sealed class OpenWebUiSignInTests(KnowledgeFixture db) : IClassFixture<Kn
                 missing.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
             }
 
-            using (var wrong = Client(api, "ume-rag-sk-" + new string('x', 43)))
+            using (var wrong = Client(api, "kalla-sk-" + new string('x', 43)))
             using (var invalid = await wrong.GetAsync(Route, Ct))
             {
                 invalid.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);

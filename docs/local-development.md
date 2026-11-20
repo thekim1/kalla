@@ -108,7 +108,7 @@ parser `7413`, ClamAV `7414`, Redis `7415` (when `Redis:Enabled`), renderer `741
 
 ## Keycloak test realm
 
-Without `Oidc:Authority` the AppHost starts Keycloak and imports the realm `ume` from `dev/keycloak/` (stream B,
+Without `Oidc:Authority` the AppHost starts Keycloak and imports the realm `kalla` from `dev/keycloak/` (stream B,
 identity design §11). Every test user has the same password, the `dev-user-password` parameter.
 
 | User | Roles | Department codes |

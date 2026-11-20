@@ -11,7 +11,7 @@ public enum RetrievalPurpose { Chat, Http, Mcp, TestPanel }
 /// version's collections (§4.2); <c>CollectionIds</c> narrows, each must be visible (404 otherwise); <c>RunId</c> is sent
 /// to the gateway as <c>x-fors-run-id</c> (chat: the message id). <c>RerankCeiling</c> asks for the rerank call (knowledge design
 /// §6.7) at that ceiling with <c>Reranker</c>: chat passes the turn's ceiling and the assistant's reranker when the assistant
-/// reranks; null (every other caller) keeps the fused order. <c>Topics</c> (chat only: <c>ume.topics</c>, chat design §3.8) narrows the
+/// reranks; null (every other caller) keeps the fused order. <c>Topics</c> (chat only: <c>kalla.topics</c>, chat design §3.8) narrows the
 /// assistant's links for this search (§4.2): a link with topics keeps those also asked for and leaves the scope when none is, a
 /// link without topics gets the asked ones; null or empty leaves the links as they are; ignored without <c>AssistantId</c>.
 /// </summary>

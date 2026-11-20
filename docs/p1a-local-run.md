@@ -10,7 +10,7 @@ There are two ways to run the stack locally:
 
 | | The AppHost ([local-development.md](local-development.md)) | The pilot stack (production Compose) |
 |---|---|---|
-| What runs | the services from source, the dev Keycloak (realm `ume` from `dev/keycloak/`), FakeGateway, Open WebUI (`http://localhost:7410`) | the images, as on the pilot host: `compose.rag.yaml` with `compose.backup.yaml` (the pilot host adds `compose.hardened.yaml`), Open WebUI as the profile `openwebui` |
+| What runs | the services from source, the dev Keycloak (realm `kalla` from `dev/keycloak/`), FakeGateway, Open WebUI (`http://localhost:7410`) | the images, as on the pilot host: `compose.rag.yaml` with `compose.backup.yaml` (the pilot host adds `compose.hardened.yaml`), Open WebUI as the profile `openwebui` |
 | Sign-in and model calls now | yes: dev Keycloak test users, FakeGateway | no: Compose has no Keycloak and no FakeGateway, so sign-in and answers wait for the live block |
 | Use it for | the demo: sign-in, set-up through Scalar, a cited answer in Open WebUI | checking the production shape: every container healthy, secrets as files, the networks |
 
@@ -90,7 +90,7 @@ The redirect URIs the setup wizard shows must be registered on the shared realm'
 carry the pilot hosts; a demo on a developer machine needs that machine's URIs on the clients too (the AppHost's admin
 port, `https://localhost:5174`). Ask the gateway session for them with J11.
 
-Pilot accounts are created by hand in the shared realm (U-c). Every enabled account of realm `ume` can sign in to Open
+Pilot accounts are created by hand in the shared realm (U-c). Every enabled account of realm `kalla` can sign in to Open
 WebUI (identity design §5.3, open question 5 of §16).
 
 **Not in this run book:** the umea.se crawl (items 19 and 20) and the gold set (item 21). The pilot embedding model
@@ -186,7 +186,7 @@ wins. A dev volume created before #172 never held the database (it lived in an a
 after #172 begins with an empty database: run the seed (§4.4) again.
 
 **Open WebUI on the AppHost** (#251): with `Seed:Enabled=false` the `open-webui` container starts only when the user
-secrets hold its key: put a whole `ume-rag-sk-` key of your choice (the prefix and 43 letters or digits) in
+secrets hold its key: put a whole `kalla-sk-` key of your choice (the prefix and 43 letters or digits) in
 `Parameters:openwebui-api-key` and restart the AppHost. `rag-migrate` registers it as the deployment's own Open WebUI
 client (identity design §5.2, M-17 C4); no client is made by hand. Publish an assistant with that client in its
 audience; it then appears as a model in Open WebUI. `dotnet run --project src/Kalla.AppHost` runs the Debug build even with `-c Release`, so build
@@ -239,7 +239,7 @@ python3 -I scripts/dev/seed_url_list.py --profile pilot-embedding --api-key \
   https://www.umea.se/<page 1> https://www.umea.se/<page 2> https://www.umea.se/<page 3>
 ```
 
-The script generates the key (`ume-rag-sk-` and 43 base62 characters), sends only its HMAC to the database and prints
+The script generates the key (`kalla-sk-` and 43 base62 characters), sends only its HMAC to the database and prints
 the key once, at the end of the output, when it creates it. Copy it from the terminal; it is not stored or logged
 anywhere. A re-run with `--api-key` finds the usable key and prints nothing secret. A key whose plaintext is lost, or
 one hashed under an earlier pepper (a new AppHost secrets store), is replaced by revoking it and running again:
@@ -253,7 +253,7 @@ UPDATE config."Keys" SET "RevokedAt" = now() WHERE "Name" = 'dev seed: pilot-pub
 1. `POST /api/clients` `{"name": "Pilot retrieval", "kind": "internal", "classificationCeiling": "public", "storesHistory": false}`
    (clients are global and only a platform admin creates them).
 2. `POST /api/keys` `{"clientId": "<its id>", "name": "pilot retrieval", "scopes": {"collectionIds": ["<pilot-public's id>"]}, "isEnabled": true}`.
-   The response holds the secret (`ume-rag-sk-…`) once; copy it into `read -rs UME_RAG_KEY` (§4.5). A platform admin
+   The response holds the secret (`kalla-sk-…`) once; copy it into `read -rs UME_RAG_KEY` (§4.5). A platform admin
    may leave out `teamId` and `scopes`; a department admin must give a team of theirs and non-empty scopes in its
    department (`key_scope_required`).
 
@@ -278,7 +278,7 @@ The key goes in `Authorization: Bearer`, `x-api-key` or `api-key`; read it into 
 shell history:
 
 ```bash
-read -rs UME_RAG_KEY   # paste the ume-rag-sk-… key the seed printed
+read -rs UME_RAG_KEY   # paste the kalla-sk-… key the seed printed
 curl -sS https://localhost:7401/v1/retrieve -H "Authorization: Bearer $UME_RAG_KEY" -H 'Content-Type: application/json' \
   -d '{"query": "Hur ansöker jag om bygglov?", "collections": ["pilot-public"], "top_k": 5}'
 ```

@@ -119,7 +119,7 @@ to `allowedLinkHosts`** if it is not under `umea.se`, or the escalation links ar
 |---|---|
 | Follow-up turns ("and if that does not work?") | work: the frontend sends the whole conversation, condense rewrites the last turn for search (chat §5, §11.3) |
 | Clarifying questions when the ticket is unclear | by instructions (§3); the model asks in its answer text |
-| Suggested follow-up questions as clickable chips | **built** (#434, SA-3): the frontend asks with `"ume": {"follow_ups": 3}` and gets them in `ume.follow_ups` after the answer (chat §9.8; `src/Kalla.Answering/Chat/FollowUps.cs`; [`05-frontend-integration.md`](05-frontend-integration.md) §5). Not a per-assistant setting; the condense model writes them (§2) |
+| Suggested follow-up questions as clickable chips | **built** (#434, SA-3): the frontend asks with `"kalla": {"follow_ups": 3}` and gets them in `kalla.follow_ups` after the answer (chat §9.8; `src/Kalla.Answering/Chat/FollowUps.cs`; [`05-frontend-integration.md`](05-frontend-integration.md) §5). Not a per-assistant setting; the condense model writes them (§2) |
 
 ## 8. Test and publish
 

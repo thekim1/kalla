@@ -28,7 +28,7 @@ public sealed record GatewayModelSyncStatus(bool Enabled, DateTimeOffset? LastRu
 /// <summary>
 /// Mirrors the gateway's models into <c>config."GatewayModels"</c> (admin design §4.10) every <c>OrgSync:IntervalMinutes</c>
 /// and on demand, from <c>GET /v1/models</c> at the service's maximum ceiling with the admin's credential key and the
-/// gateway's facts (<c>ume</c>, gateway-changes §5.5); <c>If-None-Match</c> with the last <c>ETag</c>, and a <c>304</c> writes
+/// gateway's facts (<c>kalla</c>, gateway-changes §5.5); <c>If-None-Match</c> with the last <c>ETag</c>, and a <c>304</c> writes
 /// nothing. The same pattern as <see cref="OrganisationSync"/>: one config write under the version lock and an advisory
 /// lock, only changed rows written (data-model §2.1: otherwise every run bumps the config version), one audit entry. A row
 /// per chat, embedding or rerank model or alias: a model is <c>Kind = model</c> with its residency, an alias

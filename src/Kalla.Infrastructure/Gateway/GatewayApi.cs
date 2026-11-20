@@ -88,7 +88,7 @@ public sealed class GatewayApi(IHttpClientFactory clients)
     }
 
     /// <summary>
-    /// <c>GET /v1/models</c> at <paramref name="ceiling"/> with the gateway's facts (<c>ume</c>, gateway-changes §5.5), for the
+    /// <c>GET /v1/models</c> at <paramref name="ceiling"/> with the gateway's facts (<c>kalla</c>, gateway-changes §5.5), for the
     /// model mirror. With <paramref name="etag"/> it sends <c>If-None-Match</c>, and an unchanged list comes back as
     /// <see cref="GatewayModelListAnswer.Models"/> null (<c>304</c>).
     /// </summary>

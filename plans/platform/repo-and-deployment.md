@@ -91,7 +91,7 @@ deploy/
   empty/                             an empty directory: the default of compose.rag.yaml's optional host directories (§7.1)
   portainer/                         bootstrap.sh (`rag-bootstrap`: the one bootstrap of every deployment form), build-stack.sh, stack-header.txt, compose.portainer.yaml (generated: the gateway and Ume.Rag as one stack), stack.env.example, integration-manifest.json (§7.1)
   tests/                             compose-init.sh, compose-bootstrap.sh, kubernetes-secrets.sh, pilot-stack.sh, compose-rolling-e2e.sh, release-smoke.sh, portainer-{boot,upgrade,rerun,hosts}.sh
-dev/keycloak/ume-realm.json          realm `ume` with the gateway's claims + rag-* roles
+dev/keycloak/ume-realm.json          realm `kalla` with the gateway's claims + rag-* roles
 docs/                                local-development, p1a-local-run, compose-quick-start, production-setup, portainer,
                                      kubernetes, keycloak, runbook, upgrade-guide, zero-downtime-updates, network-and-ports,
                                      test-host, ci-runner, security-events, accessibility-statement
@@ -245,7 +245,7 @@ directory another job writes, and takes only `OpenWebUi__AdminApiKey` from it), 
 | Setting | Values | Default | Effect |
 |---|---|---|---|
 | `Rag:Roles` (env `Rag__Roles`) on `Kalla.Api` | comma list of `knowledge`, `chat`, `mcp` | unset means `knowledge`; the AppHost and `compose.rag.yaml` set `knowledge,chat,mcp` (the `mcp` endpoint group arrives in P2) | maps only those endpoint groups; health reports the active roles; `/version` lists them |
-| `Retrieval:Mode` (arrives with `HttpRetriever`; not read yet) | `InProcess`, `Http` | `InProcess` | until then `chat` without `knowledge` refuses to start (`Kalla.Api` `Program.cs`, knowledge §2.2); afterwards it requires `Http` and `Retrieval:BaseUrl`, and `IRetriever` is the HTTP client with a `ume-rag-sk-` service key |
+| `Retrieval:Mode` (arrives with `HttpRetriever`; not read yet) | `InProcess`, `Http` | `InProcess` | until then `chat` without `knowledge` refuses to start (`Kalla.Api` `Program.cs`, knowledge §2.2); afterwards it requires `Http` and `Retrieval:BaseUrl`, and `IRetriever` is the HTTP client with a `kalla-sk-` service key |
 | `Worker:Classes` on `Kalla.Worker` | job classes (`preview`, `command`, `sync`, `fetch`, `parse`, `embed`, `eval`; P2 `attachment`; crawling is part of `sync`/`fetch`; data-model §4.2) | all | lets a later deployment run e.g. a `parse`-only worker next to the parser host; per-instance concurrency per class is the deployment setting `Worker:Concurrency:<class>` (defaults = engine design §9.1 table), `Settings.WorkerConcurrency` keeps only fleet-wide shares and caps ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.4) |
 | `Worker:HeartbeatSeconds`, `Worker:InstanceTimeoutSeconds`, `Worker:ReaperSeconds`, `Worker:IdleWaitSeconds`, `Worker:StopGraceSeconds` on `Kalla.Worker` | seconds | 10, 30, 10, 30, 90 | heartbeat and instance timeout, reaper interval, dispatcher poll, grace for running jobs on stop (engine design §9.1, §9.4). `Worker:Classes` is a comma list. `Worker:FinalizerSeconds` (run finalizer interval, engine design §10.4, default 30) is a `double` in 0.1–600, so tests can go below 1 s |
 | `Worker:Maintenance` | `true`/`false` | `true` | partition maintenance, content retention, blob purge and the drift sweep; `true` on exactly one instance until P2, where several instances may run it, each task as a lease leader (`content."LeaderLeases"`, failover ≤ 30 s, [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.5) |
@@ -347,7 +347,7 @@ Ports in `launchSettings.json` and the AppHost's dashboard port are chosen outsi
 
 ### 4.2 Keycloak realm (`dev/keycloak/ume-realm.json`)
 
-Realm `ume` (same name as the gateway's, so issuer paths look the same), adapted from `dev/keycloak/ume-realm.json`:
+Realm `kalla` (same name as the gateway's, so issuer paths look the same), adapted from `dev/keycloak/ume-realm.json`:
 
 | Element | Content |
 |---|---|
@@ -367,7 +367,7 @@ Realm `ume` (same name as the gateway's, so issuer paths look the same), adapted
 Keycloak shared with the gateway (Decisions table "P1 pilot sign-in"), defined and run from the gateway repo. Next to the
 dev realm, RAG keeps a **realm-additions file** in `deploy/keycloak/` (stream B, P1 item 16): RAG's clients
 `ume-rag-admin`, `open-webui` and `ume-rag-api`, the `rag-*` realm roles, full scope allowed off on every RAG client,
-pilot hosts, no test users. It is imported into realm `ume` by the gateway's Keycloak project (keycloak-config-cli, every resource type with
+pilot hosts, no test users. It is imported into realm `kalla` by the gateway's Keycloak project (keycloak-config-cli, every resource type with
 `no-delete`; Decisions "P1 pilot sign-in", [`deploy/keycloak/README.md`](../../deploy/keycloak/README.md)).
 
 ### 4.3 FakeGateway (not the gateway's FakeLlm)
@@ -384,7 +384,7 @@ streaming code, and adds:
 | `GET /v1/models`; per-model residency in `appsettings.json` (`OnPrem`, `Eu`, `External`: the gateway's `DataResidency` names); lists only models with a target within the request's `x-fors-max-residency`, as the gateway does from release 1 for every key (gateway design §3.4) | model validation on assistant save (plan §6) |
 | Response header `x-fors-residency`; honours `x-fors-max-residency` (case-insensitive names; other values 400 `invalid_request`; `403 max_residency_not_met` if no configured target fits) and answers `400 invalid_request` without it for keys flagged `RequireMaxResidency` (every dev key, on every endpoint incl. `/v1/models`; the switch `FakeGateway:RequireMaxResidency`, default on); three dev keys with per-level ceilings (`OnPrem`, `Eu`, open) and a key/level mismatch refusal, kept until Ume.Rag moves to credential keys (gateway design §3, §13.4) | fail-closed and key-layer tests (plan §6, §7) |
 | The organisation in `GET /v1/fors/context`: with the scope `organisation.read` on the admin's dev credential key, every department and team (an inactive one included, `is_active: false`; department 3000 with its teams); without it only the assigned keys' and the owner team's | organisation sync without the gateway |
-| **Gateway integration** (gateway-changes §5; built against the gateway's OpenAPI document `docs/openapi/integrations.json`, pinned with its gateway commit in `contracts/gateway/`): `GET /v1/fors/context` in the gateway's snake_case shape (`gateway.features` from `FakeGateway:Features`, so a test runs as gateway phase 1 or 2; `admin_url`; departments, teams and assigned keys from `appsettings.json`, an active, a disabled and an expired key in department 3000), with an `ETag` and `304` on `If-None-Match`; the `ume` fields on `GET /v1/models` (`kind`, `residency`/`residencies`, `context_window`, `max_output_tokens`, `features`, `pricing`), the same `ETag` rule | the admin's context, key and model sync; the key picker; V39 |
+| **Gateway integration** (gateway-changes §5; built against the gateway's OpenAPI document `docs/openapi/integrations.json`, pinned with its gateway commit in `contracts/gateway/`): `GET /v1/fors/context` in the gateway's snake_case shape (`gateway.features` from `FakeGateway:Features`, so a test runs as gateway phase 1 or 2; `admin_url`; departments, teams and assigned keys from `appsettings.json`, an active, a disabled and an expired key in department 3000), with an `ETag` and `304` on `If-None-Match`; the `kalla` fields on `GET /v1/models` (`kind`, `residency`/`residencies`, `context_window`, `max_output_tokens`, `features`, `pricing`), the same `ETag` rule | the admin's context, key and model sync; the key picker; V39 |
 | **Acting as a key**: one dev credential key per service; `x-fors-on-behalf-of` resolved as the gateway does (gateway-changes §5.2: `400 invalid_request` malformed or repeated, `403 delegation_not_allowed` for an id that is not an assigned key of the integration or shares no residency with the credential key, `403 key_disabled` for a disabled one, `403 key_revoked` or `403 key_expired` for a revoked or expired one, as gateway v0.10.1), the request then served under the assigned key's models and its residencies within the credential key's, and the id echoed in the `D` form on every later answer, errors included; `/v1/models` with the header lists the assigned key's models; modes `FakeGateway:DropOnBehalfOfEcho` (an older instance during a rolling update: the header ignored, the credential key served, no echo) and a per-key spent budget (`FakeGateway:AssignedKeys:<n>:BudgetExceeded` = `Key`, `Team` or `Department`: `402 budget_exceeded` with the gateway's message for that scope) | echo fail-closed, unavailable-assistant and V39 tests |
 | **Stream cost**: with `x-fors-stream-cost: 1` one SSE comment `: fors-cost-usd=<usd>` (six decimals) just before `data: [DONE]` (from the request's token counts and the model's `pricing`); `x-fors-cost-usd` on JSON answers | stage 1 metering; the comment never reaches rag-api's clients |
 | `GET /integration/v1/usage`, `/budgets` (gateway phase 3, `usage.read` on the admin's dev credential key; parameters, fields and `400`/`401`/`403`/`404` as gateway-changes §5.6) from the requests the fake served, by the key each ran as, its `x-fors-step` and `x-fors-run-id`; budgets from `FakeGateway:AssignedKeys:<n>:Budgets` | cost and budget read-back |
@@ -411,7 +411,7 @@ vectors when we run against a real local gateway.
   ceiling `Eu` like the pilot's EU-hosted profile); demo departments 1000/3000/5000 synced from the
   fake catalog; a `public` collection *Umeå kommun – exempel* with an upload source holding
   `tests/evaluation/smoke/documents/*` (no crawl needed offline) and its 30 smoke questions as the evaluation set;
-  assistant *Demo-assistent* (`public`); client *Open WebUI (dev)* at ceiling `internal` with key `ume-rag-sk-` from
+  assistant *Demo-assistent* (`public`); client *Open WebUI (dev)* at ceiling `internal` with key `kalla-sk-` from
   `Secret("dev-key", 43)` and `PortalUrl` the stack's Open WebUI (`Seed:DevClientPortalUrl`, set by the AppHost); a
   local `IKeyProvider` key file under the AppHost's user-secrets directory.
 - **Dev URL-list seed** (dev and test hosts only, until the admin's set-up endpoints exist): `scripts/dev/seed_url_list.py` runs `seed-url-list.sql` with psql against a local
@@ -845,7 +845,7 @@ interactive run asks once for the provider's address (`--oidc-authority`; empty 
 lines say that rag-admin reaches no provider yet), because the host firewall (§6.1)
 lets rag-admin reach only that provider, so the wizard's test sign-in can't reach one the deployment doesn't name.
 `compose.rag.yaml` and the Kubernetes base set no `Oidc__*` default.
-**P1 sign-in is the shared Keycloak** (identity §11.2, 2026-10-31): the provider's address is realm `ume`
+**P1 sign-in is the shared Keycloak** (identity §11.2, 2026-10-31): the provider's address is realm `kalla`
 (`https://<keycloak host>/realms/ume`), and the redirect URIs are registered on the Keycloak clients `ume-rag-admin`
 and `open-webui` (realm additions, §4.2).
 The embedding profile has no deployment knobs: a platform admin creates it in the admin UI after the first sign-in
@@ -1162,7 +1162,7 @@ pilot's models are EU-hosted through the gateway.
 | 7 | Config-version library (`ConfigVersionMonitor`: LISTEN `rag_config` + 2 s poll, grace window `Config:MaxUnconfirmedSeconds`) and log scope; serialised config writes (`FOR UPDATE` on the version row) | tests: a revoked key is refused as soon as the notification arrives; keyed requests get 503 after the window without confirmation; readiness stays green within it; two concurrent saves cannot both pass a cross-rule | plan §4, §11.2 |
 | 8 | `Kalla.FakeGateway` (1024-dim embeddings, residency headers, per-level dev keys, `400` without a ceiling for `RequireMaxResidency` keys, `403 max_residency_not_met` and 503 `Retry-After` modes, `/v1/models` filtered by the ceiling, rerank fake, catalog); gateway client `DelegatingHandler` that refuses a call without an explicit ceiling or with a key of another level | API tests use it; a wrong-residency answer is aborted; the handler test covers every call site that exists | README P0 (fake gateway), plan §6 |
 | 9 | `dev/keycloak/ume-realm.json` (incl. `rag-reviewer`, admin design §12); OIDC/BFF and claim mapping copied from the gateway admin API (`UME_RAG_OIDC_*`); `OidcClaimMappingTests` copied; audit actor `oid` | sign-in to the empty admin UI as each test user shows the right roles and departments (incl. a department from a group claim) | identity §8 P0 |
-| 10 | Keys in gateway style (`ume-rag-sk-`, HMAC + pepper, prefix, rotation grace) in `config."Keys"` | key auth tests copied from the gateway's `KeyTests` pass | README P0 (keys) |
+| 10 | Keys in gateway style (`kalla-sk-`, HMAC + pepper, prefix, rotation grace) in `config."Keys"` | key auth tests copied from the gateway's `KeyTests` pass | README P0 (keys) |
 | 11 | Admin UI skeleton with the copied design system in Swedish (`labels.ts`/`messages.ts` skeleton), Vite on 5174, `design-system.lock`; admin API write path (`AdminContext`: change + outbox + audit in one transaction), `PermissionMatrix` role tests, org sync against the FakeGateway catalogue, `contracts/admin/v1/error-codes.json` export | lint/typecheck/test/build green; shell looks like the gateway's; a saved change bumps the config version with one audit entry; synced departments visible | admin P0 (admin design §12) |
 | 12 | AppHost (§4.1) with postgres (pinned pgvector image), keycloak, fake-gateway, parser (P0 image with Docling, Tesseract `swe` and models baked, size measured; supervisor with one slot; health + `/v1/info` with `build_hash`; parser design §16), clamav, migrations, api, worker, adminapi, admin-ui; `Start-Dev.ps1`, `Start-E2E.ps1`; seeder | `.\scripts\Start-Dev.ps1` brings every resource to healthy on a clean machine | plan §11.4, parser P0 |
 | 13 | Parser contract skeleton: `contracts/parser/v1/*.json`, `ContractTests`, parser CI jobs (`parser.yml`) | contract job green; `test_offline.py` passes with networking disabled | parser P0 |

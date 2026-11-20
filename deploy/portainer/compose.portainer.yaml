@@ -1465,7 +1465,7 @@ configs:
           [ -f "$$S/openwebui/admin-password" ] || rand | tr -d '\n' > "$$S/openwebui/admin-password"
           # (the public CAs are the image's; outside a container the bundle may be elsewhere, and Open WebUI is not run from there)
           { [ ! -r /etc/ssl/certs/ca-certificates.crt ] || cat /etc/ssl/certs/ca-certificates.crt; cat "$$W/trust.pem"; } > "$$S/openwebui/ca.pem"
-          [ -f "$$S/.openwebui-rag-api-key" ] || printf 'ume-rag-sk-%s' "$$(openssl rand -base64 96 | tr -dc 'A-Za-z0-9' | head -c 43)" > "$$S/.openwebui-rag-api-key"
+          [ -f "$$S/.openwebui-rag-api-key" ] || printf 'kalla-sk-%s' "$$(openssl rand -base64 96 | tr -dc 'A-Za-z0-9' | head -c 43)" > "$$S/.openwebui-rag-api-key"
           cp "$$S/.openwebui-rag-api-key" "$$S/openwebui/rag-api-key"
           printf 'http://rag-openwebui:8080' > "$$S/api/OpenWebUi__BaseUrl"
           printf true > "$$S/admin/OpenWebUi__Enabled"
