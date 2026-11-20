@@ -62,11 +62,22 @@ fi
 if grep -qE '^KALLA_OIDC_AUTHORITY=.+' "$env_file"; then
   set_default "$env_file" KALLA_OIDC_CLIENT_ID ume-rag-admin
 fi
+# The value as init-deployment.sh reads it: its quotes removed (the script writes every value in single quotes), and
+# no slash at the end (s3://ENDPOINT/BUCKET/ names no path either).
 target="$(sed -n -E 's/^KALLA_BACKUP_TARGET=//p' "$env_file" | tail -n1)"
 case "$target" in
+  \'*\') target="${target#\'}"; target="${target%\'}";;
+  \"*\") target="${target#\"}"; target="${target%\"}";;
+esac
+while [ "${target%/}" != "$target" ]; do target="${target%/}"; done
+case "$target" in
   s3://*/*/*) ;;
-  s3://*/*) sed -i -E "s#^KALLA_BACKUP_TARGET=.*#KALLA_BACKUP_TARGET=${target%/}/ume-rag#" "$env_file"
-    echo "kept the backup repository's path: KALLA_BACKUP_TARGET=${target%/}/ume-rag" ;;
+  s3://*/*)
+    tmp="$(mktemp "$env_file.XXXXXX")"
+    grep -vE '^KALLA_BACKUP_TARGET=' "$env_file" > "$tmp" || true
+    printf "KALLA_BACKUP_TARGET='%s'\n" "$target/ume-rag" >> "$tmp"
+    cat "$tmp" > "$env_file"; rm -f "$tmp"
+    echo "kept the backup repository's path: KALLA_BACKUP_TARGET=$target/ume-rag" ;;
 esac
 
 containers() { docker ps -q --filter "label=com.docker.compose.project=$1" "${@:2}"; }
@@ -108,12 +119,18 @@ for v in $volumes; do
   if ! docker volume inspect "$from" >/dev/null 2>&1; then
     echo "$from does not exist: skipped"; continue
   fi
-  if docker volume inspect "$to" >/dev/null 2>&1 \
-     && [ -n "$(docker run --rm -v "$to:/to:ro" --entrypoint ls "$image" -A /to)" ]; then
-    echo "$to exists and is not empty: left as it is"; continue
+  # A copy in progress has the file .copy-unfinished: a copy that stopped part-way is done again, not taken as done.
+  if docker volume inspect "$to" >/dev/null 2>&1; then
+    state="$(docker run --rm -v "$to:/to:ro" --entrypoint sh "$image" -c \
+      'if [ -e /to/.copy-unfinished ]; then echo unfinished; elif [ -n "$(ls -A /to)" ]; then echo filled; fi')"
+    case "$state" in
+      filled) echo "$to exists and is not empty: left as it is"; continue;;
+      unfinished) echo "$to holds a copy that did not finish: copying again";;
+    esac
   fi
   docker volume create "$to" >/dev/null
-  docker run --rm --user 0 -v "$from:/from:ro" -v "$to:/to" --entrypoint sh "$image" -c 'cp -a /from/. /to/'
+  docker run --rm --user 0 -v "$from:/from:ro" -v "$to:/to" --entrypoint sh "$image" -c \
+    'touch /to/.copy-unfinished && cp -a /from/. /to/ && rm -f /to/.copy-unfinished'
   echo "copied $from to $to"
 done
 

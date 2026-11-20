@@ -44,7 +44,7 @@ namespace Kalla.Infrastructure.Persistence.Migrations
                 name: "CK_SetupTests_Target",
                 schema: "config",
                 table: "SetupTests",
-                sql: "\"Target\" IN ('kalla-admin', 'open-webui')");
+                sql: "\"Target\" IN ('rag-admin', 'open-webui')");
         }
 
         /// <inheritdoc />
@@ -74,7 +74,7 @@ namespace Kalla.Infrastructure.Persistence.Migrations
                 name: "CK_SetupTests_Target",
                 schema: "config",
                 table: "SetupTests",
-                sql: "\"Target\" IN ('kalla-admin')");
+                sql: "\"Target\" IN ('rag-admin')");
         }
     }
 }

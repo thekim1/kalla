@@ -99,7 +99,7 @@ export function wizardValues(overrides: Partial<OidcWizardValues> = {}): OidcWiz
 /** A passed test by a platform admin of the provider https://idp.example.org/realms/fors. */
 export function setupTest(overrides: Partial<SetupTest> = {}): SetupTest {
   return {
-    testId: 't1', target: 'kalla-admin', status: 'passed', reason: null, startedAt: '2026-11-15T10:00:00Z', expiresAt: '2026-11-15T10:10:00Z',
+    testId: 't1', target: 'rag-admin', status: 'passed', reason: null, startedAt: '2026-11-15T10:00:00Z', expiresAt: '2026-11-15T10:10:00Z',
     values: wizardValues({ authority: 'https://idp.example.org/realms/fors' }), clientSecret: 'typed',
     result: {
       subject: 'sub-1', name: 'Anna Andersson', roles: ['rag-platform-admin'], groups: ['rag-admins'], groupCount: 1, departmentCodes: ['1000'], teamCodes: [],

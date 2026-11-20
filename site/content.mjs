@@ -70,7 +70,7 @@ const stream = await client.chat.completions.create({
 });
 for await (const chunk of stream) {
   process.stdout.write(chunk.choices[0]?.delta?.content ?? "");
-  if (chunk.ume) console.log(chunk.ume);  // outcome, sources, follow-ups
+  if (chunk.kalla) console.log(chunk.kalla);  // outcome, sources, follow-ups
 }` },
   { id: 'curl', label: 'curl', code: `curl https://rag.example.se/v1/retrieve \\
   -H "Authorization: Bearer $KALLA_KEY" \\

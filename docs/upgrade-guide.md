@@ -1,14 +1,14 @@
 # Upgrade guide and release checklist
 
 Each release says whether it supports a **rolling update**: the previous version keeps running against the new schema
-while its containers are replaced. The pilot runs **one slot** (one `rag-api`, one `rag-admin`), so every pilot upgrade
-is a short, announced maintenance window whatever the answer. With two slots (`init-deployment.sh --rolling`) a "yes"
-release is updated without downtime by `deploy/rolling-update.sh` ([Updates without downtime](zero-downtime-updates.md)).
-Until the first production deployment releases may break compatibility (Decisions, "No backward compatibility before
-production"), so check the answer every time; from then on migrations are expand/contract only and "no" is the
-exception.
+while its containers are replaced. The pilot runs **one slot** (one `kalla-api`, one `kalla-admin`), so every pilot
+upgrade is a short, announced maintenance window whatever the answer. With two slots (`init-deployment.sh --rolling`) a
+"yes" release is updated without downtime by `deploy/rolling-update.sh` ([Updates without
+downtime](zero-downtime-updates.md)). Until the first production deployment releases may break compatibility (Decisions,
+"No backward compatibility before production"), so check the answer every time; from then on migrations are
+expand/contract only and "no" is the exception.
 
-**A "no" release needs no manual stop on one slot.** From 0.8.0, `rag-migrate` itself keeps the
+**A "no" release needs no manual stop on one slot.** From 0.8.0, `kalla-migrate` itself keeps the
 services a migration can't run beside out of the database until their new version starts: its log says *Migration …
 stops the services of role …*, the old container answers errors for the seconds until it is replaced, and the new one
 gets its access back when it starts. With two slots or on Kubernetes, stop or scale down those services first, as
@@ -347,8 +347,8 @@ A deployment older than 0.5.0 first moves to 0.7.0 with that release's copy of t
 
 1. **Read** this guide's section for every release between yours and the target: *Rolling update*, migrations, new
    grants, superuser steps, settings. Review the release's image digests, SBOM and advisories.
-2. **Announce** the window. `rag-api` and `rag-admin` are replaced together: the admin's test panel and answer judge run
-   the same answering code as the api.
+2. **Announce** the window. `kalla-api` and `kalla-admin` are replaced together: the admin's test panel and answer judge
+   run the same answering code as the api.
 3. **Back up and check the escrow:**
 
    ```bash
@@ -361,21 +361,21 @@ A deployment older than 0.5.0 first moves to 0.7.0 with that release's copy of t
    are in the Docker volumes), and remove or update any image pins you set in `deploy/.env` (below). Re-run
    `sudo deploy/host/install.sh` when `deploy/host/` changed.
 5. **Superuser steps**, only if the release lists them (below), all before step 6. Role caps and per-role settings
-   run against the running database. With a new `RAG_POSTGRES_IMAGE`, first replace rag-postgres alone with
-   `dc up -d --wait rag-postgres` (a short outage of every service), then update the extension.
+   run against the running database. With a new `KALLA_POSTGRES_IMAGE`, first replace kalla-postgres alone with
+   `dc up -d --wait kalla-postgres` (a short outage of every service), then update the extension.
 6. **Migrate and replace.** Nothing is stopped first, also for a release marked *Rolling update: no*: `up` runs the
-   migration while the old containers are still running, `rag-migrate` keeps the ones that can't run beside it out of
+   migration while the old containers are still running, `kalla-migrate` keeps the ones that can't run beside it out of
    the database, and they are replaced right after.
 
    ```bash
    dc up -d --wait
    ```
 
-   Compose recreates every container whose image or settings changed. `rag-bootstrap` runs first, then `rag-migrate`;
-   api, admin and the worker start only after it has finished successfully, so no service runs against an older schema. The worker is
-   stopped before its replacement starts (its leases make the pause harmless; an overlap would exceed its role's
-   connection limit). The parser and ClamAV are recreated only if their image changed.
-7. **Verify:** `dc ps` all healthy, `/health/ready` and `/version` of api and admin, `dc logs rag-migrate` shows the
+   Compose recreates every container whose image or settings changed. `kalla-bootstrap` runs first, then
+   `kalla-migrate`; api, admin and the worker start only after it has finished successfully, so no service runs against
+   an older schema. The worker is stopped before its replacement starts (its leases make the pause harmless; an overlap
+   would exceed its role's connection limit). The parser and ClamAV are recreated only if their image changed.
+7. **Verify:** `dc ps` all healthy, `/health/ready` and `/version` of api and admin, `dc logs kalla-migrate` shows the
    expected migration, a test question in the admin's test panel (once it exists), and the backup-status metrics are
    back to normal within a few minutes.
 8. **Record** the release, the image digests, the schema migration and the test evidence in change management.
@@ -387,31 +387,31 @@ A deployment older than 0.5.0 first moves to 0.7.0 with that release's copy of t
 ## Image pins
 
 Production runs images pinned by digest. A release bundle (from `v0.1.0`) has each digest written into the Compose
-files' `${RAG_X_IMAGE:-…}` defaults by `deploy/build-release-bundle.sh`, which refuses an unpinned image; in a clone the
-defaults of `deploy/compose.rag.yaml` are the last release's pins. To run images from a registry or built on the host,
-or to override one, set the variable in `deploy/.env` (`init-deployment.sh --set RAG_API_IMAGE=<image>@sha256:…`;
-`--set RAG_API_IMAGE=` removes it again):
+files' `${KALLA_X_IMAGE:-…}` defaults by `deploy/build-release-bundle.sh`, which refuses an unpinned image; in a clone
+the defaults of `deploy/compose.rag.yaml` are the last release's pins. To run images from a registry or built on the
+host, or to override one, set the variable in `deploy/.env` (`init-deployment.sh --set
+KALLA_API_IMAGE=<image>@sha256:…`; `--set KALLA_API_IMAGE=` removes it again):
 
 | Variable | Image |
 |---|---|
-| `RAG_POSTGRES_IMAGE` | `ume-rag/postgres` (pinned `pgvector/pgvector` plus pgBackRest) |
-| `RAG_MIGRATIONS_IMAGE`, `RAG_API_IMAGE`, `RAG_ADMIN_IMAGE`, `RAG_WORKER_IMAGE` | the .NET services |
-| `RAG_PARSER_IMAGE` | the parser |
-| `RAG_CLAMAV_IMAGE` | `ume-rag/clamav` |
-| `RAG_RENDERER_IMAGE` | `ume-rag/renderer` |
+| `KALLA_POSTGRES_IMAGE` | `kalla/postgres` (pinned `pgvector/pgvector` plus pgBackRest) |
+| `KALLA_MIGRATIONS_IMAGE`, `KALLA_API_IMAGE`, `KALLA_ADMIN_IMAGE`, `KALLA_WORKER_IMAGE` | the .NET services |
+| `KALLA_PARSER_IMAGE` | the parser |
+| `KALLA_CLAMAV_IMAGE` | `kalla/clamav` |
+| `KALLA_RENDERER_IMAGE` | `kalla/renderer` |
 | `OPENWEBUI_IMAGE` | Open WebUI, the profile `openwebui` (pinned in `deploy/compose.rag.yaml`) |
-| `RAG_PROXY_IMAGE` | nginx of the TLS proxy, the profile `proxy` (pinned in `deploy/compose.rag.yaml`) |
+| `KALLA_PROXY_IMAGE` | nginx of the TLS proxy, the profile `proxy` (pinned in `deploy/compose.rag.yaml`) |
 
 Every pin, image or package, was released at least 7 days before it was pinned.
 
 ## Superuser steps
 
-The migrator (`ume_rag_migrator`) owns ragdb but is not a superuser and cannot create or alter roles, so two kinds of
-change need the bootstrap superuser. They run inside the rag-postgres container over its socket, as the
+The migrator (`kalla_migrator`) owns ragdb but is not a superuser and cannot create or alter roles, so two kinds of
+change need the bootstrap superuser. They run inside the kalla-postgres container over its socket, as the
 `postgres` user (peer authentication):
 
 ```bash
-dc exec -T rag-postgres psql -X -v ON_ERROR_STOP=1 -U postgres -d ragdb -c '<statement>'
+dc exec -T kalla-postgres psql -X -v ON_ERROR_STOP=1 -U postgres -d ragdb -c '<statement>'
 ```
 
 **Role caps and per-role settings.** Connection limits, timeouts and the `hnsw.*` defaults of the service roles are
@@ -420,22 +420,22 @@ migration service applies on every run, re-grants table privileges but cannot ch
 cap or a per-role setting lists the statements here; run them on existing databases before `dc up`, for example:
 
 ```sql
-ALTER ROLE ume_rag_api CONNECTION LIMIT 26;
-ALTER ROLE ume_rag_api IN DATABASE ragdb SET statement_timeout = '5s';
+ALTER ROLE kalla_api CONNECTION LIMIT 26;
+ALTER ROLE kalla_api IN DATABASE ragdb SET statement_timeout = '5s';
 ```
 
 New sessions pick up a per-role setting; restart the service to make all its connections use it. Check the current
-values with `SELECT rolname, rolconnlimit FROM pg_roles WHERE rolname LIKE 'ume_rag_%'` and `\drds`.
+values with `SELECT rolname, rolconnlimit FROM pg_roles WHERE rolname LIKE 'kalla_%'` and `\drds`.
 
-**Extensions.** A new `RAG_POSTGRES_IMAGE` with a newer pgvector needs `ALTER EXTENSION vector UPDATE;` once the new
-image runs (`dc up -d --wait rag-postgres`) and before the migrations. Recreating rag-postgres restarts the database: a
-short outage of every service.
+**Extensions.** A new `KALLA_POSTGRES_IMAGE` with a newer pgvector needs `ALTER EXTENSION vector UPDATE;` once the new
+image runs (`dc up -d --wait kalla-postgres`) and before the migrations. Recreating kalla-postgres restarts the
+database: a short outage of every service.
 
 ## Change types
 
 | Change | Procedure |
 |---|---|
-| pgvector minor | new `RAG_POSTGRES_IMAGE`; extension step above |
+| pgvector minor | new `KALLA_POSTGRES_IMAGE`; extension step above |
 | Postgres major (17 → 18) | not rolling: `pg_upgrade` where possible (else `pg_dump`/`pg_restore` into a new volume), then a new pgBackRest stanza and a full backup |
 | Word list or decompounder | changes the stored search text: the release ships a worker command that recomputes it in batches; the evaluation smoke set is compared before and after |
 | Parser image (Docling, models) | the parse cache key includes the parser build, so old outputs stay valid; re-parsing is an opt-in publish |
@@ -445,20 +445,20 @@ None of these has happened yet; the first release that brings one adds its comma
 
 ## Certificate and secret rotation
 
-- **Internal certificates** (825 days): `rag-bootstrap` re-issues a service certificate at the first `dc up -d` within
-  30 days of its expiry (it needs `ca.key` in the `rag-certs` volume), and the end of its log names what to restart:
-  `dc restart rag-postgres rag-parser`. A new internal CA: delete `ca.pem` and `ca.key` in `rag-certs`,
+- **Internal certificates** (825 days): `kalla-bootstrap` re-issues a service certificate at the first `dc up -d` within
+  30 days of its expiry (it needs `ca.key` in the `kalla-certs` volume), and the end of its log names what to restart:
+  `dc restart kalla-postgres kalla-parser`. A new internal CA: delete `ca.pem` and `ca.key` in `kalla-certs`,
   `dc up -d --wait`, then `dc restart` (production-setup.md, *Internal TLS*).
 - **PKI certificates** of the public listeners: put the new `api.crt` and `api.key`, `admin.crt` and `admin.key` in
-  the directory `UME_RAG_PKI_DIR` names and run `dc up -d`: `rag-bootstrap` copies them at every start. rag-api and
-  rag-admin serve theirs through Kestrel, which watches the files; if a client still sees the old certificate, restart
+  the directory `KALLA_PKI_DIR` names and run `dc up -d`: `kalla-bootstrap` copies them at every start. kalla-api and
+  kalla-admin serve theirs through Kestrel, which watches the files; if a client still sees the old certificate, restart
   them.
 - **Gateway credential keys and the OIDC client secret:** run `init-deployment.sh` with only the new
-  `--gateway-credential-key-file SERVICE=FILE` or `--set-file UME_RAG_OIDC_CLIENT_SECRET=FILE` (it keeps the rest of
-  `deploy/.env`), then `dc up -d`: `rag-bootstrap` rewrites those files. Restart the services that read them. A credential key is rotated in the gateway with its 24-hour grace period first
+  `--gateway-credential-key-file SERVICE=FILE` or `--set-file KALLA_OIDC_CLIENT_SECRET=FILE` (it keeps the rest of
+  `deploy/.env`), then `dc up -d`: `kalla-bootstrap` rewrites those files. Restart the services that read them. A credential key is rotated in the gateway with its 24-hour grace period first
   (production-setup.md, *Gateway credential keys*).
 - **Never regenerate** the pepper, the Data Protection certificate, the blob master key or the pgBackRest passphrase:
   existing data or backups would become unreadable. There is no rotation procedure for them yet; after any future
   rotation, escrow again (runbook, *Key escrow*).
 - A re-run of `init-deployment.sh` changes only what its options name and keeps every other variable in
-  `deploy/.env` (image pins and `UME_OTEL_ENDPOINT` included); only comments and empty values are dropped.
+  `deploy/.env` (image pins and `FORS_OTEL_ENDPOINT` included); only comments and empty values are dropped.

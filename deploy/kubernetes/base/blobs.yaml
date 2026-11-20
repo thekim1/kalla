@@ -2,10 +2,12 @@
 # reads, so all three mount it. With more than one node it needs a ReadWriteMany storage class (NFS, CephFS, Azure
 # Files, Longhorn RWX); the overlay sets storageClassName. With ReadWriteOnce every pod that mounts it must run on one
 # node. Files are encrypted by the blob master key (secret kalla-blob-key) before they reach the volume.
+# The claim keeps its name from before the rename to Källa: a claim cannot be renamed, and an upgraded installation's
+# uploads and crawled content are on the volume bound to it.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: kalla-blobs
+  name: rag-blobs
   labels: {app.kubernetes.io/name: kalla, app.kubernetes.io/component: blobs}
 spec:
   accessModes: [ReadWriteMany]

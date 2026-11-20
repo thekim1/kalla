@@ -124,9 +124,9 @@ read the CA only at start.
    Leave `FORS_INTEGRATION_MANIFEST` unset (the file has it commented out) and keep `FORS_INTEGRATION_API_URL` as the file
    has it. The stack file then gives the gateway its default manifest,
    [`deploy/portainer/integration-manifest.json`](../deploy/portainer/integration-manifest.json): the gateway creates
-   the integration `Källa` and its three credential keys, and hands kalla-admin the Integration API's address (M-17 C7,
+   the integration `Kalla` and its three credential keys, and hands kalla-admin the Integration API's address (M-17 C7,
    C11). The manifest names no owner, so the gateway places the integration in a team and a department of its own, both
-   named `Källa` with the code `kalla` (a team that already has the code `kalla` is used instead). You move it to
+   named `Kalla` with the code `kalla` (a team that already has the code `kalla` is used instead). You move it to
    your own team in step 7. Two other choices:
    - **Your own team at once:** set `FORS_INTEGRATION_MANIFEST` to the default manifest on one line, with an `"owner"`
      in `"integration"`: `{"teamCode":…,"teamName":…,"departmentCode":…,"departmentName":…}`. The team is found by
@@ -139,10 +139,10 @@ read the CA only at start.
    a variable: you set it up in steps 4 and 5. To set it in the stack instead, see *Declaring sign-in instead* below.
 3. **Deploy the stack.** The one-shot `bootstrap` (the gateway's) and `kalla-bootstrap` create the internal CAs,
    certificates and secrets in the volumes; both databases are created and migrated; the gateway's `migrations`
-   creates the integration `Källa` and its keys `kalla-api`, `kalla-admin` and `kalla-worker` from the manifest and writes
+   creates the integration `Kalla` and its keys `rag-api`, `rag-admin` and `rag-worker` from the manifest and writes
    their secrets to the volume `<stack>_integration-secrets`, from which `kalla-bootstrap` gives each service its key; the
    services start. With the default manifest, `migrations`' log has the warning
-   `Integration 'Källa' names no owner in the manifest, so it is placed in the team 'Källa' (code 'kalla') …`
+   `Integration 'Kalla' names no owner in the manifest, so it is placed in the team 'Kalla' (code 'kalla') …`
    (step 7 moves it). **The end of `kalla-bootstrap`'s log lists what is still missing** (example values left in, Open
    WebUI's settings); it is printed again on every deploy, until it says every setting it checks is in place. Its last
    lines point at the setup wizard on every deploy, since `kalla-bootstrap` can't see whether setup is done: skip that
@@ -199,16 +199,16 @@ read the CA only at start.
 6. **Open WebUI is not part of this path.** To give users the chat, now or later: *Adding Open WebUI*, below.
 7. **In the gateway's admin**, as a gateway admin ([production-setup.md](production-setup.md#gateway-credential-keys)
    has every field): **move the integration to your own team** (skip it if your manifest names an owner): *Access →
-   Integrations → Källa*, *Edit*, the owner team. The team must be active, in an active department. Every credential
+   Integrations → Kalla*, *Edit*, the owner team. The team must be active, in an active department. Every credential
    key of the integration that is not revoked moves with it; usage already recorded stays with the team `kalla`, and
-   the new team's budgets count the keys from the move on. Then, under *Access → Integrations → Källa*, check the
+   the new team's budgets count the keys from the move on. Then, under *Access → Integrations → Kalla*, check the
    three credential keys (residencies `OnPrem` and `Eu`: Källa's ceiling, register M2), then create the **assigned
    keys** the assistants and knowledge bases will run on, one or more per department, in the integration with role
    *Assigned*. The manifest never changes a key that exists: change one here. **Rotate** a credential key here (with a
    grace period), then delete its file `Kalla/rag-<service>` in `<stack>_integration-secrets` and update the stack;
    the gateway writes the new secret and the service picks it up within seconds.
 8. **Keys issued by hand instead** (`FORS_INTEGRATION_MANIFEST` set empty, or the gateway runs elsewhere): create the
-   integration `Källa` and the three credential keys as production-setup.md says, set `KALLA_API_GATEWAY_KEY`,
+   integration `Kalla` and the three credential keys as production-setup.md says, set `KALLA_API_GATEWAY_KEY`,
    `KALLA_ADMIN_GATEWAY_KEY` and `KALLA_WORKER_GATEWAY_KEY` (set, a variable wins over the manifest's key) and
    update the stack. The services pick them up within seconds. **Address list** of a credential key: the services reach
    the gateway over the stack's internal network `llm`, whose subnet Docker chose
@@ -348,11 +348,11 @@ wizard:** it sets `FORS_OIDC_AUTHORITY`, so the gateway counts its setup as done
      or changed;
    - **`FORS_INTEGRATION_MANIFEST` not set** (a stack upgraded from 0.5.x that kept its keys issued by hand): the new
      stack file's default manifest applies from this update on. The gateway looks for the integration by its name,
-     `Källa`, and for each credential key by its name within it, creates what is missing and never changes what
-     exists. Keys issued by hand under other names (0.5.0's `Källa api`, …) don't count, so the gateway creates
-     three new credential keys `rag-api`, `kalla-admin` and `kalla-worker` in your integration `Källa` and writes their
+     `Kalla`, and for each credential key by its name within it, creates what is missing and never changes what
+     exists. Keys issued by hand under other names (0.5.0's `Ume.Rag api`, …) don't count, so the gateway creates
+     three new credential keys `rag-api`, `rag-admin` and `rag-worker` in your integration `Kalla` and writes their
      secrets to `<stack>_integration-secrets`; if your integration has another name, it also creates a second
-     integration `Källa`, in a new team and department `kalla`. Your services keep their keys: a
+     integration `Kalla`, in a new team and department `kalla`. Your services keep their keys: a
      `KALLA_*_GATEWAY_KEY` that is set wins over the manifest's. The new keys stay unused. **To create nothing,** add
      `FORS_INTEGRATION_MANIFEST` with an empty value now: set and empty, the default doesn't apply. Or let them be
      created and revoke them afterwards (*After the update*, step 14).
@@ -394,7 +394,7 @@ wizard:** it sets `FORS_OIDC_AUTHORITY`, so the gateway counts its setup as done
       `Message`), and **no** line with `Setup code`; kalla-admin's log has *The deployment declares the sign-in* once,
       and **no** line with *Setup code*; you sign in to both admins as before;
     - each of `kalla-api`, `kalla-admin` and `kalla-worker` logs *the credential key's ceiling: Eu* at start;
-    - `migrations`' log has `… 'Källa' applied, 0 of 3 credential keys created` when your keys came from a manifest
+    - `migrations`' log has `… 'Kalla' applied, 0 of 3 credential keys created` when your keys came from a manifest
       (`3 of 3` for a stack of step 6 without one; no such line with an empty value);
     - *Models* shows the gateway's version with `act-as-key`, and the embedding profile is still there;
     - `kalla-openwebui`'s log has *starting with OIDC sign-in from kalla-api's sign-in settings*, Open WebUI's sign-in page
@@ -403,8 +403,8 @@ wizard:** it sets `FORS_OIDC_AUTHORITY`, so the gateway counts its setup as done
     - *Apps and keys* shows `admin-console` and *Open WebUI* as managed, and the assistant test panel answers;
     - the sign-in values in the admin's *Settings* are marked *Set by the deployment* where the stack sets them;
     - an assistant's or knowledge base's *Cost* card shows the gateway's figures (the read-back) within a few minutes.
-14. **Only if step 6 let the gateway create three new keys:** in the gateway's admin, *Access → Integrations → Källa*,
-    revoke `kalla-api`, `kalla-admin` and `kalla-worker` (the manifest never creates a revoked key again). Or move to them
+14. **Only if step 6 let the gateway create three new keys:** in the gateway's admin, *Access → Integrations → Kalla*,
+    revoke `rag-api`, `rag-admin` and `rag-worker` (the manifest never creates a revoked key again). Or move to them
     instead: give them the settings of your keys (models, address list), remove the three `KALLA_*_GATEWAY_KEY`
     variables and update the stack, so `kalla-bootstrap` hands each service its new key from the volume; once *Models*
     shows a recent organisation sync again, revoke your old keys.
