@@ -477,7 +477,7 @@ itself never waits.
 | 2 | Credential kind allowed for the client kind (`open-webui`: sk key + JWT; `widget`: pk key; `integration`: sk key or app token; `own-client`/`teams`/`mcp-client`: delegated token; `internal`: service key or in-process) | `credential_not_allowed` | 403 |
 | 3 | Subject kind allowed for the client kind (`widget` ⇒ `Anonymous` only; `Anonymous` only via `widget`) | `subject_not_allowed` | 403 |
 | 4 | Permission for the action: delegated `scp` (`Chat.Use` for `ListModels`/`Chat`/`Feedback`, `Knowledge.Read` for `Search`/`ReadDocument`, `Mcp.Use` for `McpCall`), app `roles` (`Chat.Invoke.All`, `Knowledge.Read.All`), keys: key kind (`pk` ⇒ `ListModels`/`Chat`/`Feedback` only) | `permission_missing` | 403 |
-| 5 | Resource exists and is live (assistant `State = active` with a published version, collection not deleted) | `not_found` | 404 |
+| 5 | Resource exists and is live (assistant `State = active`, not deleted, with a published version; collection not deleted) | `not_found` | 404 |
 | 6 | Key scope: if `Keys.Scopes` lists assistants/collections, the resource is in it; for an assistant, collection scopes must reach at least one of its published version's collections, and the search is then narrowed to them (knowledge design §4.2) | `key_scope` | 404 |
 | 7 | **Classification ceiling**: resource level ≤ client ceiling | `ceiling_exceeded` (event 5005) | 404 |
 | 8 | **Anonymous**: resource level = `public` | `anonymous_not_allowed` | 404 |

@@ -969,6 +969,27 @@ move itself is audited under both. The admin sees what the move changes and conf
 *From:* decided by user, 2026-11-17 (#811): platform admins only, shares keep the links; the owner-team rule from
 the main session's review on #811.
 
+### Deleting knowledge bases, sources and assistants
+
+A knowledge base, a source and an assistant can each be deleted in the admin UI, and a deleted one's name is free at
+once: a slug is unique among the objects that are not deleted.
+
+- **An assistant** is deleted directly (`Manage`), from any state, after a confirmation that lists the apps it is
+  offered to and its recent use and asks for its name. It is a soft delete: no client lists or reaches it from that
+  moment, as with archive, and it does not come back. Its conversations and feedback stay until their own retention
+  removes them, and its statistics for their own time; where the assistant's row is gone they read *Deleted
+  assistant*. The row, its versions and audiences are purged 30 days later, once no conversation of it remains.
+- **A knowledge base** is deleted when no assistant that is active or archived links it (published version or draft;
+  a deleted assistant does not block) and it has no source that is not deleted. **A source** is deleted at any time.
+  Either way the documents leave the index at once and are purged by the rules for removed documents (14 days) and
+  their files by the blob purge delay.
+- **Nothing is restored** in the UI. A delete is in the audit log with the object's last values.
+
+Archive stays, for an assistant that may come back.
+
+*From:* #878; decided by user, 2026-11-20 (six questions with four alternatives each).
+*Also:* replaces "a slug is never reused" (the unique index over deleted rows too).
+
 ### Level change in the edit drawer
 
 A level is changed in the item's edit drawer under `edit`; the API's checks run as before and their refusals show

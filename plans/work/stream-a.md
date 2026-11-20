@@ -9,6 +9,22 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 
 Finished items move to [`../archive/work/`](../archive/work/) at each release (the main session); find one by its ID.
 
+## Code
+
+### [ ] A-36 A deleted source's and knowledge base's documents leave the index (#878)
+- **Do:** data-model §8 and admin §4.5: when a source is deleted (and so when its knowledge base is), the worker
+  soft-deletes its documents as removed ones are (`Documents.DeletedAt`, `PurgeAfter` +14 days, `DeletedAt` on the
+  chunks of each live set), tombstones an upload source's blobs, and cancels its running run. **Check first what
+  happens today:** the admin's `DELETE /api/sources/{id}` only sets `Sources.DeletedAt`, and the main session found
+  no worker code that removes the source's documents from the index (grep, 2026-11-20; not run). If they stay
+  searchable, that is a bug to say so on #878.
+- **Paths:** `src/Ume.Rag.Worker/**`, `tests/Ume.Rag.Worker.Tests/**`.
+- **Done when:** a test deletes a source with indexed documents and a search of its knowledge base finds none of
+  them; the documents are purged after the 14 days and an upload source's blobs after the blob purge delay.
+- **Waits on:** nothing.
+- **Read:** Decisions "Deleting knowledge bases, sources and assistants"; data-model §8; connectors §12 (soft
+  delete and purge); admin §4.5.
+
 ## Live (the live block, see the roadmap)
 
 ### [ ] A-L1 umea.se inventory and the `lastmod` sample's first pass

@@ -58,6 +58,38 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Waits on:** nothing.
 - **Read:** chat §9.9, §10.1, §10.2; decided by the user, 2026-11-19 (decisions log).
 
+### [ ] B-50 Delete a knowledge base and a source in the admin UI; their names free at once (#878)
+- **Do:** Decisions "Deleting knowledge bases, sources and assistants"; admin §4.5 (the collections and sources rows)
+  and *Delete in the UI* (§5.5): *Delete* in the ⋯ menu of a knowledge base and of a source (`Manage`), each with the
+  dialog (the counts, the name typed; for a knowledge base in use the `collection_in_use` list and no button). The
+  unique index on `config."Collections"."Slug"` becomes partial (`WHERE "DeletedAt" IS NULL`), and `slug_taken`
+  looks only at knowledge bases that are not deleted. `collection_in_use` ignores deleted assistants once B-51 is in.
+- **Paths:** `src/admin-ui/**` (b's), `src/Ume.Rag.AdminApi/**`, `src/Ume.Rag.Infrastructure/**` (the index and its
+  migration), `tests/**`.
+- **Done when:** tests show a knowledge base created with the name of a deleted one, the delete of one in use
+  refused with its list, and both dialogs (Vitest); a browser check by hand of both deletes, named in the PR.
+- **Waits on:** nothing. (That a deleted source's documents leave the index is A-36.)
+- **Read:** Decisions "Deleting knowledge bases, sources and assistants"; admin §4.5, §5.5; data-model §2.1, §8.
+
+### [ ] B-51 Delete an assistant (#878)
+- **Do:** the same decision; admin §4.5 (the assistants row): `config."Assistants"."DeletedAt"` with the partial
+  unique index on `Slug`; `DELETE /api/assistants/{id}` (`Manage`, from any state, the draft discarded, audit
+  `assistant.delete`); a deleted assistant is in no list, answers 404 on every route, is served to no client
+  (identity §4.3 step 5; `PublishedAssistantVersions` and the worker's column grant, data-model §2.2) and does not
+  block a knowledge base's delete; *Delete* in the assistant's ⋯ menu with its dialog (the apps, the questions of
+  the last 7 days, the name typed); statistics and feedback pages read *Deleted assistant* where the row is gone
+  (`labels.ts`); `config.rag_retention_config_step` purges the row 30 days after `DeletedAt` once no conversation
+  names it (data-model §8).
+- **Paths:** `src/Ume.Rag.AdminApi/**`, `src/Ume.Rag.Api/**`, `src/Ume.Rag.Answering/**`, `src/Ume.Rag.Domain/**`
+  (b's), `src/Ume.Rag.Infrastructure/**`, `src/Ume.Rag.MigrationService/**` (b's), `src/admin-ui/**` (b's),
+  `tests/**`.
+- **Done when:** tests show: a deleted assistant gone from `GET /v1/models` and refused in chat with 404 for a
+  client that had it; a new assistant with its name; its knowledge base deletable; its conversations and daily
+  totals still there; the retention step purging it only after the 30 days and its last conversation.
+- **Waits on:** nothing (B-50 first only to keep the two migrations apart).
+- **Read:** Decisions "Deleting knowledge bases, sources and assistants"; admin §4.5, §5.5; identity §4.3;
+  data-model §2.1, §2.2, §8.
+
 ## Live (the live block, see the roadmap)
 
 
