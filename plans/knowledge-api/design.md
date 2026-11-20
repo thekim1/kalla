@@ -76,6 +76,7 @@ public sealed record RetrievalRequest(
     int TopK = 10,                             // 1..50
     RetrievalMode Mode = RetrievalMode.Hybrid,
     RetrievalFilters? Filters = null,
+    IReadOnlyList<string>? Topics = null,      // chat only: ume.topics, narrows the links' topics (§4.2)
     ExpandMode Expand = ExpandMode.None,
     RetrievalPurpose Purpose = RetrievalPurpose.Chat,
     bool AllowDegraded = true,
@@ -322,7 +323,7 @@ Steps 0–5 run in memory against one snapshot; nothing touches Postgres or the 
 
 | Caller | Collections searched |
 |---|---|
-| Chat (in process) and `rag-internal` (`assistant_id`) | the `CollectionLinks` of the assistant's **published version** from the snapshot (data-model §2.1), and nothing else; a link with topic tags limits that collection to chunks carrying any of them (§6.2); a collection may belong to another department that shares it (admin design §3.2), and its level still has to pass §4.3: skills carry no collections, in either mode; `CollectionIds` in the request may only narrow this set (not a subset → 404 `collection_not_found`) |
+| Chat (in process) and `rag-internal` (`assistant_id`) | the `CollectionLinks` of the assistant's **published version** from the snapshot (data-model §2.1), and nothing else; a link with topic tags limits that collection to chunks carrying any of them (§6.2), and a chat request's `ume.topics` narrows the links further for that turn (`RetrievalRequest.Topics`; chat §3.8: a link with topics keeps those also asked for and leaves the scope when none is, a link without topics gets the asked ones), so the topic links of §6.2, the coverage counts and the floor all see the narrowed links; a collection may belong to another department that shares it (admin design §3.2), and its level still has to pass §4.3: skills carry no collections, in either mode; `CollectionIds` in the request may only narrow this set (not a subset → 404 `collection_not_found`) |
 | Integration key (P2) | requested slugs, each in `Keys.Scopes`; no slugs → all collections in the key's scope |
 | Token caller (P2) | requested slugs, each allowed by `CollectionAudiences` (new P2 table, §18) for the client, department or group; no slugs → `Filter` over all |
 | Admin test panel | the collections of the assistant's draft (or a chosen version) or the chosen collections, **including unpublished ones**, checked with the admin's role scope (identity §4.8); runs in the admin process through `KnowledgeService` (`Ume.Rag.Answering`) on `Ume.Rag.Retrieval` |

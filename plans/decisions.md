@@ -817,6 +817,17 @@ sitemap `lastmod`. An upload has no `checked`. The citation label shows both, in
 
 *From:* support chatbot proposal F4; picked by user, 2026-11-19 (#857).
 
+### Topics per request
+
+A client other than Open WebUI may send `ume.topics` with a chat request: the turn then searches only chunks that
+carry one of those topics, inside what the assistant's links allow. A link with topics keeps the ones also asked
+for, and is left out when none is; a link without topics is searched for the asked topics. A request narrows and
+never widens. A topic that matches no link is not an error: the answer's `ume.topics` lists the ones that were
+searched, and a turn with nothing left to search ends `not-found`. Detail: `chat-api/design.md` §3.8;
+`knowledge-api/design.md` §4.2.
+
+*From:* support chatbot proposal F8; picked by user, 2026-11-20.
+
 ### Chat rate limit per key
 
 A key that is itself the chat subject is limited by `Keys.RequestsPerMinute`, else by the per-user value; Open WebUI
