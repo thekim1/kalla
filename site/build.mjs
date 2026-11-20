@@ -1,5 +1,5 @@
 // Builds the static website into site/dist: the product page, Getting started and every Markdown page in content.mjs
-// DOCS rendered as documentation. No framework; one dependency (marked). The gateway's site build (thekim1/llmgateway,
+// DOCS rendered as documentation. No framework; one dependency (marked). The gateway's site build (thekim1/fors,
 // site/build.mjs), adapted: its pages, brand and links.
 //
 //   node build.mjs                 build for https://<host>/        (SITE_BASE=/kalla-platform/ for GitHub Pages)

@@ -8,7 +8,7 @@
       "path": "tailwind.config.cjs",
       "sha256": "d3e2f6eecbaec1bd8155fadd1402a373cead1040771cdb5e5e0441e9005e76e1",
       "copy": "unchanged",
-      "note": "the font stack from thekim1/llmgateway#111 (08f9fda8), ahead of the lock commit (#869)"
+      "note": "the font stack from thekim1/fors#111 (08f9fda8), ahead of the lock commit (#869)"
     },
     {
       "path": "src/styles/icons.css",
@@ -24,7 +24,7 @@
       "path": "src/styles/tokens.css",
       "sha256": "8e9ea8fcf09d3f759774c5123e9b0dfc68d235331fa00f4ee565251e84bc0f0b",
       "copy": "unchanged",
-      "note": "the font stack from thekim1/llmgateway#111 (08f9fda8), ahead of the lock commit (#869)"
+      "note": "the font stack from thekim1/fors#111 (08f9fda8), ahead of the lock commit (#869)"
     },
     {
       "path": "src/components/ui/AppIcon.vue",

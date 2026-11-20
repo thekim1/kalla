@@ -196,7 +196,7 @@ public sealed class FakeGatewayInfo
 
     /// <summary>
     /// The capabilities the fake implements, of the gateway's list (<c>ContextEndpoint.Features</c> at
-    /// thekim1/llmgateway <c>v0.10.2</c>), phase 2 included: <c>act-as-key</c> and <c>run-metadata</c> (B-42),
+    /// thekim1/fors <c>v0.10.2</c>), phase 2 included: <c>act-as-key</c> and <c>run-metadata</c> (B-42),
     /// <c>stream-cost</c> (B-38), <c>organisation-name</c> (M-17 C12), <c>integration-api-url</c> (M-17 C11) and
     /// <c>oidc-authority</c> (M-20 S8, after <c>v0.10.3</c>).
     /// </summary>

@@ -67,7 +67,7 @@ waits on anything but the user. In order:
    before starting one.
 4. **#874**, the quick start's three smaller findings (stream a's paths): the bootstrap's wizard address has no
    port, the setup script's bare error without root, the quick start does not say the cost read-back is off.
-5. **The gateway's repository:** thekim1/llmgateway#112 (`realm-import` cannot read its trust store after
+5. **The gateway's repository:** thekim1/fors#112 (`realm-import` cannot read its trust store after
    `init-keycloak.sh`, and `up --wait` reports success) and #113 (the release bundle has no `docs/`), both from the
    quick start run; the wildcard DNS advice of Decisions "Host names" is not in the gateway's guides yet (a pull
    request there; merges are the user's).

@@ -10,7 +10,7 @@ namespace Kalla.Api.Tests;
 /// B-35 (#580): the FakeGateway's discovery answers hold to the gateway's published integration contract
 /// (<c>contracts/gateway/integrations.json</c>, checked as the gateway's own tests do: an undescribed field or a missing
 /// required one is a difference), and behave as the gateway's (<c>ContextEndpoint</c>, <c>ModelListEndpoint</c>,
-/// <c>CacheableJson</c> at thekim1/llmgateway <c>v0.10.0</c>): the organisation and member groups under <c>organisation.read</c>, revoked keys left out,
+/// <c>CacheableJson</c> at thekim1/fors <c>v0.10.0</c>): the organisation and member groups under <c>organisation.read</c>, revoked keys left out,
 /// <c>usable</c> against the presenting credential key, and an <c>ETag</c> with an empty <c>304</c>.
 /// </summary>
 public sealed class FakeGatewayContractTests(FakeGatewayFactory fake) : IClassFixture<FakeGatewayFactory>

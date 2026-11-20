@@ -45,7 +45,7 @@ canary (`POST /api/gateway/canary-check`; Decisions "Embedding canary on demand"
 `PUT /api/settings/retrieval` ([`../../../docs/production-setup.md`](../../../docs/production-setup.md), "Rerank
 (optional)").
 
-**The Foundry reranker.** Gateway v0.9.1 routes rerankers on Azure AI Foundry natively (thekim1/llmgateway#72, ADR
+**The Foundry reranker.** Gateway v0.9.1 routes rerankers on Azure AI Foundry natively (thekim1/fors#72, ADR
 019; release notes "Rerankers on Azure AI Foundry, and a residency per model"); the earlier OpenAI-compatible
 workaround is no longer needed:
 

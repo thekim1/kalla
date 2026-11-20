@@ -2,7 +2,7 @@
 
 **Status:** **agreed** (user, 2026-11-13: D1–D10 each as recommended, D9 nginx with the operator's certificates in
 Källa's template for all five hosts). The binding rules are in Decisions ("Deploy configuration", "Residency per
-level", "Role groups as a setting"); the work is `work/main.md` **M-17**; the gateway changes are thekim1/llmgateway
+level", "Role groups as a setting"); the work is `work/main.md` **M-17**; the gateway changes are thekim1/fors
 #87 (G1), #88 (G2), #89 (G4), #90 (G5). G3 is not asked (the embedding dimensions are measured). Written by the main
 session, session 34.
 

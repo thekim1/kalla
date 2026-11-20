@@ -5,7 +5,7 @@ using Microsoft.Net.Http.Headers;
 namespace Kalla.FakeGateway;
 
 /// <summary>
-/// Copied from the gateway (<c>src/Fors.Gateway/Requests/CacheableJson.cs</c>, thekim1/llmgateway <c>v0.10.0</c>,
+/// Copied from the gateway (<c>src/Fors.Gateway/Requests/CacheableJson.cs</c>, thekim1/fors <c>v0.10.0</c>,
 /// unchanged since #84 at <c>7b5f4e3</c>); only the namespace differs.
 /// Answers of the discovery endpoints (<c>/v1/models</c>, <c>/v1/fors/context</c>) with an <c>ETag</c> over the body, so a
 /// client that polls sends <c>If-None-Match</c> and usually gets an empty 304. The body is built from memory either way;

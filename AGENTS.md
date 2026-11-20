@@ -1,6 +1,6 @@
 # Källa
 
-RAG, crawling and chat platform for Umeå kommun, built as small .NET 10 services on top of the team's LLM gateway.
+RAG, crawling and chat platform for Umeå kommun, built as small .NET 10 services on top of Fors, the team's LLM gateway.
 This repo holds the design (`plans/`, with the goal and principles in `01-general-idea.md`; background research on
 other platforms, not binding, in `platforms/`) and, from P0, the code in the layout of
 `plans/platform/repo-and-deployment.md` §1.

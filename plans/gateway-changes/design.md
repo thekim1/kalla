@@ -7,7 +7,7 @@ tenant/guest refusal are designed there for both systems; this document only tur
 rows are in [`adr-drafts.md`](adr-drafts.md). Nothing here is implemented in the gateway yet (`~/git/llmgateway` is at
 v0.8.5); Källa's side of feature B is built and runs against v0.8.5 until release 1 (§13.4).
 
-**As built (#390, 2026-11-06):** release 1 is implemented in gateway draft PRs thekim1/llmgateway#65 (embeddings per
+**As built (#390, 2026-11-06):** release 1 is implemented in gateway draft PRs thekim1/fors#65 (embeddings per
 input), #66 (feature B, ADR 018) and #67 (FakeLlm, tool passthrough); rerank is #68 and the shared Keycloak #70. Where
 this document and those PRs differ, the PRs win; §3.3, §3.5 and §7.4 below state the built behaviour. Ground rule: the
 gateway never depends on Källa; every change is a generic gateway feature.
@@ -31,7 +31,7 @@ test/dev instance (§13.4). The letters name features:
 | **A** (gateway integration phases 1–3) | Integration with credential and assigned keys, `GET /v1/fors/context` and the model facts on `GET /v1/models`; acting as an assigned key with `x-fors-on-behalf-of`; run metadata (§7.1); stream cost; Integration API (§5) | the gateway's own (`Integrations`, `UsageRunMetadata`) | one credential key per service; each assistant and knowledge base as its own assigned key (§13.4) |
 | Development (release 1) | FakeLlm embedding dimensions (§6); tool passthrough tests (§7.2) | none | local development against a real gateway with FakeLlm (optional; the FakeGateway is the default) |
 
-Not in either release's scope: the optional rerank endpoint (§7.4, thekim1/llmgateway#68), which shipped alongside
+Not in either release's scope: the optional rerank endpoint (§7.4, thekim1/fors#68), which shipped alongside
 release 1's residency ceiling in gateway v0.9.0 (Foundry rerankers in v0.9.1).
 It is pulled forward from P2 but is no go-live gate: with no rerank model configured Källa makes no rerank call
 (Decisions "Rerank pulled forward").
@@ -571,7 +571,7 @@ Decisions "Answer length from the model"); until the gateway sends them, a platf
 mirror. Route aliases are listed on `GET /v1/models` with their targets' residencies (`fors.residencies`), so the sync
 takes them from there too and no manual route rows remain.
 
-### 7.4 Rerank endpoint (its own release after release 1; #390, thekim1/llmgateway#68)
+### 7.4 Rerank endpoint (its own release after release 1; #390, thekim1/fors#68)
 
 Decided (user, 2026-11-05/06). **Optional and provider-neutral:** `POST /v1/rerank`, Cohere/Jina-compatible, served
 by any provider with the *Rerank* capability and a model of kind *Rerank* (vLLM, TEI, Infinity, Cohere, Jina). Request
@@ -697,7 +697,7 @@ Two releases, so the pilot waits only for the smallest change a production gatew
 - **Feature A** (§5, with §7.1) comes in the gateway's integration phases 1–3, each its own release, independent of
   release 2.
 
-The optional rerank endpoint (§7.4) is in neither release's scope: it shipped in gateway v0.9.0 (thekim1/llmgateway#68),
+The optional rerank endpoint (§7.4) is in neither release's scope: it shipped in gateway v0.9.0 (thekim1/fors#68),
 pulled forward from P2, and is no go-live gate (Decisions "Rerank pulled forward").
 
 ### 13.2 Migrations and rolling update

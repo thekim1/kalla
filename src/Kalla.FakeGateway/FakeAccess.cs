@@ -31,7 +31,7 @@ public sealed record FakeCall(Residency KeyLevel, Residency? Ceiling, bool Crede
 public sealed record FakeKey(Residency Level, FakeCredentialKey? Credential);
 
 /// <summary>
-/// The gateway's step 1 and 1b and candidate selection as release 1 builds them (gateway PR thekim1/llmgateway#66:
+/// The gateway's step 1 and 1b and candidate selection as release 1 builds them (gateway PR thekim1/fors#66:
 /// <c>RequestStages.ReadMaxResidency</c>, <c>RouteResolver.SelectCandidatesAsync</c>, <c>GatewayErrors</c>): the key, then
 /// <c>x-fors-max-residency</c> (required for every dev key, as <c>RequireMaxResidency</c>), then the model, its kind, and
 /// the targets within the ceiling with the 403/503 split, then the attempts (502/504 when every one fails). Errors use the

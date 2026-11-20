@@ -4,11 +4,11 @@ using Microsoft.Extensions.Options;
 using Kalla.FakeGateway;
 
 // OpenAI-compatible fake of the team's LLM gateway for local runs and tests (repo-and-deployment §4.3). Behaves like
-// gateway release 1 as built (thekim1/llmgateway#66, #390): per-level dev keys that require x-fors-max-residency (400
+// gateway release 1 as built (thekim1/fors#66, #390): per-level dev keys that require x-fors-max-residency (400
 // invalid_request when it is missing, empty, repeated or not one of the three names), x-fors-residency on every answer,
 // 403 max_residency_not_met vs 503 no_eligible_provider + Retry-After, no circuit-open 503 (failing in-ceiling targets end
 // in 502/504 all_providers_failed), /v1/models filtered by the ceiling, the optional Cohere-compatible /v1/rerank
-// (thekim1/llmgateway#68; off unless FakeGateway:RerankEnabled), and /v1/fors/context. Behaviour by model name
+// (thekim1/fors#68; off unless FakeGateway:RerankEnabled), and /v1/fors/context. Behaviour by model name
 // (appsettings.json):
 //   fake-fail-500 → 502 all_providers_failed; fake-fail-timeout → 504; fake-fail-fallback → its OnPrem target fails, so
 //   OnPrem gets 502 and Eu an answer from Eu; fake-slow → 3 s delay; fake-wrong-residency → answers with x-fors-residency
@@ -52,7 +52,7 @@ app.MapGet("/v1/models", async (HttpContext ctx, IOptionsSnapshot<FakeGatewayOpt
         return;
     }
 
-    // As the gateway's ModelListEndpoint (thekim1/llmgateway#84): only models with an available target within the
+    // As the gateway's ModelListEndpoint (thekim1/fors#84): only models with an available target within the
     // ceiling (gateway design §3.4); a multi-target name is a route alias (fors.residencies, the limits all its targets
     // have), a single-target one a deployment (fors.residency); fors.kind is the gateway's ModelKind name; an ETag.
     var data = new JsonArray();
@@ -309,7 +309,7 @@ app.MapPost("/v1/embeddings", async (HttpContext ctx, IOptionsSnapshot<FakeGatew
     });
 });
 
-// Cohere-compatible rerank as the gateway serves it from thekim1/llmgateway#68 (gateway design §7.4): documents as strings
+// Cohere-compatible rerank as the gateway serves it from thekim1/fors#68 (gateway design §7.4): documents as strings
 // or { text }, results[] with index and relevance_score (and document with return_documents), usage in input tokens.
 // Optional: with FakeGateway:RerankEnabled off (the default) no rerank model exists, so the call answers 404 (400 for a
 // model of another kind), as the gateway does without a rerank provider. Scores from word overlap, deterministic.

@@ -219,7 +219,7 @@ may sign in to Open WebUI is open (§5.3, §16).
 
 ## 2. Feature C: department scope from member groups (both systems, claims only)
 
-**Phase:** the gateway delivers member groups with **v0.10.0** (#580, thekim1/llmgateway#85, 2026-11-12): each
+**Phase:** the gateway delivers member groups with **v0.10.0** (#580, thekim1/fors#85, 2026-11-12): each
 department of `GET /v1/fors/context` carries `member_groups` under the scope `organisation.read` (feature
 `member-groups`). Department scope comes from the `departmentCodes` claim **plus the mirrored member groups**, matched
 against the `groups` claim by the resolver (§2.3). The user chose to wait for the gateway rather than build another
@@ -315,7 +315,7 @@ admins (who need no departments) are never locked out.
 4. `/bff/user`: `departmentSources`. New events 2008 `admin.signin.refused` and Data API 3003 `data.token.refused`
    (tenant/guest refusals).
 5. Integration context: `member_groups` on each department of `GET /v1/fors/context` under `organisation.read` (teams
-   already carry `code`). Built in v0.10.0 (thekim1/llmgateway#85).
+   already carry `code`). Built in v0.10.0 (thekim1/fors#85).
 6. `FORS_OIDC_TENANT_ID`, `FORS_OIDC_REFUSE_GUESTS` in `compose.prod.yaml` and the Portainer templates.
 7. Docs: `identity-and-roles.md` (Entra step 4 alternative "member groups in the group claim"), runbook *Identity
    provider*.
@@ -571,7 +571,7 @@ name, is never changed, a difference is only logged. It writes each new key's se
 admin (with a grace period), then deleting the key's file and updating the stack: a missing file is written again from
 the key's stored secret (audited as a reveal). Compose and Kubernetes take the keys from files as before
 (`--gateway-credential-key-file`, `create-secrets.sh`). The gateway's preset `deploy/integration-presets/kalla.json`
-is Källa's to change (thekim1/llmgateway#95: kalla-api and kalla-admin limited to `OnPrem`+`Eu` too).
+is Källa's to change (thekim1/fors#95: kalla-api and kalla-admin limited to `OnPrem`+`Eu` too).
 
 **Acting as the object's key.** From phase 2 (the context's `features` contain `act-as-key`), every call made for an
 assistant or a knowledge base that has a `GatewayKeyId` also sends `x-fors-on-behalf-of: <that key id>` (cost-attribution
@@ -589,7 +589,7 @@ the object's key cannot be used now (gateway-changes §5.7; chat §3.6, engine �
 call, acted or not, and hold whatever a key's admins change. The gateway is the second guard: a request made as an
 assigned key needs `x-fors-max-residency` when either key has `RequireMaxResidency`, and gets the assigned key's
 residencies **intersected with the credential key's** (decided by user, 2026-11-12, #580; gateway design §5.3,
-built in thekim1/llmgateway#84, feature `credential-residencies`). An older gateway instance during a rolling update
+built in thekim1/fors#84, feature `credential-residencies`). An older gateway instance during a rolling update
 does not apply the bound, which is one more reason the ceiling header goes on every call. Each service's credential key is therefore capped at the highest level that service serves: the worker's at
 `Eu` (it never sends `External`), kalla-api's and kalla-admin's at the highest level their assistants may use (`Eu`
 while register M2 holds). The
@@ -1113,7 +1113,7 @@ follows:
 | Users, groups | **no test users**; pilot accounts are local Keycloak accounts created by hand (J11, user item U-c); member groups for the pilot department are Keycloak groups whose names a platform admin enters on our department record (§2) | §11.1's users and groups stay dev-only |
 | Seed | none: the mirror is filled from the gateway (org sync) and by hand (§2) | – |
 
-**Settled by the gateway session (#390, thekim1/llmgateway#70, 2026-11-06).** Keycloak runs **26.8.1** (the gateway's pin,
+**Settled by the gateway session (#390, thekim1/fors#70, 2026-11-06).** Keycloak runs **26.8.1** (the gateway's pin,
 `quay.io/keycloak/keycloak:26.8.1-1@sha256:a78d6b79572168cb25886b80a8b5b8d4ed4390743e3eecb810538683e209dd6b`).
 **keycloak-config-cli** applies the realm on every `docker compose up` of the gateway's `deploy/keycloak` project: the
 gateway's `realm/10-gateway.json` first, then every `*.json` in the operator's additions directory in name order, each
@@ -1490,7 +1490,7 @@ kalla-admin writes it to standard output at start while setup is open, with the 
 logger or a security event. A wrong code never voids the code and never stops the right one: the code is
 compared first, so the right one always gives a session, and after 20 wrong codes in a minute an instance answers
 further wrong ones 429 with `Retry-After`, on top of the per-address limit (until 2026-11-16 the throttle came first and
-a flood of wrong codes kept the right one out; found by the gateway's security review, thekim1/llmgateway#100); nothing
+a flood of wrong codes kept the right one out; found by the gateway's security review, thekim1/fors#100); nothing
 about wrong codes is stored, and their security event is sampled (one per 10 seconds, with a count). 128 bits need no
 hard stop, and a hard stop would let anyone who reaches the page shut the deployer out.
 
@@ -1534,7 +1534,7 @@ in use. Without a usable authority (none, not an absolute https URL, or a stored
 that can't be completed gives no session, security event 5001 `callback_failed` and a redirect to `/?signin=failed`.
 Built in M-20 S2 (#762); the bound in #784.
 
-**Anonymous callbacks of a setup test** (#784, from the review of thekim1/llmgateway#103). A request to the callback
+**Anonymous callbacks of a setup test** (#784, from the review of thekim1/fors#103). A request to the callback
 path with a setup test's `state` is answered before a test is looked up: 404 while setup is closed by the values last
 read (nothing more is read), and while it is open at most 20 a minute per client address reach the database, then 429
 (`SetupCallbackThrottle`, per instance; per address so a flood does not keep the deployer's own callback out). A passed

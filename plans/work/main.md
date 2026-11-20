@@ -44,7 +44,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   request (`kalla-migrate` fences the service roles a migration stops, data-model §10; an upgrade from 0.5.x is one
   step, boot-tested from 0.5.1 in `release.yml`; `docs/portainer.md` has one *Upgrade* section; Decisions "Upgrades in
   one step"), and S9's admin UI part (#816, closes #807). S6 (one escrow set: `escrow-keys.sh` with the pepper, the blob keys, the passphrase, the database passwords, the conversation id keys, the Data Protection certificate and the CA, by `--env-file`, `--project` or directories, with `--restore`; repo-and-deployment §7.4). Open: S8 as each page is touched. S5 and S7 are proposals in the gateway's
-  repository (thekim1/llmgateway#108, #109).
+  repository (thekim1/fors#108, #109).
 - **Done when:** a first install with Compose needs the same few values as the Portainer stack and no bootstrap logic
   exists twice; an installation without Open WebUI shows no trace of it; each step shown by the deploy tests
   (`deploy-checks`, the boot test) and, for a stack-file change, a boot.
@@ -114,6 +114,6 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   the context, `OnPrem` before the first one; `Gateway:MaxResidency` gone), C10 (#693: `Settings.Identity.RoleGroups`,
   *Settings → Role groups*; four group variables gone, the platform-admin one stays as the break-glass), C7 (#727, gateway
   v0.10.2: the gateway's migrations create the three credential keys from `FORS_INTEGRATION_MANIFEST`, kalla-bootstrap
-  copies them; preset hand-off thekim1/llmgateway#95), C12 (#731: `organisation_name` from the context). In review: C11
+  copies them; preset hand-off thekim1/fors#95), C12 (#731: `organisation_name` from the context). In review: C11
   (#740, replaces #732: `integration_api_url` from the context, key sent only over `https`). Left: C13. The M-16 session
   continues and announces each step on #667.

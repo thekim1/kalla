@@ -522,7 +522,7 @@ usage record); the answer's echo of the header is checked, and a missing or diff
 (`Gateway:RequireDelegationEcho`). Every call still sends `x-fors-max-residency` from the data's level, and the worker
 never sends `External`. The gateway bounds an acted request by the credential key too: `RequireMaxResidency` applies
 when either key requires it, and the effective residencies are the assigned key's ∩ the credential key's (decided by
-user, 2026-11-12, #580; built in thekim1/llmgateway#84, feature `credential-residencies`). So each service's
+user, 2026-11-12, #580; built in thekim1/fors#84, feature `credential-residencies`). So each service's
 credential key is capped at the highest level it serves (the worker's at `Eu`). An assigned key cannot
 authenticate by itself, so nothing per assistant is copied, stored or rotated in Källa. Each setting has one owner:
 departments, teams, models with their limits and prices, and a key's models, residencies, PII policy, content guard,

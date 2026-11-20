@@ -6,7 +6,7 @@
 #   deploy/portainer/build-stack.sh                # the compose.portainer.yaml asset of the gateway's latest release
 #   deploy/portainer/build-stack.sh v0.10.1        # ... of that gateway release
 #   deploy/portainer/build-stack.sh current        # ... of the gateway release the committed file was built from
-#   deploy/portainer/build-stack.sh ../llmgateway/deploy/compose.portainer.yaml   # or a local file
+#   deploy/portainer/build-stack.sh ../fors/deploy/compose.portainer.yaml   # or a local file
 #
 # Options, before the gateway:
 #   --check          write nothing: build from `current` and fail with the difference when the committed
@@ -74,10 +74,10 @@ fi
 
 if [ -z "$gateway" ] || [ ! -f "$gateway" ]; then
   case "$gateway" in
-    "") tag="$(gh release view -R thekim1/llmgateway --json tagName --jq .tagName)" ;;
+    "") tag="$(gh release view -R thekim1/fors --json tagName --jq .tagName)" ;;
     current)
-      tag="$(grep -m1 -oE 'llmgateway/gateway:[0-9][0-9A-Za-z.-]*' "$committed" | cut -d: -f2)"
-      [ -n "$tag" ] || { echo "$committed names no gateway release (llmgateway/gateway:X.Y.Z)" >&2; exit 1; }
+      tag="$(grep -m1 -oE 'fors/gateway:[0-9][0-9A-Za-z.-]*' "$committed" | cut -d: -f2)"
+      [ -n "$tag" ] || { echo "$committed names no gateway release (fors/gateway:X.Y.Z)" >&2; exit 1; }
       tag="v$tag" ;;
     *) tag="$gateway" ;;
   esac

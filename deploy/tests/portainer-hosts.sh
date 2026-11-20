@@ -125,7 +125,7 @@ fi
 # Unset, and set but empty (Portainer keeps a variable whose value was cleared): the stack renders with an empty name,
 # and kalla-bootstrap, which every service waits for, stops on it with a message that names both. The stack file has no
 # ":?" inside a default: some Compose versions evaluate it even when the outer variable is set (5.0.2 does not), which refuses a stack with
-# only KALLA_API_HOST (seen on GitHub's runner with the gateway's file, thekim1/llmgateway#102).
+# only KALLA_API_HOST (seen on GitHub's runner with the gateway's file, thekim1/fors#102).
 grep -q ':?[^}]*}}' "$stack" && fail "the stack file has a required-variable form inside a default"
 grep -q 'KALLA_API_HOST:?Set FORS_DOMAIN or KALLA_API_HOST' "$stack" \
   || fail "kalla-bootstrap's script does not stop on an empty KALLA_API_HOST with a message that names both"

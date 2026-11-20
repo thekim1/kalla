@@ -13,7 +13,7 @@ namespace Kalla.Api.Tests;
 
 /// <summary>
 /// The FakeGateway behaves like gateway release 1 as built (repo-and-deployment §4.3, gateway design §3, #390 Feature B
-/// points 1–4 and 8, checked against thekim1/llmgateway#66 and #68): keys that require a ceiling, the 400/403/503 split
+/// points 1–4 and 8, checked against thekim1/fors#66 and #68): keys that require a ceiling, the 400/403/503 split
 /// with <c>Retry-After</c> only on the ceiling 503, 502/504 instead of a circuit-open 503, <c>x-fors-residency</c>,
 /// <c>/v1/models</c> by ceiling, 1024-dim embeddings, cited answers, the stream modes of chat design §18.4, the optional
 /// Cohere-compatible rerank and the catalogue.
@@ -312,7 +312,7 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
     [Fact]
     public async Task Rerank_scores_strings_and_text_objects_in_the_cohere_shape()
     {
-        // gateway design §7.4, thekim1/llmgateway#68: { model, query, documents: (string | { text })[], top_n?,
+        // gateway design §7.4, thekim1/fors#68: { model, query, documents: (string | { text })[], top_n?,
         // return_documents? } → results[] with index and relevance_score (document when asked) and usage.
         using var rerank = Rerank();
         using var response = await SendAsync("/v1/rerank", """

@@ -19,7 +19,7 @@ namespace Kalla.AdminApi.Tests;
 /// <summary>
 /// A Keycloak container (<see cref="KeycloakFixture.Image"/>, the shared Keycloak's 26.8.1) and keycloak-config-cli
 /// runs against it, as the gateway's <c>deploy/keycloak</c> project applies realm files (identity design §11.2,
-/// thekim1/llmgateway#70): the same image and digest, sign-in as the bootstrap service account
+/// thekim1/fors#70): the same image and digest, sign-in as the bootstrap service account
 /// <c>fors-realm-import</c> by client credentials with its secret from a Spring config tree, <c>realm/*.json</c> then
 /// <c>additions/*.json</c> in name order, <c>$(env:...)</c> substitution, and every resource type <c>no-delete</c>.
 /// The placeholder values are the job's environment, as <c>FORS_KEYCLOAK_IMPORT_ENV</c>'s file makes them.

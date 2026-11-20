@@ -302,7 +302,7 @@ deployment sets on purpose.
 
 ## 6. Gateway changes (the user's repository), for stage 2
 
-Proposed as issues in thekim1/llmgateway once this proposal is agreed; none blocks stage 1.
+Proposed as issues in thekim1/fors once this proposal is agreed; none blocks stage 1.
 
 | # | Change | For |
 |---|---|---|

@@ -67,8 +67,8 @@
 # Ports: inside the containers the apps listen on 8443 and the health probe checks that; only
 # the host side of the mapping is configurable (see compose.prod.yaml for details).
 #
-# ---- Ume Rag (added by the RAG repository's deploy/portainer/build-stack.sh) ------------------------------------------
-# The same stack also runs Ume Rag: kalla-postgres, kalla-migrate, kalla-api (8543), kalla-admin (9543), kalla-worker,
+# ---- Källa (added by the RAG repository's deploy/portainer/build-stack.sh) ------------------------------------------
+# The same stack also runs Källa: kalla-postgres, kalla-migrate, kalla-api (8543), kalla-admin (9543), kalla-worker,
 # kalla-parser and, with their profiles in COMPOSE_PROFILES, kalla-clamav (clamav) and kalla-renderer (render). Its one-shot
 # kalla-bootstrap creates RAG's certificates and secrets in the volumes <stack>_kalla-certs and <stack>_kalla-secrets on first
 # start. Keep the stack name: the gateway's volumes are found by it.
@@ -84,7 +84,7 @@
 #                             overrides its name; without FORS_DOMAIN, FORS_GATEWAY_HOST and KALLA_API_HOST are
 #                             required instead
 # Set by the stack file or stack.env.example, nothing to type
-#   FORS_INTEGRATION_MANIFEST  (the gateway's) unset, this file's default: the integration Ume.Rag with its three
+#   FORS_INTEGRATION_MANIFEST  (the gateway's) unset, this file's default: the integration Källa with its three
 #                             credential keys (deploy/portainer/integration-manifest.json), in a team and department of
 #                             its own (kalla) that a gateway admin can move. The gateway's migrations create what is
 #                             missing (never change what exists) and write each new key to the volume
@@ -92,7 +92,7 @@
 #                             C7). Set it to your own manifest (with an "owner") to place the integration in an existing
 #                             team at once; set it empty to create nothing. Then, or for a key issued by hand:
 #   KALLA_API_GATEWAY_KEY, KALLA_ADMIN_GATEWAY_KEY, KALLA_WORKER_GATEWAY_KEY
-#                             each service's credential key of the gateway integration Ume.Rag; set, it wins over the
+#                             each service's credential key of the gateway integration Källa; set, it wins over the
 #                             manifest's. Without a key the stack starts but that service's model calls are refused. To
 #                             rotate one: rotate it in the gateway's admin, then set the variable (or delete its file in
 #                             <stack>_integration-secrets) and update the stack: picked up within seconds, no restart.
@@ -124,7 +124,7 @@
 #                             residencies in the gateway (register M2: OnPrem and Eu)
 #   COMPOSE_PROFILES=clamav,render  also the renderer for JavaScript-rendered pages (see kalla-renderer)
 #   Open WebUI is optional: without the openwebui profile nothing of it is created (no secrets, no client in RAG's
-#                             admin, no chat host name in the proxy), and Ume.Rag serves its API to your applications.
+#                             admin, no chat host name in the proxy), and Källa serves its API to your applications.
 #   COMPOSE_PROFILES=clamav,openwebui  also kalla-openwebui, Open WebUI as the chat for users, on plain HTTP at
 #                             KALLA_OPENWEBUI_BIND (127.0.0.1):KALLA_OPENWEBUI_PORT (3000) for a TLS proxy in front
 #                             (it sets Secure cookies, so users reach it over HTTPS only). It calls kalla-api inside the
@@ -226,7 +226,7 @@ services:
       FORS_OIDC_CLIENT_SECRET: ${FORS_OIDC_CLIENT_SECRET:-}
       FORS_DATA_AUTHORITY: ${FORS_DATA_AUTHORITY:-}
       COMPOSE_PROFILES: ${COMPOSE_PROFILES:-}
-      # Rewritten by the RAG repository's build-stack.sh: the integration Ume.Rag and its three credential keys as the
+      # Rewritten by the RAG repository's build-stack.sh: the integration Källa and its three credential keys as the
       # default (deploy/portainer/integration-manifest.json), used only while the variable is unset. Set, the variable
       # wins; set and empty, nothing is provisioned.
       FORS_INTEGRATION_MANIFEST: '${FORS_INTEGRATION_MANIFEST-{"schemaVersion":1,"integration":{"name":"Kalla","description":"K\u00e4lla retrieval platform"},"credentialKeys":[{"name":"rag-api","allowedResidencies":["OnPrem","Eu"],"requireMaxResidency":true,"piiPolicy":"Off","allowedIpRanges":[]},{"name":"rag-admin","integrationScopes":["organisation.read","usage.read"],"allowedResidencies":["OnPrem","Eu"],"requireMaxResidency":true,"piiPolicy":"Off","allowedIpRanges":[]},{"name":"rag-worker","allowedResidencies":["OnPrem","Eu"],"requireMaxResidency":true,"piiPolicy":"Off","allowedIpRanges":[]}]}}'
@@ -953,13 +953,13 @@ services:
     image: ${KALLA_PROXY_IMAGE:-docker.io/nginxinc/nginx-unprivileged:1.31.6-alpine@sha256:884e0b7f42f303641b0f4e78755aea647521dca0b89ca3be7992ad78b5c07434}
     user: "101:101"
     restart: unless-stopped
-    command: [nginx, -c, /etc/nginx/ume/nginx.conf, -g, "daemon off;"]
+    command: [nginx, -c, /etc/nginx/kalla/nginx.conf, -g, "daemon off;"]
     cpus: 0.5
     mem_limit: 128m
     pids_limit: 128
     ports: ["${KALLA_PROXY_BIND:-0.0.0.0}:${KALLA_PROXY_PORT:-443}:8443"]
     volumes:
-      - {type: volume, source: kalla-config, target: /etc/nginx/ume, read_only: true, volume: {subpath: proxy}}
+      - {type: volume, source: kalla-config, target: /etc/nginx/kalla, read_only: true, volume: {subpath: proxy}}
       # The operator's certificate: a host directory, not created when missing (the container then does not start).
       - type: bind
         source: ${KALLA_PROXY_CERTS_DIR:-/etc/kalla/proxy-certs}
@@ -2453,7 +2453,7 @@ configs:
       # gateway, its admin, kalla-api, kalla-admin and Open WebUI, with the operator's certificate. kalla-bootstrap fills in the
       # @placeholders@ from the stack's host names and writes kalla-config/proxy/nginx.conf; it drops the blocks marked
       # #gwadmin, #ragadmin or #owui when that host has no name of its own (or the openwebui profile is off). Routes and body
-      # sizes as the gateway's and Ume.Rag's nginx.conf.example; every upstream but Open WebUI (plain HTTP inside the stack)
+      # sizes as the gateway's and Källa's nginx.conf.example; every upstream but Open WebUI (plain HTTP inside the stack)
       # is re-encrypted and verified against its internal CA.
       worker_processes auto;
       pid /tmp/nginx.pid;
@@ -2521,7 +2521,7 @@ configs:
       #gateway            proxy_send_timeout 600s;
       #gateway            proxy_connect_timeout 5s;
       #gateway            proxy_ssl_verify on;
-      #gateway            proxy_ssl_trusted_certificate /etc/nginx/ume/gateway-ca.pem;
+      #gateway            proxy_ssl_trusted_certificate /etc/nginx/kalla/gateway-ca.pem;
       #gateway            proxy_ssl_name gateway;
       #gateway            proxy_ssl_server_name on;
       #gateway        }
@@ -2539,7 +2539,7 @@ configs:
       #gwadmin            proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
       #gwadmin            proxy_connect_timeout 5s;
       #gwadmin            proxy_ssl_verify on;
-      #gwadmin            proxy_ssl_trusted_certificate /etc/nginx/ume/gateway-ca.pem;
+      #gwadmin            proxy_ssl_trusted_certificate /etc/nginx/kalla/gateway-ca.pem;
       #gwadmin            proxy_ssl_name adminapi;
       #gwadmin            proxy_ssl_server_name on;
       #gwadmin        }
@@ -2558,14 +2558,14 @@ configs:
       #ragapi            proxy_http_version 1.1;
       #ragapi            proxy_set_header Connection '';
       #ragapi            proxy_set_header Host $$host;
-      #ragapi            # List this proxy under Ume.Rag's Settings > Network (trusted proxies), or kalla-api ignores the header.
+      #ragapi            # List this proxy under Källa's Settings > Network (trusted proxies), or kalla-api ignores the header.
       #ragapi            proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
       #ragapi            proxy_buffering off;           # stream answer tokens as they arrive (SSE)
       #ragapi            proxy_read_timeout 600s;
       #ragapi            proxy_send_timeout 600s;
       #ragapi            proxy_connect_timeout 5s;
       #ragapi            proxy_ssl_verify on;
-      #ragapi            proxy_ssl_trusted_certificate /etc/nginx/ume/rag-ca.pem;
+      #ragapi            proxy_ssl_trusted_certificate /etc/nginx/kalla/rag-ca.pem;
       #ragapi            proxy_ssl_name kalla-api;
       #ragapi            proxy_ssl_server_name on;
       #ragapi        }
@@ -2584,7 +2584,7 @@ configs:
       #ragadmin            proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
       #ragadmin            proxy_connect_timeout 5s;
       #ragadmin            proxy_ssl_verify on;
-      #ragadmin            proxy_ssl_trusted_certificate /etc/nginx/ume/rag-ca.pem;
+      #ragadmin            proxy_ssl_trusted_certificate /etc/nginx/kalla/rag-ca.pem;
       #ragadmin            proxy_ssl_name kalla-admin;
       #ragadmin            proxy_ssl_server_name on;
       #ragadmin        }
@@ -2600,7 +2600,7 @@ configs:
       #ragadmin            proxy_send_timeout 300s;
       #ragadmin            proxy_connect_timeout 5s;
       #ragadmin            proxy_ssl_verify on;
-      #ragadmin            proxy_ssl_trusted_certificate /etc/nginx/ume/rag-ca.pem;
+      #ragadmin            proxy_ssl_trusted_certificate /etc/nginx/kalla/rag-ca.pem;
       #ragadmin            proxy_ssl_name kalla-admin;
       #ragadmin            proxy_ssl_server_name on;
       #ragadmin        }

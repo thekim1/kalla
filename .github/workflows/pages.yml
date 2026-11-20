@@ -2,7 +2,7 @@ name: Website
 # Builds site/ (the product page, Getting started and every Markdown page in site/content.mjs) and publishes it to GitHub
 # Pages whenever the site, the documentation or the admin UI's design tokens change on main. Pull requests that change
 # the same files build it without publishing, unless they are drafts, so a broken link in docs/ fails the pull request
-# rather than the deployment. The gateway's workflow (thekim1/llmgateway, .github/workflows/pages.yml), on our runners
+# rather than the deployment. The gateway's workflow (thekim1/fors, .github/workflows/pages.yml), on our runners
 # and pins.
 on:
   push:

@@ -91,7 +91,7 @@ the admin console (*Groups* → *Role mapping*) or in a **site file** next to th
 - **Entra ID directly** (P2, `infra/entra/`): one app registration per product, with app roles named as that product's
   roles (`rag-platform-admin`, …, and the gateway's `gateway-admin`, …), and the **same security group** assigned in both.
 - The gateway documents the same model in its `docs/keycloak.md` (*Realm files*, *One group for several systems*;
-  thekim1/llmgateway#79).
+  thekim1/fors#79).
 - **Standalone Källa** (its own Keycloak, below) uses the same site file with only the `rag-*` roles.
 
 `RealmAdditionsTests.One_shared_group_gives_each_system_its_own_role_and_no_other` imports `examples/site-groups.json`
