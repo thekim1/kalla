@@ -11,7 +11,9 @@ public enum RetrievalPurpose { Chat, Http, Mcp, TestPanel }
 /// version's collections (§4.2); <c>CollectionIds</c> narrows, each must be visible (404 otherwise); <c>RunId</c> is sent
 /// to the gateway as <c>x-ume-run-id</c> (chat: the message id). <c>RerankCeiling</c> asks for the rerank call (knowledge design
 /// §6.7) at that ceiling with <c>Reranker</c>: chat passes the turn's ceiling and the assistant's reranker when the assistant
-/// reranks; null (every other caller) keeps the fused order.
+/// reranks; null (every other caller) keeps the fused order. <c>Topics</c> (chat only: <c>ume.topics</c>, chat design §3.8) narrows the
+/// assistant's links for this search (§4.2): a link with topics keeps those also asked for and leaves the scope when none is, a
+/// link without topics gets the asked ones; null or empty leaves the links as they are; ignored without <c>AssistantId</c>.
 /// </summary>
 public sealed record RetrievalRequest(
     string Query,
@@ -25,7 +27,8 @@ public sealed record RetrievalRequest(
     bool AllowDegraded = true,
     Guid? RunId = null,
     Residency? RerankCeiling = null,
-    RerankerKind Reranker = RerankerKind.ChatModel);
+    RerankerKind Reranker = RerankerKind.ChatModel,
+    IReadOnlyList<string>? Topics = null);
 
 /// <summary>
 /// Which reranker a search asks for (B-16; Decisions "Rerank pulled forward", "Gateway release 1 and shared Keycloak as
@@ -79,14 +82,18 @@ public sealed record RetrievedChunk(
 public sealed record SectionText(
     int Id, Guid DocumentId, string HeadingPath, string Text, int TokenEstimate, int? PageStart, int? PageEnd, IReadOnlyList<Guid> ChunkIds, bool Truncated);
 
-/// <summary>The outcome of a retrieval (knowledge design §2.2).</summary>
+/// <summary>
+/// The outcome of a retrieval (knowledge design §2.2). <c>SearchedTopics</c>: with <see cref="RetrievalRequest.Topics"/>, the
+/// asked topics that at least one searched link searched, in the request's order (chat design §3.8); null without.
+/// </summary>
 public sealed record RetrievalResult(
     IReadOnlyList<RetrievedChunk> Results,
     IReadOnlyList<SectionText> Sections,
     Coverage Coverage,
     string? Degraded,
     long ConfigVersion,
-    RetrievalTimings Timings);
+    RetrievalTimings Timings,
+    IReadOnlyList<string>? SearchedTopics = null);
 
 /// <summary>A document's citation plus its page count (<c>GET /v1/documents/{id}</c>, §3.4).</summary>
 public sealed record DocumentInfo(Citation Citation, int? PageCount, Guid CollectionId, string CollectionSlug);

@@ -15,6 +15,7 @@ using Microsoft.Extensions.Time.Testing;
 using Ume.Rag.Answering;
 using Ume.Rag.Answering.Chat;
 using Ume.Rag.Domain.Access;
+using Ume.Rag.Domain.Entities;
 using Ume.Rag.Retrieval;
 using Ume.Rag.TestKit;
 using FakeChatScripts = fakegateway::Ume.Rag.FakeGateway.FakeChatScripts;
@@ -84,10 +85,11 @@ public sealed partial class ChatApiTests
     /// <summary>
     /// The chat host with <c>Settings.Chat.condenseModel</c> (unless <paramref name="condenseModel"/> is false), the assistant's
     /// <paramref name="querySteps"/>, the recording gateway (the fixture's FakeGateway, or <paramref name="gateway"/>) for chat and
-    /// query embeddings, and the chat service on <paramref name="time"/>.
+    /// query embeddings, and the chat service on <paramref name="time"/>; <paramref name="links"/> replaces the published links.
     /// </summary>
     private WebApplicationFactory<Program> LongHost(ConcurrentQueue<GatewayCall> calls, LongFault fault, FakeTimeProvider time, CapturingLoggerProvider logs,
-        string? querySteps = null, bool condenseModel = true, WebApplicationFactory<fakegateway::Program>? gateway = null)
+        string? querySteps = null, bool condenseModel = true, WebApplicationFactory<fakegateway::Program>? gateway = null,
+        IReadOnlyList<CollectionLink>? links = null)
     {
         var upstream = gateway ?? db.Gateway;
         var snapshot = Snapshot();
@@ -97,7 +99,13 @@ public sealed partial class ChatApiTests
             ChatSettings = condenseModel ? """{"condenseModel":"ume/chat-eu","condenseReasoningEffort":"none"}""" : null,
             Assistants = new Dictionary<Guid, AssistantEntry>
             {
-                [db.AssistantId] = bygg with { Published = bygg.Published! with { QuerySteps = querySteps ?? bygg.Published.QuerySteps } },
+                [db.AssistantId] = bygg with
+                {
+                    Published = bygg.Published! with
+                    {
+                        QuerySteps = querySteps ?? bygg.Published.QuerySteps, CollectionLinks = links ?? bygg.Published.CollectionLinks,
+                    },
+                },
             },
         };
         return db.ApiHost(snapshot).WithWebHostBuilder(web =>

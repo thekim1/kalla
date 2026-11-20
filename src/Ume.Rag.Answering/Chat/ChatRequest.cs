@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Ume.Rag.Domain.Entities;
 using Ume.Rag.Retrieval;
 
 namespace Ume.Rag.Answering.Chat;
@@ -46,12 +47,17 @@ public sealed record ParsedChat(string Model, string Question, IReadOnlyList<Cha
 /// The <c>ume</c> extension asked for (chat design §3.8): how many related documents to list (§9.7) and the most follow-up
 /// questions to suggest (§9.8); 0 is none. <see cref="GeneralKnowledge"/> is a stricter general-knowledge level for the turn
 /// (null: the assistant's own; <see cref="GeneralKnowledgeLevels.Effective"/>). <see cref="Escalation"/> asks for the escalation
-/// hand-off (§9.9). Any object, <c>{}</c> included, gives the answer's <c>ume</c> with its outcome.
+/// hand-off (§9.9). <see cref="Topics"/> narrows the assistant's links for the turn (Decisions "Topics per request"; null: the links
+/// as they are). Any object, <c>{}</c> included, gives the answer's <c>ume</c> with its outcome.
 /// </summary>
-public sealed record UmeRequest(int RelatedDocuments, int FollowUps, GeneralKnowledge? GeneralKnowledge = null, bool Escalation = false)
+public sealed record UmeRequest(int RelatedDocuments, int FollowUps, GeneralKnowledge? GeneralKnowledge = null, bool Escalation = false,
+    IReadOnlyList<string>? Topics = null)
 {
     public const int MaxRelatedDocuments = 10;
     public const int MaxFollowUps = 5;
+
+    /// <summary>The most values of <c>ume.topics</c> (§3.8).</summary>
+    public const int MaxTopics = 20;
 }
 
 /// <summary>
@@ -206,7 +212,8 @@ public static partial class ChatRequestParser
 
     /// <summary>
     /// The <c>ume</c> object (§3.8): <c>null</c> is none; not an object is 400 <c>invalid_request</c>; <c>related_documents</c>
-    /// 0–10 and <c>follow_ups</c> 0–5 as integers, <c>escalation</c> a boolean, and <c>general_knowledge</c> one of the level values or <c>null</c>, else 400
+    /// 0–10 and <c>follow_ups</c> 0–5 as integers, <c>escalation</c> a boolean, <c>general_knowledge</c> one of the level values or <c>null</c>, and
+    /// <c>topics</c> <c>null</c> or an array of at most 20 strings in the tag format, else 400
     /// <c>invalid_request</c>; any other member is 400 <c>unsupported_parameter</c> (the namespace is ours, so a typo fails
     /// instead of doing nothing).
     /// </summary>
@@ -225,6 +232,7 @@ public static partial class ChatRequestParser
         var (related, followUps) = (0, 0);
         GeneralKnowledge? generalKnowledge = null;
         var escalation = false;
+        IReadOnlyList<string>? topics = null;
         foreach (var member in ume.EnumerateObject())
         {
             switch (member.Name)
@@ -246,12 +254,50 @@ public static partial class ChatRequestParser
                         _ => throw Invalid("ume.escalation must be true or false.", "ume.escalation"),
                     };
                     break;
+                case "topics":
+                    topics = UmeTopics(member);
+                    break;
                 default:
                     throw new ChatException(400, "unsupported_parameter", $"ume.{member.Name} is not supported.", "ume." + member.Name);
             }
         }
 
-        return new UmeRequest(related, followUps, generalKnowledge, escalation);
+        return new UmeRequest(related, followUps, generalKnowledge, escalation, topics);
+    }
+
+    /// <summary>
+    /// <c>ume.topics</c> (§3.8): <c>null</c> and <c>[]</c> are none; an array of at most 20 strings in the chunk tag format (processing
+    /// §7), a repeated one kept once in its first place; anything else 400 <c>invalid_request</c> with <c>param</c> <c>ume.topics</c>.
+    /// </summary>
+    private static List<string>? UmeTopics(JsonProperty member)
+    {
+        if (member.Value.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        var invalid = Invalid($"ume.topics must be an array of at most {UmeRequest.MaxTopics} topics (lower case letters, digits and '-', 1–50 characters).",
+            "ume.topics");
+        if (member.Value.ValueKind != JsonValueKind.Array || member.Value.GetArrayLength() > UmeRequest.MaxTopics)
+        {
+            throw invalid;
+        }
+
+        var topics = new List<string>();
+        foreach (var value in member.Value.EnumerateArray())
+        {
+            if (value.ValueKind != JsonValueKind.String || value.GetString() is not { } topic || !TopicTags.IsValid(topic))
+            {
+                throw invalid;
+            }
+
+            if (!topics.Contains(topic, StringComparer.Ordinal))
+            {
+                topics.Add(topic);
+            }
+        }
+
+        return topics.Count > 0 ? topics : null;
     }
 
     /// <summary><c>ume.general_knowledge</c>: <c>null</c> is none; a level value exactly as stored (lower case), else 400.</summary>

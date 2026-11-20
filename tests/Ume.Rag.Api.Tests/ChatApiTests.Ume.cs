@@ -64,6 +64,8 @@ public sealed partial class ChatApiTests
     [InlineData("""{"foo":1,"related_documents":99}""")]
     [InlineData("""{"related_documents":5}""")]
     [InlineData("""{"general_knowledge":"loose"}""")]
+    [InlineData("""{"topics":[1]}""")]
+    [InlineData("""{"topics":["okänt"]}""")]
     public async Task Open_webui_requests_ignore_ume_without_validating_it(string ume)
     {
         await using var api = WireHost(null, openWebUi: true, Upstream.Fake);

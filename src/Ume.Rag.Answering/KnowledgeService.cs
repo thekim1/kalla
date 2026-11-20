@@ -85,6 +85,25 @@ public sealed partial class KnowledgeService(
             : RequestedCollections(who, request.CollectionIds, snapshot, confirmed);
         var allowedLevels = Levels.UpTo(Levels.Rank(effectiveLevel) <= Levels.Rank(who.Client.Ceiling) ? effectiveLevel : who.Client.Ceiling);
 
+        // §4.2, chat §3.8 (Decisions "Topics per request"): a chat request's topics narrow the published links, never widen them; a
+        // link left without a topic leaves the scope, so the topic links, the coverage counts and the floor see only what is left.
+        var topics = Topics(request.AssistantId, snapshot);
+        var askedTopics = request.AssistantId is not null && request.Topics is { Count: > 0 } t ? t : null;
+        if (askedTopics is { } asked)
+        {
+            var narrowed = new Dictionary<Guid, IReadOnlyList<string>>();
+            foreach (var collection in collections)
+            {
+                if (TopicNarrowing.Narrow(topics.GetValueOrDefault(collection.Id, []), asked) is { } kept)
+                {
+                    narrowed[collection.Id] = kept;
+                }
+            }
+
+            collections = [.. collections.Where(c => narrowed.ContainsKey(c.Id))];
+            topics = narrowed;
+        }
+
         // One candidate run per embedding profile; P1 has one, so a collection on another profile is skipped (§4.3).
         var profileId = collections.Count > 0 ? collections[0].EmbeddingProfileId : Guid.Empty;
         foreach (var other in collections.Where(c => c.EmbeddingProfileId != profileId))
@@ -93,6 +112,7 @@ public sealed partial class KnowledgeService(
         }
 
         collections = [.. collections.Where(c => c.EmbeddingProfileId == profileId)];
+        var searchedTopics = askedTopics is null ? null : TopicNarrowing.Searched(collections.Select(c => topics.GetValueOrDefault(c.Id, [])), askedTopics);
         if (collections.Count == 0 || !snapshot.EmbeddingProfiles.TryGetValue(profileId, out var profile) || profile.State != EmbeddingProfileStates.Active)
         {
             if (collections.Count > 0)
@@ -102,7 +122,7 @@ public sealed partial class KnowledgeService(
 
             // Nothing searchable: no results and coverage low, so the chat role answers with the not-found text (§4.4).
             return new RetrievalResult([], [], new Coverage(CoverageStatus.Low, null, null, null, null), null, snapshot.Version,
-                new RetrievalTimings(Ms(started), 0, 0, 0, 0, Ms(started)));
+                new RetrievalTimings(Ms(started), 0, 0, 0, 0, Ms(started)), searchedTopics);
         }
 
         // B-42 (knowledge §5.2, cost-attribution §4.1): the query embedding and rerank run as the assistant's gateway key, or for a
@@ -112,7 +132,6 @@ public sealed partial class KnowledgeService(
             : new GatewayCall(collections[0].GatewayKeyId, CollectionId: collections[0].Id));
         var (platform, settings) = Settings(snapshot);
         var demote = Demote(snapshot);
-        var topics = Topics(request.AssistantId, snapshot);
         var scope = new SearchScope(profile.Id, profile.Dimensions,
             [.. collections.Select(c => new CollectionInScope(c.Id, settings.GetValueOrDefault(c.Id, platform.Defaults)) { Topics = topics.GetValueOrDefault(c.Id, []) })],
             allowedLevels, platform)
@@ -168,7 +187,7 @@ public sealed partial class KnowledgeService(
         counter.Retrieved(results);
         var timings = new RetrievalTimings(policyMs, search.Timings.KeywordMs, search.Timings.EmbeddingMs, search.Timings.VectorMs,
             Ms(hydrateStarted), Ms(started));
-        return new RetrievalResult(results, sections, search.Coverage, search.Degraded, snapshot.Version, timings);
+        return new RetrievalResult(results, sections, search.Coverage, search.Degraded, snapshot.Version, timings, searchedTopics);
     }
 
     public async Task<DocumentInfo> GetDocumentAsync(RagPrincipal who, Guid documentId, CancellationToken ct)
