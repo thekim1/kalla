@@ -238,17 +238,17 @@ ok "with no FORS_INTEGRATION_MANIFEST set, the gateway's bootstrap got the stack
 # The gateway's migrations created the integration Källa from it and wrote each key to the integration-secrets volume;
 # kalla-bootstrap copied them to each service. The gateway accepts each one on its context.
 gw_helper="$(grep -m1 '/alpine/openssl@' <<< "$(dc config --images)")"
-docker run --rm --network none -v "${project}_ume-certs:/c:ro" --entrypoint cat "$gw_helper" /c/ca.pem > "$work/gateway-ca.pem" \
-  || fail "could not read the gateway's CA from the volume ${project}_ume-certs"
+docker run --rm --network none -v "${project}_fors-certs:/c:ro" --entrypoint cat "$gw_helper" /c/ca.pem > "$work/gateway-ca.pem" \
+  || fail "could not read the gateway's CA from the volume ${project}_fors-certs"
 for svc in api admin worker; do
   key="$(docker run --rm --network none -v "${project}_kalla-secrets:/s:ro" --entrypoint cat "$gw_helper" "/s/$svc/Gateway__Key" 2>/dev/null)" \
     || fail "kalla-secrets/$svc/Gateway__Key is missing"
   manifest_key="$(docker run --rm --network none -v "${project}_integration-secrets:/i:ro" --entrypoint cat "$gw_helper" "/i/Kalla/rag-$svc" 2>/dev/null)" \
     || fail "integration-secrets/Kalla/rag-$svc is missing: the gateway did not provision the manifest"
-  [ "$key" = "$manifest_key" ] || fail "rag-$svc's Gateway__Key is not the manifest's key"
+  [ "$key" = "$manifest_key" ] || fail "kalla-$svc's Gateway__Key is not the manifest's key"
   status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 --cacert "$work/gateway-ca.pem" \
     --resolve "gateway:$gateway_port:127.0.0.1" -H "Authorization: Bearer $key" "https://gateway:$gateway_port/v1/fors/context")"
-  [ "$status" = 200 ] || fail "the gateway's /v1/fors/context answered $status to rag-$svc's key, expected 200"
+  [ "$status" = 200 ] || fail "the gateway's /v1/fors/context answered $status to kalla-$svc's key, expected 200"
 done
 ok "kalla-api, kalla-admin and kalla-worker each have the manifest's key, and the gateway accepts it (/v1/fors/context = 200)"
 context="$(docker run --rm --network none -v "${project}_kalla-secrets:/s:ro" --entrypoint cat "$gw_helper" /s/admin/Gateway__Key)"

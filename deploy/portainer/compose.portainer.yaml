@@ -1748,7 +1748,7 @@ configs:
       example() { case "$$1" in ""|*example.se*|*CHANGE*) return 0 ;; esac; return 1; }
       for svc in api admin worker; do
         up="$$(echo "$$svc" | tr '[:lower:]' '[:upper:]')"
-        [ -e "$$S/$$svc/Gateway__Key" ] || note "KALLA_$${up}_GATEWAY_KEY: no key for rag-$$svc. $$key_how"
+        [ -e "$$S/$$svc/Gateway__Key" ] || note "KALLA_$${up}_GATEWAY_KEY: no key for kalla-$$svc. $$key_how"
       done
       # A name under FORS_DOMAIN is named once, as the domain; a name set of its own, as its variable.
       if [ -n "$${FORS_DOMAIN:-}" ] && example "$$FORS_DOMAIN"; then note "FORS_DOMAIN is still an example value (the host names default under it)"; fi
@@ -1767,14 +1767,14 @@ configs:
       # its configuration is unchanged (Kestrel watches kalla-api's, kalla-admin's and kalla-worker's files). Each certificate that expires within
       # 60 days is named on every run; the service certificates are re-issued below 30 days, the CA never.
       restart=""
-      for svc in $$reissued; do case "$$svc" in postgres|parser) restart="$$restart rag-$$svc" ;; esac; done
+      for svc in $$reissued; do case "$$svc" in postgres|parser) restart="$$restart kalla-$$svc" ;; esac; done
       [ -z "$$restart" ] || note "restart$$restart ($$restart_how): a re-issued certificate takes effect there only after a restart"
       for crt in "$$C/ca.pem" "$$C"/*/*.crt; do
         quiet openssl x509 -checkend 5184000 -noout -in "$$crt" && continue
         end="$$(openssl x509 -enddate -noout -in "$$crt" | cut -d= -f2)"
         case "$$crt" in
           "$$C/ca.pem") note "RAG's internal CA expires $$end, within 60 days: replace it ($$ca_guide)" ;;
-          *) note "the certificate of rag-$$(basename "$$(dirname "$$crt")") expires $$end, within 60 days: $$again once fewer than 30 days remain, and kalla-bootstrap re-issues it" ;;
+          *) note "the certificate of kalla-$$(basename "$$(dirname "$$crt")") expires $$end, within 60 days: $$again once fewer than 30 days remain, and kalla-bootstrap re-issues it" ;;
         esac
       done
       # Retired variables (collected above): tidying, nothing depends on it.

@@ -83,7 +83,7 @@ cat_in() { in_helper -v "${project}_$1:/v:ro" "$helper" -c "cat /v/$2 2>/dev/nul
 [ "$(cat_in kalla-secrets admin/Gateway__Key)" = admin-key-from-manifest ] || fail "kalla-admin's key is not the manifest's"
 [ "$(cat_in kalla-secrets worker/Gateway__Key)" = worker-key-by-hand ] || fail "kalla-worker's key is not the one set by hand"
 for svc in api admin worker; do
-  cat_in kalla-certs "$svc/ca.pem" | grep -qF "$(sed -n 2p "$work/gw-certs/ca.pem")" || fail "rag-$svc does not trust the gateway's CA"
+  cat_in kalla-certs "$svc/ca.pem" | grep -qF "$(sed -n 2p "$work/gw-certs/ca.pem")" || fail "kalla-$svc does not trust the gateway's CA"
 done
 ok "the gateway's CA is trusted and its manifest's keys reach the services; a key set by hand wins"
 

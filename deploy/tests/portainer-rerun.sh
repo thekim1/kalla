@@ -34,7 +34,7 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "ok: $*"; }
 cleanup() {
   docker compose -p "$project" -f "$stack" --env-file "$work/stack.env" down -v --remove-orphans >/dev/null 2>&1 || true
-  docker volume rm -f "${project}_ume-certs" "${project}_integration-secrets" >/dev/null 2>&1 || true
+  docker volume rm -f "${project}_fors-certs" "${project}_integration-secrets" >/dev/null 2>&1 || true
   rm -rf "$work"
 }
 trap cleanup EXIT
@@ -54,9 +54,9 @@ in_helper() { docker run --rm --network none --entrypoint /bin/sh "$@"; }
 # The gateway's volumes as its bootstrap and migrations leave them: a CA certificate in fors-certs, and the manifest's
 # key for kalla-api in integration-secrets (uid 1654, mode 600, as the gateway writes it). kalla-admin has neither a file
 # nor a variable.
-docker volume create "${project}_ume-certs" >/dev/null
+docker volume create "${project}_fors-certs" >/dev/null
 docker volume create "${project}_integration-secrets" >/dev/null
-in_helper -v "${project}_ume-certs:/c" -v "${project}_integration-secrets:/i" "$helper" -c '
+in_helper -v "${project}_fors-certs:/c" -v "${project}_integration-secrets:/i" "$helper" -c '
   openssl req -x509 -newkey rsa:2048 -nodes -keyout /tmp/k -out /c/ca.pem -days 1 -subj /CN=fake-gateway-ca 2>/dev/null
   mkdir -p /i/Kalla && printf api-key-from-manifest > /i/Kalla/rag-api
   chown -R 1654:1654 /i && chmod 700 /i /i/Kalla && chmod 600 /i/Kalla/rag-api'

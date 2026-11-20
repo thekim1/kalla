@@ -552,7 +552,7 @@ with their profiles, kalla-clamav (`clamav`) and kalla-renderer (`render`) and k
 step for a new VM or an upgrade: [portainer.md](portainer.md).
 
 **Deploy.** In the gateway's existing stack, *Editor*: replace the file with this one, keep the stack name (the
-gateway's volumes `<stack>_ume-certs`, `<stack>_ume-secrets` and its database are found by it), add the variables
+gateway's volumes `<stack>_fors-certs`, `<stack>_fors-secrets` and its database are found by it), add the variables
 below, and *Update the stack*. The RAG images on GHCR are private: add `ghcr.io` under *Registries* with a GitHub token
 that can read packages.
 
