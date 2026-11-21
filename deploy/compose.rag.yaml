@@ -144,7 +144,7 @@ services:
 
   kalla-postgres:
     <<: *hardened
-    image: ${KALLA_POSTGRES_IMAGE:-ghcr.io/thekim1/ume-rag/postgres:0.8.0@sha256:0aefe84f00b300ff677a4c33432dd01c368bb5e574540547b6c43b4538bec252}
+    image: ${KALLA_POSTGRES_IMAGE:-ghcr.io/thekim1/kalla/postgres:0.9.0@sha256:b0201ee9b3e4e63ad95f9787d2c30eaf2a1547a9751eae42502888cc844dd1b5}
     user: "999:999"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -176,7 +176,7 @@ services:
 
   kalla-migrate:
     <<: *hardened
-    image: ${KALLA_MIGRATIONS_IMAGE:-ghcr.io/thekim1/ume-rag/migrations:0.8.0@sha256:1592d00a6e6dfae7ea30dbfc5c34fea0adc26c508ea49f450a51c6725b378a45}
+    image: ${KALLA_MIGRATIONS_IMAGE:-ghcr.io/thekim1/kalla/migrations:0.9.0@sha256:ad61fc6b57ed052d35360161e9cf56ed2fc2a49f6710659a61ea11cea0df5e89}
     user: "1654:1654"
     restart: "no"
     cpus: 1.0
@@ -200,7 +200,7 @@ services:
 
   kalla-api:
     <<: *hardened
-    image: ${KALLA_API_IMAGE:-ghcr.io/thekim1/ume-rag/api:0.8.0@sha256:89ff9d7746c44746c9e52cfba5e19b85bf6f66b52a6bc8b8b86fee79e174e86b}
+    image: ${KALLA_API_IMAGE:-ghcr.io/thekim1/kalla/api:0.9.0@sha256:9d50dd0110b7f5a47d23aee5bc475bb0fb47d00198a85a0df20267c363f6a969}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -267,7 +267,7 @@ services:
 
   kalla-admin:
     <<: *hardened
-    image: ${KALLA_ADMIN_IMAGE:-ghcr.io/thekim1/ume-rag/admin:0.8.0@sha256:d849f1028f57993cb71f4ed49fbed332438a8c8f19f7d4748a2a871ab040e532}
+    image: ${KALLA_ADMIN_IMAGE:-ghcr.io/thekim1/kalla/admin:0.9.0@sha256:66c1266207e7f18c1fce3cb6a1d3864f62190486b73ff778a53cc6905d690524}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -349,7 +349,7 @@ services:
 
   kalla-worker:
     <<: *hardened
-    image: ${KALLA_WORKER_IMAGE:-ghcr.io/thekim1/ume-rag/worker:0.8.0@sha256:10afeb408745fd24ffc87334b095626148efcbefc05cc422f0f7bbeef3531c06}
+    image: ${KALLA_WORKER_IMAGE:-ghcr.io/thekim1/kalla/worker:0.9.0@sha256:0de8b0e84eee2e3ba2a36ba3bfd6892d65be245b2b0048963a514e59ae29257d}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 120s
@@ -412,7 +412,7 @@ services:
 
   kalla-parser:
     <<: *hardened
-    image: ${KALLA_PARSER_IMAGE:-ghcr.io/thekim1/ume-rag/parser:0.8.0@sha256:53c02f8203a729d96b79b463655067391e9d6290608ddbef2968f659de1b5a64}
+    image: ${KALLA_PARSER_IMAGE:-ghcr.io/thekim1/kalla/parser:0.9.0@sha256:0343bd880fe75523a39c31b9afd30ee328cb275fe46cfff24100894576f67cc8}
     user: "10001:10001"
     restart: unless-stopped
     tmpfs: ["/tmp:size=1g"]
@@ -437,7 +437,7 @@ services:
   kalla-clamav:
     <<: *hardened
     profiles: [clamav]
-    image: ${KALLA_CLAMAV_IMAGE:-ghcr.io/thekim1/ume-rag/clamav:0.8.0@sha256:37c8f54dd2015e52ef04817a84616c0218d376eda5bb203cc1c764bfd731cbce}
+    image: ${KALLA_CLAMAV_IMAGE:-ghcr.io/thekim1/kalla/clamav:0.9.0@sha256:9944e2bbe72055daa8b7c3897b659d76a6e79b450d9059a9d7267d7e48aa05d7}
     user: "1000:1000"
     restart: unless-stopped
     cpus: 1.0
@@ -457,7 +457,7 @@ services:
   kalla-renderer:
     <<: *hardened
     profiles: [render]
-    image: ${KALLA_RENDERER_IMAGE:-ghcr.io/thekim1/ume-rag/renderer:0.8.0@sha256:1ed049a4b906e00c7aa044e397804bdfaaccac2b53a73ba85ee22e7e70675f99}
+    image: ${KALLA_RENDERER_IMAGE:-ghcr.io/thekim1/kalla/renderer:0.9.0@sha256:0ce96d23e8c62e3ba56b255a3760b8312a4ee87a6a3bb42dc1a3939dd4567362}
     user: "10002:10002"
     restart: unless-stopped
     security_opt: [no-new-privileges:true, seccomp=unconfined]
