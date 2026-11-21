@@ -136,7 +136,7 @@ completed() {
   local name state exit_code restarts
   while read -r name state exit_code restarts; do
     case "$name" in
-      *-bootstrap-1|*-roles-1|*-migrations-1|*-rag-migrate-1|*-kalla-roles-1|*-kalla-migrate-1)
+      *-bootstrap-1|*-roles-1|*-migrations-1|*-rag-migrate-1|*-kalla-migrate-1)
         [ "$state $exit_code" = "exited 0" ] || fail "$name is $state (exit $exit_code), expected to have completed";;
       *-rag-openwebui-setup-1|*-kalla-openwebui-setup-1)
         [ "$state" = running ] || [ "$state $exit_code" = "exited 0" ] || fail "$name is $state (exit $exit_code)";;
