@@ -3,17 +3,17 @@ name = "ume-parser"
 version = "0.1.0"
 requires-python = "==3.12.*"
 dependencies = [
-    "docling-slim[convert-core,format-pdf,format-office,format-opendocument,models-local]==2.149.0",
+    "docling-slim[convert-core,format-pdf,format-office,format-opendocument,models-local]==2.150.0",
     "opencv-python-headless==4.14.0.94",
     "pandas==3.1.1",
-    "pypdfium2==5.15.0",
+    "pypdfium2==5.15.2",
     "defusedxml==0.7.1",
     "psutil==7.2.2",
     "pillow==13.0.0",
-    "fastapi==0.162.2",
+    "fastapi==0.162.5",
     "uvicorn==0.54.0",
     "pydantic==2.14.3",
-    "pydantic-settings==2.16.2",
+    "pydantic-settings==2.16.3",
     "python-multipart==0.0.33",
     "torch==2.15.0",
     "torchvision==0.29.2",
@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest==9.2.0", "ruff==0.17.4", "httpx2==2.16.0", "pip-audit==2.10.1"]
+dev = ["pytest==9.2.0", "ruff==0.17.5", "httpx2==2.16.0", "pip-audit==2.10.1"]
 
 [tool.uv]
 package = false
