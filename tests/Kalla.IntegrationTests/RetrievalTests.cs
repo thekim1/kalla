@@ -84,7 +84,9 @@ public sealed class RetrievalTests(RagDatabaseFixture database) : IAsyncLifetime
         var exact = await index.VectorAsync(Scope(collection), V(1, 0, 0), null, 100, VectorSearch.Exact, Ct);
         var approximate = await index.VectorAsync(Scope(collection), V(1, 0, 0), null, 100, VectorSearch.Approximate, Ct);
         approximate.OrderBy(c => c.Distance).Select(c => c.ChunkId).ShouldBe(exact.OrderBy(c => c.Distance).Select(c => c.ChunkId));
-        approximate.Zip(exact.OrderBy(c => c.Distance)).ShouldAllBe(p => Math.Abs(p.First.Distance!.Value - p.Second.Distance!.Value) < 1e-3);
+        // Both sides in distance order: the approximate plan's rows need not come back sorted (failed on #906).
+        approximate.OrderBy(c => c.Distance).Zip(exact.OrderBy(c => c.Distance))
+            .ShouldAllBe(p => Math.Abs(p.First.Distance!.Value - p.Second.Distance!.Value) < 1e-3);
     }
 
     [Fact]
