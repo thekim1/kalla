@@ -121,7 +121,7 @@ public static partial class Metadata
             switch (rule.On)
             {
                 case "path":
-                    return path is not null && GlobMatches(rule.Match, path, upload: input.Url is null) ? [] : null;
+                    return path is not null && PathMatches(rule.Match, input.Url, path) ? [] : null;
                 case "path-regex":
                     return path is null ? null : Groups(new Regex(rule.Match, RegexOptions.CultureInvariant, RegexTimeout).Match(path));
                 case "title-regex":
@@ -157,6 +157,69 @@ public static partial class Metadata
         }
 
         return groups;
+    }
+
+    /// <summary>
+    /// A <c>path</c> rule (#929). On a website document the glob may be written as a URL pasted from the browser
+    /// (<c>https://www.umea.se/bygga/</c>) or without its scheme (<c>www.umea.se/bygga/**</c>): the host then has to be the
+    /// page's (case-insensitive, IDN as its ASCII form) and the rest is the path glob, with the URL's query and fragment
+    /// dropped. A glob that ends in <c>/</c> also matches everything under it, on websites and uploads alike.
+    /// </summary>
+    private static bool PathMatches(string match, Uri? url, string path)
+    {
+        var (host, glob) = PathGlob(match, website: url is not null);
+        return (host is null || (url is not null && string.Equals(url.IdnHost, host, StringComparison.OrdinalIgnoreCase)))
+            && GlobMatches(glob, path, upload: url is null);
+    }
+
+    /// <summary>The host (when <paramref name="match"/> names one) and the path glob of a <c>path</c> rule (see <see cref="PathMatches"/>).</summary>
+    internal static (string? Host, string Glob) PathGlob(string match, bool website)
+    {
+        var glob = match.Trim();
+        string? host = null;
+        if (website)
+        {
+            var pasted = false;
+            foreach (var scheme in (ReadOnlySpan<string>)["https://", "http://"])
+            {
+                if (glob.StartsWith(scheme, StringComparison.OrdinalIgnoreCase))
+                {
+                    glob = glob[scheme.Length..];
+                    pasted = true;
+                    break;
+                }
+            }
+
+            var slash = glob.IndexOf('/', StringComparison.Ordinal);
+            var first = slash < 0 ? glob : glob[..slash];
+            if (pasted || (slash != 0 && HostName().IsMatch(first)))
+            {
+                host = HostOf(first);
+                glob = slash < 0 ? "/" : glob[slash..];
+                if (pasted)
+                {
+                    // A pasted address: its query and fragment are not part of the path the rule is matched against.
+                    var end = glob.IndexOfAny(['?', '#']);
+                    glob = end < 0 ? glob : glob[..end];
+                }
+            }
+        }
+
+        return (host, glob.EndsWith('/') ? glob + "**" : glob);
+    }
+
+    /// <summary>A host as <see cref="Uri.IdnHost"/> gives it: an IDN in its ASCII form, without a port or a trailing dot.</summary>
+    private static string HostOf(string authority)
+    {
+        var name = authority.Split(':')[0].TrimEnd('.');
+        try
+        {
+            return new IdnMapping().GetAscii(name);
+        }
+        catch (ArgumentException)
+        {
+            return name;
+        }
     }
 
     /// <summary>
@@ -209,4 +272,8 @@ public static partial class Metadata
 
     [GeneratedRegex(@"^[\p{L}\p{N}-]{1,50}$")]
     private static partial Regex TagPattern();
+
+    /// <summary>A host name with at least one dot and a top-level part of letters (<c>www.umea.se</c>, <c>umea.se:443</c>), not a folder such as <c>HR</c>.</summary>
+    [GeneratedRegex(@"^(?:[\p{L}\p{N}-]+\.)+\p{L}{2,24}\.?(?::\d{1,5})?$", RegexOptions.IgnoreCase)]
+    private static partial Regex HostName();
 }

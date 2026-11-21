@@ -537,6 +537,38 @@ public sealed class StageRuleTests
     }
 
     [Fact]
+    public void A_website_path_rule_takes_a_pasted_address_or_a_host_led_glob_and_a_trailing_slash_means_everything_under_it()
+    {
+        // #929: an editor pastes the section's address from the browser; matched as the path alone it tagged nothing.
+        var rules = Metadata.ReadRules(System.Text.Json.JsonDocument.Parse("""
+            [ { "match": "https://www.umea.se/bygga-bo-och-miljo/bygglov/?utm=x#top", "on": "path", "tags": ["bygglov"] },
+              { "match": "WWW.Umea.se/kommun-och-politik/**", "on": "path", "tags": ["politik"] },
+              { "match": "https://www.vakin.se/", "on": "path", "tags": ["vakin"] },
+              { "match": "/utbildning/", "on": "path", "tags": ["utbildning"] } ]
+            """).RootElement);
+        Tags("https://www.umea.se/bygga-bo-och-miljo/bygglov/ansok.html").ShouldBe(["bygglov"]);
+        Tags("https://www.umea.se/bygga-bo-och-miljo/bygglov/").ShouldBe(["bygglov"]);
+        Tags("https://www.umea.se/bygga-bo-och-miljo/bygglov").ShouldBeEmpty("the section's own address without its slash is another path");
+        Tags("https://umea.se/bygga-bo-och-miljo/bygglov/ansok.html").ShouldBeEmpty("the host is the rule's: www.umea.se");
+        Tags("https://www.umea.se/kommun-och-politik/protokoll/2024/ks.pdf").ShouldBe(["politik"]);
+        Tags("https://www.vakin.se/sortera/glas").ShouldBe(["vakin"]);
+        Tags("https://www.umea.se/utbildning/forskola/plats.html").ShouldBe(["utbildning"]);
+        Tags("https://www.vakin.se/utbildning/").ShouldBe(["vakin", "utbildning"]);
+
+        // The forms the rule is reduced to; an upload's relative path is never read as a host.
+        Metadata.PathGlob("https://www.umea.se/a/b.html?x=1", website: true).ShouldBe(("www.umea.se", "/a/b.html"));
+        Metadata.PathGlob("http://xn--rebro-iua.se:8080/a/*", website: true).ShouldBe(("xn--rebro-iua.se", "/a/*"));
+        Metadata.PathGlob("https://örebro.se/a/", website: true).ShouldBe(("xn--rebro-iua.se", "/a/**"));
+        Metadata.PathGlob("umea.se", website: true).ShouldBe(("umea.se", "/**"));
+        Metadata.PathGlob("/a/b?.html", website: true).ShouldBe((null, "/a/b?.html"));
+        Metadata.PathGlob("HR/**", website: true).ShouldBe((null, "HR/**"));
+        Metadata.PathGlob("protokoll.2024/**", website: false).ShouldBe((null, "protokoll.2024/**"));
+        Metadata.PathGlob("HR/", website: false).ShouldBe((null, "HR/**"));
+
+        IReadOnlyList<string> Tags(string url) => Metadata.Apply(rules, new MetadataInput(ProcessingMediaTypes.Html) { Url = new Uri(url) }).Tags;
+    }
+
+    [Fact]
     public void Quality_facts_and_the_observation_score()
     {
         var parsed = QualityFacts.ForParsed(new ParsedDocument
