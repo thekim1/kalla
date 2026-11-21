@@ -274,7 +274,7 @@ the context's `member_groups` (feature `member-groups`, gateway v0.10.0; identit
   §4.10); outbox `EntityId` null (the key is `Name`). The 5-minute sync writes only rows that changed (incl.
   `SyncedAt`), so a sync without changes does not bump the config version; a catalogue row whose deployment is
   disabled or no longer served is deleted; manual rows are never touched.
-- **`GatewayKeys`** (not built): no change stamps or `xmin` (not an editable root); outbox `EntityId` = the key id. The
+- **`GatewayKeys`**: no change stamps or `xmin` (not an editable root); outbox `EntityId` = the key id. The
   sync writes only rows that changed and deletes the row of a key the context no longer lists (revoked); an
   `Assistants` or `Collections` row that still names it shows its key as gone, and V39 refuses its next save.
 - `AssistantTestQuestions` and `AssistantTemplates` (P2) are not created.

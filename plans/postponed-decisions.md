@@ -5,12 +5,11 @@ Review this list at the start of every phase (P0 → P1 → P2 → P3). When an 
 register `decisions.md` and strike it here with the date.
 
 **Phase-start rule** ([weakness review §5](archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)): every item that blocks the next phase has a **named person and a date** before that
-phase starts. P0 ends only when A1, G1, W1, W2, N1, U1 and P2 have both. The *Owner* column names a role until then;
-the person and the date are named by the user before P0 ends and written into the row (*Owner*: the person; *Decide
-by*: the date).
+phase starts. The *Owner* column names a role until the user names the person and the date, which are written into
+the row (*Owner*: the person; *Decide by*: the date).
 
-**Not met (2026-11-01):** P0 finished (v0.1.0, 2026-10-31) with A1, N1, U1 and W2 still naming roles and no dates. The
-user names the persons and dates; until then these rows stay open and block the phase gates they name.
+**Not met since P0** (v0.1.0, 2026-10-31): A1, U1 and W2 still name roles and have no dates (N1 is decided). The user
+names the persons and dates; until then these rows stay open and block the phase gates they name.
 
 **Reviewed at P2's start (2026-11-20, Decisions "P2 starts before go-live"):** nothing here blocks P2's wave 1
 (assistants and answer quality). Due with later waves: M1's open questions and SDK re-check and V1's validator

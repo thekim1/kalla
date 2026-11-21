@@ -1095,7 +1095,7 @@ from the gateway's file; passwords and secrets are import placeholders like `${F
 
 The pilot's Keycloak is the gateway's (Decisions table "P1 pilot sign-in"; plan §1): the gateway repo defines the
 Compose project, the base realm `fors` (the gateway's clients and roles, without test users) and its operation
-(`../gateway-changes/prompt-gateway-session.md` §2). RAG contributes a **realm-additions file** in `deploy/keycloak/`
+(`../archive/gateway-changes/prompt-gateway-session.md` §2). RAG contributes a **realm-additions file** in `deploy/keycloak/`
 (owned by stream B, `../archive/p1/README.md` §2; P1 item 16 → hand-off J8, through the user to the gateway session; J11 is the
 shared Keycloak with the additions imported and pilot accounts created). It is derived from §11.1 and differs as
 follows:
@@ -1406,7 +1406,7 @@ realm-wide settings in the gateway's base file. Q4: OTP not enforced for the pil
 shared Keycloak as built"). Q8: audience only. The list below keeps the original questions; 5, 7 and 9 are unchanged.
 
 **Open for P1 (shared Keycloak; not decided by the 2026-10-30 decision, 2026-10-31).** Each needs an answer before
-J11; the gateway session (`../gateway-changes/prompt-gateway-session.md` §2) or the user decides, not the streams.
+J11; the gateway session (`../archive/gateway-changes/prompt-gateway-session.md` §2) or the user decides, not the streams.
 
 1. **Who administers the shared realm** in production: accounts, role grants, `departmentCodes`, OTP resets, the
    realm's admin users and their own OTP. The gateway session writes the runbook; who holds the Keycloak admin role
