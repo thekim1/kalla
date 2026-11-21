@@ -145,7 +145,7 @@ services:
 
   kalla-postgres:
     <<: *hardened
-    image: ${KALLA_POSTGRES_IMAGE:-ghcr.io/thekim1/kalla/postgres:0.9.1@sha256:5667dd38264f0b56f6fd5b89f7679be83d0948baa748a21344436347c96d103b}
+    image: ${KALLA_POSTGRES_IMAGE:-ghcr.io/thekim1/kalla/postgres:0.9.2@sha256:db25012f297079d6ab793c0d5b3c3efe43c4b1258010d461b64b193bc180588d}
     user: "999:999"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -183,7 +183,7 @@ services:
     # new names. The Postgres superuser by peer over kalla-postgres's socket, as Postgres's own user: no password and
     # no network.
     <<: *hardened
-    image: ${KALLA_POSTGRES_IMAGE:-ghcr.io/thekim1/kalla/postgres:0.9.1@sha256:5667dd38264f0b56f6fd5b89f7679be83d0948baa748a21344436347c96d103b}
+    image: ${KALLA_POSTGRES_IMAGE:-ghcr.io/thekim1/kalla/postgres:0.9.2@sha256:db25012f297079d6ab793c0d5b3c3efe43c4b1258010d461b64b193bc180588d}
     user: "999:999"
     restart: "no"
     entrypoint: [psql, -X, -q, -v, ON_ERROR_STOP=1, -h, /var/run/postgresql, -U, postgres, -d, postgres, -f, /run/config/0.9-rename-roles.sql]
@@ -199,7 +199,7 @@ services:
 
   kalla-migrate:
     <<: *hardened
-    image: ${KALLA_MIGRATIONS_IMAGE:-ghcr.io/thekim1/kalla/migrations:0.9.1@sha256:e8355b68611398cf279a358c584de18428ce8951f6910fa9b7dddcca0d324c7a}
+    image: ${KALLA_MIGRATIONS_IMAGE:-ghcr.io/thekim1/kalla/migrations:0.9.2@sha256:9d92ae0975ae897162c8a9a9d7b665b536bc36ca0736494fb859aff249ecd0c8}
     user: "1654:1654"
     restart: "no"
     cpus: 1.0
@@ -224,7 +224,7 @@ services:
 
   kalla-api:
     <<: *hardened
-    image: ${KALLA_API_IMAGE:-ghcr.io/thekim1/kalla/api:0.9.1@sha256:db09348c4e84994a5e9d67ef5683ef26ce821a8818bd739739d961e4ee2e57dc}
+    image: ${KALLA_API_IMAGE:-ghcr.io/thekim1/kalla/api:0.9.2@sha256:ca4f12dd05674b94dd663b4ccb2c1c62834bf6117b835d028c18629c92ed3d32}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -291,7 +291,7 @@ services:
 
   kalla-admin:
     <<: *hardened
-    image: ${KALLA_ADMIN_IMAGE:-ghcr.io/thekim1/kalla/admin:0.9.1@sha256:074470e072eda8914eb3448d6ac64eebe0e3dec19242b8cf8dfc823c2bdf0cd5}
+    image: ${KALLA_ADMIN_IMAGE:-ghcr.io/thekim1/kalla/admin:0.9.2@sha256:c656e2732678c7a0320ca98f17e185371d0e955a5da5bdd5f17361f67b208eb4}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -373,7 +373,7 @@ services:
 
   kalla-worker:
     <<: *hardened
-    image: ${KALLA_WORKER_IMAGE:-ghcr.io/thekim1/kalla/worker:0.9.1@sha256:5f5322bcd7a4402868689252ebdc6c1c2025a6c584f6a838e9d173f938bd7f96}
+    image: ${KALLA_WORKER_IMAGE:-ghcr.io/thekim1/kalla/worker:0.9.2@sha256:992665af3c846e82aad1ed7274ac9d8b2e086e8e153aed7bae5b246242dc3e9d}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 120s
@@ -436,7 +436,7 @@ services:
 
   kalla-parser:
     <<: *hardened
-    image: ${KALLA_PARSER_IMAGE:-ghcr.io/thekim1/kalla/parser:0.9.1@sha256:1cbfd932e3c61578731a9d7cc6e4650769c4d09e7db77b34e61e4d4aff89ba47}
+    image: ${KALLA_PARSER_IMAGE:-ghcr.io/thekim1/kalla/parser:0.9.2@sha256:4f67237412d3b10c33ad4ab1b8f7fc3ab43b56ea98301cc7fd2f87a182990c5f}
     user: "10001:10001"
     restart: unless-stopped
     tmpfs: ["/tmp:size=1g"]
@@ -461,7 +461,7 @@ services:
   kalla-clamav:
     <<: *hardened
     profiles: [clamav]
-    image: ${KALLA_CLAMAV_IMAGE:-ghcr.io/thekim1/kalla/clamav:0.9.1@sha256:5c0af7b35c04bac1bfab1780d2a3ab5480b43868d8981c8a4397fb5e7f3b327a}
+    image: ${KALLA_CLAMAV_IMAGE:-ghcr.io/thekim1/kalla/clamav:0.9.2@sha256:7becb59f5423a18131ee97a044461b1e05eeca3901a8ad7cd9e51b241f7ccfc1}
     user: "1000:1000"
     restart: unless-stopped
     cpus: 1.0
@@ -481,7 +481,7 @@ services:
   kalla-renderer:
     <<: *hardened
     profiles: [render]
-    image: ${KALLA_RENDERER_IMAGE:-ghcr.io/thekim1/kalla/renderer:0.9.1@sha256:0ff316e9be520ecda1f11ba158728effecccc9bb7c8dc2ab4069d5106e5ffa01}
+    image: ${KALLA_RENDERER_IMAGE:-ghcr.io/thekim1/kalla/renderer:0.9.2@sha256:36b9a2821fe9d37497399994d5521580cd4fd263a5a7033c8808d003235343ac}
     user: "10002:10002"
     restart: unless-stopped
     security_opt: [no-new-privileges:true, seccomp=unconfined]
