@@ -6,6 +6,7 @@ import { api } from '@/api'
 import type { Pipeline, Source } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { bffUser } from '@/test/fixtures'
+import { PIPELINE } from '@/utils/labels'
 import PipelineCard from './PipelineCard.vue'
 
 const definition = { schema: 1, template: 'website', templateVersion: 1, params: { chunkTokens: 500 } }
@@ -48,6 +49,8 @@ describe('Processing on the source page (admin design §6.6 step 1)', () => {
     await flushPromises()
     expect(document.body.querySelector('[data-test=copy-on-write]')).not.toBeNull()
     expect(document.body.textContent).toContain('From 200 to 800.')
+    // Topics explains its rules with an example instead of "leave it as it is" (#929).
+    expect(document.body.textContent).toContain(PIPELINE.pathRulesHint)
     const tokens = document.body.querySelector<HTMLInputElement>('#param-chunkTokens')!
     expect(tokens.value).toBe('500')
     tokens.value = 'många'

@@ -405,7 +405,7 @@ onMounted(load)
       </div>
 
       <div v-else-if="tab === 'topics'" id="collection-panel-topics" role="tabpanel" aria-labelledby="collection-tab-topics">
-        <CollectionTopics :collection-id="collection.data.value.id" />
+        <CollectionTopics :collection-id="collection.data.value.id" :sources="sources.data.value" />
       </div>
 
       <div v-else-if="tab === 'sharing'" id="collection-panel-sharing" role="tabpanel" aria-labelledby="collection-tab-sharing">
