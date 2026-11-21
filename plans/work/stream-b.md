@@ -97,6 +97,23 @@ tables in one migration of its own (no backward compatibility before production)
 - **Waits on:** B-57 and B-58 for their two kinds (the others first, those two added when they land).
 - **Read:** admin §5.3 (Home row), §5.5.1, V32; processing §14.8; cost-attribution §4.2.
 
+
+### [ ] B-63 Clear a personal-data hold in the admin UI, with the highlights (#925 step 1)
+- **Do:** admin §4.5's `POST /api/documents/{id}/pii-clear` (reason ≥ 10, V26) and `POST /api/documents/{id}/pii-preview`
+  (audited `pii.view`) in the admin UI, both built in the API and unused by the UI today: on a flagged, not cleared
+  document in the knowledge base's document list (§5.5.2) and in the source's personal-data report (§5.5.3), for
+  Manage holders of the source's department, a *Show highlights* action (the spans of the preview job, with the
+  wait while it runs) and a *Clear* action with the reason dialog that says what clearing does (the held set is
+  released and later sets are covered while no count rises, processing §9.5). The badges and the report follow the
+  cleared state.
+- **Paths:** `src/admin-ui/**` (not `src/platform/**`), `tests/**`; `src/Kalla.AdminApi/**` only if a field the UI
+  needs is missing.
+- **Done when:** Vitest for both actions and the reason rule; an API-backed test that a cleared document's held set is
+  served; both shown in a browser on the demo seed with a document flagged by a test personnummer.
+- **Waits on:** nothing. Steps 2–4 of `proposals/pii-review.md` (verdicts, reject, the summary) come with their
+  Decisions entry (user's answers on #925, 2026-11-21).
+- **Read:** admin §4.5, §4.7, V26, §5.5.2, §5.5.3; processing §9.5; `proposals/pii-review.md`.
+
 ## Live (the live block, see the roadmap)
 
 
