@@ -604,6 +604,11 @@ export const SHARING = {
 /** The Topics tab (admin design §5.5.2): tags set by the sources' path rules. */
 export const TOPICS = {
   lead: 'Topics are set by path rules on the sources (processing settings, Topics). Assistants can limit a link to some topics.',
+  editRules: 'Edit the rules on a source: open it, choose Edit processing and fill in Topics.',
+  howTitle: 'How to write a rule',
+  how: 'One rule per section of the site or folder of files. "match" is the section: a path such as /bygga-bo-och-miljo/bygglov/, an address pasted from the browser, or a folder of uploaded files such as HR/. A match that ends in / covers every page under it. "tags" are the topics, in lower case.',
+  example: '[\n  { "match": "https://www.umea.se/bygga-bo-och-miljo/bygglov/", "on": "path", "tags": ["bygglov"] },\n  { "match": "/kommun-och-politik/", "on": "path", "tags": ["politik"] }\n]',
+  after: 'Publish the processing to apply the rules. The topics appear here once the pages have been processed again.',
   topic: 'Topic',
   rule: 'Rule',
   documents: 'Documents',
@@ -827,6 +832,8 @@ export const PIPELINE = {
   } as Record<string, string>,
   range: (min: number, max: number) => `From ${min} to ${max}.`,
   json: 'JSON. Leave it as it is if you are unsure.',
+  /** The Topics field (pathRules, processing §7, #929). */
+  pathRulesHint: 'One rule per section: "match" is a path such as /bygga-bo-och-miljo/bygglov/, an address pasted from the browser, or a folder of files such as HR/ (a match that ends in / covers everything under it); "tags" are its topics. Example: [{ "match": "/bygga-bo-och-miljo/bygglov/", "on": "path", "tags": ["bygglov"] }]. [] means no topics.',
   invalidNumber: 'Enter a whole number.',
   invalidJson: 'This is not valid JSON.',
 } as const

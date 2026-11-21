@@ -46,7 +46,7 @@ const fields = computed(() =>
       label: PIPELINE.params[name] ?? labels?.en ?? labels?.sv ?? name,
       options: kind === 'select' ? (schema.enum as string[]).map((v) => ({ value: v, label: PIPELINE.options[v] ?? v })) : [],
       hint: kind === 'integer' && typeof schema.minimum === 'number' && typeof schema.maximum === 'number'
-        ? PIPELINE.range(schema.minimum, schema.maximum) : kind === 'json' ? PIPELINE.json : undefined,
+        ? PIPELINE.range(schema.minimum, schema.maximum) : name === 'pathRules' ? PIPELINE.pathRulesHint : kind === 'json' ? PIPELINE.json : undefined,
     }
   }),
 )
