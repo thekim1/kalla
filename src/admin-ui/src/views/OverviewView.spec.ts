@@ -69,7 +69,7 @@ describe('Overview: your access (P0 checklist #9)', () => {
   it('tells a user without a rag-* role to ask for access', () => {
     signIn({ roles: [], departmentCodes: [], departmentSources: [] })
     const wrapper = mount(OverviewView)
-    expect(wrapper.text()).toContain('You have no role in the Knowledge platform yet.')
+    expect(wrapper.text()).toContain('You have no role in Källa yet.')
   })
 
   it('shows Get started for each unfinished collection, and the empty state with Create knowledge base', async () => {

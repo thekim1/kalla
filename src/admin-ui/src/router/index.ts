@@ -101,7 +101,7 @@ export function createAppRouter(history: RouterHistory = createWebHistory()) {
   let firstNavigation = true
   router.afterEach((to, from, failure) => {
     if (failure) return
-    document.title = `${to.meta.title ?? APP.name} · ${APP.titleSuffix}`
+    document.title = to.meta.title ? `${to.meta.title} · ${APP.titleSuffix}` : APP.name
     if (firstNavigation) {
       firstNavigation = false
       if (to.hash) focusSection(to.hash)
