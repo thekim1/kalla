@@ -553,8 +553,7 @@ step for a new VM or an upgrade: [portainer.md](portainer.md).
 
 **Deploy.** In the gateway's existing stack, *Editor*: replace the file with this one, keep the stack name (the
 gateway's volumes `<stack>_fors-certs`, `<stack>_fors-secrets` and its database are found by it), add the variables
-below, and *Update the stack*. The RAG images on GHCR are private: add `ghcr.io` under *Registries* with a GitHub token
-that can read packages.
+below, and *Update the stack*. Källa's images on GHCR are public, so no registry is needed.
 
 | Variable | |
 |---|---|

@@ -125,14 +125,14 @@ git config core.hooksPath .githooks` },
   { id: 'production', title: 'Deploy a release', body: 'A Linux Docker host, Fors and your own login provider.', icon: 'dns',
     prereqs: ['Linux + Docker 28+', 'Compose 2.33.1+', '8 cores, 20 GB RAM (with the gateway)', 'An OIDC provider', 'Fors'],
     steps: [
-      { title: 'Set up the gateway', body: 'Källa calls every model through the Ume AI Gateway. Install its release first and finish its setup wizard.', shell: 'bash', code: `curl -fsSLO https://github.com/thekim1/fors/releases/download/vX.Y.Z/fors-X.Y.Z.tar.gz
+      { title: 'Set up the gateway', body: 'Källa calls every model through Fors, the LLM gateway. Install its release first and finish its setup wizard.', shell: 'bash', code: `curl -fsSLO https://github.com/thekim1/fors/releases/download/vX.Y.Z/fors-X.Y.Z.tar.gz
 tar -xzf fors-X.Y.Z.tar.gz && cd fors-X.Y.Z
 sudo ./deploy/init-deployment.sh --gateway-host <host> --admin-host <host> --bind 0.0.0.0 --yes
 sudo docker compose -f deploy/compose.prod.yaml --env-file deploy/.env up -d --wait` },
-      { title: 'Download Källa and let the gateway create its keys', body: 'The release ships a manifest that the gateway applies: an integration with the three credential keys rag-api, kalla-admin and kalla-worker call it with.', shell: 'bash', code: `curl -fsSLO ${GH}/releases/download/vX.Y.Z/kalla-X.Y.Z.tar.gz
+      { title: 'Download Källa and let the gateway create its keys', body: 'The release ships a manifest that the gateway applies: an integration Kalla with the three credential keys rag-api, rag-admin and rag-worker, which kalla-api, kalla-admin and kalla-worker call it with.', shell: 'bash', code: `curl -fsSLO ${GH}/releases/download/vX.Y.Z/kalla-X.Y.Z.tar.gz
 tar -xzf kalla-X.Y.Z.tar.gz
 sudo install -m 644 kalla-X.Y.Z/deploy/portainer/integration-manifest.json \\
-  fors-X.Y.Z/deploy/integration-manifests/kalla.json`, note: 'Källa\'s images on ghcr.io are private: sudo docker login ghcr.io with a token that holds read:packages.' },
+  fors-X.Y.Z/deploy/integration-manifests/kalla.json`, note: 'Källa\'s images on ghcr.io are public: no docker login is needed.' },
       { title: 'Start Källa', body: 'The script writes deploy/.env; the first start creates the certificates and secrets and lists what is still missing.', shell: 'bash', code: `cd kalla-X.Y.Z
 sudo ./deploy/init-deployment.sh --api-host <host> --admin-host <host> \\
   --gateway-url https://<host>:8443 --gateway-ca-file ../fors-X.Y.Z/deploy/certs/ca.pem \\

@@ -81,8 +81,8 @@ two residencies.
 
 Källa calls the gateway with three credential keys, one each for kalla-api, kalla-admin and kalla-worker. The gateway
 creates them from a manifest that ships with Källa, and writes their secrets to a directory that Källa's bootstrap
-reads. Download and unpack Källa's release first, next to the gateway's directory. Its images are private: log in as root,
-which is who pulls them (`sudo docker login ghcr.io`, a GitHub user and a token holding `read:packages`).
+reads. Download and unpack Källa's release first, next to the gateway's directory. Its images on `ghcr.io` are public,
+so no `docker login` is needed.
 
 ```bash
 cd ..
