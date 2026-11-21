@@ -42,13 +42,14 @@ sink" monolith. Design and code live in this repo.
 - **The session approves nothing on this machine.** `gh pr review --approve` as `ume-nichlas` is stopped by Claude
   Code's permission check, and in session 52 so was approving as `Crotalus`, with the user's decision on record and
   their go-ahead in the conversation. Review as a comment, say that it is not the approval, and give the user the
-  line to run (handbook, *How we work*). What then merges a pull request is the user's approval or `thekim1`'s `--admin`.
+  line to run (handbook, *How we work*). What then merges a pull request is the user's approval, `thekim1`'s
+  approval, or `thekim1`'s `--admin`.
 - **Look at the open pull requests before each step** (`gh pr list`): the other machine works at the same hour.
   Say on its pull request what you are about to write.
 - **A decision for the user is asked as four alternatives with one recommendation** (the question tool).
 
-**Open when this was written** (2026-11-21 12:30 UTC): this file's pull request (the plan clean-up) and Dependabot's
-first four after the release (#911 to #914). In Fors: the draft thekim1/fors#118. In order:
+**Open when this was written** (2026-11-21 12:30 UTC): this file's pull request (#915, the plan clean-up) and
+Dependabot's first four after the release (#911 to #914). In Fors: the draft thekim1/fors#118. In order:
 
 1. **The first Audit run after the release** (the schedule says 04:17 UTC, the runs come around 13:00) scans
    0.9.0's images and should be green: #907 has the three updates the scan of 0.8.0 asked for. It had not come when
@@ -237,10 +238,8 @@ the reviews of #906) is in this file's history: `git log -- HANDOVER.md`.
   to #914; in Fors the draft #118.
 - **Dependabot works:** grouped pull requests; `.github/dependabot.yml`'s header lists where a pin is repeated.
   Playwright is bumped by hand, in the package list, the renderer image and its lockfile together (#907).
-- **The user's machine (`~/research/rag`):** the main clone on `main`, and three more checkouts:
-  `~/research/rag-docs` (this file's branch; it goes when the pull request is merged), `~/research/rag-small` (the
-  old `main-session/handover-50`) and `~/research/rag-902` (detached, from the review of #902); the last two can go.
-  Docker works without sudo; there is no sudo.
+- **The user's machine (`~/research/rag`):** the main clone on `main` and one more checkout, `~/research/rag-docs`
+  (this file's branch, #915; it goes when the pull request is merged). Docker works without sudo; there is no sudo.
   - **The development stack has not run since the rename, and its data is still under the old names**
     (checked 2026-11-21; this file said otherwise before): the AppHost's user secrets are under the old id
     `ume-rag-apphost-dev` and the new id `kalla-apphost-dev` has none; the volumes are `ume-rag-m1-postgres` (the
