@@ -284,6 +284,18 @@ main session needs:
 - **A pinned base image with no newer build** (session 51, pgvector and `zlib1g`): pin the one fixed package in our
   own Dockerfile, with a comment that the line goes when the base has the fix. `docker buildx imagetools inspect`
   shows whether a tag was rebuilt; `apt-get -s upgrade` in the base shows what else an upgrade would move.
+- **On this machine the session does not approve as `Crotalus`** (session 52, #906): with the user's decision on
+  record and their go-ahead in the conversation, the permission check still stopped it, first the account switch and
+  then the approval itself. The approval is the user's own action: give them the one line to run
+  (`gh auth switch -u Crotalus && gh pr review <n> --approve && gh auth switch -u ume-nichlas`) or the browser.
+- **A pull request whose branch joins a rebuilt line to its old one loses every approval** (session 52, #906): the
+  release preparation was rebuilt on the new `main` and merged with its first version (`757153f3`), so the pull
+  request's stored base stayed at the old `main` (`gh api …/pulls/<n> --jq .base.sha`) while the merge base was the
+  new one. GitHub dismissed two approvals within seconds with *The merge-base changed after approval*, with no push
+  in between, and a third would have gone the same way. That the stored base is the cause is a reading, not checked.
+  Rebuild such a branch as a new branch and a new pull request. Others report that closing and reopening clears it.
+- **Pushing in Fors's clone** needs the `gh` credential helper as well (*Environment notes*, *Git over HTTPS*): a
+  plain `git push` there waits for the Windows credential manager and never returns (session 52, two minutes lost).
 
 ## Plan files (how they are kept, M-14)
 
