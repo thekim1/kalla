@@ -128,9 +128,9 @@ Image `runtime` is the parser image; `test` is the test image only (the dev grou
 | docling-core | 2.106.0 | MIT | `LICENSE` | runtime |
 | docling-ibm-models | 4.0.4 | MIT | `LICENSE` | runtime |
 | docling-parse | 7.23.0 | MIT | `LICENSE` | runtime |
-| docling-slim | 2.149.0 | MIT | `LICENSE` | runtime |
+| docling-slim | 2.150.0 | MIT | `LICENSE` | runtime |
 | et-xmlfile | 2.0.0 | MIT License | `LICENCE.python`, `LICENCE.rst`, `AUTHORS.txt` | runtime |
-| fastapi | 0.162.2 | MIT | `LICENSE` | runtime |
+| fastapi | 0.162.5 | MIT | `LICENSE` | runtime |
 | filelock | 4.2.4 | MIT | `LICENSE` | runtime |
 | filetype | 1.2.0 | MIT License | - | runtime |
 | fsspec | 2026.9.0 | BSD-3-Clause | `LICENSE` | runtime |
@@ -176,11 +176,11 @@ Image `runtime` is the parser image; `test` is the test image only (the dev grou
 | py-serializable | 2.1.0 | Apache Software License | - | test |
 | pydantic | 2.14.3 | MIT | `LICENSE` | runtime |
 | pydantic-core | 2.50.4 | MIT | `LICENSE` | runtime |
-| pydantic-settings | 2.16.2 | MIT | `LICENSE` | runtime |
+| pydantic-settings | 2.16.3 | MIT | `LICENSE` | runtime |
 | pygments | 2.21.0 | BSD-2-Clause | `AUTHORS`, `LICENSE` | runtime |
 | pylatexenc | 2.11 | MIT License | `LICENSE.txt` | runtime |
 | pyparsing | 3.3.3 | MIT | `LICENSE` | test |
-| pypdfium2 | 5.15.0 | BSD-3-Clause, Apache-2.0, dependency licenses | `LICENSES/Apache-2.0.txt`, `LICENSES/BSD-3-Clause.txt`, `LICENSES/CC-BY-4.0.txt`, `BUILD_LICENSES/SHARED_LICENSES/Apache-2.0.txt`, `BUILD_LICENSES/abseil.txt`, `BUILD_LICENSES/agg23.txt`, `BUILD_LICENSES/all_except_musl/llvm-libc.txt`, `BUILD_LICENSES/android/catapult.txt`, `BUILD_LICENSES/android/cpu_features.txt`, `BUILD_LICENSES/android/libunwind.txt`, `BUILD_LICENSES/cibw_musl/libgcc_and_libstdc++.txt`, `BUILD_LICENSES/dragonbox-Apache2-LLVM.txt`, `BUILD_LICENSES/dragonbox-Boost.txt`, `BUILD_LICENSES/fast_float.txt`, `BUILD_LICENSES/freetype.txt`, `BUILD_LICENSES/harfbuzz.txt`, `BUILD_LICENSES/highway.txt`, `BUILD_LICENSES/icu.txt`, `BUILD_LICENSES/lcms.txt`, `BUILD_LICENSES/libjpeg_turbo.ijg`, `BUILD_LICENSES/libjpeg_turbo.md`, `BUILD_LICENSES/libopenjpeg.txt`, `BUILD_LICENSES/libpng.txt`, `BUILD_LICENSES/libtiff.txt`, `BUILD_LICENSES/pdfium-binaries.txt`, `BUILD_LICENSES/pdfium-binaries_musl/musl.txt`, `BUILD_LICENSES/pdfium.txt`, `BUILD_LICENSES/simdutf.txt`, `BUILD_LICENSES/v8_xfa/bigint.txt`, `BUILD_LICENSES/v8_xfa/fdlibm.txt`, `BUILD_LICENSES/v8_xfa/fp16.txt`, `BUILD_LICENSES/v8_xfa/inspector_protocol.txt`, `BUILD_LICENSES/v8_xfa/strongtalk.txt`, `BUILD_LICENSES/v8_xfa/v8.txt`, `BUILD_LICENSES/zlib.txt` | runtime |
+| pypdfium2 | 5.15.2 | BSD-3-Clause, Apache-2.0, dependency licenses | `LICENSES/Apache-2.0.txt`, `LICENSES/BSD-3-Clause.txt`, `LICENSES/CC-BY-4.0.txt`, `BUILD_LICENSES/SHARED/Apache-2.0.txt`, `BUILD_LICENSES/abseil.txt`, `BUILD_LICENSES/agg23.txt`, `BUILD_LICENSES/all_except_musl/llvm-libc.txt`, `BUILD_LICENSES/android/catapult.txt`, `BUILD_LICENSES/android/cpu_features.txt`, `BUILD_LICENSES/android/libunwind.txt`, `BUILD_LICENSES/cibw_musl/libgcc_and_libstdc++.txt`, `BUILD_LICENSES/dragonbox-Apache2-LLVM.txt`, `BUILD_LICENSES/dragonbox-Boost.txt`, `BUILD_LICENSES/fast_float.txt`, `BUILD_LICENSES/freetype.txt`, `BUILD_LICENSES/harfbuzz.txt`, `BUILD_LICENSES/highway.txt`, `BUILD_LICENSES/icu.txt`, `BUILD_LICENSES/lcms.txt`, `BUILD_LICENSES/libjpeg_turbo.ijg`, `BUILD_LICENSES/libjpeg_turbo.md`, `BUILD_LICENSES/libopenjpeg.txt`, `BUILD_LICENSES/libpng.txt`, `BUILD_LICENSES/libtiff.txt`, `BUILD_LICENSES/pbin_and_sbuild/brotli.txt`, `BUILD_LICENSES/pbin_and_sbuild/libyuv.txt`, `BUILD_LICENSES/pbin_musl/musl.txt`, `BUILD_LICENSES/pdfium-binaries.txt`, `BUILD_LICENSES/pdfium.txt`, `BUILD_LICENSES/simdutf.txt`, `BUILD_LICENSES/v8_xfa/bigint.txt`, `BUILD_LICENSES/v8_xfa/fdlibm.txt`, `BUILD_LICENSES/v8_xfa/fp16.txt`, `BUILD_LICENSES/v8_xfa/inspector_protocol.txt`, `BUILD_LICENSES/v8_xfa/strongtalk.txt`, `BUILD_LICENSES/v8_xfa/v8.txt`, `BUILD_LICENSES/zlib.txt` | runtime |
 | pytest | 9.2.0 | MIT | `LICENSE` | test |
 | python-dateutil | 3.0.0 | BSD License / Apache Software License | `LICENSE` | runtime |
 | python-docx | 1.2.0 | MIT License | `LICENSE` | runtime |
@@ -194,7 +194,7 @@ Image `runtime` is the parser image; `test` is the test image only (the dev grou
 | rich | 15.0.0 | MIT License | `LICENSE` | runtime |
 | rpds-py | 2026.9.1 | MIT | `LICENSE` | runtime |
 | rtree | 1.4.1 | MIT | `LICENSE.txt` | runtime |
-| ruff | 0.17.4 | MIT | `LICENSE` | test |
+| ruff | 0.17.5 | MIT | `LICENSE` | test |
 | safetensors | 0.8.0 | Apache Software License | `LICENSE` | runtime |
 | scipy | 1.18.1 | BSD License | - | runtime |
 | setuptools | 84.2.1 | MIT | `LICENSE` | runtime |
