@@ -22,3 +22,15 @@ See [`../archive/passes/simplification-pass.md`](../passes/simplification-pass.m
 | `perf.yml`, nightly `evaluation.yml` (§1) | P1, before the pilot |
 | `redis` in the pilot: container, its `data` network membership and limits row, `ConnectionStrings__redis`, Redis password, ACL and certificate; Redis in the default AppHost (§14) | P2 (first multi-host deployment, enabled by `ConnectionStrings:redis`); P1 uses the in-memory `IRateLimitStore`/`ISharedCache` and the Postgres admin session store |
 | `rag-pgbackrest` sidecar, `ume-rag/pgbackrest` image, `PGBACKREST_IMAGE`, `pgbackrest-spool` volume (§14) | Replaced: pgBackRest inside `ume-rag/postgres`, backups from a host timer |
+
+## 12. Open decisions and contradictions found: how they were settled
+
+Moved here from the design on 2026-11-21 (session 53's clean-up); the rows stay in the design, each in its current
+state.
+
+**Review (2026-10-29):** accepted 1, 2 (added to `gateway-changes` §3c), 3, 6, 7, 8, 9, 10 (as a proposal for both repos), 12, 13, 14.
+User decisions: 5 Bicep, 11 postponed (file keys in the pilot, Key Vault later), 15 ClamAV direct without a mirror; 4 (self-hosted runner) waits for IT security.
+Review fix: Chromium keeps its sandbox via a seccomp profile (§5.4). Rows 3, 6, 7, 8, 11 and 12 are restated in the
+decided form of the simplification pass (2026-10-30). Row 8 first planned Open WebUI as a Compose project of its own
+(`compose.openwebui.yaml`) with an `env_file` and an `openwebui` network; it was built as a profile of
+`compose.rag.yaml` (M-17).

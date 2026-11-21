@@ -189,7 +189,7 @@ store, scale tests, e-mail, site-profile learning, stored chat content (A1) and 
 | # | Item | Where | Phase | How | Status |
 |---|---|---|---|---|---|
 | 25 | `OnTokenValidated` properties reach the cookie ticket; `ctx.Fail` + `OnRemoteFailure` redirect on .NET 10 | gateway design §16 | P2 (release 2: feature C, tenant/guest) | test | open |
-| 33 | Kestrel client-certificate listener vs health probes; shared Data Protection key ring in `AddRagDatabase` (separate `rag-tools` service) | `tools/design.md` §2.2, §8.3 | P3 | test | open |
+| 33 | Kestrel client-certificate listener vs health probes; shared Data Protection key ring in `AddRagDatabase` (separate `kalla-tools` service) | `tools/design.md` §2.2, §8.3 | P3 | test | open |
 | 35 | Azure Key Vault SDK versions | `platform/repo-and-deployment.md` §2.2 | when K1 is decided (P2) | source | open |
 | 31 | SmartReader as the fallback for hosts without a site profile; the Sitevision preset against the ≈ 20 saved umea.se pages. **Preset part done (P1a item 8, PR #104, 2026-10-31):** the built-in Sitevision preset extracts the same content as the hand-checked umea.se profile on all 20 saved pages, each with a hand-read golden; reading them fixed four faults (root `main, .pagecontent` tried in order, breadcrumb crumbs, list-item lines, menu/archive/file-list portlets as link blocks); hub pages end `skipped` `parse.empty`. **SmartReader open:** not built (without a matching root the extractor falls back to the landmarks, then `body`); details in `archive/p1/results-a.md` | `ingestion-worker/design-processing.md` §21 | P1 | test | open: not built; for hosts without a site profile, with site-profile learning (P2) |
 

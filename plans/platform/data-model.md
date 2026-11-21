@@ -82,7 +82,7 @@ pooler up to 5 hosts**: a backend costs about 10 MB (no dictionaries load into P
 memory limit comes from the P0 measurement; PgBouncer (≥ 1.21, transaction mode) comes only when the budget no longer
 fits `max_connections`, e.g. a further api host at 5-host scale (performance pass §6 trigger). There is no
 `kalla_tools` role: the P2 tool hub runs in-process in `kalla-api` and `kalla-admin` (§1.2), and the role comes only with
-a separate `rag-tools` service (P3, §13). Code is **pooler-safe from P0**: no session `SET`, session advisory locks,
+a separate `kalla-tools` service (P3, §13). Code is **pooler-safe from P0**: no session `SET`, session advisory locks,
 `WITH HOLD` cursors, temporary tables other than `ON COMMIT DROP`, or SQL `PREPARE`; LISTEN runs on its own
 `ConnectionStrings__ragdb-listen` (§4.3), and the worker's HNSW rebuild, the one session `SET`
 (`statement_timeout = 0`), on its own `ConnectionStrings__ragdb-maintenance` (falls back to `ragdb`; never through a
@@ -117,7 +117,7 @@ No retrieval statement runs `SET LOCAL`; every collection uses these role defaul
 Revoke-and-grant in one transaction on every migration run, tables named one by one, so a new table is unreadable until
 listed here (copied from the gateway's file header). `S` select, `I` insert, `U` update, `D` delete, `X` execute.
 The P2 tool hub runs in-process in `kalla-api` (chat) and in `kalla-admin` (skill gate, discovery, drift polling; tools
-design §2), so both roles get the tool grants; there is no tool role before a separate `rag-tools` service (P3). The
+design §2), so both roles get the tool grants; there is no tool role before a separate `kalla-tools` service (P3). The
 worker runs only retrieval evaluation and reads no skill or tool tables and of the assistants only their published
 links: the HNSW index health check samples every scope an assistant link uses (knowledge design §6.4), so it reads
 `PublishedAssistantVersions` (`AssistantId`, `CollectionLinks`) and `Assistants` (`Id`, `State`, `DeletedAt`, to skip

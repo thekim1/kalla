@@ -368,8 +368,8 @@ public sealed record RagPrincipal(
 | MCP client (`/mcp` and `/mcp/skills/<slug>`, same principal) | delegated token, `scp` `Mcp.Use` (§8) | `EntraUser` | `oid` | `azp` (kind `mcp-client`) | P2 |
 | Worker → API internal attachment route (`POST /internal/attachments/{id}/chunks`, chat design §15.2) | internal service key, internal network only | `Application` | `svc:{keyId}` | client `rag-internal` (kind `internal`) | P2 |
 | Chat role → knowledge role over HTTP (`Retrieval:Mode=Http`) | internal `kalla-sk-` service key | `Application` + forwarded decision | `svc:{keyId}` | client `rag-internal` (kind `internal`) | when split |
-| Chat and `mcp` roles → `rag-tools` service (P2: in-process hub, no hop; tools design §2) | **mTLS** client certificate **and** internal `kalla-sk-` service key | `Application` + forwarded `ToolCallContext` | `svc:{keyId}` | client `rag-internal` (kind `internal`) | P3 |
-| Admin → `rag-tools` service (discovery, connection test; P2 in-process) | mTLS **and** service key | `Application` | `svc:{keyId}` | client `admin-console` (kind `internal`) | P3 |
+| Chat and `mcp` roles → `kalla-tools` service (P2: in-process hub, no hop; tools design §2) | **mTLS** client certificate **and** internal `kalla-sk-` service key | `Application` + forwarded `ToolCallContext` | `svc:{keyId}` | client `rag-internal` (kind `internal`) | P3 |
+| Admin → `kalla-tools` service (discovery, connection test; P2 in-process) | mTLS **and** service key | `Application` | `svc:{keyId}` | client `admin-console` (kind `internal`) | P3 |
 | Admin test panel | admin session (in-process, no HTTP) | `EntraUser` | admin `oid` (fallback `sub`; P1 Keycloak: `sub`) | client `admin-console` (kind `internal`) | P1 |
 | Browser following a citation link (`GET /v1/documents/{id}` and `/content` only) | signed download grant `?grant=g1.…` (knowledge design §4.6) | none (no subject; the grant carries ids only) | – | the grant's `cl` (client that received the citation) | P1 |
 
@@ -978,7 +978,7 @@ scope value on one registration. This is stricter than the Data API's "any confi
   Should several tool-hub instances ever need a shared cache, it is Redis with Data Protection encryption and a key
   per user (plan §7).
 - P2 service-identity calls (client credentials) run in the in-process hub of `kalla-api` and `kalla-admin` (tools design
-  §4.6); OBO arrives with the separate `rag-tools` service (P3, tools design §2).
+  §4.6); OBO arrives with the separate `kalla-tools` service (P3, tools design §2).
 
 ### 9.3 Claims challenges and consent
 
@@ -1194,7 +1194,7 @@ Enterprise applications.
 | `kalla-open-webui` registration (new) | Web redirect `https://<owui host>/oauth/oidc/login/callback` (§5.3); ID-token optional claims `email`, `acct`; delegated Graph `openid profile email` (user consent is enough, but granted tenant-wide by admin to avoid prompts); its own client secret (§12.2) | admin consent for the delegated scopes (recommended) |
 | Its service principal | `appRoleAssignmentRequired = true` | no |
 | Pilot groups (new) | `Källa pilot users` (Open WebUI access), `Källa platform admins`, `Källa department admins – <pilot department>` (names agreed with IT; no convention exists, plan answered question 5) | `Group.Create` or `Group.ReadWrite.All` for the deployer (open, §12.4) |
-| Tool identity and MCP server registrations (**package 2**, P2; not in `infra/entra/` yet) | app registration `kalla-tools` with a certificate credential (`keyCredentials`) for client credentials (`/run/certs/kalla-tools-entra.pfx`, mounted in `kalla-api` and `kalla-admin` only, tools design §4.6); per hosted MCP server a registration `ume-mcp-<name>` (first: `ume-mcp-kommun`) with app role `Tools.Invoke` (Application) and its assignment to `kalla-tools` (tools design §8.1, §8.3) | assignments need app ownership or `AppRoleAssignment.ReadWrite.All` (manual step, §12.3) |
+| Tool identity and MCP server registrations (**package 2**, P2; not in `infra/entra/` yet) | app registration `kalla-tools` with a certificate credential (`keyCredentials`) for client credentials (`/run/certs/kalla-tools-entra.pfx`, mounted in `kalla-api` and `kalla-admin` only, tools design §4.6); per hosted MCP server a registration `kalla-mcp-<name>` (first: `kalla-mcp-kommun`) with app role `Tools.Invoke` (Application) and its assignment to `kalla-tools` (tools design §8.1, §8.3) | assignments need app ownership or `AppRoleAssignment.ReadWrite.All` (manual step, §12.3) |
 | App role assignments | pilot users group → `kalla-open-webui` (default access); admin groups → `rag-platform-admin` / `rag-department-admin`, reviewer groups per department → `rag-reviewer` (P2: skill editor groups → `rag-skill-editor`) on `kalla-admin` | a manual approval step (§12.3) |
 
 ### 12.2 Credentials
