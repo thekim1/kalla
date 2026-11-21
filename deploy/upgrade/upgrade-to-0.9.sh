@@ -14,7 +14,8 @@
 #      ume-rag-admin when the file declares the sign-in and names no client (the old default), and the backup
 #      repository's path /ume-rag when an s3:// target names none (the old default, so the existing backups stay in use);
 #   2. stops the old project's services except Postgres;
-#   3. renames the database roles ume_rag_* to kalla_* (deploy/upgrade/0.9-rename-roles.sql, as the Postgres superuser);
+#   3. renames the database roles ume_rag_* to kalla_* (deploy/upgrade/0.9-rename-roles.sql, as the Postgres superuser;
+#      the new release's kalla-roles runs the same statements before kalla-migrate, and finds nothing left to rename);
 #   4. removes the old project's containers and networks (its volumes stay);
 #   5. copies the volumes <old project>_rag-{postgres-data,certs,secrets,blobs,openwebui-data,pgbackrest-repo,upload-copy} to
 #      kalla_kalla-{...}. The old volumes are kept: remove them once the new version runs.
@@ -47,7 +48,12 @@ command -v docker >/dev/null || die "docker is required"
 
 # --- 1. Variables ------------------------------------------------------------------------------------------------------
 # set_default FILE NAME VALUE: adds NAME=VALUE unless the file sets NAME (also an empty NAME=, which means unset on purpose).
-set_default() { grep -qE "^$2=" "$1" || printf '%s=%s\n' "$2" "$3" >> "$1"; }
+# A last line without its newline gets one first, so that the new line doesn't run into it.
+set_default() {
+  grep -qE "^$2=" "$1" && return
+  [ ! -s "$1" ] || [ -z "$(tail -c 1 "$1")" ] || echo >> "$1"
+  printf '%s=%s\n' "$2" "$3" >> "$1"
+}
 
 step "1. Variables"
 if grep -qE '(^|[^A-Za-z0-9_])(UME_|RAG_[A-Z]+_IMAGE)' "$env_file"; then

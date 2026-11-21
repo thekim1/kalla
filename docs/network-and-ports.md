@@ -250,6 +250,7 @@ listeners of §2) and `ss -ltnp`.
 | `kalla-openwebui` | 8080 | HTTP | `kalla-edge` | the published host port of §2; inside `kalla-edge`, kalla-proxy, kalla-api's feedback import and kalla-openwebui-setup | `deploy/compose.rag.yaml` |
 | `kalla-proxy` | 8443 | HTTPS | `kalla-edge` | only through its published host port of §2 | `deploy/compose.rag.yaml` |
 | `kalla-migrate` | – | one-shot client of kalla-postgres | `kalla-data` | – | `deploy/compose.rag.yaml` |
+| `kalla-roles` | – | one-shot client of kalla-postgres over its Unix socket (the volume `kalla-postgres-socket`), no network (`network_mode: none`) | – | – | `deploy/compose.rag.yaml` |
 | `kalla-bootstrap`, `rag-upload-backup` | – | no network (`network_mode: none`) | – | – | `deploy/compose.rag.yaml`, `deploy/compose.backup.yaml` |
 | Redis | – | none in the production Compose files (P2; the dev AppHost starts one only with `Redis:Enabled`) | – | – | `src/Kalla.AppHost/Program.cs` |
 

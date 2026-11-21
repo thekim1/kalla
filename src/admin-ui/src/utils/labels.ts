@@ -18,10 +18,10 @@ export const TONE_CLASSES: Record<Tone, string> = {
   accent: 'bg-accent-soft text-accent-ink',
 }
 
-/** Product name N1 is open (admin design §5.1); "Knowledge platform" until it is decided. */
+/** The product's name (Decisions "Product names"). */
 export const APP = {
-  name: 'Knowledge platform',
-  titleSuffix: 'Knowledge platform',
+  name: 'Källa',
+  titleSuffix: 'Källa',
   loading: 'Loading …',
 } as const
 
@@ -111,7 +111,7 @@ export const PALETTE = {
 } as const
 
 export const SIGN_IN = {
-  title: 'Sign in to the Knowledge platform',
+  title: 'Sign in to Källa',
   /** `organisation` is the gateway's organisation name; without one, the texts name no organisation. */
   lead: (organisation: string | null) =>
     `Administration of ${organisation ? `${organisation}’s` : 'the'} knowledge bases and assistants. Sign in with your organisation account.`,
@@ -136,7 +136,7 @@ export const SIGN_IN = {
 /** The setup wizard at /setup (admin design §5.11, identity design §19). */
 export const SETUP_WIZARD = {
   title: 'Set up sign-in',
-  lead: 'Connect the Knowledge platform to your identity provider. Finishing needs a test sign-in by a platform admin.',
+  lead: 'Connect Källa to your identity provider. Finishing needs a test sign-in by a platform admin.',
   reopened: 'Setup was re-opened. The current sign-in keeps working until you finish.',
   stepsLabel: 'Setup steps',
   stepOf: (n: number, total: number) => `Step ${n} of ${total}`,
@@ -389,7 +389,7 @@ export const OVERVIEW = {
   roles: 'Roles',
   departments: 'Departments',
   source: 'From',
-  noRoles: 'You have no role in the Knowledge platform yet. Contact the platform team if you need access.',
+  noRoles: 'You have no role in Källa yet. Contact the platform team if you need access.',
   noDepartments: 'No departments are linked to your account.',
   unknownDepartment: (code: string) => `Unknown department (code ${code})`,
   allDepartments: 'As a platform administrator you see all departments.',

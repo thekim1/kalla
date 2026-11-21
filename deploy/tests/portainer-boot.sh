@@ -202,7 +202,7 @@ for svc in gateway adminapi kalla-api kalla-admin kalla-worker kalla-parser kall
 done
 while read -r name state exit_code restarts; do
   case "$name" in
-    *-bootstrap-1|*-migrations-1|*-kalla-migrate-1)
+    *-bootstrap-1|*-roles-1|*-migrations-1|*-kalla-migrate-1)
       [ "$state $exit_code" = "exited 0" ] || fail "$name is $state (exit $exit_code), expected to have completed";;
     *-kalla-openwebui-setup-1)
       # One-shot that waits for Open WebUI itself; checked below.
