@@ -57,3 +57,12 @@ Per [weakness review §5](../passes/weakness-review.md#5-the-pilots-critical-pat
 | Item | Where it went |
 |---|---|
 | `Departments.MemberGroups` and `Teams.Code` filled in P1 | P2, from gateway release 2; the columns stay and are empty (or null) until then |
+
+## 12. Open decisions and contradictions found: how they were settled
+
+Moved here from the design on 2026-11-21 (session 53's clean-up); the rows stay in the design.
+
+**Review (2026-10-29):** recommendations 1–22 accepted and carried into the plans (platform §3, §8, §8a; worker §2,
+§4; knowledge §3; key prefixes everywhere). 23 is resolved by the Chat API detail design (§15.2 there). Rows 5–8, 10,
+13, 16, 18 and 19 are restated in the decided form of the simplification pass (2026-10-30); 24–25 come from its §15
+(many assistants per department).

@@ -47,14 +47,16 @@ learned, not every session (the session's state is in [`../../HANDOVER.md`](../.
 
 ## Local stack (this machine)
 
-- **State (2026-11-21):** the dev AppHost is stopped and has not run since the rename. Its data is still under the
-  old names: user secrets under the id `ume-rag-apphost-dev` (the AppHost now reads `kalla-apphost-dev`, which is
-  empty), volumes `ume-rag-m1-postgres` (named by the old secret `DevelopmentVolumes:Postgres`),
-  `ume-rag-openwebui-data` and `ume-rag-clamav-db` (the AppHost now mounts `kalla-openwebui-data` and
-  `kalla-clamav-db`), helper scripts in `~/ume-rag-tools/`. Moving them over is the user's call. The old secrets
-  also hold a `Gateway:Keys` section, `Parameters:gateway-key-{eu,onprem,external}` and `Parameters:data-api-key`,
-  which the AppHost refuses or no longer reads (`docs/local-development.md` lists the current parameters).
-- **What the development data holds** (department DoIT; in `ume-rag-m1-postgres`): the collections `turkos` (1,166
+- **State (2026-11-21):** the dev AppHost's data is under the new names since session 53 (the user's call): user
+  secrets under `kalla-apphost-dev`, with `DevelopmentVolumes:Postgres` = `kalla-dev-postgres`; volumes
+  `kalla-dev-postgres`, `kalla-openwebui-data` and `kalla-clamav-db`, copied from the `ume-rag-*` ones, which are
+  kept for now (the old secrets too, under `ume-rag-apphost-dev`). A start on the copy with the FakeGateway ran the
+  0.9 migrations and showed the five collections. Left out of the copy, because the AppHost refuses or no longer
+  reads them: `Gateway:Keys:Eu`, `Parameters:gateway-key-{eu,onprem,external}` and `Parameters:data-api-key`. **A
+  start against a real gateway** (the secret `FakeGateway:Enabled` is `false`) needs
+  `Gateway:Services:<api|admin|worker>:Key` set first (`docs/local-development.md`); until then start with
+  `FakeGateway__Enabled=true`. Helper scripts are in `~/ume-rag-tools/`.
+- **What the development data holds** (department DoIT; in `kalla-dev-postgres`): the collections `turkos` (1,166
   documents, about 10,000 chunks, a 100-question evaluation set), `renderer-demo`, `a13-klimatkollen`, `a19-e-umea`
   and `Personalhandbok` (an upload source made as test data); the assistant `turkos`; the embedding profile
   `pilot-embedding`; crawl `hostOverrides` for `www.umea.se` only (2 req/s, 2 connections).
@@ -62,7 +64,8 @@ learned, not every session (the session's state is in [`../../HANDOVER.md`](../.
   Seed__Enabled=false Parser__Mode=off Render__Mode=off OpenWebUi__Enabled=false ClamAv__Mode=off
   DevelopmentVolumes__Postgres=<a throwaway volume name>`, then start; afterwards stop and `docker volume rm` it.
 - **Start:** `aspire start --apphost src/Kalla.AppHost/Kalla.AppHost.csproj --non-interactive` (Docker up:
-  `docker info`). **Stop:** `aspire stop --all --non-interactive`; it returns before the persistent containers have
+  `docker info`). **Stop:** `aspire stop --apphost src/Kalla.AppHost/Kalla.AppHost.csproj --non-interactive` (the
+  permission check stopped `--all` on 2026-11-21); it returns before the persistent containers have
   stopped, so wait a few seconds before `docker volume rm`. One service: `aspire resource worker restart --apphost …`.
   Logs and states: `aspire logs worker`, `aspire describe --apphost …`. The CLI is at
   `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on PATH; it starts the 13.6.5
@@ -84,8 +87,8 @@ learned, not every session (the session's state is in [`../../HANDOVER.md`](../.
   -h localhost -U postgres -d ragdb` (schemas `config`, `content`, `chat`).
 - **UI checks on realistic data:** copy the dev volume to a throwaway one (`docker run --rm -v <dev>:/from:ro -v
   <copy>:/to alpine cp -a /from/. /to/`), start the FakeGateway stack on it, and remove it afterwards.
-- **Fors:** `~/git/llmgateway` is a clone of `thekim1/fors` on a merged feature branch, fetched through `v0.12.2`:
-  read a release with `git show v0.12.2:<path>`. Where its documents and its code differ, follow the code.
+- **Fors:** `~/git/llmgateway` is a clone of `thekim1/fors` on `main` at `v0.12.2`, with no other worktrees since
+  2026-11-21: read a release with `git show v0.12.2:<path>`. Where its documents and its code differ, follow the code.
 
 ## Lessons
 

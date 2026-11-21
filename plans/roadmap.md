@@ -35,7 +35,7 @@ T2–T6; they fix what the team reports and answer questions.
 
 | # | Step | Input it waits on | Owner | Status |
 |---|---|---|---|---|
-| T0 | The gateway with Källa's integration and its three credential keys (`rag-api`; `rag-admin` with `organisation.read`, `usage.read`; `rag-worker` capped at `OnPrem`+`Eu`), the EU chat and embedding models, DoIT's department and team, and an assigned key for the assistant and the knowledge base (`docs/production-setup.md` *Gateway credential keys*) | the gateway deploy | user | open |
+| T0 | The gateway with Källa's integration and its three credential keys (`rag-api`; `rag-admin` with `organisation.read`, `usage.read`; `rag-worker` capped at `OnPrem`+`Eu`), the EU chat and embedding models, DoIT's department and team, and an assigned key for the assistant and the knowledge base (`docs/production-setup.md` *Gateway credential keys*) | the gateway deploy | user | **done** with the 0.5.0 deployment (user, 2026-11-21) |
 | T1 | Källa `v0.5.0` deployed as one Portainer stack with the gateway (`docs/portainer.md`; Keycloak realm, Open WebUI, ClamAV on), checked with its read-backs. It moves to `v0.9.1` on Fors `v0.12.2` in one update, with no SQL by hand (`docs/portainer.md`, *Upgrade*); `thekim1` does the upgrade (user, 2026-11-21; #920) | T0 | user | **deployed** (user, 2026-11-13: "0.5.0 deployed fine", with the Portainer stack and the `openwebui` and `clamav` profiles); read-backs to confirm |
 | T2 | The test group's accounts (Keycloak or the gateway's sign-in) and their Open WebUI access; DoIT's admin in the admin UI | T1 | user | open |
 | T3 | DoIT's documents: the source inventory, then an upload knowledge base `support` (`internal`) with preview, first sync, run reports and the personal-data report (`02-knowledge-base.md` §5) | DoIT's files | user | open |
@@ -74,7 +74,7 @@ table says "user".
 P2 wave 1 (*P2 Broaden* below) is the code work. Beside it, what is open without an input:
 
 - **Checks before go-live:** done 2026-11-16 (results in [`work/results-main.md`](work/results-main.md)) but for
-  row 96, the NVDA pass, which needs a Windows screen reader. The question to KB (row 110) is the user's call. The
+  row 96, the NVDA pass, which needs a Windows screen reader; row 110 needs no question to KB (user, 2026-11-21). The
   live block's rows are listed in [`to-verify.md`](to-verify.md) under each step.
 - **Step 3 starts on working tools:** the grading tools ran end to end on a FakeGateway stack (2026-11-15: `answer` →
   graded CSV → `totals`, which exits 1 on a failing gate and 2 on an inconsistent file). The pilot assistant needs a
@@ -87,6 +87,9 @@ P2 wave 1 (*P2 Broaden* below) is the code work. Beside it, what is open without
 - **Not tried anywhere yet:** Portainer's own *Update the stack* on an upgraded stack (the VM's move to `v0.9.1` is
   the first), and both setup wizards completed against a real provider in one stack. CI boots and upgrades the stack
   with Compose.
+- **Support chatbot F10 and F7** (cost per outcome, the content-gap report;
+  [`proposals/support-chatbot-features.md`](proposals/support-chatbot-features.md)): picked by the user on 2026-11-21;
+  designed (Decisions "Cost per outcome", "Content-gap report") and queued as stream b's B-61 and B-62.
 - **CI:** what the test collections of one `Kalla.AdminApi.Tests` process wait for (not CPU, thread pool, disk or
   GC; a profiler would say); the project runs as five processes meanwhile.
 
@@ -130,7 +133,7 @@ chatbot's assistant (T4) once it exists; until then FakeGateway and the demo see
 **Later waves: themes that need no input** (the user picks the order):
 
 - **Tools and MCP:** skills with know-how and tools, the in-process tool hub (`hosted` servers, read-only tools), the
-  agent loop, `/mcp` with `search_knowledge`, the mock municipal server `ume-mcp-kommun` (tools design; the gateway
+  agent loop, `/mcp` with `search_knowledge`, the mock municipal server `kalla-mcp-kommun` (tools design; the gateway
   passes function tools already). The SDK and validator re-checks
   of M1 and V1 come first (`postponed-decisions.md`).
 - **Ingestion breadth:** e-mail (`.eml`/`.msg`) and archives (Z1), site-profile learning and re-learning,

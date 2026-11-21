@@ -1,6 +1,6 @@
 # Platform data model and storage: detailed design
 
-Detail round, step 1. Covers every table, role, index, queue, key and blob path of Källa. Builds on
+Covers every table, role, index, queue, key and blob path of Källa. Builds on
 [`../archive/area-plans/platform.md`](../archive/area-plans/platform.md) §2–4, §6, §8, §8a and §9 and the data parts of every service plan. Where this document had to choose
 something the plans leave open, or found two plans disagreeing, the choice is listed in §12 with a recommendation.
 Removed or deferred mechanisms are listed once, in §13 (reasoning: [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md))
@@ -8,7 +8,7 @@ and §15 (reasoning: [`../archive/passes/weakness-review.md`](../archive/passes/
 Where the schema is built, the EF model and migrations (`src/Kalla.Infrastructure/Persistence`) are the source;
 this document describes them and the parts still to build.
 
-**Gateway conventions mirrored** (`~/git/llmgateway`, user decision: be as compatible as possible):
+**Gateway conventions mirrored** (the gateway, Fors; user decision: be as compatible as possible):
 
 | Convention | Gateway source | Here |
 |---|---|---|
@@ -31,7 +31,7 @@ The gateway has no connection caps, `statement_timeout`, partitioning, schemas o
 
 ## 1. Database layout
 
-One Postgres 17 instance on the **stock `pgvector/pgvector` image** (pgvector 0.8.7; tag *to verify*), or managed
+One Postgres 17 instance on the **stock `pgvector/pgvector` image** (pgvector 0.8.7, `0.8.7-pg17-trixie` pinned by digest in `images/postgres/Dockerfile`), or managed
 Postgres where pgvector ≥ 0.8 and the settings below are available; database **`ragdb`** (gateway: `gatewaydb`),
 owned by the DDL role. Extension `vector` is created by `init.sql` as the bootstrap superuser (it is not a trusted
 extension). The `public` schema keeps only the extension; `REVOKE ALL ON SCHEMA public FROM PUBLIC` and `USAGE` for the
@@ -82,7 +82,7 @@ pooler up to 5 hosts**: a backend costs about 10 MB (no dictionaries load into P
 memory limit comes from the P0 measurement; PgBouncer (≥ 1.21, transaction mode) comes only when the budget no longer
 fits `max_connections`, e.g. a further api host at 5-host scale (performance pass §6 trigger). There is no
 `kalla_tools` role: the P2 tool hub runs in-process in `kalla-api` and `kalla-admin` (§1.2), and the role comes only with
-a separate `rag-tools` service (P3, §13). Code is **pooler-safe from P0**: no session `SET`, session advisory locks,
+a separate `kalla-tools` service (P3, §13). Code is **pooler-safe from P0**: no session `SET`, session advisory locks,
 `WITH HOLD` cursors, temporary tables other than `ON COMMIT DROP`, or SQL `PREPARE`; LISTEN runs on its own
 `ConnectionStrings__ragdb-listen` (§4.3), and the worker's HNSW rebuild, the one session `SET`
 (`statement_timeout = 0`), on its own `ConnectionStrings__ragdb-maintenance` (falls back to `ragdb`; never through a
@@ -117,7 +117,7 @@ No retrieval statement runs `SET LOCAL`; every collection uses these role defaul
 Revoke-and-grant in one transaction on every migration run, tables named one by one, so a new table is unreadable until
 listed here (copied from the gateway's file header). `S` select, `I` insert, `U` update, `D` delete, `X` execute.
 The P2 tool hub runs in-process in `kalla-api` (chat) and in `kalla-admin` (skill gate, discovery, drift polling; tools
-design §2), so both roles get the tool grants; there is no tool role before a separate `rag-tools` service (P3). The
+design §2), so both roles get the tool grants; there is no tool role before a separate `kalla-tools` service (P3). The
 worker runs only retrieval evaluation and reads no skill or tool tables and of the assistants only their published
 links: the HNSW index health check samples every scope an assistant link uses (knowledge design §6.4), so it reads
 `PublishedAssistantVersions` (`AssistantId`, `CollectionLinks`) and `Assistants` (`Id`, `State`, `DeletedAt`, to skip
@@ -135,7 +135,7 @@ archived and deleted ones), column grants only. It reads `GatewayModels` for the
 | `content` tables | S (incl. test-panel retrieval, knowledge design §4.2), plus **I U on `EvaluationRuns`, `EvaluationResults`** (answer-level runs of kinds `answers` and `assistant-tests` and P2 skill-gate runs, which run in `kalla-admin`) | S on `Documents` (columns `Id`, `SourceId`, `Classification`, `IdentityKind`, `IdentityHash`, `Title`, `Url`, `MediaType`, `DisplayName`, `SourceModifiedAt`, `PageCount`, `LiveChunkSetId`, `DeletedAt`, `Language`, `FetchedAt` (statement D and the citation fields, knowledge design §6.3, §10.1), `CanonicalIdentity`, `ContentHash` (the blob key and `ETag` of `/content`, knowledge design §3.5)), `ChunkSets`, `Chunks`, `KeywordStatistics` | S I U D (all), and `MAINTAIN` on `content."Chunks"` for the HNSW rebuild (knowledge design §6.4) |
 | `content."Jobs"` | S I | – | S I U D |
 | `content."BlobTombstones"` (§9) | S I (the admin tombstones the upload blobs it replaces or deletes) | – | S I U D (all `content`; it tombstones stage outputs and quarantine and runs the purge sweep) |
-| `chat` tables | S, plus **U on `Feedback` column `ReviewState`** (admin design §8.1) and **I U on `AssistantDailyUsage`** (the test panel's and P2 assistant tests' usage, admin design §4.9) | S I U D | – |
+| `chat` tables | S, plus **U on `Feedback` column `ReviewState`** (admin design §8.1) and **I U on `AssistantDailyUsage` and `AssistantDailyOutcomes`** (the test panel's and P2 assistant tests' usage, admin design §4.9) | S I U D | – |
 | `audit."AuditLog"` | S I | I | I |
 | `audit."ConversationAccess"` | S I | – | – |
 | `audit."ToolCallEvents"`, `"ToolDefinitionObservations"` (P2) | S I | I | – |
@@ -370,6 +370,8 @@ design §3.3, V26; processing design §9.5), which releases the set by the same 
 | `ToolCalls` | Full tool arguments and results (tools §3: only here, under conversation retention) | `Id`, `MessageId`, `Classification`, `CallIndex smallint`, `ToolServerId` (null for built-ins), `ToolName` (model name, or `builtin:<name>`), `ToolId`, `DefinitionId`, `SkillVersionId`, **`ArgumentsCiphertext`**, **`ResultCiphertext`** (the normalised text the model saw), `DataKeyId`, `ArgumentsHmac bytea`, `ArgumentsBytes`, `ResultBytes`, `DurationMs`, `Outcome`, `CreatedAt` (tools design §6.11) | FK `MessageId` Cascade |
 | `AssistantDailyTotals` | Statistics that outlive conversations (§8) | `Day date` (Europe/Stockholm), `AssistantId`, `ClientId`, `DepartmentId`, `Classification`, `Conversations`, `Messages`, `NotFound`, `GeneralAnswers`, `Unavailable`, `Degraded`, `Errors`, `Cancelled`, `UncitedAnswers`, `ThumbsUp`, `ThumbsDown`, `ToolCalls`, `ToolErrors`, `AgentLimitHits` (tools design §6.11); tokens and cost are in `AssistantDailyUsage` | PK (`Day`, `AssistantId`, `ClientId`, `Classification`) |
 | `AssistantDailyUsage` | Tokens and cost of every model call made for an assistant, per step (cost-attribution §5 C1, C2; chat design §8.3) | `Day date` (Europe/Stockholm), `AssistantId`, `ClientId` (the test panel and P2 assistant tests: the `admin-console` row), `Classification`, `Step varchar(100)` (the `x-fors-step` the calls sent: `condense`, `condense-long`, `query-embed`, `rerank`, `chat-answer`, `follow-ups`; P2 `agent-{n}`, `assistant-test`, `eval-answer`), `DepartmentId` (the assistant's department at the time of the call), `Calls int`, `InputTokens bigint`, `CachedInputTokens bigint`, `OutputTokens bigint`, `CostUsd numeric(18,8)` (the gateway's: `x-fors-cost-usd` or the stream comment), `EstimatedCalls int`, `EstimatedCostUsd numeric(18,8)` (calls without a gateway cost, priced from `GatewayModels`; a model without prices adds 0), all counters `NOT NULL DEFAULT 0` | PK (`Day`, `AssistantId`, `ClientId`, `Classification`, `Step`); IX (`DepartmentId`, `Day`) |
+| `AssistantDailyOutcomes` | Turns and their full cost per outcome (Decisions "Cost per outcome"; chat design §12.2) | `Day date` (Europe/Stockholm), `AssistantId`, `ClientId` (the test panel: the `admin-console` row), `Classification`, `Outcome varchar(20)` (`Messages.Outcome`'s values; a usage-only turn is `unavailable` or `error`), `DepartmentId` (the assistant's department at the time), `Turns int`, `CostUsd numeric(18,8)`, `EstimatedCostUsd numeric(18,8)` (the sums of the turns' usage records, as `AssistantDailyUsage`), counters `NOT NULL DEFAULT 0` | PK (`Day`, `AssistantId`, `ClientId`, `Classification`, `Outcome`); IX (`DepartmentId`, `Day`) |
+| `AssistantDailyGaps` | Turns that ended `not-found` or `answered-general`, by their nearest hit (Decisions "Content-gap report"; chat design §12.2) | `Day date` (Europe/Stockholm), `AssistantId`, `ClientId`, `Classification`, `Outcome varchar(20)` (CHECK `not-found`, `answered-general`), `CollectionId uuid`, `DocumentId uuid` (the first retrieval result's, no FK; both the zero UUID for *no hit*), `DepartmentId`, `Turns int NOT NULL DEFAULT 0`; written only by the api's writer, never for the `admin-console` client | PK (`Day`, `AssistantId`, `ClientId`, `Classification`, `Outcome`, `CollectionId`, `DocumentId`); IX (`DepartmentId`, `Day`) |
 | `FeedbackImportState` | Watermark of the Open WebUI feedback import over its HTTP API (chat design §14.2); no `Classification` | `ClientId` (config id, no FK), `WatermarkUpdatedAt bigint`, `LastRunAt`, `LastOutcome`, `Unmapped int`, `FailedRuns int` (failed runs in a row, for the alert after 4, chat design §14.3; #487) | PK `ClientId` |
 | `Attachments` (P2) | Chat-scoped attachment, conversation retention (chat design §15.2) | `Id`, `ConversationId`, `Classification`, `DataKeyId`, **`FileNameCiphertext`**, `MediaType`, `Bytes`, `Sha256`, `State` (`received`/`scanning`/`clean`/`parsed`/`ready`/`malware`/`refused`/`failed`), `Reason`, `PiiTypes text[]`, `ChunkCount`, `CreatedAt` | FK `ConversationId` Cascade |
 | `AttachmentChunks` (P2) | Parsed chunks of an attachment, searched only within the conversation | `Id`, `AttachmentId`, `ConversationId`, `Classification`, `Ordinal`, `Page`, `PageEnd`, `DataKeyId`, **`TextCiphertext`**, **`EmbeddingCiphertext`** (1024 float32), `TokenCount` | FK `AttachmentId` Cascade; FK `ConversationId` Cascade |
@@ -382,6 +384,9 @@ schema; they are first written when A1 allows stored content.
 The background writer upserts `AssistantDailyTotals` in the transaction that inserts the message, so statistics never
 depend on rows that retention later removes. It upserts `AssistantDailyUsage` in the same transaction from the turn's
 usage records (chat design §12.2); `kalla-admin` upserts it for the test panel's calls (admin design §4.9).
+`AssistantDailyOutcomes` and `AssistantDailyGaps` are upserted in the same transaction (the test panel writes
+`AssistantDailyOutcomes` only). The gap rows hold no question text and no subject: the nearest document is a fact
+about the knowledge base, and a count per day has no link to who asked.
 
 **Why a per-step table, not more columns on the totals row** (cost-attribution §5 C1). The totals row is one per (day,
 assistant, client, level), and a turn makes up to six model calls (condense, long-question condense, query embedding,
@@ -794,7 +799,7 @@ Nightly, batched step functions in the gateway style (ADR 016): `SECURITY DEFINE
 | `chat."Messages"` + `MessageSources`, `Feedback`, `ToolCalls` (cascade) | `ExpiresAt` = `CreatedAt` + assistant retention (default 90 d, `sensitive` 30 d, max per level policy; `session` 24 h); in P1 metadata rows only (history mode `none`, weakness review §4) | `chat.rag_retention_chat_step(batch)` |
 | `chat."Conversations"` (+ P2 `Attachments`, `AttachmentChunks`) | deleted when no message remains and `ExpiresAt` passed; user delete: rows deleted at once | same function / Chat API `DELETE` |
 | `chat."DataKeys"` | when A1 allows stored content (none in P1, weakness review §4): bucket row deleted when its month has passed and no row references it; shred key destroyed only when `Settings.ChatShreddingEnabled` (§7) | same function; then shred-key destruction |
-| `chat."AssistantDailyTotals"`, `chat."AssistantDailyUsage"` | 3 years *proposed* | same function |
+| `chat."AssistantDailyTotals"`, `chat."AssistantDailyUsage"`, `chat."AssistantDailyOutcomes"`, `chat."AssistantDailyGaps"` | 3 years *proposed* | same function |
 | `content."Documents"`, `"ChunkSets"`, `"Chunks"` | removed from source, **or its source or knowledge base deleted** → soft delete (the chunks of its live set too, so it leaves the index at once), purge after 14 days; a deleted source's upload blobs are tombstoned as a deleted file's are | worker; cascade from `Documents` |
 | `content."ChunkSets"` (`superseded`) + chunks | 14 days after `SupersededAt` (rollback window) | worker |
 | `content."ChunkSets"` (`writing`) | orphans older than 24 hours (engine design §14) | worker sweep |
@@ -845,8 +850,8 @@ delete; only from `tmp/`; returns `BlobWriteResult`, `AlreadyExisted` when the t
 `previews/` sweeps; `ListAsync` only for those sweeps and the weekly orphan audit, never on hot paths. The file system
 implementation serves dev and the single-host pilot; beyond one host an S3-compatible object store: the
 municipality's S3 service if IT offers one, else SeaweedFS (never MinIO, which is archived), decided with IT before
-the first multi-host deployment (postponed decision S2). The S3 implementation (`S3BlobStore`, not built yet; due in
-P1 with its contract tests) uses `AWSSDK.S3` (not the `Minio` client) with `ForcePathStyle = true`,
+the first multi-host deployment (postponed decision S2). The S3 implementation (`S3BlobStore`, not built; it comes with the first multi-host deployment and its contract
+tests) uses `AWSSDK.S3` (not the `Minio` client) with `ForcePathStyle = true`,
 `RequestChecksumCalculation`/`ResponseChecksumValidation` `WHEN_REQUIRED`, a 30 s timeout and `MaxErrorRetry` 2; it
 sends one PUT for a known length (≤ 5 GB) and multipart (8 MiB parts) only for an unknown length over 64 MiB; the
 contract tests run against each server in CI. Settings: `BlobStore:Kind`, `BlobStore:S3:ServiceUrl`,
@@ -966,10 +971,8 @@ Postgres). Every use states its behaviour when Redis is down; rate limits fall b
 
 ## 12. Open decisions and contradictions found
 
-**Review (2026-10-29):** recommendations 1–22 accepted and carried into the plans (platform §3, §8, §8a; worker §2,
-§4; knowledge §3; key prefixes everywhere). 23 is resolved by the Chat API detail design (§15.2 there). Rows 5–8, 10,
-13, 16, 18 and 19 are restated in the decided form of the simplification pass (2026-10-30); 24–25 come from its §15
-(many assistants per department).
+Each row states where its topic stands now; how the rows were reviewed and decided (2026-10-29, 2026-10-30) is in
+[`../archive/design-history/data-model.md`](../archive/design-history/data-model.md) §12.
 
 | # | Topic | Finding | Recommendation |
 |---|---|---|---|

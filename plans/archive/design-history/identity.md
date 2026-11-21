@@ -102,3 +102,45 @@ Per [weakness review §5](../passes/weakness-review.md#5-the-pilots-critical-pat
 | Delegating keys, `x-ume-on-behalf-of`, echo check and event 5011 in P1 (§4.7) | acting as an assigned key from the gateway's integration phase 2; until phase 1 the pilot team's per-level keys |
 | Gateway tenant/guest refusal (§1.7) | gateway release 2 (P2); our own refusal is unchanged in P1 |
 | E1 test (§9.4) | P2 with Entra (Decisions table "P1b briefs", O3); the W3 spike in P1b; one Open WebUI instance per department until W3 and E1 are solved (§5.2) |
+
+## 16. The P1 questions on the shared Keycloak, as first asked
+
+Moved here from the design on 2026-11-21 (session 53's clean-up); the design keeps each question's number with its
+answer or, for 5 and 7, the open question.
+
+**Answered for P1 (#390, 2026-11-06):** Q1 and Q6: the gateway operator holds realm admin for the pilot and demo
+(accounts, role grants, `departmentCodes`/`teamCodes`, resets; runbook in the gateway's `docs/keycloak.md`); brokered
+organisations manage accounts in their own directory. Q2: keycloak-config-cli, `no-delete`, name order (§11.2). Q3:
+realm-wide settings in the gateway's base file. Q4: OTP not enforced for the pilot (Decisions "Gateway release 1 and
+shared Keycloak as built"). Q8: audience only. The list below keeps the original questions; 5, 7 and 9 are unchanged.
+
+**Open for P1 (shared Keycloak; not decided by the 2026-10-30 decision, 2026-10-31).** Each needs an answer before
+J11; the gateway session (`../archive/gateway-changes/prompt-gateway-session.md` §2) or the user decides, not the streams.
+
+1. **Who administers the shared realm** in production: accounts, role grants, `departmentCodes`, OTP resets, the
+   realm's admin users and their own OTP. The gateway session writes the runbook; who holds the Keycloak admin role
+   for realm `fors` (the gateway's operators, RAG's platform admins, or both, with which Keycloak admin roles) is open.
+2. **How RAG's additions are imported and kept in step** with the gateway's base realm: an import job, `kcadm`, or a
+   documented procedure (the gateway session chooses and says which); how a later change to `deploy/keycloak/**` (a new
+   redirect URI, a new `rag-*` role) reaches production, who applies it, and how a mistake in one system's part is
+   kept from breaking the other's sign-in.
+3. **Realm-level settings shared by both systems**: password policy, brute-force protection, the user profile
+   (`departmentCodes`, `teamCodes`) and the OTP flow apply to the whole realm, not per client. P1 item 16 puts them in
+   RAG's file (provisionally, §11.2); whether they belong in the gateway's base realm instead.
+4. **OTP for admins**: which accounts count as admins (every account with a `rag-*` role, only
+   `rag-platform-admin`/`rag-department-admin`, and the gateway's `gateway-admin`), and how it is enforced (the
+   *Configure OTP* required action per account, or a conditional browser flow on role). Provisionally (§11.2):
+   `rag-platform-admin` and `rag-department-admin`, by a conditional browser flow on role.
+5. **Who may sign in to Open WebUI** (§5.3): any account in the realm today; a role gate or a flow condition.
+6. **Account lifecycle**: who creates, disables and removes pilot accounts (leavers), how initial credentials and OTP
+   enrolment reach people, and who keeps `departmentCodes` and member-group membership current.
+7. **Identity continuity** when LDAP federation arrives and when P2 moves to Entra: the Keycloak `sub` of a local
+   account may differ from the federated one, and Entra's `oid` differs from both. Audit actors change (§1.1); Open
+   WebUI accounts appear to be keyed by the provider's `sub` with `OAUTH_MERGE_ACCOUNTS_BY_EMAIL=false`, so a switch may
+   create new Open WebUI users and new `SubjectId`s for our conversations (to verify). Whether the pilot's accounts and
+   chats are migrated or start over.
+8. **Token-caller parts in the P1 additions**: whether `kalla-api` in P1 is only the audience, or also brings the
+   `Chat.Use`/`Knowledge.Read`/`Mcp.Use` scopes, the app permissions `Knowledge.Read.All`/`Chat.Invoke.All` and a
+   client-credentials client (no P1 caller needs them, §7.1). Provisionally (§11.2): the audience client only.
+9. **E1 spike** (§9.4, weakness review §5): answered by the Decisions table "P1b briefs" (O3): E1 moves to P2 with
+   Entra.

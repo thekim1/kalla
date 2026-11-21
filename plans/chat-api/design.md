@@ -1064,7 +1064,9 @@ bounded wait before dropping (`Pipeline/GatewayRequestHandler.Accounting.cs:118-
 (text, external id), assistant message (text, external id, outcome, coverage, degraded, language, condense used),
 cited and uncited source rows (ids, rank, number, page, snippet text), gateway facts of the answer call (model,
 request id, observed residency, tokens, cost, latency, TTFT), the **usage record of every model call** of the turn
-(§8.3: step, input, cached input and output tokens, cost, estimated or not), timestamps. Plaintext lives in memory only
+(§8.3: step, input, cached input and output tokens, cost, estimated or not), the **nearest hit** of a turn that ended
+`not-found` or `answered-general` (the first retrieval result's collection and document, none when the search found
+nothing; Decisions "Content-gap report"), timestamps. Plaintext lives in memory only
 until the batch is encrypted. In mode `none` (all of P1, §11.2) the turn carries no text at all. A turn that ends
 without an answer (an error or refusal after a model call, e.g. the answer call failing after condense and the query
 embedding were paid) is enqueued as a **usage-only** turn: no conversation or message rows, only its usage deltas.
@@ -1085,7 +1087,11 @@ embedding were paid) is enqueued as a **usage-only** turn: no conversation or me
    insert per source, then the **`AssistantDailyTotals`** upserts with the batch's aggregated deltas per
    (Europe/Stockholm day, assistant, client, level) and the **`AssistantDailyUsage`** upserts per (day, assistant,
    client, level, step) with the summed calls, tokens, gateway cost and estimated cost of the batch's usage records
-   (data-model §2.3: statistics never depend on rows retention removes), placed **last** in sorted key order, so the
+   (data-model §2.3: statistics never depend on rows retention removes), the **`AssistantDailyOutcomes`** upserts per
+   (day, assistant, client, level, outcome) with the turns and their summed gateway and estimated cost (a usage-only
+   turn counts under `unavailable` or `error`; Decisions "Cost per outcome"), and the **`AssistantDailyGaps`** upserts
+   per (day, assistant, client, level, outcome, nearest collection, nearest document) for the `not-found` and
+   `answered-general` turns (Decisions "Content-gap report"), all placed **last** in sorted key order, so the
    hot totals row locks are held only until the commit that follows. `Messages.CostUsd` is the answer call's cost
    (gateway or estimated); the turn's full cost is the sum of its usage records. Each statement is its own round trip (`ConversationWriter.WriteAsync`; a turn with 5 sources is about 10);
    folding the lock, `Seq` and the inserts into one `NpgsqlBatch` is built only if the R1 performance test shows the
@@ -1450,7 +1456,7 @@ expected behaviour. Run kind `assistant-tests` in `kalla-admin`; question, answe
 `content."EvaluationResults"` (data-model §2.2) and shown next to the previous version's run. Advisory: publish never
 waits for or depends on it.
 
-### 18.9 Support-assistant extensions (§3.8, §4.1 step 4, §5.1, §9.7, §9.8, §9.9)
+### 18.9 Support-assistant extensions (§3.8, §4.1 step 4, §5.1, §9.7, §9.8, §9.9, §12.2)
 
 Unit (`Kalla.Api.Tests`) and API tests against FakeGateway (scripted answers per `x-fors-step`, `FakeGateway:ChatScripts:<step>`):
 
@@ -1500,6 +1506,12 @@ Unit (`Kalla.Api.Tests`) and API tests against FakeGateway (scripted answers per
   and the label "(2026-03-02, kontrollerad 2026-11-18)"; one without a date gives only `checked` and
   "(kontrollerad 2026-11-18)"; an English turn says "checked"; an upload gives `modified` (its upload time when the
   file states no date) and no `checked`.
+- **Cost per outcome**: two answered turns, a not-found turn and a usage-only error turn in one batch give
+  `AssistantDailyOutcomes` rows `answered` 2, `not-found` 1, `error` 1, each with the summed cost of its turns' usage
+  records; the rows' cost summed equals the day's `AssistantDailyUsage` cost summed, gateway and estimated apart.
+- **Content gaps**: a not-found turn whose first result is document D of collection C adds one to (`not-found`, C,
+  D); a turn narrowed to no link (§3.8) adds one to *no hit*; an `answered` turn and a test-panel turn add nothing;
+  no row or column holds the question.
 - **Open WebUI**: a request with `kalla` from the `open-webui` client streams exactly as without it (recorded fixture).
 
 ## 19. Milestones

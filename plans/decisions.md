@@ -428,8 +428,8 @@ by `entra.yml`. Pinning actions by commit SHA with automated pin bumps (A-20, A-
 
 Every workflow runs on the self-hosted runners; `verify.yml` and `parser.yml` run on every non-draft PR, each job only
 when its paths change, and the full set before a release. Agents run only the test projects
-they touch. The main session
-merges on local evidence, then checks `main` after a batch; a red `main` is fixed first. `perf.yml` and
+they touch. `main` is protected (the ruleset *Protect main*, 2026-11-16): a pull request needs one approving
+review and the required checks; a red `main` is fixed first. `perf.yml` and
 `evaluation.yml` schedules stay off until the test host; its runner awaits IT security. Pull-request jobs share the
 runners' OS user, so a tag release builds without the build cache and with its own empty NuGet and npm caches (dry runs
 keep the cache); before go-live, `release.yml` and `entra.yml` move to a runner of their own under a separate user,
@@ -437,7 +437,7 @@ labelled `release`, which runs no pull-request code (#704, with #506 and #507). 
 `platform/repo-and-deployment.md` §8, §12 (#4).
 
 *From:* log rows 12, 88, 90, 91; decided by user, 2026-10-31; path-filtered jobs, 2026-11-05; release isolation,
-2026-11-15 (#704).
+2026-11-15 (#704); protected `main`, 2026-11-16.
 *Also:* "CI on the self-hosted runner for every pull request", "Merge on local evidence, then check main".
 
 ### E2E optional on release
@@ -880,6 +880,29 @@ searched, and a turn with nothing left to search ends `not-found`. Detail: `chat
 
 *From:* support chatbot proposal F8; picked by user, 2026-11-20.
 
+### Cost per outcome
+
+Every assistant turn adds its full cost (the sum of its model calls' gateway and estimated cost, as the per-step
+table) and one turn to a daily row per outcome (`chat."AssistantDailyOutcomes"`), usage-only turns and test-panel
+turns included (the test panel under its own client, shown apart). The assistant's *Cost* card shows, per outcome, the
+turns, the cost and the cost per turn, the gateway and estimated parts apart. Reporting only, like the rest of the
+cost report: the gateway stays the record for charging. Detail: `chat-api/design.md` §12.2;
+`platform/data-model.md` §2.3; `admin/design.md` §8.6.
+
+*From:* support chatbot proposal F10; picked by user, 2026-11-21.
+
+### Content-gap report
+
+A turn that ends `not-found` or `answered-general` adds one to a daily count by its **nearest hit**: the knowledge
+base and document of the search's first result, or *no hit* when the search found nothing
+(`chat."AssistantDailyGaps"`). No question text, no subject and no conversation are stored with it. The assistant's
+Statistics tab shows the share of such turns and the documents they came nearest to, most first, with a CSV export.
+Test-panel turns are left out. The proposal's "nearest topic" is the nearest document: topic tags are optional per
+link, a document is always there. Detail: `chat-api/design.md` §12.1, §12.2; `platform/data-model.md` §2.3;
+`admin/design.md` §8.7.
+
+*From:* support chatbot proposal F7; picked by user, 2026-11-21.
+
 ### Chat rate limit per key
 
 A key that is itself the chat subject is limited by `Keys.RequestsPerMinute`, else by the per-user value; Open WebUI
@@ -1079,7 +1102,7 @@ Tools are read-only first; write tools later always need the user's confirmation
 level is fixed at its start, and a composition that would combine private data, third-party text and an outbound
 channel is refused. Tool definitions are pinned with drift checks: a pre-registered change is pinned, any other needs
 a two-person re-approval. Agent limits per user message are 8 calls, 60 s, $0.05 (caps 20, 120 s, $0.25). Tool calls
-raise security events 5012–5015. The platform serves `/mcp`, calls MCP tools through an in-process hub, and hosts .NET municipal servers (hosted only, the first `ume-mcp-kommun`); an MCP
+raise security events 5012–5015. The platform serves `/mcp`, calls MCP tools through an in-process hub, and hosts .NET municipal servers (hosted only, the first `kalla-mcp-kommun`); an MCP
 client's ceiling is `public`, raisable to `internal`, never `sensitive`. Detail: `tools/design.md` §1, §5–§8.
 
 *From:* log rows 19, 20, 26, 48, 49, 55; decided by user, 2026-10-30.

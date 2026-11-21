@@ -79,12 +79,11 @@ the VM's upgrade to `thekim1`. In order:
    notes name them is for its preparation. The next Audit run (around 13:00 UTC) is the first on that `main`.
 4. **P2 wave 1 runs on `thekim1`'s machine** (Decisions "P2 starts before go-live"): B-54 to B-59 are open in
    stream b's queue. Say on the issue before starting one here.
-5. **This machine's development stack still has its old names** (*State*): nothing was moved at the rename. The
-   user was told and asked whether to copy the secrets and volumes over; not answered. Do not move them unasked.
+5. **This machine's development stack is under the new names** (session 53, the user's call; handbook, *Local
+   stack*). The old `ume-rag-*` volumes and secrets are kept until the user lets them go.
 6. **Repository variables:** since the rename the workflows read `vars.KALLA_TEST_HOST_RUNNER`,
-   `vars.KALLA_TEST_HOST_DEPLOY_ENV`, `vars.KALLA_R1_*` and `secrets.KALLA_R1_API_KEY`. `gh variable list` shows
-   none to `ume-nichlas` (both accounts here have write access, not admin); whoever set the `UME_RAG_*` ones creates
-   them again (asked in #905, not answered; the user was told on 2026-11-21).
+   `vars.KALLA_TEST_HOST_DEPLOY_ENV`, `vars.KALLA_R1_*` and `secrets.KALLA_R1_API_KEY`, and none exist. On the
+   user's decision (2026-11-21) `thekim1` was asked on #905 to create them from the `UME_RAG_*` values.
 7. **Fors is on `v0.12.2`** (2026-11-21): its stack renames the gateway's database roles itself, and `thekim1`
    merged #119 to #123 there, which the main session has not read. Whether #112 and #113 are closed by them is not
    checked.
@@ -94,20 +93,12 @@ the VM's upgrade to `thekim1`. In order:
 - **The umea.se inventory (A-L1):** the first input of the live block; the user was reminded on 2026-11-21.
 - **The live block** (the critical path to go-live, `plans/roadmap.md`): every item waits on an input, A-L1 (the
   umea.se inventory) first.
-- **The support-chatbot proposal** (`plans/proposals/support-chatbot-features.md`): F3, F4 and F8 are built. The
-  rest is the user's pick.
+- **The support-chatbot proposal** (`plans/proposals/support-chatbot-features.md`): F3, F4 and F8 are built; F10
+  and F7 are picked (2026-11-21), designed and queued (B-61, B-62). The rest is the user's pick.
 - **P2's later waves** (the roadmap's *P2 Broaden*): the user picks the next theme when wave 1 is nearly done.
-- **The roadmap's T0 row** says *open* though T1, which depends on it, is deployed: the user knows its state.
 - **To-verify row 96:** the NVDA screen-reader pass of the admin UI, which needs Windows.
-- **To-verify row 110, a question to KB** (the user's call; the main session would send it before go-live): *"We
-  intend to use KBLab/bert-base-swedish-cased-ner (revision f3c83af8) in a municipal production service and possibly
-  redistribute a container image containing the weights. Can you confirm that the MIT licence on the model card covers
-  the weights without restriction from the SUC 3.0 agreement, and which variant of SUC 3.0 (licensed or
-  scrambled/SUCX) it was trained on? Which copyright line should the MIT notice carry?"*
 - **To-verify row 79:** whether `NerMinScore` moves for the int8 NER model (left at 0.80: the sample is small).
 - **U1 (pictures in uploads)** waits for DoIT's files at T6 (decided 2026-11-15).
-- **The Eneo report PDF** is only at `/mnt/c/temp/eneo-vs-ume-rag.pdf`; the user hasn't said whether to keep it in the
-  repo.
 
 ### Watch
 
@@ -257,19 +248,17 @@ the reviews of #906) is in this file's history: `git log -- HANDOVER.md`.
   requests: this file's (#922); none in Fors.
 - **Dependabot works:** grouped pull requests; `.github/dependabot.yml`'s header lists where a pin is repeated.
   Playwright is bumped by hand, in the package list, the renderer image and its lockfile together (#907).
-- **The user's machine (`~/research/rag`):** the main clone on `main` and one more checkout,
-  `~/research/rag-handover` (this file's branch, #922; it goes when the pull request is merged). Docker works
+- **The user's machine (`~/research/rag`):** the main clone on `main`, and a worktree per open
+  `main-session/` pull request. Docker works
   without sudo; there is no sudo.
-  - **The development stack has not run since the rename, and its data is still under the old names**
-    (checked 2026-11-21; this file said otherwise before): the AppHost's user secrets are under the old id
-    `ume-rag-apphost-dev` and the new id `kalla-apphost-dev` has none; the volumes are `ume-rag-m1-postgres` (the
-    development data; the old secret `DevelopmentVolumes:Postgres` names it), `ume-rag-openwebui-data` and
-    `ume-rag-clamav-db`, while the AppHost now mounts `kalla-openwebui-data` and `kalla-clamav-db`; the helper
-    scripts are in `~/ume-rag-tools/`. A start from `main` today gets an empty database and generated secrets.
-    Moving the secrets and volumes over is the user's call.
+  - **The development stack is under the new names** (session 53): secrets in `kalla-apphost-dev`, data in
+    `kalla-dev-postgres`, `kalla-openwebui-data` and `kalla-clamav-db`, copied from the `ume-rag-*` volumes, which are
+    kept with the old secrets until the user lets them go. A start against a real gateway needs
+    `Gateway:Services:<service>:Key` first (handbook, *Local stack*). Three older generated volumes
+    `ume.rag.apphost-*-postgres-data` are left too.
   - **Local images:** `kalla.local/renderer:ci` (Playwright 1.65.1; the worker's render tests take it through
-    `KALLA_TEST_RENDERER_IMAGE`). `kalla.local/*:bump09`, every `ume-rag*/*` image and
-    `ume-llm-gateway/*:setup-test` are left from earlier sessions and can go.
+    `KALLA_TEST_RENDERER_IMAGE`). The earlier sessions' `bump09`, `ume-rag*` and gateway `setup-test` images were
+    removed on 2026-11-21.
   - **Docker's default address pools are full** (about 25 unused networks of other projects): a new Compose project
     needs explicit subnets, or a `docker network prune` by the user. The machine's name is upper case and does not
     resolve inside containers. Neither `gh` token has `read:packages`; Källa's images are public since 0.9.0.
@@ -278,9 +267,8 @@ the reviews of #906) is in this file's history: `git log -- HANDOVER.md`.
     Firefox are in `~/.cache/ms-playwright`. The Aspire CLI is at
     `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on PATH).
 - **`thekim1`'s machine:** a fresh clone after the rename; its development data starts empty under `~/.kalla`.
-- **Fors on the user's machine:** `~/git/llmgateway` (and the worktrees `-100`, `-100-deploy`, `-101`) are clones of
-  `thekim1/fors` on merged branches; fetched through `v0.12.2` (read a release with `git show v0.12.2:<path>`). They
-  can go, or move to `main`. The remote is still named `thekim1/llmgateway` there (GitHub redirects); push with
-  the `gh` credential helper. Merges and releases in Fors are the user's; its rules: draft pull requests (drafts run
-  no CI), checks run locally first, squash-merge. Ports 5000 and 5173 are taken here
-  (`ASPNETCORE_URLS=http://127.0.0.1:0` for its IntegrationTests).
+- **Fors on the user's machine:** `~/git/llmgateway` is a clone of `thekim1/fors` on `main` at `v0.12.2` (its
+  worktrees removed on 2026-11-21, their branches kept); read a release with `git show v0.12.2:<path>`. The remote is
+  still named `thekim1/llmgateway` there (GitHub redirects); push with the `gh` credential helper. Merges and releases
+  in Fors are the user's; its rules: draft pull requests (drafts run no CI), checks run locally first, squash-merge.
+  Ports 5000 and 5173 are taken here (`ASPNETCORE_URLS=http://127.0.0.1:0` for its IntegrationTests).

@@ -1,29 +1,30 @@
 # Platform repository, build and deployment: detailed design
 
-Detail round, step 2. Covers the repository, build conventions, projects, local development, images, production
+Covers the repository, build conventions, projects, local development, images, production
 Compose, release bundle, CI/CD, observability, Kubernetes and the ordered P0 checklist. Builds on [`../archive/area-plans/platform.md`](../archive/area-plans/platform.md)
 §1, §2, §7, §10, §11 and [`data-model.md`](data-model.md) (roles, `init.sql`/`app-roles.sql`, migration service, Redis
-prefix, partitions, Swedish search). Choices the plans leave open and contradictions found are in §12. Rewritten in the
-simplification pass ([`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md), 2026-10-30); what went is listed in §13.
+prefix, partitions, Swedish search). Choices the plans left open and contradictions found are in §12; what the simplification pass removed is in §13
+(archived).
 
-**Rule**: copy the gateway (`~/git/llmgateway`, commit `e25b491`, release 0.8.5) wherever it fits. Every file below is
+**Rule**: copy the gateway (Fors, https://github.com/thekim1/fors; the first copies were taken at commit `e25b491`,
+release 0.8.5) wherever it fits. Every file below is
 marked **copy** (as-is apart from names), **adapt** (same structure, our content) or **new**. Versions marked
 *to verify* could not be checked against the gateway or the NuGet check in
 [`../../platforms/kernel-memory-and-dotnet.md`](../../platforms/kernel-memory-and-dotnet.md) §5 (NuGet, 2026-10-29).
 
 ## 1. Repository layout
 
-Code lives in the design repository `kalla-platform` (decided 2026-10-30): the tree below sits at the repo root beside
+Code lives in this repository (`thekim1/kalla`): the tree below sits at the repo root beside
 `plans/`, `platforms/` and the numbered design documents, `docs/` holds both the design-side `stakeholder-report.html`
 and the operations documents, and `verify.yml` ignores changes under `plans/**`, `platforms/**` and the root `*.md`
 files. Solution `Kalla.slnx` (gateway: `Fors.slnx`),
-namespaces and assembly names `Källa.*`, image repositories `kalla/<service>`, Compose project `kalla`.
+namespaces and assembly names `Kalla.*`, image repositories `ghcr.io/thekim1/kalla/<service>`, Compose project `kalla`.
 
 ```
 .editorconfig  .gitattributes  .gitignore  global.json  Directory.Build.props  Directory.Build.targets
 Directory.Packages.props  dotnet-tools.json  aspire.config.json  Kalla.slnx  README.md  CHANGELOG.md
 .githooks/pre-commit                 admin UI lint (copy) + parser ruff check (new)
-.github/workflows/                   verify.yml parser.yml release.yml entra.yml perf.yml evaluation.yml audit.yml e2e.yml; P2, not built: deploy-e2e.yml flake-hunt.yml scale.yml parser-robustness.yml (§8.1)
+.github/workflows/                   verify.yml parser.yml release.yml entra.yml perf.yml evaluation.yml audit.yml e2e.yml pages.yml; P2, not built: deploy-e2e.yml flake-hunt.yml scale.yml parser-robustness.yml (§8.1)
 src/
   Kalla.Domain/                    entities, classification, IAccessPolicy, ports (IRetriever, IBlobStore, IKeyProvider, IJobQueue, IReranker)
   Kalla.Retrieval/                 search core (keyword/vector candidates, RRF, dedup, diversity, coverage; knowledge design §2.1) and `SwedishDecompounder` (`sv_SE` word list shipped as files, used by the worker too), shared by the knowledge API, the evaluator (processing design §13.5) and the admin test panel
@@ -48,7 +49,7 @@ images/
   postgres/Dockerfile                stock pgvector image (digest-pinned) + PGDG `pgbackrest` package and `pgbackrest.conf` (§5.2)
   renderer/Dockerfile                Playwright run-server + Chromium (connectors design §8)
   clamav/Dockerfile                  ClamAV + freshclam updating directly from database.clamav.net (decided: no mirror, §5.5); clamd.conf, freshclam.conf, test.sh (image test)
-templates/mcp-server/                P2: `dotnet new ume-mcp-server` template, packaged as `Kalla.Templates` (contents: tools design §8.1)
+templates/mcp-server/                P2: `dotnet new kalla-mcp-server` template, packaged as `Kalla.Templates` (contents: tools design §8.1)
 infra/entra/                         Bicep (Graph extension) for RAG's own app registrations, applied by entra.yml (§8.1)
 tests/
   Directory.Build.props              copy
@@ -69,7 +70,7 @@ tests/
 benchmarks/
   release-test/                      R1 test: k6 chat streams during crawl + OCR (from the gateway's benchmarks/compare/k6); chat overhead run (k6/chat.js, FakeGateway, chat design §16.2)
 deploy/
-  compose.rag.yaml                   the one Källa service file, with the `rag-` names: kalla-bootstrap, kalla-postgres, kalla-migrate, the services and the profiles `clamav`, `render`, `openwebui` and `proxy`; Compose runs it directly and `portainer/build-stack.sh` merges it into the Portainer stack (§7.1). Open WebUI (profile `openwebui`): env of chat design §4.3 (title, tag and follow-up generation off; fixed `WEBUI_BANNERS` input warning, weakness review §4), feedback pruning through its HTTP API; chat-copy retention is open item W2, decided within the DPIA G1 (chat design §13.3)
+  compose.rag.yaml                   the one Källa service file: kalla-bootstrap, kalla-postgres, kalla-migrate, the services and the profiles `clamav`, `render`, `openwebui` and `proxy`; Compose runs it directly and `portainer/build-stack.sh` merges it into the Portainer stack (§7.1). Open WebUI (profile `openwebui`): env of chat design §4.3 (title, tag and follow-up generation off; fixed `WEBUI_BANNERS` input warning, weakness review §4), feedback pruning through its HTTP API; chat-copy retention is open item W2, decided within the DPIA G1 (chat design §13.3)
   compose.backup.yaml                overlay: WAL archiving and pgBackRest inside kalla-postgres, the `backup` network, the upload copy `rag-upload-backup` (§7.4)
   compose.hardened.yaml              overlay: fixed subnets for the host firewall, the ingestion slice, the CPU weights, the restart-unhealthy labels, the renderer's seccomp profile (§6.1, §6.2)
   compose.host-24g.yaml              overlay for the 24 GB host profile (§6.2)
@@ -98,7 +99,8 @@ docs/                                local-development, p1a-local-run, compose-q
 scripts/Start-Dev.ps1  scripts/Start-E2E.ps1
 ```
 
-No `site/` (the gateway's GitHub Pages product page) until the user-facing name is decided (plan §12.3).
+`site/` is the product page and the operators' documentation as a website, built and published to GitHub Pages by
+`pages.yml` (adapted from the gateway's; Decisions "Product names").
 
 | Gateway file | Here | Mode | Change |
 |---|---|---|---|
@@ -110,14 +112,14 @@ No `site/` (the gateway's GitHub Pages product page) until the user-facing name 
 | `dotnet-tools.json` | same | copy | `dotnet-ef` 10.0.12 |
 | `aspire.config.json` | same | adapt | path `src/Kalla.AppHost/Kalla.AppHost.csproj` |
 | `tests/Directory.Build.props` | same | copy | TestKit name |
-| `src/*.ServiceDefaults/*` | `Kalla.ServiceDefaults` | copy | `TelemetryName = "Källa"` |
+| `src/*.ServiceDefaults/*` | `Kalla.ServiceDefaults` | copy | `TelemetryName = "Kalla"` |
 | `src/*.FakeLlm/FakeLatency.cs` | `Kalla.FakeGateway` | copy | rest new (§4.3) |
 | `src/*.MigrationService/*` | `Kalla.MigrationService` | adapt | `RunItems` partition maintenance (data-model §10) |
 | `src/*.AppHost/Program.cs` | `Kalla.AppHost` | adapt | §4.1 |
 | `scripts/Start-Dev.ps1`, `Start-E2E.ps1` | same | adapt | wait for `admin-ui`; volume `kalla-e2e-postgres` |
 | `dev/keycloak/fors-realm.json` | same name (Keycloak's directory import needs `<realm>-realm.json`) | adapt | §4.2 |
 | `deploy/*` | `deploy/*` | adapt | §6, §7 |
-| `.github/workflows/*` | same names | adapt | §8; `pages.yml` not copied |
+| `.github/workflows/*` | same names | adapt | §8; `pages.yml` builds `site/` |
 | `.githooks/pre-commit` | same | adapt | adds parser lint |
 | `src/admin-ui/{.npmrc,eslint.config.js,tsconfig*.json,tailwind.config.cjs,vite.config.ts}` | `src/admin-ui/` | copy | port 5174 |
 | `src/admin-ui/src/styles/*`, `components/ui/*`, `components/layout/*`, `scripts/subset-icons.py` | same | copy | design system (§2.4) |
@@ -137,14 +139,14 @@ No `site/` (the gateway's GitHub Pages product page) until the user-facing name 
 | Packages | `ManagePackageVersionsCentrally`, `CentralPackageTransitivePinningEnabled=false` | `Directory.Packages.props` |
 | Version | `0.0.0-local`; release overrides `-p:Version` from the tag | `Directory.Build.props`, `release.yml` |
 | Containers | SDK container publish (`-t:PublishContainer`), **no Dockerfiles for .NET**; base `mcr.microsoft.com/dotnet/aspnet:10.0.15-noble-chiseled-extra@sha256:cae5…115b`, user 1654 | `Directory.Build.targets` |
-| Aspire | AppHost SDK `Aspire.AppHost.Sdk/13.6.5` (ahead of the gateway's 13.6.1 at the user's request, #339), `AspireUseCliBundle`, stays on the 13.6 family together with the gateway | AppHost csproj, `docs/upgrade-guide.md` |
+| Aspire | AppHost SDK `Aspire.AppHost.Sdk/13.6.5` (the gateway's too), `AspireUseCliBundle`, stays on the 13.6 family together with the gateway | AppHost csproj, `docs/upgrade-guide.md` |
 
 ### 2.2 Initial `Directory.Packages.props`
 
 | Group | Package | Version | Status |
 |---|---|---|---|
-| Aspire AppHost | `Aspire.Hosting.Docker`, `.PostgreSQL`, `.Redis`, `.JavaScript` | 13.6.5 | gateway's family (13.6.1 there; user, #339) |
-| | `Aspire.Hosting.Keycloak` | 13.6.5-preview.1.26559.7 | gateway's family (#339) |
+| Aspire AppHost | `Aspire.Hosting.Docker`, `.PostgreSQL`, `.Redis`, `.JavaScript` | 13.6.5 | gateway |
+| | `Aspire.Hosting.Keycloak` | 13.6.5-preview.1.26559.7 | gateway |
 | | `CommunityToolkit.Aspire.Hosting.Ollama` | 13.6.0 | gateway (optional local BGE-M3, §4.4) |
 | | `MessagePack` | 2.5.307 | gateway (GHSA pin) |
 | | `Aspire.Hosting.Python` | 13.6.5 | checked in Stage 0 (2026-10-07 release; only for `Parser:Mode=local`, §4.1) |
@@ -153,7 +155,7 @@ No `site/` (the gateway's GitHub Pages product page) until the user-facing name 
 | | `OpenTelemetry.Instrumentation.AspNetCore`, `.Http`, `.Runtime` | 1.19.0 | gateway |
 | | `Microsoft.Extensions.Hosting`, `Microsoft.EntityFrameworkCore.Relational`, `.Design`, `Microsoft.AspNetCore.DataProtection.EntityFrameworkCore`, `.OpenApi`, `.Authentication.JwtBearer`, `.Authentication.OpenIdConnect` | 10.0.15 | gateway |
 | | `Npgsql.EntityFrameworkCore.PostgreSQL` | 10.0.3 | gateway |
-| | `Aspire.Npgsql.EntityFrameworkCore.PostgreSQL`, `Aspire.StackExchange.Redis` | 13.6.5 | gateway's family (#339) |
+| | `Aspire.Npgsql.EntityFrameworkCore.PostgreSQL`, `Aspire.StackExchange.Redis` | 13.6.5 | gateway |
 | | `Scalar.AspNetCore` | 2.18.0 | gateway |
 | Vectors | `Pgvector` / `Pgvector.EntityFrameworkCore` | 0.3.2 / 0.3.0 | NuGet-checked; dependency ranges admit Npgsql EF 10.0.3 (Stage 0); EF 10 compatibility test in P0 #6 |
 | | `CommunityToolkit.VectorData.PgVector`, `Microsoft.Extensions.VectorData.Abstractions` | 1.0.2 / 10.11.0 | **not added**: retrieval is hand-written SQL (knowledge design §6) |
@@ -166,7 +168,7 @@ No `site/` (the gateway's GitHub Pages product page) until the user-facing name 
 | Pipelines | JSON Schema 2020-12 validator `LateApexEarlySpeed.Json.Schema` | 4.2.2 (BSD-3-Clause; to-verify #17: `JsonSchema.Net` 9.x binaries ship under an Open Source Maintenance Fee Agreement, so they are not used; Corvus' validator was checked first and left out because its analyzers flow into every consuming project) | P1, `Kalla.Pipelines` (template parameter schemas, admin and worker; generic schema-driven admin forms) |
 | Text | `sv_SE` Hunspell word list (LibreOffice dictionaries, pinned commit and SHA-256) | – | content files of `Kalla.Retrieval` (`Text/sv_SE/`: `.aff`, `.dic` and the licence texts), copied to `dictionaries/sv_SE` next to the application and replaceable: `Text:SwedishWordListDirectory` names another directory (data-model §3.1) |
 | MCP | `ModelContextProtocol`, `ModelContextProtocol.AspNetCore` | 2.3.0 | NuGet-checked (knowledge design step 7: attribute and transport names); P2 (MCP endpoint group, tool hub, template); recheck at P2 start. No further JSON-Schema, YAML or MSAL package in P2; MSAL in P3 for OBO |
-| Blobs | `AWSSDK.S3` (only dependency `AWSSDK.Core`) | exact pin under the package rule of §2.3 (4.0.104.6 checked 2026-10-30) | `Kalla.Infrastructure` `S3BlobStore` (P1, contract-tested against the chosen server; `Minio` not used) ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.13) |
+| Blobs | `AWSSDK.S3` (only dependency `AWSSDK.Core`) | **not added**: exact pin under the package rule of §2.3 when it is (4.0.104.6 checked 2026-10-30) | `Kalla.Infrastructure` `S3BlobStore` (not built; with the first multi-host deployment, contract-tested against the chosen server; `Minio` not used) ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.13) |
 | Keys | `Azure.Security.KeyVault.Keys`, `Azure.Identity` | *to verify* | `IKeyProvider` for Azure; OpenBao via plain `HttpClient` (transit API), no package |
 | Testing | `xunit.v3` 4.0.2, `xunit.runner.visualstudio` 4.0.1, `Microsoft.NET.Test.Sdk` 18.11.0, `Shouldly` 4.3.0, `NSubstitute` 6.2.0, `WireMock.Net` 2.19.0, `Microsoft.AspNetCore.Mvc.Testing` 10.0.15, `Microsoft.Extensions.TimeProvider.Testing` 10.11.0, `Testcontainers.PostgreSql` / `.Redis` 4.16.0 | as listed | gateway (no `EntityFrameworkCore.Sqlite`: every DB test needs pgvector) |
 | Benchmarks | `BenchmarkDotNet` | 0.15.8 | gateway |
@@ -234,7 +236,7 @@ src/parser/
 | `Kalla.MigrationService` | `Microsoft.NET.Sdk.Worker` | Infrastructure, ServiceDefaults | `kalla/migrations` | `kalla-migrate` |
 | `Kalla.FakeGateway` | `Microsoft.NET.Sdk.Web`, `ContainerFamily noble-chiseled` (as FakeLlm) | ServiceDefaults | `kalla/fake-gateway` (tests, R1 test) | dev/CI only |
 | `Kalla.AppHost` | `Aspire.AppHost.Sdk/13.6.5` | all runnable projects; links `ServiceDefaults/HealthEndpoints.cs` as the gateway does | – | dev |
-| `Kalla.Tools` (P2) | `Microsoft.NET.Sdk` | Domain, Infrastructure, MCP SDK | – (in `kalla/api`; its own host `rag-tools` only with the first external, OBO or write tool, P3) | chat role of `kalla-api`; `kalla-admin` |
+| `Kalla.Tools` (P2) | `Microsoft.NET.Sdk` | Domain, Infrastructure, MCP SDK | – (in `kalla/api`; its own host `kalla-tools` only with the first external, OBO or write tool, P3) | chat role of `kalla-api`; `kalla-admin` |
 
 Every service project starts with `if (await WebDefaults.ExitIfHealthProbeAsync(args)) return;`, then
 `AddDeploymentSecrets()` (key-per-file from `Security:SecretsDirectory`; kalla-api also reads `Security:ExtraSecretsDirectory`, a
@@ -310,7 +312,7 @@ Scale-out settings ([`../archive/passes/performance-pass.md`](../archive/passes/
 values): `Worker:Concurrency:<class>` (per instance, above); P2 `Embedding:GlobalMaxInFlight` (fleet-wide embedding cap
 via a Redis lease, default 2 × provider replicas; Redis down: per-instance AIMD only, engine design §18); `Parser:Endpoints` (optional multi-endpoint parser list, not used in the
 3- and 5-host topologies); `BlobStore:Root` (the file-system store's container, an absolute path, default
-`/data/blobs/rag`: the `rag/` container on the `kalla-blobs` volume, §6.3); P1 with the S3 store: `BlobStore:Kind` (`FileSystem` | `S3`; `FileSystem` on the single-host pilot),
+`/data/blobs/rag`: the `rag/` container on the `kalla-blobs` volume, §6.3); with the S3 store (not built yet): `BlobStore:Kind` (`FileSystem` | `S3`; `FileSystem` on the single-host pilot),
 `BlobStore:S3:ServiceUrl`, `BlobStore:S3:Bucket` (`rag`); `ConnectionStrings__ragdb-listen`
 (LISTEN on its own connection string, same server today, so the pooled strings stay pooler-safe),
 `ConnectionStrings__ragdb-maintenance` (the worker's HNSW rebuild, unpooled, falls back to `ragdb`; the AppHost sets
@@ -337,7 +339,7 @@ persistent secrets through the same `Secret(name, length)` helper, `WaitFor`/`Wa
 | `migrations` | `AddProject<…MigrationService>` | `Seed:Enabled` | `WaitFor(database)`; seeds dev key, the development embedding profile (§4.4), demo data |
 | `api` | `AddProject<…Api>("api", "https")` | – | `Rag__Roles=knowledge,chat,mcp`; `Gateway__BaseUrl` = fake or real gateway |
 | `worker` | `AddProject<…Worker>("worker", "https")` | – | references parser, clamav |
-| `mcp-kommun` | `AddProject<Ume.Mcp.Kommun>` (from `templates/mcp-server/`) | P2 | `ume-mcp-kommun`, first tool the mock fee calculator (tools design §8.5), reached by the api's in-process tool hub only |
+| `mcp-kommun` | `AddProject<Kalla.Mcp.Kommun>` (from `templates/mcp-server/`) | P2 | `kalla-mcp-kommun`, first tool the mock fee calculator (tools design §8.5), reached by the api's in-process tool hub only |
 | `adminapi` | `AddProject<…AdminApi>("adminapi", "https")` | – | `Oidc__ClientId=kalla-admin`; `Oidc:*` passed through when external |
 | `admin-ui` | `AddViteApp("admin-ui", "../admin-ui")`, port **5174** (gateway: 5173), `PublishWithContainerFiles(adminUi, "wwwroot")` | – | both stacks can run side by side |
 | `open-webui` | `AddContainer("open-webui", "ghcr.io/open-webui/open-webui", <pinned tag>)` | `OpenWebUi:Enabled` (default true in run mode; the resource also needs `Seed:Enabled`, since its key is the seeded client's) | env of chat design §4.3 (one connection = our api endpoint with the seeded dev key, `X-Rag-Owui-*` headers, title, tag and follow-up generation off); tag **v0.12.5** by digest (go-live pin review A-4, #457); local sign-in (`ENABLE_SIGNUP`/`ENABLE_LOGIN_FORM` true, the first account is Open WebUI's admin), not OIDC, because routing OIDC between the container and the browser through the dev Keycloak is not worth it for a dev stack; the pilot signs in over OIDC (`deploy/compose.rag.yaml`, profile `openwebui`) |
@@ -353,7 +355,7 @@ Realm `fors` (same name as the gateway's, so issuer paths look the same), adapte
 |---|---|
 | User profile | declares `departmentCodes`, `teamCodes` (Keycloak ≥ 24 drops undeclared attributes) |
 | Client `kalla-admin` | confidential, code + PKCE, redirect URIs `https://localhost:5174/signin-oidc` and the adminapi https port; mappers copied: `roles` (realm role mapper), `departmentCodes`, `teamCodes` (user attribute mappers); **new** `groups` mapper (group membership, full path off: department scope from groups in the claim) |
-| Client `kalla-api-dev` | client credentials (as the gateway's `ume-data-dev`), audience mapper `kalla-api`, roles mapper; service-account roles `Knowledge.Read.All`, `Chat.Invoke.All` for integration and machine-token tests |
+| Client `kalla-api-dev` | client credentials (as the gateway's `fors-data-dev`), audience mapper `kalla-api`, roles mapper; service-account roles `Knowledge.Read.All`, `Chat.Invoke.All` for integration and machine-token tests |
 | Client `kalla-chat-dev` | public, code + PKCE, loopback redirect; default scope `Chat.Use`, optional `Knowledge.Read`, `Mcp.Use`; delegated-token and MCP tests |
 | Client `open-webui-dev` | for `OpenWebUi:Enabled` with OIDC login |
 | Client scopes | `Chat.Use`, `Knowledge.Read`, `Mcp.Use` (optional, audience mapper `kalla-api`, in `scope`) |
@@ -361,11 +363,11 @@ Realm `fors` (same name as the gateway's, so issuer paths look the same), adapte
 | Groups | `Byggnadsnämnden`, `rag-pilot-users` (all test users) |
 | Users | `rag-platform-admin` (`departmentCodes` 1000, 3000, 5000), `rag-department-admin` (1000), `rag-pipeline-editor` (1000), `rag-reviewer` (1000), `rag-skill-editor` (1000, P2), `rag-viewer` (1000), `rag-group-member` (no attribute, role `rag-viewer`; member of group `Byggnadsnämnden`, a member group of department 3000, tests department scope from groups), `rag-no-role` (1000, no role: every `/api` call 403), `rag-chat-user` (no admin role; delegated chat tokens) — codes as the gateway's demo data. Full realm: identity design §11 |
 | Passwords / secrets | from `KALLA_DEV_USER_PASSWORD`, `KALLA_OIDC_CLIENT_SECRET`, `KALLA_API_CLIENT_SECRET`, `KALLA_OWUI_CLIENT_SECRET` (realm import placeholders, as the gateway; the AppHost generates them) |
-| Keycloak image | `quay.io/keycloak/keycloak:26.6.4@sha256:0aae0de7…` (the version `Aspire.Hosting.Keycloak` runs, tag 26.6); the AppHost and `KeycloakFixture` share the pin and are updated together |
+| Keycloak image | the shared Keycloak's version (the gateway's `deploy/keycloak/Dockerfile`), pinned by digest in the AppHost (`KeycloakTag`, `KeycloakDigest`; 26.8.1 on 2026-11-21); the AppHost and `KeycloakFixture` share the pin and are updated together |
 
 **P1: realm additions for the shared Keycloak** (identity design §11.2, 2026-10-31). The pilot signs in with the
 Keycloak shared with the gateway (Decisions table "P1 pilot sign-in"), defined and run from the gateway repo. Next to the
-dev realm, RAG keeps a **realm-additions file** in `deploy/keycloak/` (stream B, P1 item 16): RAG's clients
+dev realm, Källa keeps a **realm-additions file** in `deploy/keycloak/`: its clients
 `kalla-admin`, `open-webui` and `kalla-api`, the `rag-*` realm roles, full scope allowed off on every RAG client,
 pilot hosts, no test users. It is imported into realm `fors` by the gateway's Keycloak project (keycloak-config-cli, every resource type with
 `no-delete`; Decisions "P1 pilot sign-in", [`deploy/keycloak/README.md`](../../deploy/keycloak/README.md)).
@@ -398,8 +400,7 @@ streaming code, and adds:
 acted request and a streamed request with the stream cost are validated against the pinned OpenAPI document, so the
 fake cannot drift from the gateway's contract; the pin is bumped with each gateway integration phase.
 
-Feature request for the gateway (§12.2), delivered in gateway release 1 (gateway design §6, weakness review §5): FakeLlm honours the
-OpenAI `dimensions` parameter and a `fake-embed-<n>` model-name suffix, so the gateway's own fake serves 1024-dim
+The gateway's FakeLlm honours the OpenAI `dimensions` parameter (gateway-changes §6) and a `fake-embed-<n>` model-name suffix, so the gateway's own fake serves 1024-dim
 vectors when we run against a real local gateway.
 
 ### 4.4 Start scripts, seed data, real gateway
@@ -443,11 +444,11 @@ vectors when we run against a real local gateway.
 
 | Image | Built by | Base | User | Root fs | Health probe | Expected size |
 |---|---|---|---|---|---|---|
-| `kalla/api`, `worker`, `admin`, `migrations` | `dotnet publish -t:PublishContainer` | `aspnet:10.0.15-noble-chiseled-extra@sha256:cae5…` (gateway's) | 1654 | read-only, tmpfs `/tmp` | `dotnet Källa.<X>.dll --health-check` (`ExitIfHealthProbeAsync`, `FORS_HEALTHCHECK_URL` default `https://localhost:8443/health/ready`) | 160–220 MB (admin + UI ~230 MB) |
+| `kalla/api`, `worker`, `admin`, `migrations` | `dotnet publish -t:PublishContainer` | `aspnet:10.0.15-noble-chiseled-extra@sha256:cae5…` (gateway's) | 1654 | read-only, tmpfs `/tmp` | `dotnet Kalla.<X>.dll --health-check` (`ExitIfHealthProbeAsync`, `FORS_HEALTHCHECK_URL` default `https://localhost:8443/health/ready`) | 160–220 MB (admin + UI ~230 MB) |
 | `kalla/fake-gateway` | SDK container | `noble-chiseled` | 1654 | read-only | same | ~130 MB |
 | `kalla/postgres` | `images/postgres/Dockerfile` (a few lines, §5.2) | stock `pgvector/pgvector`, digest-pinned (pgvector 0.8.7 on Postgres 17, tag *to verify*) + PGDG `pgbackrest` package | 999 (`postgres`) | read-only, tmpfs `/tmp` (pgBackRest lock path), `/var/run/postgresql` | `pg_isready -d ragdb` | stock image + the `pgbackrest` package, *to verify* |
 | `kalla/parser` | `src/parser/Dockerfile` | `python:3.12-slim-trixie` (digest-pinned; parser design §12) | 10001 | read-only, tmpfs `/tmp` (1 GB: tmpfs counts against the memory limit) | `python -m ume_parser.health` (HTTPS GET `/health/ready`, exit code; no curl) | budget ≤ 4.0 GB with the NER model (measured 2.88 GB; torch CPU + models; Tesseract `swe` only; no LibreOffice, EasyOCR or `python-oxmsg`; parser design §12) |
-| `kalla/clamav` | `images/clamav/Dockerfile` | `clamav/clamav-debian:1.4.6_base` (1.4 LTS, `_base` = no bundled signatures; digest-pinned; 1.4.6 from `v0.1.0`) | 1000 (the image's `clamav`; entrypoint `/init-unprivileged`) | read-only, volume `/var/lib/clamav`, tmpfs `/tmp` (clamd's local socket) | a real scan of a small file through clamd (`clamdscan`), not `--ping`: after a failed reload clamd still answers PONG with no engine (§5.5) | 223 MB (measured) + ~110 MB signatures in the volume |
+| `kalla/clamav` | `images/clamav/Dockerfile` | `clamav/clamav-debian:1.4.6_base` (1.4 LTS, `_base` = no bundled signatures; digest-pinned) | 1000 (the image's `clamav`; entrypoint `/init-unprivileged`) | read-only, volume `/var/lib/clamav`, tmpfs `/tmp` (clamd's local socket) | a real scan of a small file through clamd (`clamdscan`), not `--ping`: after a failed reload clamd still answers PONG with no engine (§5.5) | 223 MB (measured) + ~110 MB signatures in the volume |
 | `kalla/renderer` | `images/renderer/Dockerfile` (§5.4) | `mcr.microsoft.com/playwright:v1.65.1-noble`, digest-pinned, its Ubuntu packages upgraded at build time (so a build is not reproducible bit for bit; the release records the digest and the SBOM), npm and yarn removed, Chromium headless shell only, flattened | 10002 | read-only, tmpfs `/tmp` (512 MB) | TCP connect to port 3000 (no secret) | 1.48 GB (A-10) |
 
 All Dockerfiles: digest-pinned `FROM`, multi-stage, `apt-get` versions from the pinned base only, no package caches,
@@ -471,13 +472,14 @@ anchor). The renderer image (`images/renderer/`, Playwright server + Chromium, �
   vectors; `pg_stat_statements` loads; `wal_compression=lz4` is accepted; `pgbackrest` runs as uid 999 on the
   read-only root file system and `archive_command` pushes WAL from inside the container to a local test repository
   (`pgbackrest check`). The Swedish search tests are .NET tests (`SwedishTextSearchTests`, data-model §3.1).
-- **P0 comparison** (one-off, recorded in `docs/`): the .NET decompounder against Postgres `ispell` with the same
-  `sv_SE` word list, in a throwaway container that has the dictionary files, on a word sample (to verify, §14).
+- **The decompounder against Postgres `ispell`** (done in P0, to-verify 128): with the same `sv_SE` word list on a
+  103-word umea.se sample the .NET decompounder loses no recall and gains a lot
+  ([`../archive/p0/results-b.md`](../archive/p0/results-b.md)).
 
 ### 5.3 Parser image (`src/parser/Dockerfile`)
 
 Stage 1 `python:3.12.16-slim-trixie` by digest + uv (copied from the pinned `ghcr.io/astral-sh/uv` image): `uv sync
---frozen --no-dev --no-install-project` (`docling-slim` 2.142.0 with selected extras, `pypdfium2`, `defusedxml`,
+--frozen --no-dev --no-install-project` (`docling-slim` with selected extras at the pin in `pyproject.toml`, `pypdfium2`, `defusedxml`,
 `psutil`, `pillow`, and `opencv-python-headless` and `pandas` as direct dependencies, so no `libgl1` or fonts are
 needed), then `python scripts/download_models.py --out /opt/models` (pinned revisions and SHA-256, Docling models and
 the KB NER model; the **only** step with network). Stage 2 same base, apt from a dated `snapshot.debian.org` (≥ 7 days
@@ -627,7 +629,7 @@ verify* on the host image).
 | kalla-renderer | ingestion | 2.0 | 128 | 256m | 2g | 2g | 512 | only with the Compose profile `render` (`init-deployment.sh --profiles`, #505; without it `browser` sources fail with `render.not_configured`); one shared Chromium (§5.4); 167–215 MB peak measured on fixtures (A-9, A-10); real sites in A-13. The worker also carries Playwright's Node driver (≈ 150–175 MB RSS), inside its own limit |
 | `rag-ingestion.slice` | ingestion | `CPUQuota=500%` | `CPUWeight=25` | – | `MemoryMax=7G` | `MemoryMax=11G` | – | zone cap |
 | kalla-openwebui (profile `openwebui`) | edge | 1.0 | 512 (in `compose.rag.yaml`) | 512m | not co-hosted | 1.5g | 256 | §12.8 |
-| `ume-mcp-<name>` (P2) | tools-hosted | 0.5 each | 256 | – | 384m each | 384m each | – | hosted MCP servers, `compose.mcp.yaml` (tools design §8.3) |
+| `kalla-mcp-<name>` (P2) | tools-hosted | 0.5 each | 256 | – | 384m each | 384m each | – | hosted MCP servers, `compose.mcp.yaml` (tools design §8.3) |
 
 **During development** (user, 2026-10-31) `compose.rag.yaml` keeps every `cpus` cap at 2 or less, so the stack starts
 on any host with 2 cores or more (the CI runner included): postgres 2.0, parser 2.0 with `PARSER_THREADS=2`.
@@ -639,7 +641,7 @@ above the slice's `MemoryMax=7G`: the slice is the cap, and the parser, ClamAV a
 (to measure in A-13 and R1). Sum of memory limits (ingestion containers counted at the slice cap, the one-shot migrator included), pilot with one
 slot (seven long-running containers, no Redis): 16 GB host ≈ 12 GB (OS and Docker keep ~2 GB; limits are not all
 reached at once); 24 GB host ≈ 18.75 GB, ≈ 20.25 GB with Open WebUI. P2 adds the b slots, Redis (256m,
-[`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.12) and 384m per hosted MCP server (`ume-mcp-kommun`): ≈ 14.1 GB on a
+[`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.12) and 384m per hosted MCP server (`kalla-mcp-kommun`): ≈ 14.1 GB on a
 16 GB host and ≈ 21.6 GB on a 24 GB host, so P2 uses the 24 GB host **with Open WebUI on its own VM** (decided by the user
 2026-10-30 in the consistency pass); the in-process tool hub may need a larger `kalla-api` limit, measured in P2. Under
 CPU contention the data plane (weight 1024) gets about 4× the CPU of each ingestion container; the slice keeps the ingestion zone at 5 cores even when every ingestion container is
@@ -709,8 +711,7 @@ Hardening: every service but the one-shot kalla-bootstrap (no network; it gives 
 `/tmp`), numeric `user`, `restart: unless-stopped`, `stop_grace_period` 60 s (api/admin; postgres, so the shutdown
 checkpoint is not cut short), 120 s (worker: running jobs get `Worker:StopGraceSeconds` 90 s to finish, then are
 released; the worker raises its host shutdown timeout to that grace + 15 s, so Compose must give it at least 105 s).
-`compose.hardening.yaml` is the
-overlay for `aspire publish` output in `deploy/generated/`, verified by `Test-Deployment.ps1`, exactly as in the gateway; `compose.rag.yaml` is self-contained.
+`compose.rag.yaml` is self-contained (no `aspire publish` output is deployed).
 
 ### 6.4 Moving the ingestion zone to its own host
 
@@ -943,7 +944,7 @@ Targets for the pilot: **RPO ≤ 5 min, RTO ≤ 4 h** (simplification pass §4).
 |---|---|---|
 | Postgres | **pgBackRest** inside the `kalla-postgres` container (`kalla/postgres`, §5.2), with the overlay `compose.backup.yaml` (`init-deployment.sh --backup-target`; `compose.rag.yaml` alone runs Postgres with `archive_mode=off` and has no repository): continuous WAL archiving by `archive_command` (`archive-push`, synchronous, so no spool volume; `archive_timeout` 60 s), weekly full, daily differential, 35-day retention (proposed); repository `repo1` on the backup target, encrypted (`repo1-cipher-type=aes-256-cbc`, passphrase escrowed); kalla-bootstrap writes the repository settings and generates the passphrase once (`kalla-secrets/pgbackrest`). Scheduled backups: one host timer `rag-backup.timer` (daily 01:30) runs `backup-postgres.sh --type auto`, i.e. `docker compose exec -T kalla-postgres pgbackrest --stanza=ragdb --type=full\|diff backup`, full on Sundays or when the newest full is 7 days old or more, differential otherwise (expiry follows each backup); `rag-backup-status.timer` refreshes the health metrics every 2 minutes (rule 5); no long-running sidecar. The stanza is created once per database or repository after the first `up` (WAL archiving fails until it exists). The overlay puts `kalla-postgres` on the `backup` network (§6.1) | **point-in-time restore** with `restore-pitr.sh --target-time … --confirm`: a WAL switch first (so the newest changes are archived), stops api, admin, worker and postgres; `pgbackrest restore --type=time --delta --target-action=pause` in place, in a one-off container of the `kalla-postgres` service on `kalla-postgres-data` (`docker compose run --rm`); starts Postgres, which recovers to the target and pauses; `pg_promote()` (a new timeline), `pgbackrest check`, then the services |
 | Open WebUI data (the volume `kalla-openwebui-data`) | **not built; decide with W2/G1** (2026-10-31) | in the pilot (history mode `none`) Open WebUI's store is the primary copy of chats and feedback comments (chat design §13.3), but no script backs it up; whether it is backed up, how and for how long is open with W2 and the DPIA (G1), postponed decisions |
-| Uploads | `backup-uploads.sh`, run by `rag-upload-backup.timer` every 10 minutes: copies new `uploads/` objects to the backup target **within 15 minutes** (the only content that cannot be fetched again); write-once keys make the copy incremental, and it never overwrites. It runs the profiled Compose service `rag-upload-backup` of `compose.backup.yaml` (kalla-bootstrap's image for its shell and coreutils, uid 1654, `kalla-blobs` read-only, `network_mode: none`: a posix target needs no network), not a member of `backup` | `rclone`/bucket replication beyond one host (§6.4); the S3 upload copy is not built in P0 |
+| Uploads | `backup-uploads.sh`, run by `rag-upload-backup.timer` every 10 minutes: copies new `uploads/` objects to the backup target **within 15 minutes** (the only content that cannot be fetched again); write-once keys make the copy incremental, and it never overwrites. It runs the profiled Compose service `rag-upload-backup` of `compose.backup.yaml` (kalla-bootstrap's image for its shell and coreutils, uid 1654, `kalla-blobs` read-only, `network_mode: none`: a posix target needs no network), not a member of `backup` | `rclone`/bucket replication beyond one host (§6.4); the S3 upload copy is not built |
 | Derived blobs | raw fetches, parse and stage outputs | re-creatable: backed up nightly or not at all (a restore re-fetches and re-parses) |
 | Secrets and long-lived keys | **one escrow set** (M-22 S6), `escrow-keys.sh`, the same in every form (a Compose installation by `--env-file`, a Portainer stack by `--project`, Kubernetes' directories by `--secrets-dir`/`--certs-dir`): what `kalla-bootstrap` generates once and never again, and no backup holds: the pepper (`kalla-secrets/.pepper`), the blob master keys (`rag-blob-internal`; chat master keys `rag-chat-<level>` join once A1 allows stored chat content, weakness review §4), the pgBackRest passphrase (with a backup target), the database roles' passwords (`postgres/*_password`: a restored cluster keeps its roles), the conversation id keys (`api/Security__ConversationIdKeys__<kid>`), `kalla-certs/data-protection.pfx` and the internal CA (`ca.pem`, `ca.key`), exported to the offline escrow (sealed media in two places, or the key service's own backup). The rest of `kalla-secrets` and `kalla-certs` is generated again | retention ≥ the data they protect; re-run after every rotation; `--verify` reads a set back against the deployment, `--restore` writes it into new volumes before the first start, refusing to replace a file that differs (given media rather than one set, both take the deployment's newest set, and another deployment's only when it is the only one there); the restore drill uses both |
 | Shred-class keys | per-month chat shred keys, only once `Settings.ChatShreddingEnabled` is on (after A1) | never escrowed beyond their shred date; key-service snapshots that hold them are kept no longer than the shred schedule, and a key-service restore is followed by `reconcile-shredded-keys` (re-destroys keys listed as destroyed in `audit."AuditLog"`) |
@@ -953,7 +954,7 @@ Rules:
 1. **Blobs are write-once**: a key is never overwritten and a deletion is a tombstone row in the database, written
    with the caller's change and purged after the backup retention (35 days), so a point-in-time restore of the database
    always finds the blobs it references (data-model §9).
-2. After a database restore the worker's orphan audit (not built in P0) reports blobs without a referencing row (left to the purge) and
+2. After a database restore the worker's orphan audit (not built) reports blobs without a referencing row (left to the purge) and
    documents whose derived blob is missing (re-fetched or re-parsed on the next sync; a missing upload is restored from
    the upload copy).
 3. **Restore drill** (on the test host before go-live, P1b; then quarterly; runbook): a point-in-time restore onto an
@@ -992,10 +993,9 @@ then the gateway's six-step *Upgrade procedure* and *Certificate and secret rota
 (identity §2 approval packages) are also created by a GitHub workflow (`entra.yml`, below).
 
 **Runners**: every workflow runs on the self-hosted runners `ume-rag` and `ume-rag2` (labels `[self-hosted, linux,
-x64]`; one machine, one user and one Docker daemon, `docs/ci-runner.md`), not on GitHub-hosted runners. `verify.yml` and `parser.yml` run for every non-draft pull request. The main session merges a
-pull request on its local evidence (build, `Worker.Tests` twice, Pipelines, Contract, ownership) and, after a batch of
-merges, checks `main` with a dispatched `verify.yml` run plus the local suites; a red `main` is fixed before the next
-merge. GitHub does not enforce required checks on this repository, so "merge only on green" is a rule. The scheduled
+x64]`; one machine, one user and one Docker daemon, `docs/ci-runner.md`), not on GitHub-hosted runners. `verify.yml` and `parser.yml` run for every non-draft pull request.
+`main` is protected (the ruleset *Protect main*, user, 2026-11-16): a pull request needs one approving review and the
+required checks, and is squash-merged; a red `main` is fixed before the next merge. The scheduled
 workflows (`perf.yml`, `evaluation.yml`) stay off until the test host exists (Decisions "CI on the
 self-hosted runner for every pull request", "Merge on local evidence, then check main").
 
@@ -1063,8 +1063,8 @@ p50/p95/p99).
 
 ## 9. Observability
 
-- **ServiceDefaults copied**: OTel logs (formatted message + scopes), metrics (`AddMeter("Källa")`, ASP.NET Core,
-  HttpClient, runtime) and traces (`AddSource(appName)`, `AddSource("Källa")`, health filtered, `url.query` removed);
+- **ServiceDefaults copied**: OTel logs (formatted message + scopes), metrics (`AddMeter("Kalla")`, ASP.NET Core,
+  HttpClient, runtime) and traces (`AddSource(appName)`, `AddSource("Kalla")`, health filtered, `url.query` removed);
   JSON console outside Development; OTLP only when `OTEL_EXPORTER_OTLP_ENDPOINT` (`FORS_OTEL_ENDPOINT`) is set.
   Npgsql (and, from P2, Redis) tracing comes from the Aspire client integrations. The parser writes JSON logs to
   stdout only in P1 (no OTel, no OTLP egress; Decisions "Parser telemetry is logs only in P1", #453); the worker's
@@ -1086,7 +1086,7 @@ p50/p95/p99).
 - **Log scopes** (`BeginScope` in middleware and job runner): `ConfigVersion` (every service, every request and job),
   `RunId`, `JobId`, `JobClass`, `DocumentId`, `SourceId` (worker), `AssistantId`, `ClientId`, `Classification`,
   `ConversationId` hash (api).
-- **Metrics** (meter `Källa`): `rag.chat.ttft` (histogram, by `level`, `client_kind`, `outcome`), `rag.retrieval.duration`, `rag.retrieval.coverage` with near-threshold distances (never query text),
+- **Metrics** (meter `Kalla`): `rag.chat.ttft` (histogram, by `level`, `client_kind`, `outcome`), `rag.retrieval.duration`, `rag.retrieval.coverage` with near-threshold distances (never query text),
   `rag.gateway.request.duration` and `rag.gateway.residency_refusals`, `rag.jobs.queued` / `rag.jobs.age` by class,
   `rag.parse.duration_per_page`, `rag.clamav.detections`, `rag.config.version` per instance, `rag.config.lag` and `rag.config.unconfirmed_seconds` (grace window),
   `rag.db.pool.in_use` per role, `rag.retention.deleted` by table, `rag.backup.age` (from `pgbackrest info`) and `rag.backup.wal_archive_age` (from `pg_stat_archiver`; §7.4), `rag.ingest.incomplete_runs` per source, `rag.evaluation.recall_at_10` by collection;
@@ -1111,7 +1111,7 @@ p50/p95/p99).
   `rag.db.wal.bytes_per_second`, `rag.db.replication.lag` (P2 standby), `rag.blob.duration`, P2 `rag.leader.changes`.
   Postgres-side values come from `pg_stat_statements` (§6.2) and, from P2, the OpenTelemetry Collector's
   `postgresql` receiver (role `kalla_monitor`, data-model §1.1; metric set *to verify*).
-- **Dashboards** (`deploy/otel/dashboards/`, Grafana JSON, *new*: the gateway ships none): *Data plane* (TTFT p50/p95,
+- **Dashboards** (`deploy/otel/dashboards/`, Grafana JSON, *new*: the gateway ships none; **not built yet**): *Data plane* (TTFT p50/p95,
   retrieval p50/p95 per stage, degraded rate, coverage `low` share per level, embedding cache hit rate, downloads,
   gateway latency, refusals), *Ingestion* (queue depth and age, parse throughput, failures, ClamAV),
   *Database* (connections per role vs. limits, pool waits, slow statements, partition sizes, backup and WAL archive age), *Config & security*
@@ -1188,10 +1188,8 @@ A1, G1, W1, W2, N1, U1 and P2 (`postponed-decisions.md` phase-start rule; P0 end
 
 ## 12. Open decisions and contradictions found
 
-**Review (2026-10-29):** accepted 1, 2 (added to `gateway-changes` §3c), 3, 6, 7, 8, 9, 10 (as a proposal for both repos), 12, 13, 14.
-User decisions: 5 Bicep, 11 postponed (file keys in the pilot, Key Vault later), 15 ClamAV direct without a mirror; 4 (self-hosted runner) waits for IT security.
-Review fix: Chromium keeps its sandbox via a seccomp profile (§5.4). Rows 3, 6, 7, 8, 11 and 12 are restated in the
-decided form of the simplification pass (2026-10-30).
+Each row states where its topic stands now; how the rows were reviewed and decided (2026-10-29, 2026-10-30) is in
+[`../archive/design-history/repo-and-deployment.md`](../archive/design-history/repo-and-deployment.md) §12.
 
 | # | Topic | Finding | Recommendation |
 |---|---|---|---|
@@ -1202,12 +1200,12 @@ decided form of the simplification pass (2026-10-30).
 | 5 | Entra IaC tool | Bicep vs Terraform | **Decided: Bicep** with the Microsoft Graph extension in `infra/entra/` |
 | 6 | Hunspell memory per backend | Ispell dictionaries load per backend; with many backends this can be GBs inside a 3 GB Postgres limit | **Closed** (simplification pass §3, postponed H1): no dictionary in Postgres; decompounding in .NET (data-model §3.1) |
 | 7 | P0 Entra registrations | Identity §2/§9.6 say none is needed for P0 and package 1 is only *submitted* in P0 | P0 = package 1 (RAG's own registrations) built (checklist #17); submitting it moved to P2 (Decisions table "P1 pilot sign-in") |
-| 8 | Open WebUI hosting | Chat-api §6 configures it but no plan says where it runs or what database it uses | Separate Compose project `compose.openwebui.yaml` on the pilot host (24 GB) or its own VM, own SQLite on an encrypted volume (never in `ragdb`), no pruning sidecar; ceiling `internal`; v0.12.5 by digest (§4.1), uid 1000 with `DATA_DIR=/data` on a host directory, secrets from an `env_file`, plain HTTP on loopback behind the proxy, its own `openwebui` network (§6.1). Env per chat design §4.3: **one connection** (ours, no gateway connection), title, tag and follow-up generation off, `X-Rag-Owui-*` headers, uploads, admin chat access and export off, API keys restricted to the feedback endpoints, a fixed non-dismissible banner `WEBUI_BANNERS` ("Skriv inte in sekretessbelagda uppgifter eller känsliga personuppgifter.", weakness review §4); feedback older than `ClientRetentionDays` pruned through Open WebUI's HTTP API, never SQL against its database (chat design §13.3). Chat copies of other users cannot be pruned at v0.12.5 without `ENABLE_ADMIN_CHAT_ACCESS=true`: they stay unpruned in the pilot (stated in Open WebUI's data-handling profile) until register item **W2** is decided within the DPIA (**G1**, weakness review §4), which covers this store as the primary copy |
+| 8 | Open WebUI hosting | Chat-api §6 configures it but no plan says where it runs or what database it uses | **Built** as the profile `openwebui` of `compose.rag.yaml` (§7.1), on the pilot host (24 GB) or its own VM: its own SQLite in the volume `kalla-openwebui-data` (never in `ragdb`, §6.3), no pruning sidecar; ceiling `internal`; v0.12.5 by digest (§4.1), uid 1000 with `DATA_DIR=/data`, secrets from `kalla-secrets/openwebui` through its start wrapper (§6.3), plain HTTP on loopback behind the proxy, on `kalla-edge` (§6.1). Env per chat design §4.3: **one connection** (ours, no gateway connection), title, tag and follow-up generation off, `X-Rag-Owui-*` headers, uploads, admin chat access and export off, API keys restricted to the feedback endpoints, a fixed non-dismissible banner `WEBUI_BANNERS` ("Skriv inte in sekretessbelagda uppgifter eller känsliga personuppgifter.", weakness review §4); feedback older than `ClientRetentionDays` pruned through Open WebUI's HTTP API, never SQL against its database (chat design §13.3). Chat copies of other users cannot be pruned at v0.12.5 without `ENABLE_ADMIN_CHAT_ACCESS=true`: they stay unpruned in the pilot (stated in Open WebUI's data-handling profile) until register item **W2** is decided within the DPIA (**G1**, weakness review §4), which covers this store as the primary copy |
 | 9 | Portainer | The gateway ships `compose.portainer.yaml`; operations may expect it | **Built** (M-17, from 0.5.0): `deploy/portainer/`, §7.1 |
 | 10 | Supply chain in both repos | Gateway pins actions by tag and signs nothing | Actions pinned by SHA with automated bumps: postponed until before go-live (Decisions "CI/CD", postponed S1; A-20, A-27). `attest-build-provenance` on images: open in postponed S1, decided with the gateway team |
 | 11 | Pilot key service | Envelope encryption needs a production `IKeyProvider` from P1 (for `internal` blobs; chat content keys only once A1 allows stored content, weakness review §4) | **Postponed: file key provider in the pilot** with the rules in plan §8a (`--key-provider file --allow-file-keys`, chat master keys only in api/admin, the blob master key in worker/admin and read-only in api (§6.3), long-lived keys escrowed (§7.4), no `sensitive` data); Azure Key Vault later via the `rewrap` command (`../postponed-decisions.md` K1) |
-| 12 | Package versions | Docling, FastAPI, MCP SDK (2.3.0 checked, knowledge design), Playwright (the renderer, to-verify #29), Cronos, the JSON Schema validator (engine design §23), Azure Key Vault SDK, `Aspire.Hosting.Python`, the `pgvector/pgvector` tag for 0.8.7 on Postgres 17 (0.8.7 checked, knowledge design), ClamAV tag, Open WebUI tag, the pgBackRest package | Exact versions and digests, under the 7-day rule of §2.3 (suspended until go-live; every pin younger than 7 days is reviewed before go-live). Recorded: ClamAV `1.4.6_base` by digest (§5.1); Open WebUI v0.12.5 by digest (§4.1); JSON Schema validator `LateApexEarlySpeed.Json.Schema` 4.2.2 (§2.2); parser `docling-slim` 2.142.0 (§5.3) |
-| 13 | Aspire minor | `kernel-memory-and-dotnet.md` lists `Aspire.Hosting.PostgreSQL` 13.6.4; the gateway pins 13.6.1 | **Decided (user, 2026-11-02, #339):** 13.6.4, ahead of the gateway's 13.6.1 within the same 13.6 family |
+| 12 | Package versions | Docling, FastAPI, MCP SDK (2.3.0 checked, knowledge design), Playwright (the renderer, to-verify #29), Cronos, the JSON Schema validator (engine design §23), Azure Key Vault SDK, `Aspire.Hosting.Python`, the `pgvector/pgvector` tag for 0.8.7 on Postgres 17 (0.8.7 checked, knowledge design), ClamAV tag, Open WebUI tag, the pgBackRest package | Exact versions and digests, under the 7-day rule of §2.3 (suspended until go-live; every pin younger than 7 days is reviewed before go-live). Recorded: ClamAV `1.4.6_base` by digest (§5.1); Open WebUI v0.12.5 by digest (§4.1); JSON Schema validator `LateApexEarlySpeed.Json.Schema` 4.2.2 (§2.2); parser `docling-slim` in `src/parser/pyproject.toml` (§5.3) |
+| 13 | Aspire minor | `kernel-memory-and-dotnet.md` lists `Aspire.Hosting.PostgreSQL` 13.6.4; the gateway pins 13.6.1 | **Decided (user, 2026-11-02, #339):** the 13.6 family, then ahead of the gateway; both are on 13.6.5 now (§2.1) |
 | 14 | Blob volume shared by admin and worker | File volume works only on one host; uploads arrive at the admin | Accepted for the pilot (plan §12.1); S3/Azure Blob is a precondition of §6.4 |
 | 15 | ClamAV updates | Plan §2 assumed a controlled mirror | **Decided: direct, no mirror**: freshclam updates from `database.clamav.net`, allowed through the host firewall for the `mirror` network only |
 
