@@ -1,32 +1,32 @@
 # Gateway changes: detailed design
 
-Detail step 4 of the Källa design. Feature A (§5) is the gateway's integrations design (`docs/integrations.md` in
-the gateway repository, decided by user, 2026-11-11, #580); this document keeps only what Källa relies on from it. Details [`../archive/area-plans/gateway-changes.md`](../archive/area-plans/gateway-changes.md) (archived: history, not binding; this design states every rule, the plan's answered questions in §15) and the
-gateway side of [`../identity/design.md`](../identity/design.md) §1.4, §1.5, §1.7, §2 and §10 (feature C and the
-tenant/guest refusal are designed there for both systems; this document only turns them into gateway work). The ADR
-rows are in [`adr-drafts.md`](adr-drafts.md). Nothing here is implemented in the gateway yet (`~/git/llmgateway` is at
-v0.8.5); Källa's side of feature B is built and runs against v0.8.5 until release 1 (§13.4).
+What Källa needs from the gateway (Fors) and relies on. **Everything here has shipped in the gateway** but the tenant and
+guest refusal of feature C (§4.6): feature B (§3) with the FakeLlm `dimensions` (§6) and the optional rerank endpoint
+(§7.4) in gateway v0.9.0; feature C's member groups (§4) and feature A's integration phases 1–3 (§5, with the run
+metadata of §7.1) in v0.10.0; the Integration API's address in the context in v0.10.2. Feature A is the gateway's own
+integrations design (`docs/integrations.md` in the gateway repository, its ADRs 020 to 022; decided by user,
+2026-11-11, #580); this document keeps only what Källa relies on from it. **Where this document and the gateway's code
+or documents differ, the gateway wins** (repo-and-deployment §1: check behaviour in the code at the tag). Ground rule:
+the gateway never depends on Källa; every change is a generic gateway feature. Feature C and the tenant/guest refusal
+are designed for both systems in [`../identity/design.md`](../identity/design.md) §1.4, §1.5, §1.7, §2 and §10. The
+plan this design came from is [`../archive/area-plans/gateway-changes.md`](../archive/area-plans/gateway-changes.md)
+(history, not binding), the ADR drafts are in
+[`../archive/gateway-changes/adr-drafts.md`](../archive/gateway-changes/adr-drafts.md) (the gateway adopted 018 as its
+ADR 018; draft 019's member groups shipped without an ADR of their own), and how the releases were planned and built
+is in [`../archive/design-history/gateway-changes.md`](../archive/design-history/gateway-changes.md) §13.
 
-**As built (#390, 2026-11-06):** release 1 is implemented in gateway draft PRs thekim1/fors#65 (embeddings per
-input), #66 (feature B, ADR 018) and #67 (FakeLlm, tool passthrough); rerank is #68 and the shared Keycloak #70. Where
-this document and those PRs differ, the PRs win; §3.3, §3.5 and §7.4 below state the built behaviour. Ground rule: the
-gateway never depends on Källa; every change is a generic gateway feature.
-
-Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5), superseded by the PRs above. "Pipeline" means
+Gateway citations are `path:line` in the gateway's repository at `e25b491` (v0.8.5), from before the features were
+built: read them as where the change went in, and the code at the tag as what it is. "Pipeline" means
 `src/Fors.Gateway/Pipeline/`; "Entities.cs" means `src/Fors.Domain/Entities/Entities.cs`.
 
 ## 1. Overview
 
-**Two releases**, each rolling-update safe; the gateway's own release practice decides the numbers (reasoning:
-[weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)).
-**Release 1, in P1b before the Källa pilot goes live**: feature B and the FakeLlm `dimensions` addition (with the
-tool passthrough tests). **Later (P2): release 2**, before the first second-department or group audience: feature C.
-Feature A (with the run metadata) follows the gateway's own integration phases 1–3 (§5). Until release 1, P1a runs against the gateway as it is (v0.8.5) on an interim
-test/dev instance (§13.4). The letters name features:
+The features were planned as two releases plus the integration phases; they shipped as the header says. The letters
+name features:
 
 | Feature | Content | Migration | RAG platform afterwards |
 |---|---|---|---|
-| **B** (release 1) | Residency ceiling `x-fors-max-residency`, key flag `RequireMaxResidency`, 403/503 rule (§3) | `KeyResidencyCeiling` | sends an explicit ceiling on every call (`External` for `public`), with the pilot team's per-level keys until release 2 (§13.4) |
+| **B** (release 1) | Residency ceiling `x-fors-max-residency`, key flag `RequireMaxResidency`, 403/503 rule (§3) | `KeyResidencyCeiling` | sends an explicit ceiling on every call (`External` for `public`; identity design §4.7) |
 | **C** (release 2) | Department member groups from the group claim, `/bff/user` `departmentSources` (§4); tenant and guest refusal for admin sign-in and Data API tokens (§4.6); `code` on catalog teams | `DepartmentMemberGroups` | syncs `memberGroups` and team codes; same group rule as the gateway; same `TenantId`/`RefuseGuests` |
 | **A** (gateway integration phases 1–3) | Integration with credential and assigned keys, `GET /v1/fors/context` and the model facts on `GET /v1/models`; acting as an assigned key with `x-fors-on-behalf-of`; run metadata (§7.1); stream cost; Integration API (§5) | the gateway's own (`Integrations`, `UsageRunMetadata`) | one credential key per service; each assistant and knowledge base as its own assigned key (§13.4) |
 | Development (release 1) | FakeLlm embedding dimensions (§6); tool passthrough tests (§7.2) | none | local development against a real gateway with FakeLlm (optional; the FakeGateway is the default) |
@@ -210,7 +210,7 @@ answer: during the rolling update an older instance ignores the request header.
 
 ## 4. Feature C: department scope from member groups, and tenant/guest refusal
 
-**Later (P2):** release 2. Designed in `../identity/design.md` §2 (both systems) and §1.7; this section is the
+**Member groups shipped in gateway v0.10.0; the tenant and guest refusal (§4.6) is not built in the gateway yet.** Designed in `../identity/design.md` §2 (both systems) and §1.7; this section is the
 gateway's file-level plan for the work items of §2.7 there, in **claims-only** mode: only the token's group claim is
 read. Alignment notes are in §4.10.
 
@@ -293,7 +293,7 @@ affected.
   the gateway owner's plan on #580, feature C not scheduled).
 - `GET /v1/catalog/teams` (`:143-145`) adds `code`. **Gap found**: Källa's `Teams` mirror has a `Code` column
   (data-model §2.1) that the catalog does not deliver today. Not needed for acting as a key (§5.2), but cheap and useful
-  for display; Källa's `OrgSync` reads it from release 2 on.
+  for display; Källa's `OrgSync` reads each team's `code` from `GET /v1/fors/context`.
 - `docs/data-access.md:162` (catalog row) updated.
 
 ### 4.8 Settings
@@ -335,8 +335,8 @@ Added to `deploy/compose.prod.yaml` (admin API block `:136-146`, Data API block 
 ## 5. Feature A: acting as an assigned key (gateway integrations)
 
 Decided by user, 2026-11-11 (#580). The gateway-side source of truth is the gateway's own design, `docs/integrations.md`
-in `~/git/llmgateway`, with its ADRs 020 and 021: phases 1–3, the credential bound, `organisation.read`, member
-groups and the contract document are released in **gateway v0.10.0** (2026-11-12; #81–#85). Källa pins **v0.10.1** (#86: a refusal of the assigned key is always `403`, §5.7). The contract Källa builds against is the gateway's **`docs/openapi/integrations.json`** (OpenAPI 3.1:
+in the gateway's repository, with its ADRs 020 and 021: phases 1–3, the credential bound, `organisation.read`, member
+groups and the contract document are released in **gateway v0.10.0** (2026-11-12; #81–#85). Källa needs at least **v0.10.1** (#86: a refusal of the assigned key is always `403`, §5.7) and is released on Fors `v0.12.2`. The contract Källa builds against is the gateway's **`docs/openapi/integrations.json`** (OpenAPI 3.1:
 `/v1/fors/context`, the `kalla` facts on `/v1/models`, the request headers, `/integration/v1`), held to the real answers
 by the gateway's tests and changed by addition only (fields, features, scopes, enum values); a client ignores what it
 does not know. `/v1` is snake_case, `/integration/v1` camelCase. This section states only what Källa relies on; where it and the
@@ -677,7 +677,7 @@ Compatible with improvement-plan item 2 (one Redis round trip, `docs/performance
 | `docs/admin-ui.md` | C | Organisation member groups |
 | `docs/performance.md` | B | new benchmark case |
 | `docs/upgrade-guide.md`, `CHANGELOG.md` | all | §13 |
-| `docs/adr.md` | B, C | rows 018, 019 (`adr-drafts.md`); 020 and 021 are the gateway's integrations ADRs |
+| `docs/adr.md` | B, C | row 018 (draft in `../archive/gateway-changes/adr-drafts.md`); 020 and 021 are the gateway's integrations ADRs |
 | `docs/local-development.md` | development, C | FakeLlm dimensions; Keycloak `group-member` user |
 
 Feature A's pages (`docs/integrations.md` and what it lists) are updated by the gateway's integration phases.
@@ -687,77 +687,23 @@ Feature A's pages (`docs/integrations.md` and what it lists) are updated by the 
 
 ### 13.1 Contents
 
-Two releases, so the pilot waits only for the smallest change a production gateway that other teams use must take
-(reasoning: [weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)):
-
-- **Release 1, in P1b before go-live** (built in a separate session in the gateway repo): §3 (feature B), §6 (FakeLlm `dimensions`), §7.2 (tool passthrough tests), ADR 018,
-  the docs of §12 for B, and the upgrade-guide entry (§13.3).
-- **Later (P2): release 2**, before the first second-department or group audience: §4 (feature C with the tenant/guest
-  refusal), ADR 019, the remaining docs of §12, settings in compose, Portainer and Kubernetes examples, and the
-  Keycloak realm.
-- **Feature A** (§5, with §7.1) comes in the gateway's integration phases 1–3, each its own release, independent of
-  release 2.
-
-The optional rerank endpoint (§7.4) is in neither release's scope: it shipped in gateway v0.9.0 (thekim1/fors#68),
-pulled forward from P2, and is no go-live gate (Decisions "Rerank pulled forward").
+Moved to [`../archive/design-history/gateway-changes.md`](../archive/design-history/gateway-changes.md) on 2026-11-21: history, not binding. What shipped where is in the header.
 
 ### 13.2 Migrations and rolling update
 
-**Migrations**: release 1 `KeyResidencyCeiling`; release 2 `DepartmentMemberGroups`. Feature A's are the gateway's
-integration phases'. **Rolling update: yes** for both, with these rules in the upgrade guide:
-
-1. Set `RequireMaxResidency` on a key only after every gateway instance runs release 1: an old instance ignores
-   `x-fors-max-residency` (callers must check `x-fors-residency`). The same holds for `x-fors-on-behalf-of` in the
-   integration phase 2: an old instance ignores it and sends no echo, which is why Källa checks the echo (§5.2).
-2. Do not rotate a key with `RequireMaxResidency` until the admin API is fully upgraded: an old instance's rotation
-   does not copy the flag.
-3. Release 2: during the window an old admin API instance signs users in without group-derived scope and without the
-   tenant/guest checks; sessions are fixed at sign-in, so affected admins sign in again after the rollout.
+Moved to [`../archive/design-history/gateway-changes.md`](../archive/design-history/gateway-changes.md) on 2026-11-21: history, not binding. The gateway's upgrade guide holds the rules.
 
 ### 13.3 Upgrade-guide outline
 
-**Release 1.** *Rolling update: yes* (rules above). New request header `x-fors-max-residency` and error code
-`max_residency_not_met`; `503` with `Retry-After` for unavailable in-ceiling targets; `/v1/models` honours the
-ceiling; `x-fors-residency` now documented; key flag `RequireMaxResidency`; FakeLlm takes `dimensions` /
-`fake-embed-<n>` (development only). Nothing changes for clients that send no ceiling.
-
-**Release 2.** *Rolling update: yes* (rules above). *Check before upgrading*: guests are now refused at sign-in by
-default (`acct = 1` or a foreign `idp`): set `FORS_OIDC_REFUSE_GUESTS=false` to keep admitting them; set
-`FORS_OIDC_TENANT_ID` on Entra. *Opt in*: member groups on *Organisation* (the IdP must emit them in the group claim).
-New `/bff/user` field, Data API `memberGroups`, team `code`, events 2008/3003. The integration phases have their own
-upgrade-guide entries (gateway `docs/integrations.md`).
+Moved to [`../archive/design-history/gateway-changes.md`](../archive/design-history/gateway-changes.md) on 2026-11-21: history, not binding.
 
 ### 13.4 Källa afterwards
 
-CI and tests run on the FakeGateway (`../platform/repo-and-deployment.md` §4.3), which implements the release-1
-contract and the integration contract of §5 (built against the gateway's published OpenAPI document).
-
-**P1a, before release 1** (Decisions "P1a plan answers", "Interim gateway for P1a"): Källa calls the gateway as it
-is (v0.8.5), on an interim **test/dev gateway instance** on a fixed host (HTTPS, public certificate) with EU-hosted
-embedding and chat models; it is the interim J10, and the same host's Keycloak holds the shared realm `fors` (J11).
-Address and keys live only in user secrets or `deploy/.env` and secret files, never in the repository. Everything is
-EU-hosted until on-prem hardware exists (register M2): the pilot embedding profile is `text-embedding-3-large` at 1024
-dimensions, requested with `dimensions`. Källa already behaves as for release 1: every call carries
-`x-fors-max-residency` with the level's key and the answer's `x-fors-residency` is checked before a byte is used
-(`ResidencyCeilingHandler`); v0.8.5 ignores the request header, so until release 1 the ceiling rests on the keys'
-`AllowedResidencies` and that check. `GET /v1/models` is not yet filtered by the ceiling.
-
-**With release 1, in P1b before go-live (until the gateway's integration phase 1):**
-
-- **Keys per level of the pilot department's team** (plan §4): ordinary team keys `OnPrem`-only (`AllowedResidencies = [OnPrem]`), `Eu`-max (`[OnPrem, Eu]`) and open
-  (all), each issued per deployable that needs it with `AllowedIpRanges` of that deployable's hosts (`Entities.cs:89`)
-  and `RequireMaxResidency = true`. The worker never holds the open key. Which deployable holds which level is the
-  platform plan's (§6). Every Källa call is charged to the pilot team. The team's admins can edit these keys (no
-  delegation, so not gateway-admin only); the explicit ceiling and the `x-fors-residency` check still hold whatever
-  they change. The gateway applies the team's request policy to non-delegated requests, so the pilot team keeps none.
-  The worker's keys also carry the gateway's existing `MaxConcurrentRequests` cap (429 + `Retry-After`), so a
-  misconfigured worker cannot starve chat (processing design §11).
-- Every call carries `x-fors-max-residency` (`OnPrem`, `Eu` or `External` for `public`) and the run headers (stored
-  from the integration phase 2 on; older gateways ignore them); no `x-fors-on-behalf-of`. The answer's `x-fors-residency` is verified.
-- The admin's sync reads departments, teams and member groups from `GET /v1/fors/context` with its credential key and
-  the scope `organisation.read` (§5.1; B-35). No Data API key is used.
-- Saving an assistant calls `GET /v1/models` with the level's key and `x-fors-max-residency` = the level's ceiling,
-  and refuses a model that is not listed (§3.4, admin design §4.6 V8).
+CI and tests run on the FakeGateway (`../platform/repo-and-deployment.md` §4.3), which implements the residency-ceiling
+contract and the integration contract of §5 (built against the gateway's published OpenAPI document). Every call
+carries `x-fors-max-residency` and the run headers, and the answer's `x-fors-residency` is verified before a byte is
+used (`ResidencyCeilingHandler`, identity design §4.7). How Källa ran before the integration phases (the interim
+gateway, the pilot team's per-level keys) is in the archive with §13.1.
 
 **With the gateway's integration phases** (§5; cost-attribution §6 orders Källa's work):
 

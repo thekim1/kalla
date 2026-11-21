@@ -1,6 +1,6 @@
 # Gateway changes: plan
 
-**Detailed design: [`../../gateway-changes/design.md`](../../gateway-changes/design.md)** (step 4) and ADR drafts 018–020 in [`../../gateway-changes/adr-drafts.md`](../../gateway-changes/adr-drafts.md);
+**Detailed design: [`../../gateway-changes/design.md`](../../gateway-changes/design.md)** (step 4) and ADR drafts 018–020 in [`../gateway-changes/adr-drafts.md`](../gateway-changes/adr-drafts.md);
 where they differ from this plan, they win (header values, error codes, the team id, events, the release).
 
 Small features in the LLM gateway (`~/git/llmgateway`, our own code), so the RAG platform does not have to store

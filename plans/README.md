@@ -23,7 +23,7 @@ nobody needs to read them end to end.
 | Chat | [`chat-api/design.md`](chat-api/design.md) | OpenAI-compatible chat, frames, condense, feedback, history |
 | Admin | [`admin/design.md`](admin/design.md) | The admin API, validation rules (V-numbers), every admin page |
 | Tools (P2) | [`tools/design.md`](tools/design.md) | Skills, the tool hub, MCP |
-| Gateway changes | [`gateway-changes/design.md`](gateway-changes/design.md), [`adr-drafts.md`](gateway-changes/adr-drafts.md) | Residency ceiling, member groups, and what Källa relies on from the gateway's integrations (credential and assigned keys, acting as a key) |
+| Gateway changes | [`gateway-changes/design.md`](gateway-changes/design.md), ADR drafts archived in [`archive/gateway-changes/adr-drafts.md`](archive/gateway-changes/adr-drafts.md) | Residency ceiling, member groups, and what Källa relies on from the gateway's integrations (credential and assigned keys, acting as a key) |
 | Cost attribution | [`platform/cost-attribution.md`](platform/cost-attribution.md) | Who pays for each model call: each assistant and knowledge base on its own assigned gateway key, the gateway's cost as the record, Källa's split per step |
 
 **Proposals** (not binding until adopted in `decisions.md`), in [`proposals/`](proposals/), each with a status line.
