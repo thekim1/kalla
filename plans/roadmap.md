@@ -36,7 +36,7 @@ T2–T6; they fix what the team reports and answer questions.
 | # | Step | Input it waits on | Owner | Status |
 |---|---|---|---|---|
 | T0 | The gateway with Källa's integration and its three credential keys (`rag-api`; `rag-admin` with `organisation.read`, `usage.read`; `rag-worker` capped at `OnPrem`+`Eu`), the EU chat and embedding models, DoIT's department and team, and an assigned key for the assistant and the knowledge base (`docs/production-setup.md` *Gateway credential keys*) | the gateway deploy | user | open |
-| T1 | Källa `v0.5.0` deployed as one Portainer stack with the gateway (`docs/portainer.md`; Keycloak realm, Open WebUI, ClamAV on), checked with its read-backs. It moves to `v0.9.0` on Fors `v0.12.1` in one update (`docs/portainer.md`, *Upgrade*) | T0 | user | **deployed** (user, 2026-11-13: "0.5.0 deployed fine", with the Portainer stack and the `openwebui` and `clamav` profiles); read-backs to confirm |
+| T1 | Källa `v0.5.0` deployed as one Portainer stack with the gateway (`docs/portainer.md`; Keycloak realm, Open WebUI, ClamAV on), checked with its read-backs. It moves to `v0.9.1` on Fors `v0.12.2` in one update, with no SQL by hand (`docs/portainer.md`, *Upgrade*) | T0 | user | **deployed** (user, 2026-11-13: "0.5.0 deployed fine", with the Portainer stack and the `openwebui` and `clamav` profiles); read-backs to confirm |
 | T2 | The test group's accounts (Keycloak or the gateway's sign-in) and their Open WebUI access; DoIT's admin in the admin UI | T1 | user | open |
 | T3 | DoIT's documents: the source inventory, then an upload knowledge base `support` (`internal`) with preview, first sync, run reports and the personal-data report (`02-knowledge-base.md` §5) | DoIT's files | user | open |
 | T4 | Assistant `support`: the instructions of `04-assistant.md` §3, the knowledge base's key (V39), general knowledge `fallback`, a not-found text with the real escalation links; checked in the test panel with about twenty anonymised or invented tickets | T3 | user | open |
@@ -84,7 +84,7 @@ P2 wave 1 (*P2 Broaden* below) is the code work. Beside it, what is open without
   public IT guides (2026-11-15). U1 is the largest loss: 18 % of the text is inside screenshots (19–76 % in
   step-by-step guides), none of it kept. U5 and U7 cost little. The same script (`scripts/upload-gaps/measure.py`)
   runs on DoIT's files at T6.
-- **Not tried anywhere yet:** Portainer's own *Update the stack* on an upgraded stack (the VM's move to `v0.9.0` is
+- **Not tried anywhere yet:** Portainer's own *Update the stack* on an upgraded stack (the VM's move to `v0.9.1` is
   the first), and both setup wizards completed against a real provider in one stack. CI boots and upgrades the stack
   with Compose.
 - **CI:** what the test collections of one `Kalla.AdminApi.Tests` process wait for (not CPU, thread pool, disk or

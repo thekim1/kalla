@@ -1,8 +1,8 @@
 # Handover
 
 State of the Källa work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`).
-**Last release `v0.9.0`** (2026-11-21, tag on #906's merge commit `1ed5bdd8`): the first under the names Källa and
-Fors, on Fors `v0.12.1`. `main` holds two small changes since (*State*). The
+**Last release `v0.9.1`** (2026-11-21, tag at `e9ec0597`, on Fors `v0.12.2`), the same day as `v0.9.0`, the first
+under the names Källa and Fors: 0.9.1 makes the upgrade need no SQL by hand. Nothing is unreleased on `main`. The
 user's VM runs 0.5.0. Two machines work on it: `~/research/rag` (the user's, where sessions 49 to 52 ran) and
 `thekim1`'s (stream b, often stream a, and this release's preparation). Branch `main`, remote `origin` =
 https://github.com/thekim1/kalla (HTTPS through `gh auth git-credential`, handbook *Environment notes*).
@@ -48,8 +48,8 @@ sink" monolith. Design and code live in this repo.
   Say on its pull request what you are about to write.
 - **A decision for the user is asked as four alternatives with one recommendation** (the question tool).
 
-**Open when this was written** (2026-11-21 13:00 UTC): this file's pull request (#915, the plan clean-up) and
-Dependabot's first four after the release (#911 to #914). In Fors: thekim1/fors#118, ready for review. **The user
+**Open when this was written** (2026-11-21 17:15 UTC): this file's pull request (#915, the plan clean-up) and
+Dependabot's four (#911 to #914). Nothing of the main session's is open in Fors. **The user
 ended the session here and continues with the clean-up next time.** In order:
 
 1. **#915, the plan clean-up:** its checks are green; it waits for an approval (the user's or `thekim1`'s). When it
@@ -84,22 +84,23 @@ ended the session here and continues with the clean-up next time.** In order:
    `vars.KALLA_TEST_HOST_DEPLOY_ENV`, `vars.KALLA_R1_*` and `secrets.KALLA_R1_API_KEY`. `gh variable list` shows
    none to `ume-nichlas` (both accounts here have write access, not admin); whoever set the `UME_RAG_*` ones creates
    them again (asked in #905, not answered; the user was told on 2026-11-21).
-7. **Fors:** thekim1/fors#118 (one paragraph in the upgrade guide's *0.12.0*, *Portainer*, which sends a stack that
-   also holds Källa to Källa's guide) was marked ready on the user's word and is the user's to merge. `thekim1`
-   opened the drafts #119 to #122 there the same day (two are about #112 and #113 from the quick start run); the
-   main session has not read them.
+7. **Fors is on `v0.12.2`** (2026-11-21): its stack renames the gateway's database roles itself, and `thekim1`
+   merged #119 to #123 there (the release bundle's `docs/`, the Keycloak trust store, the setup callback limit, the
+   drain, the role rename), which the main session has not read. Whether #112 and #113 are closed by them is not
+   checked. **thekim1/fors#118, the main session's note for the upgrade guide, is closed:** 0.12.2 removed the dead
+   end it warned about, and its 0.12.2 section says how a stack that also holds Källa upgrades.
 
 ### Waiting on the user
 
-- **The VM:** runs 0.5.0 (Ume.Rag) with its gateway. **`v0.9.0` is out, so it can move now** (offered to the user
-  as the next thing to do, 2026-11-21; not answered): one update by `docs/portainer.md`, *Upgrade*: the 0.5.x steps
-  (the keys' residencies, the hand-made Open WebUI client, role groups), the integration renamed from `Ume.Rag` to
-  `Kalla`, then **the services stopped and the roles renamed in consoles on the old `rag-postgres` and
-  `postgres`**, the stack stopped, its variables renamed, and one update with *Prune services*. After the role
-  rename the old stack does not start again: the way back is the backup of step 1. Never Fors 0.12.0
-  (thekim1/fors#116). Pulls that say "denied": `docker logout ghcr.io`. Portainer's own *Update the stack* has never
-  been run on an upgraded stack, so this is the step with the most to learn. **0.5.1's admin image is gone from
-  ghcr.io** (found 2026-11-18): the VM has its 0.5.0 images locally, a host that must pull them again cannot.
+- **The VM:** runs 0.5.0 (Ume.Rag) with its gateway. **It can move to `v0.9.1` now** (offered to the user as the
+  next thing to do, 2026-11-21; they chose the plan clean-up first): one update by `docs/portainer.md`, *Upgrade*:
+  back up, the 0.5.x steps (the keys' residencies, the hand-made Open WebUI client, role groups), a look through the
+  variables, then **rename the stack's variables, paste 0.9.1's file and update once**. The roles are renamed by
+  the stack's own one-shots (`kalla-roles`, and Fors 0.12.2's `roles`): no console and no SQL, which 0.9.0 still
+  needed. Read the guide's steps before the user starts: the main session has not read 0.9.1's version of them.
+  Never Fors 0.12.0 (thekim1/fors#116). Portainer's own *Update the stack* has never been run on an upgraded stack,
+  so this is the step with the most to learn. **0.5.1's admin image is gone from ghcr.io** (found 2026-11-18): the
+  VM has its 0.5.0 images locally, a host that must pull them again cannot.
 - **The live block** (the critical path to go-live, `plans/roadmap.md`): every item waits on an input, A-L1 (the
   umea.se inventory) first.
 - **The support-chatbot proposal** (`plans/proposals/support-chatbot-features.md`): F3, F4 and F8 are built. The
@@ -157,7 +158,10 @@ the reviews of #906) is in this file's history: `git log -- HANDOVER.md`.
   `--admin`: merged as `1ed5bdd8`, whose tree is `3ef38e8e`'s, tagged, and published at 10:28 UTC.
 - **The pin (#908)** compared with the release's own stack file, closed and reopened for its checks; `thekim1` merged
   it. **The handover (#904)** approved by `thekim1` and merged by the session.
-- **thekim1/fors#118:** the line for Fors's upgrade guide, marked ready on the user's word.
+- **thekim1/fors#118:** a line for Fors's upgrade guide, marked ready on the user's word and closed the same day,
+  when Fors 0.12.2 made it wrong.
+- **`v0.9.1` came out while the clean-up was open** (`thekim1`'s: #916 to #919, on Fors 0.12.2): the role renames
+  run in the stack. The main session did not review it; this file and the roadmap were brought up to it.
 - **After the release:** the first Audit run on 0.9.0's images is green (*State*); Dependabot's #911 to #914 read
   and answered as comments (*Start here* 3); the worktrees `rag-small` and `rag-902` removed.
 - **The plan clean-up** (the user's choice of what to do next): the roadmap without its finished and duplicated
@@ -219,7 +223,7 @@ the reviews of #906) is in this file's history: `git log -- HANDOVER.md`.
   -f version=X.Y.Z-dryrun -f e2e=true`, about 30 minutes, with the runners idle). The boot-only run
   (`-f portainer_boot=X.Y.Z`) takes minutes but uses that version's images already on ghcr.io, so it only fits a change
   that needs no new image.
-- **Rebuild the Portainer stack:** `sh deploy/portainer/build-stack.sh v0.12.1` (Fors's release; or its next one);
+- **Rebuild the Portainer stack:** `sh deploy/portainer/build-stack.sh v0.12.2` (Fors's release; or its next one);
   `--check` is what `deploy-checks` runs.
 - **Try Källa's wizard locally** (a throwaway volume each time): `export FakeGateway__Enabled=true
   Seed__Enabled=false Parser__Mode=off Render__Mode=off OpenWebUi__Enabled=false ClamAv__Mode=off
@@ -238,23 +242,23 @@ the reviews of #906) is in this file's history: `git log -- HANDOVER.md`.
 
 ## State
 
-- **Release:** `v0.9.0` published 2026-11-21 ([run 44892651954](https://github.com/thekim1/kalla/actions/runs/44892651954)),
-  tag at `1ed5bdd8`, on Fors `v0.12.1`: `ghcr.io/thekim1/kalla/*`, Apache-2.0. `v0.8.0` and earlier are Ume.Rag
-  (`ghcr.io/thekim1/ume-rag/*`, EUPL-1.2).
+- **Release:** `v0.9.1` published 2026-11-21 ([run 44923888580](https://github.com/thekim1/kalla/actions/runs/44923888580)),
+  tag at `e9ec0597`, on Fors `v0.12.2`; `v0.9.0` the same morning (tag at `1ed5bdd8`, on Fors `v0.12.1`). Both are
+  `ghcr.io/thekim1/kalla/*`, public, Apache-2.0. `v0.8.0` and earlier are Ume.Rag (`ghcr.io/thekim1/ume-rag/*`,
+  EUPL-1.2).
 - **Audit:** green on 2026-11-21 ([run 44905272366](https://github.com/thekim1/kalla/actions/runs/44905272366)),
-  the first run on 0.9.0's images and the first green one since the image scan was added (#819). The dated
-  exceptions are in *Watch*.
+  the first run on 0.9.0's images and the first green one since the image scan was added (#819). 0.9.1's images
+  are scanned from the next run. The dated exceptions are in *Watch*.
 - **What a deployer types in Portainer:** 1 value since 0.7.0 (`FORS_DOMAIN` since the rename, no secret).
-- **On `main`, unreleased** (notes in `changes/`): the guides say that Källa's images are public on ghcr.io (#909),
-  and B-60 (#910: the admin shows evaluation questions whose documents were deleted). The compose files default to
-  0.9.0's images (#908).
+- **On `main`, unreleased:** nothing (`changes/` holds only its README); the compose files default to 0.9.1's
+  images (#919).
 - **Migrations in 0.9.0:** `CollectionSlugUniqueAmongLive`, `AssistantsDeletedAt`,
   `PurgeDeletedSourcesAndCollections`; *Rolling update: no* (the rename).
 - **Queues:** stream a: the live block (A-L1 to A-L10), A-34 and A-35 with only their live checks open. Stream b:
   B-54 to B-59 (P2 wave 1), B-42 to B-46 (the gateway phases' live checks) and its live items. Main: M-4.
 - **Open issues that matter:** #781 (watch), #667 (M-16's issue: the work is done, the issue is `thekim1`'s to
   close), #333, #511, #580 and #550. In Fors: #112 and #113. Open pull requests: this file's and Dependabot's #911
-  to #914; in Fors #118 (ready) and `thekim1`'s drafts #119 to #122.
+  to #914; none in Fors.
 - **Dependabot works:** grouped pull requests; `.github/dependabot.yml`'s header lists where a pin is repeated.
   Playwright is bumped by hand, in the package list, the renderer image and its lockfile together (#907).
 - **The user's machine (`~/research/rag`):** the main clone on `main` and one more checkout, `~/research/rag-docs`
@@ -278,9 +282,8 @@ the reviews of #906) is in this file's history: `git log -- HANDOVER.md`.
     `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on PATH).
 - **`thekim1`'s machine:** a fresh clone after the rename; its development data starts empty under `~/.kalla`.
 - **Fors on the user's machine:** `~/git/llmgateway` (and the worktrees `-100`, `-100-deploy`, `-101`) are clones of
-  `thekim1/fors` on merged branches; fetched through `v0.12.1` (read a release with `git show v0.12.1:<path>`). They
-  can go, or move to `main`. `~/git/llmgateway-kalla-note` holds the branch of the draft #118 and stays until it is
-  merged. The remote is still named `thekim1/llmgateway` there (GitHub redirects); push with the `gh` credential
-  helper. Merges and releases in Fors are the user's; its rules: draft pull requests (drafts run
+  `thekim1/fors` on merged branches; fetched through `v0.12.2` (read a release with `git show v0.12.2:<path>`). They
+  can go, or move to `main`. The remote is still named `thekim1/llmgateway` there (GitHub redirects); push with
+  the `gh` credential helper. Merges and releases in Fors are the user's; its rules: draft pull requests (drafts run
   no CI), checks run locally first, squash-merge. Ports 5000 and 5173 are taken here
   (`ASPNETCORE_URLS=http://127.0.0.1:0` for its IntegrationTests).

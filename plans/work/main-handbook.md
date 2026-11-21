@@ -82,8 +82,8 @@ learned, not every session (the session's state is in [`../../HANDOVER.md`](../.
   -h localhost -U postgres -d ragdb` (schemas `config`, `content`, `chat`).
 - **UI checks on realistic data:** copy the dev volume to a throwaway one (`docker run --rm -v <dev>:/from:ro -v
   <copy>:/to alpine cp -a /from/. /to/`), start the FakeGateway stack on it, and remove it afterwards.
-- **Fors:** `~/git/llmgateway` is a clone of `thekim1/fors` on a merged feature branch, fetched through `v0.12.1`:
-  read a release with `git show v0.12.1:<path>`. Where its documents and its code differ, follow the code.
+- **Fors:** `~/git/llmgateway` is a clone of `thekim1/fors` on a merged feature branch, fetched through `v0.12.2`:
+  read a release with `git show v0.12.2:<path>`. Where its documents and its code differ, follow the code.
 
 ## Lessons
 
