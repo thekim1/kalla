@@ -1,0 +1,40 @@
+<Project>
+  <!--
+    libatomic.so.1 for Playwright's Node driver in the worker image (#927). Microsoft.Playwright 1.65 bundles a Node
+    (.playwright/node/linux-x64/node) that links libatomic.so.1, and the chiseled base image has no libatomic, so every
+    render failed with "error while loading shared libraries: libatomic.so.1" (render.unavailable). Playwright's own
+    `playwright.ps1 install` with deps does not apply: the worker runs no browser (kalla-renderer does), the driver's library is only
+    in WebKit's package list, and the chiseled image has no shell or apt.
+
+    On a linux-x64 publish this target downloads Ubuntu noble's libatomic1 (the gcc-14 build of the base image's
+    release), checks its SHA-256 against the value below (the archive's Packages index), and publishes the library next
+    to the driver. The image sets LD_LIBRARY_PATH to that directory (Kalla.Worker.csproj). Update the version, URL and
+    hash together. Licence: GPL-3.0-or-later WITH GCC-exception-3.1 (the GCC Runtime Library Exception), which allows
+    shipping it with the image.
+  -->
+  <PropertyGroup>
+    <KallaLibatomicVersion>14.2.0-4ubuntu2~24.04.1</KallaLibatomicVersion>
+    <KallaLibatomicUrl>http://archive.ubuntu.com/ubuntu/pool/main/g/gcc-14/libatomic1_14.2.0-4ubuntu2~24.04.1_amd64.deb</KallaLibatomicUrl>
+    <KallaLibatomicSha256>fe49cbbc7be753528380c724a8eef5f1e31dffa9221f692c5069048d81c7449d</KallaLibatomicSha256>
+    <KallaLibatomicDir>$(BaseIntermediateOutputPath)libatomic/</KallaLibatomicDir>
+    <KallaPlaywrightNodeDir>.playwright/node/linux-x64/</KallaPlaywrightNodeDir>
+  </PropertyGroup>
+
+  <Target Name="KallaPublishLibatomic" BeforeTargets="ComputeResolvedFilesToPublishList"
+          Condition="'$(RuntimeIdentifier)' == 'linux-x64'">
+    <DownloadFile SourceUrl="$(KallaLibatomicUrl)" DestinationFolder="$(KallaLibatomicDir)" DestinationFileName="libatomic1.deb"
+                  SkipUnchangedFiles="true" Retries="3" />
+    <GetFileHash Files="$(KallaLibatomicDir)libatomic1.deb" Algorithm="SHA256">
+      <Output TaskParameter="Hash" PropertyName="_KallaLibatomicHash" />
+    </GetFileHash>
+    <Error Condition="'$(_KallaLibatomicHash.ToLowerInvariant())' != '$(KallaLibatomicSha256)'"
+           Text="libatomic1 $(KallaLibatomicVersion): SHA-256 $(_KallaLibatomicHash) is not the pinned $(KallaLibatomicSha256)" />
+    <!-- A .deb is an ar archive; its data member is a zstd tarball (ar and tar with zstd are on the Linux build hosts). -->
+    <Exec Command="ar p libatomic1.deb data.tar.zst | tar --zstd -x -f - ./usr/lib/x86_64-linux-gnu/libatomic.so.1.2.0"
+          WorkingDirectory="$(KallaLibatomicDir)" />
+    <ItemGroup>
+      <ResolvedFileToPublish Include="$(KallaLibatomicDir)usr/lib/x86_64-linux-gnu/libatomic.so.1.2.0"
+                             RelativePath="$(KallaPlaywrightNodeDir)libatomic.so.1" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+</Project>

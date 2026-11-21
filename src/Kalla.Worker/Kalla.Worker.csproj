@@ -29,4 +29,9 @@
     <ProjectReference Include="..\Kalla.Pipelines\Kalla.Pipelines.csproj" />
     <ProjectReference Include="..\Kalla.Retrieval\Kalla.Retrieval.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Playwright's Node driver finds the libatomic.so.1 that Libatomic.targets publishes next to it (#927). -->
+    <ContainerEnvironmentVariable Include="LD_LIBRARY_PATH" Value="/app/.playwright/node/linux-x64" />
+  </ItemGroup>
+  <Import Project="Libatomic.targets" />
 </Project>
