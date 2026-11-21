@@ -54,15 +54,22 @@ In order:
 
 1. **Release `v0.9.0`: finish #906.** The user decided on 2026-11-21, for #906: *when its checks and a dry run are
    green, the main session approves it as `Crotalus`, merges it, and the go-ahead for the tag is given with that;
-   `thekim1` pushes the tag.* Where it stood at 2026-11-21 00:06 UTC:
-   - #906's head is `24078efe` (the upgrade order, below). In the dry run on that commit,
-     [44839739980](https://github.com/thekim1/kalla/actions/runs/44839739980), the `build` job was green: *Smoke test
-     the bundle*, *Boot the Portainer stack* and **the upgrade from 0.6.0's stack with the roles renamed first**,
-     which had failed in the run before
-     ([44835972377](https://github.com/thekim1/kalla/actions/runs/44835972377)). Its `backend`, `renderer` and
-     `parser-image` jobs and #906's own checks were still running.
-   - **Check that the run had the browser tests** (an `e2e` job): a release needs a dry run with `e2e=true`
-     (*How to*). If it had none, ask `thekim1` for one, or dispatch it with the runners idle.
+   `thekim1` pushes the tag.* Where it stood at 2026-11-21 00:40 UTC:
+   - #906's head is `5ffe3506`. The dry run on `24078efe`,
+     [44839739980](https://github.com/thekim1/kalla/actions/runs/44839739980), was **green in everything but the
+     browser tests**: *Smoke test the bundle*, *Boot the Portainer stack*, **the upgrade from 0.6.0's stack with the
+     roles renamed first** (which failed in the run before,
+     [44835972377](https://github.com/thekim1/kalla/actions/runs/44835972377)), `verify` and the parser. In `e2e` the
+     pilot and accessibility suites passed and the setup wizard's stopped at `setup.spec.ts:44`, which waited for
+     the realm `ume` (it is `fors`); its six later tests did not run.
+   - `thekim1` fixed that line (`5ffe3506`) and a recall pinned at 1.0 in `HnswIndexHealthTests` (`ccb452fe`), and
+     started `e2e.yml` alone on the branch:
+     [44844546882](https://github.com/thekim1/kalla/actions/runs/44844546882). **Read that run first**, then #906's
+     own checks on its head.
+   - **What counts as green** (the main session's reading of the user's condition, by the user's rule of 2026-11-15
+     to fix a failing release check in isolation instead of another 30-minute dry run): #906's checks green on its
+     head, and an `e2e.yml` run green on that head or a later one, with the release steps shown by 44839739980. Say
+     so when approving. If the user or `thekim1` wants a full dry run again instead, that is theirs to ask for.
    - If it is red: diagnose it and say so on #906. `thekim1` asked that nobody else push to its branch, and the user
      chose that `thekim1` makes the fixes there.
    - If it is green and #906 is still open: approve as `Crotalus`, merge (squash, not `--admin`), and write on #906
@@ -154,8 +161,9 @@ On `~/research/rag`, as the main session, beside `thekim1`'s machine, which did 
 - **Closed #878 and #894** with an evidence comment.
 - **The release preparation (#906, `thekim1`'s), reviewed four times.** It was opened at the same hour as #905 and
   folded the upgrade note as it was before #905; it was rebuilt on `main` after both merges. Its first dry run that
-  could reach the upgrade test failed there (the next one, with the new order, passed it), and the fault was in the
-  upgrade as documented: in the joined stack
+  could reach the upgrade test failed there (the next one, with the new order, passed it and failed only in the
+  setup wizard's browser test, on a realm name that the main session's sweep of #905 had missed), and the fault was
+  in the upgrade as documented: in the joined stack
   `kalla-bootstrap` waits for the gateway's `migrations`, which fail until the gateway's roles are renamed, so the
   volumes were never copied and `kalla-postgres`, where the guide said to rename the roles, never started.
 - **The user's decisions (2026-11-21):** the Portainer upgrade renames the roles first, on the old databases with
