@@ -16,8 +16,10 @@ import { EVALUATION } from '@/utils/labels'
 import QuestionDialog from './QuestionDialog.vue'
 
 // The questions table (admin design §7.1, keyset): question, layer, expected documents, state. Editors add, change and
-// retire human questions; a generated question is changed by saving it as a human one.
-const props = defineProps<{ collectionId: string; canEdit: boolean }>()
+// retire human questions; a generated question is changed by saving it as a human one. A stale human question (not
+// retired) expects a deleted document (processing design §13.3): the editor re-points it or retires it; `deleted` is
+// their count from the overview, with a shortcut to them.
+const props = defineProps<{ collectionId: string; canEdit: boolean; deleted?: number }>()
 const emit = defineEmits<{ (e: 'changed'): void }>()
 const ui = useUiStore()
 const questions = useLoadable<EvaluationQuestion[]>([])
@@ -61,6 +63,14 @@ async function load(append = false): Promise<void> {
   })
 }
 
+/** A human question whose expected document was deleted; a generated stale question is retired at its top-up. */
+const documentDeleted = (row: EvaluationQuestion) => row.layer === 'human' && row.state === 'stale' && row.retiredAt === null
+
+function showDeleted(): void {
+  layer.value = 'human'
+  state.value = 'stale'
+}
+
 function openEditor(question: EvaluationQuestion | null): void {
   editing.value = question
   dialogOpen.value = true
@@ -97,6 +107,13 @@ defineExpose({ reload: () => load() })
       <FilterSelect v-model="layer" :label="EVALUATION.layer" :options="layerOptions" />
       <FilterSelect v-model="state" :label="EVALUATION.state" :options="stateOptions" />
     </div>
+    <div
+      v-if="deleted && !(layer === 'human' && state === 'stale')" class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-tile border border-border p-4"
+      data-test="deleted-notice"
+    >
+      <p class="text-small">{{ EVALUATION.deletedNotice(deleted) }}</p>
+      <UiButton size="sm" data-test="show-deleted" @click="showDeleted">{{ EVALUATION.showDeleted }}</UiButton>
+    </div>
     <AsyncState
       :loading="questions.loading.value && questions.data.value.length === 0" :error="questions.error.value"
       :empty="questions.data.value.length === 0" :empty-text="EVALUATION.noSet" @retry="load()"
@@ -112,6 +129,7 @@ defineExpose({ reload: () => load() })
         </template>
         <template #cell-state="{ row }">
           <UiBadge :tone="row.state === 'active' ? 'ok' : row.state === 'stale' ? 'warn' : 'neutral'" :label="EVALUATION.states[row.state] ?? row.state" />
+          <span v-if="documentDeleted(row)" class="block text-small text-fg-2" data-test="document-deleted">{{ EVALUATION.documentDeleted }}</span>
         </template>
         <template #cell-actions="{ row }">
           <span v-if="row.state !== 'retired'" class="flex justify-end gap-2">

@@ -28,9 +28,9 @@ public static class EvaluationEndpoints
                 var sets = admin.Db.EvaluationSets.AsNoTracking().Where(s => s.CollectionId == id).Select(s => s.Id);
                 var counts = await admin.Db.EvaluationQuestions.AsNoTracking().Where(q => sets.Contains(q.SetId)).GroupBy(q => new { q.Layer, q.State })
                     .Select(g => new QuestionCount(g.Key.Layer, g.Key.State, g.Count())).ToListAsync(ct);
-                var runs = await admin.Db.EvaluationRuns.AsNoTracking().Where(r => sets.Contains(r.SetId)).OrderByDescending(r => r.StartedAt).Take(10)
-                    .Select(r => EvaluationRunDto.Of(r)).ToListAsync(ct);
-                return new EvaluationOverview(await sets.AnyAsync(ct), counts, runs);
+                var runs = await admin.Db.EvaluationRuns.AsNoTracking().Where(r => sets.Contains(r.SetId)).OrderByDescending(r => r.StartedAt).Take(10).ToListAsync(ct);
+                var gone = await DocumentGoneAsync(admin, runs, ct);
+                return new EvaluationOverview(await sets.AnyAsync(ct), counts, [.. runs.Select(r => EvaluationRunDto.Of(r, gone.GetValueOrDefault(r.Id)))]);
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("GetEvaluation").WithSummary("A collection's evaluation set by layer and state, and its latest runs");
 
@@ -155,7 +155,11 @@ public static class EvaluationEndpoints
         var runs = api.MapGroup("/evaluation-runs").WithTags("Evaluation");
 
         runs.MapGet("/{runId:guid}", async (Guid runId, AdminContext admin, CancellationToken ct) =>
-                EvaluationRunDto.Of(await RunAsync(admin, runId, ct)))
+            {
+                var run = await RunAsync(admin, runId, ct);
+                var gone = await DocumentGoneAsync(admin, [run], ct);
+                return EvaluationRunDto.Of(run, gone.GetValueOrDefault(run.Id));
+            })
             .RequireAuthorization(AdminPolicies.Read).WithName("GetEvaluationRun").WithSummary("A run: recall@k and MRR with counts, compared run");
 
         runs.MapGet("/{runId:guid}/results", async (Guid runId, AdminContext admin, CancellationToken ct) =>
@@ -187,6 +191,55 @@ public static class EvaluationEndpoints
         var sets = admin.Db.EvaluationSets.Where(s => collections.Contains(s.CollectionId)).Select(s => s.Id);
         return await admin.Db.EvaluationRuns.AsNoTracking().SingleOrDefaultAsync(r => r.Id == runId && sets.Contains(r.SetId), ct)
             ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+    }
+
+    /// <summary>
+    /// The runs' <c>documentGone</c> counts (processing design §13.3; admin design §7.2): the questions a run left out because an
+    /// expected document is gone. The count is only in the <c>eval</c> job's result (<c>eval.run.result</c> top-level,
+    /// <c>eval.on-demand.result</c> <c>runs[]</c>), not on <c>EvaluationRuns</c>, so a run whose job is past retention (7 days)
+    /// has none (null). Only jobs completed since the oldest run started are read.
+    /// </summary>
+    private static async Task<Dictionary<Guid, int?>> DocumentGoneAsync(AdminContext admin, List<EvaluationRun> runs, CancellationToken ct)
+    {
+        var gone = new Dictionary<Guid, int?>();
+        if (runs.Count == 0)
+        {
+            return gone;
+        }
+
+        var ids = runs.Select(r => r.Id.ToString("D")).ToArray();
+        var since = runs.Min(r => r.StartedAt);
+        var results = await admin.Db.Database.SqlQuery<string>($"""
+            SELECT j."Result"::text AS "Value" FROM content."Jobs" j
+            WHERE j."Class" = 'eval' AND j."State" = 'succeeded' AND j."CompletedAt" >= {since} AND j."Result" IS NOT NULL
+              AND (j."Result" ->> 'evaluationRunId' = ANY({ids})
+                   OR EXISTS (SELECT 1 FROM jsonb_array_elements(CASE jsonb_typeof(j."Result" -> 'runs') WHEN 'array' THEN j."Result" -> 'runs' ELSE '[]'::jsonb END) r
+                              WHERE r ->> 'evaluationRunId' = ANY({ids})))
+            """).ToListAsync(ct);
+        foreach (var result in results)
+        {
+            using var document = JsonDocument.Parse(result);
+            var root = document.RootElement;
+            Read(root);
+            if (root.TryGetProperty("runs", out var each) && each.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var run in each.EnumerateArray())
+                {
+                    Read(run);
+                }
+            }
+        }
+
+        return gone;
+
+        void Read(JsonElement run)
+        {
+            if (run.ValueKind == JsonValueKind.Object && run.TryGetProperty("evaluationRunId", out var id) && id.TryGetGuid(out var runId))
+            {
+                // documentGone defaults to 0 in the contracts.
+                gone[runId] = run.TryGetProperty("documentGone", out var count) && count.TryGetInt32(out var n) ? n : 0;
+            }
+        }
     }
 
     /// <summary>
@@ -315,14 +368,17 @@ public sealed record EvaluationQuestionDto(Guid Id, string Layer, string State, 
 /// <summary>
 /// A run. <see cref="Candidate"/> marks an on-demand run under unsaved settings; <see cref="ThresholdProposal"/> is the
 /// worker's coverage-threshold proposal as stored (<c>CoverageProposal</c>: the proposed <c>coverageMaxDistance</c> and
-/// <c>coverageMinKeywordScore</c> with the questions each misclassifies; admin design §7.1).
+/// <c>coverageMinKeywordScore</c> with the questions each misclassifies; admin design §7.1). <see cref="DocumentGone"/> is the
+/// questions the run left out because an expected document is gone (processing design §13.3), read from the run's job result;
+/// null once the job is past retention or while the run is unfinished.
 /// </summary>
 public sealed record EvaluationRunDto(
     Guid Id, string Kind, string Variant, int? QuestionCount, int K, int? Found, decimal? RecallAtK, decimal? Mrr, int? Wins, int? Losses, Guid? ComparedRunId,
-    bool Candidate, JsonElement? ThresholdProposal, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt)
+    bool Candidate, JsonElement? ThresholdProposal, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt, int? DocumentGone)
 {
-    public static EvaluationRunDto Of(EvaluationRun r) => new(r.Id, r.Kind, r.Variant, r.QuestionCount, r.K, r.Found, r.RecallAtK, r.Mrr, r.Wins, r.Losses,
-        r.ComparedRunId, r.Candidate, r.ThresholdProposal is { } proposal ? JsonDocument.Parse(proposal).RootElement.Clone() : null, r.StartedAt, r.FinishedAt);
+    public static EvaluationRunDto Of(EvaluationRun r, int? documentGone) => new(r.Id, r.Kind, r.Variant, r.QuestionCount, r.K, r.Found, r.RecallAtK, r.Mrr, r.Wins,
+        r.Losses, r.ComparedRunId, r.Candidate, r.ThresholdProposal is { } proposal ? JsonDocument.Parse(proposal).RootElement.Clone() : null, r.StartedAt,
+        r.FinishedAt, documentGone);
 }
 
 /// <summary>

@@ -761,6 +761,8 @@ export interface EvaluationRun {
   thresholdProposal: CoverageProposal | null
   startedAt: IsoDateTime
   finishedAt: IsoDateTime | null
+  /** Questions left out because an expected document was deleted (processing design §13.3); null once the run's job is past retention. */
+  documentGone: number | null
 }
 
 /** A proposed threshold and how many human questions it misclassifies. */

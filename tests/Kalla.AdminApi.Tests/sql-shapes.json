@@ -9,6 +9,7 @@
   "AdminApi.EmbeddingProfileEndpoints.RecordedCanaryAsync#1": ["Value real[]"],
   "AdminApi.EmbeddingProfileEndpoints.UpdateAsync#1": ["?column? integer"],
   "AdminApi.EmbeddingProfileEndpoints.UpdateAsync#3": ["rag_reset_profile void"],
+  "AdminApi.EvaluationEndpoints.DocumentGoneAsync#1": ["Value text"],
   "AdminApi.EvaluationEndpoints.EditAsync#1": ["Value integer"],
   "AdminApi.GatewayEndpoints.StatusAsync#1": ["Value uuid"],
   "AdminApi.GatewayModelSync.RecordCanariesAsync#2": ["Value uuid"],

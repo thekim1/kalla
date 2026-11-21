@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { api } from '@/api'
+import { isApiError } from '@/api/client'
 import type { DocumentSummary, EvaluationQuestion } from '@/api/types'
 import InlineError from '@/components/ui/InlineError.vue'
 import TextAreaField from '@/components/ui/TextAreaField.vue'
@@ -12,12 +13,13 @@ import { problemMessage } from '@/utils/problem'
 
 // Add or change a human test question (admin design §7.1): the question, an optional expected answer, and up to 10
 // expected documents picked by title search; none means the question expects "not found". Editing a generated
-// question saves it as a human one (a new question; the API's edit-eval-question only changes the human layer).
+// question saves it as a human one (a new question; the API's edit-eval-question only changes the human layer). An expected
+// document that was deleted (404) is marked so the editor removes it and picks another (processing design §13.3).
 const props = defineProps<{ open: boolean; collectionId: string; question: EvaluationQuestion | null }>()
 const emit = defineEmits<{ (e: 'update:open', value: boolean): void; (e: 'saved'): void }>()
 
 const MAX_DOCUMENTS = 10
-interface Picked { id: string; title: string }
+interface Picked { id: string; title: string; deleted?: boolean }
 
 const text = ref('')
 const answer = ref('')
@@ -47,8 +49,11 @@ watch(
     const ids = props.question?.expectedDocumentIds ?? []
     picked.value = ids.map((id) => ({ id, title: id }))
     // Titles for the expected documents (at most 10 requests).
-    const details = await Promise.all(ids.map((id) => api.documents.get(id).catch(() => null)))
-    picked.value = ids.map((id, i) => ({ id, title: details[i] ? titleOf(details[i]!, id) : id }))
+    const details = await Promise.all(ids.map((id) => api.documents.get(id).catch((e: unknown) => (isApiError(e) && e.status === 404 ? 'deleted' : null))))
+    picked.value = ids.map((id, i) => {
+      const d = details[i]
+      return d === 'deleted' ? { id, title: EVALUATION.deletedDocument, deleted: true } : { id, title: d ? titleOf(d, id) : id }
+    })
   },
   { immediate: true },
 )
@@ -76,13 +81,15 @@ function add(d: DocumentSummary): void {
   picked.value = [...picked.value, { id: d.id, title: titleOf(d, d.id) }]
 }
 
+const hasDeleted = () => picked.value.some((p) => p.deleted)
+
 function remove(id: string): void {
   picked.value = picked.value.filter((p) => p.id !== id)
 }
 
 async function save(): Promise<void> {
   textError.value = text.value.trim() ? null : EVALUATION.questionRequired
-  if (textError.value) return
+  if (textError.value || hasDeleted()) return
   busy.value = true
   error.value = null
   const body = { question: text.value.trim(), expectedAnswer: answer.value.trim() || null, expectedDocumentIds: picked.value.map((p) => p.id) }
@@ -110,11 +117,12 @@ async function save(): Promise<void> {
       <p class="mb-2 text-small text-fg-2">{{ EVALUATION.expectedHint }}</p>
       <ul v-if="picked.length" class="mb-3 grid gap-1" data-test="picked">
         <li v-for="p in picked" :key="p.id" class="flex items-center justify-between gap-2 text-small">
-          <span class="break-all">{{ p.title }}</span>
+          <span class="break-all" :class="{ 'text-warn': p.deleted }" :data-test="p.deleted ? 'deleted-document' : undefined">{{ p.title }}</span>
           <UiButton size="sm" variant="quiet" :aria-label="EVALUATION.removeDocument(p.title)" @click="remove(p.id)">{{ EVALUATION.retire }}</UiButton>
         </li>
       </ul>
       <p v-else class="mb-3 text-small text-fg-3">{{ EVALUATION.expectedNone }}</p>
+      <InlineError v-if="hasDeleted()" :message="EVALUATION.removeDeleted" class="mb-3" />
       <TextField id="eval-document-search" v-model="search" :label="EVALUATION.documentSearch" :disabled="picked.length >= MAX_DOCUMENTS" />
       <p v-if="picked.length >= MAX_DOCUMENTS" class="mt-1 text-small text-fg-2">{{ EVALUATION.maxDocuments }}</p>
       <ul v-if="found.length" class="mt-2 grid gap-1" data-test="found">

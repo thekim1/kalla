@@ -315,4 +315,62 @@ public sealed class EvaluationEndpointsTests(AdminDatabaseFixture database, Admi
         var latest = (await admin.GetFromJsonAsync<JsonElement>($"/api/collections/{seed.Collection}/evaluation", Ct)).GetProperty("latestRuns")[0];
         latest.GetProperty("thresholdProposal").GetProperty("answerable").GetInt32().ShouldBe(8);
     }
+
+    /// <summary>
+    /// A question whose expected document was deleted (processing design §13.3, admin design §7.1, §7.2; #893): the human one is
+    /// <c>stale</c> without <c>RetiredAt</c>, the generated one retired; each run carries its job result's <c>documentGone</c>
+    /// (eval publish-report/nightly top-level, on-demand <c>runs[]</c>), and null once the job is gone.
+    /// </summary>
+    [Fact]
+    public async Task Stale_human_questions_and_each_runs_document_gone_count_are_shown()
+    {
+        var seed = await SeedAsync();
+        using var admin = await AdminDatabaseFixture.UserAsync(host.Factory, RagRoles.DepartmentAdmin, seed.Code);
+        var path = $"/api/collections/{seed.Collection}/evaluation";
+        await using var db = TestPostgres.Context(database.Connection(null));
+        var set = await db.EvaluationSets.AsNoTracking().SingleAsync(s => s.CollectionId == seed.Collection, Ct);
+        var human = new EvaluationQuestion
+        {
+            SetId = set.Id, Classification = "public", Layer = EvaluationLayers.Human, Question = "Var finns blanketten?", State = EvaluationQuestionStates.Stale,
+            ExpectedDocumentIds = [seed.Document],
+        };
+        db.EvaluationQuestions.Add(human);
+        await db.EvaluationQuestions.Where(q => q.Id == seed.Generated)
+            .ExecuteUpdateAsync(u => u.SetProperty(q => q.State, EvaluationQuestionStates.Stale).SetProperty(q => q.RetiredAt, DateTimeOffset.UtcNow), Ct);
+
+        var now = DateTimeOffset.UtcNow;
+        var nightly = new EvaluationRun { SetId = set.Id, Classification = "public", Kind = "nightly", StartedAt = now.AddMinutes(-30), FinishedAt = now.AddMinutes(-29) };
+        var onDemand = new EvaluationRun { SetId = set.Id, Classification = "public", Kind = "on-demand", StartedAt = now.AddMinutes(-10), FinishedAt = now.AddMinutes(-9) };
+        var old = new EvaluationRun { SetId = set.Id, Classification = "public", Kind = "nightly", StartedAt = now.AddDays(-9), FinishedAt = now.AddDays(-9) };
+        db.EvaluationRuns.AddRange(nightly, onDemand, old);
+        Job Succeeded(object result, DateTimeOffset completed) => new()
+        {
+            Class = JobClasses.Eval, DepartmentId = seed.Department, Classification = "public", State = JobStates.Succeeded, EnqueuedAt = completed, AvailableAt = completed,
+            CompletedAt = completed, Payload = $$"""{"kind": "nightly", "collectionId": "{{seed.Collection}}"}""", Result = Kalla.Pipelines.Json.ContractJson.Serialize(result),
+        };
+        db.Jobs.AddRange(
+            Succeeded(new Kalla.Pipelines.Jobs.EvalRunResult { EvaluationRunId = nightly.Id, QuestionCount = 4, Found = 3, DocumentGone = 2 }, nightly.FinishedAt.Value),
+            Succeeded(new Kalla.Pipelines.Jobs.EvalOnDemandResult
+            {
+                Runs = [new Kalla.Pipelines.Jobs.EvaluationRunRef { Variant = Kalla.Pipelines.Jobs.EvaluationVariant.Hybrid, EvaluationRunId = onDemand.Id, QuestionCount = 5, Found = 4, DocumentGone = 1 }],
+            }, onDemand.FinishedAt.Value));
+        await db.SaveChangesAsync(Ct);
+
+        // The questions table: the human stale question is not retired, the generated one is.
+        var stale = (await admin.GetFromJsonAsync<JsonElement>($"{path}/questions?state=stale", Ct)).GetProperty("items").EnumerateArray()
+            .ToDictionary(q => q.GetProperty("layer").GetString()!);
+        (stale["human"].GetProperty("id").GetGuid(), stale["human"].GetProperty("retiredAt").ValueKind).ShouldBe((human.Id, JsonValueKind.Null));
+        stale["generated"].GetProperty("retiredAt").ValueKind.ShouldBe(JsonValueKind.String);
+        var counts = (await admin.GetFromJsonAsync<JsonElement>(path, Ct)).GetProperty("questions").EnumerateArray()
+            .Select(c => (c.GetProperty("layer").GetString(), c.GetProperty("state").GetString(), c.GetProperty("count").GetInt32())).ToList();
+        counts.ShouldContain(("human", "stale", 1));
+
+        // The report card's count: from each run's job result; a run past job retention has none.
+        var runs = (await admin.GetFromJsonAsync<JsonElement>(path, Ct)).GetProperty("latestRuns").EnumerateArray()
+            .ToDictionary(r => r.GetProperty("id").GetGuid(), r => r.GetProperty("documentGone"));
+        runs[nightly.Id].GetInt32().ShouldBe(2);
+        runs[onDemand.Id].GetInt32().ShouldBe(1);
+        runs[old.Id].ValueKind.ShouldBe(JsonValueKind.Null);
+        (await admin.GetFromJsonAsync<JsonElement>($"/api/evaluation-runs/{onDemand.Id}", Ct)).GetProperty("documentGone").GetInt32().ShouldBe(1);
+    }
 }

@@ -28,7 +28,7 @@ const run = (state: string): RunSummary => ({
 })
 const evalRun = (id: string, recall: number, compared: string | null, startedAt: string): EvaluationRun => ({
   id, kind: 'publish-report', variant: 'hybrid', questionCount: 86, k: 5, found: 67, recallAtK: recall, mrr: 0.6, wins: 4, losses: 1, comparedRunId: compared,
-  candidate: false, thresholdProposal: null, startedAt, finishedAt: startedAt,
+  candidate: false, thresholdProposal: null, startedAt, finishedAt: startedAt, documentGone: null,
 })
 
 function signIn(roles: string[]) {

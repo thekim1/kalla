@@ -12,7 +12,8 @@ import { layerMetrics, rankChanges, type LayerMetrics } from './metrics'
 // The evaluation report card (admin design §7.2): led by the human layer (the gold set: recall@10 on answerable
 // questions, false not-found, unanswerable answered "not found"; weakness review §2), then the generated layer as a
 // regression signal, the questions that got worse or better, "Om utvärderingen", and the coverage-threshold proposal
-// as numbers (§7.1), which the editor takes to Sökinställningar.
+// as numbers (§7.1), which the editor takes to Sökinställningar. Questions whose expected document was deleted are left
+// out of the run and counted apart (`documentGone`, processing design §13.3).
 const props = defineProps<{ run: EvaluationRun; compared: EvaluationRun | null; canEdit?: boolean }>()
 const emit = defineEmits<{ (e: 'use-proposal', values: { coverageMaxDistance?: number; coverageMinKeywordScore?: number }): void }>()
 
@@ -96,6 +97,7 @@ const resultColumns: Column[] = [
       <template v-if="answerable < MIN_COMPARABLE">{{ EVALUATION.tooFew }}</template>
       <template v-else>{{ EVALUATION.summary(results.length, changes.worse.length, changes.better.length) }}</template>
     </p>
+    <p v-if="run.documentGone" class="mb-3 text-small text-fg-2" data-test="document-gone">{{ EVALUATION.documentGone(run.documentGone) }}</p>
 
     <details v-if="changes.worse.length" class="mb-2">
       <summary class="cursor-pointer">{{ EVALUATION.worse(changes.worse.length) }}</summary>

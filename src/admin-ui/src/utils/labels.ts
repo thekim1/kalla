@@ -1760,6 +1760,8 @@ export const EVALUATION = {
   change: (before: string, after: string) => `${before} → ${after}`,
   summary: (n: number, worse: number, better: number) => `${questionCount(n)} · ${worse} worse, ${better} better`,
   tooFew: 'Too few questions to compare.',
+  documentGone: (n: number) =>
+    n === 1 ? '1 question left out: its document was deleted' : `${n} questions left out: their documents were deleted`,
   worse: (n: number) => `Questions that got worse (${n})`,
   better: (n: number) => `Questions that got better (${n})`,
   rankChange: (before: string, after: string) => `place ${before} → ${after}`,
@@ -1786,6 +1788,14 @@ export const EVALUATION = {
   state: 'State',
   expected: 'Expected documents',
   expectedNone: 'no answer expected',
+  documentDeleted: 'Its expected document was deleted',
+  deletedNotice: (n: number) =>
+    n === 1
+      ? '1 question expects a document that was deleted. It is left out of the evaluation until you choose another document or remove it.'
+      : `${n} questions expect a document that was deleted. They are left out of the evaluation until you choose another document or remove them.`,
+  showDeleted: 'Show them',
+  deletedDocument: 'Deleted document',
+  removeDeleted: 'Remove the deleted document and choose another one.',
   expectedCount: (n: number) => (n === 1 ? '1 document' : `${n} documents`),
   allLayers: 'All layers',
   allStates: 'All states',
