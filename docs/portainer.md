@@ -1,6 +1,6 @@
 # Deploying and upgrading with Portainer (0.9.x)
 
-How to run Källa with Fors `v0.12.1` as one Portainer stack: a first deploy on a new VM, and the upgrade
+How to run Källa with Fors `v0.12.2` as one Portainer stack: a first deploy on a new VM, and the upgrade
 of a `0.5.x` or later stack in one update (an older one: *Upgrade from before 0.5.0*). The stack is configured only
 through environment variables, for hosts where `init-deployment.sh` can't run. Background and the full variable list:
 the header of [`deploy/portainer/compose.portainer.yaml`](../deploy/portainer/compose.portainer.yaml), the runbook's
@@ -13,9 +13,9 @@ the header of [`deploy/portainer/compose.portainer.yaml`](../deploy/portainer/co
 
 ## Which file
 
-Use the **`compose.portainer.yaml` asset of the `v0.9.0` release** (or later), or the same file in the repository at
+Use the **`compose.portainer.yaml` asset of the `v0.9.1` release** (or later), or the same file in the repository at
 `deploy/portainer/compose.portainer.yaml` once the release's pin PR has merged. It pins the gateway's images
-(`v0.12.1` in the `v0.9.0` asset; `v0.11.0` in the `v0.8.0` and `v0.7.0` assets; `v0.10.3` in the `v0.6.0` asset; `v0.10.1` in the `v0.5.1` asset)
+(`v0.12.2` in the `v0.9.1` asset; `v0.12.1` in the `v0.9.0` asset; `v0.11.0` in the `v0.8.0` and `v0.7.0` assets; `v0.10.3` in the `v0.6.0` asset; `v0.10.1` in the `v0.5.1` asset)
 and Källa's by digest, so no image variable is needed, and has Open WebUI as the profile `openwebui`. The `v0.5.0`
 asset predates both: it has no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE` to be
 set by hand. The one typed

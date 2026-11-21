@@ -6,6 +6,43 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
+## 0.9.1 (2026-11-21)
+
+The upgrade to Källa runs without SQL by hand: the stack's one-shots `kalla-roles` and Fors 0.12.2's `roles` rename
+the database roles from before the rename, so a Portainer stack from 0.5.x or later is upgraded by renaming its
+variables, pasting this release's file and updating it once. On **Fors 0.12.2**. No migration. **Rolling update: no**
+from 0.9.0 (the update recreates `kalla-postgres` and the gateway's `postgres` once, a short restart of each); from
+0.8 or earlier, as for 0.9.0 ([upgrade guide](docs/upgrade-guide.md#091)).
+
+### Changed
+
+- **The database roles are renamed by the stack:** the new one-shot `kalla-roles` runs before every `kalla-migrate`
+  (Compose and the Portainer stack) and renames the roles `ume_rag_*` from before the rename to Källa to `kalla_*`
+  (`deploy/upgrade/0.9-rename-roles.sql`, now also ending a session still signed in under an old name), so the upgrade
+  from 0.8 or earlier needs no console and no SQL. Where the roles have the new names it changes nothing. It signs in
+  as the Postgres superuser over `kalla-postgres`'s Unix socket (by peer, no password, no network), which now lives in
+  the in-memory volume `kalla-postgres-socket`. With Fors 0.12.2, whose own one-shot renames the gateway's roles, the
+  Portainer upgrade from 0.5.x or later is: back up, rename the variables, paste the stack and update it once.
+- **The guides say Källa's images are public:** `ghcr.io/thekim1/kalla/*` pulls without a registry login since 0.9.0,
+  so the Portainer, Compose quick start, production, runbook and Kubernetes guides no longer ask for a `ghcr.io` token
+  (Ume.Rag's `ghcr.io/thekim1/ume-rag/*` images up to 0.8.0 still need one). The site names the gateway Fors and the
+  credential keys `rag-api`, `rag-admin` and `rag-worker`.
+
+### Added
+
+- **The admin shows evaluation questions whose expected documents were deleted** (#893): a human test question whose
+  expected document was deleted says so in the questions table, with a shortcut from a notice above it; the editor
+  marks the deleted document, so it is replaced or removed before saving, or the question is retired. The report card
+  shows the run's `documentGone` ("N questions left out: their documents were deleted"), read from the run's job
+  result; a run whose job is past the 7-day job retention shows no count.
+
+### Fixed
+
+- **The admin says Källa:** the menu's heading, the browser tab's title, the sign-in page and the setup wizard said
+  "Knowledge platform", the placeholder from before the product was named.
+- **The env-file helpers keep the last line:** `deploy/upgrade/upgrade-to-0.9.sh` and the upgrade tests' `deploy/tests/rename-0.9.sh` wrote a variable
+  they add onto the last line of an env file that did not end in a newline (`FORS_INTEGRATION_MANIFEST=KALLA_OIDC_...`).
+
 ## 0.9.0 (2026-11-21)
 
 Ume.Rag is now **Källa**, and the gateway is now **Fors**. Every name changes (variables, services, volumes, database

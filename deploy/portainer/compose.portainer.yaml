@@ -238,6 +238,7 @@ services:
       - {source: postgres-init, target: /config/postgres-init.sql}
       - {source: postgres-hba, target: /config/pg_hba.conf}
       - {source: app-roles, target: /config/app-roles.sql}
+      - {source: rename-roles, target: /config/rename-roles.sql}
     volumes:
       - fors-certs:/certs
       - fors-secrets:/secrets
@@ -253,13 +254,14 @@ services:
     image: docker.io/library/postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
     user: "70:70"
     restart: unless-stopped
-    tmpfs: [/tmp, "/var/run/postgresql:uid=70,gid=70,mode=0700"]
     environment:
       POSTGRES_PASSWORD_FILE: /run/postgres-secrets/bootstrap_password
       POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=trust
     command: [postgres, -c, ssl=on, -c, ssl_cert_file=/run/certs/postgres.crt, -c, ssl_key_file=/run/certs/postgres.key, -c, ssl_ca_file=/run/certs/ca.pem, -c, hba_file=/run/config/pg_hba.conf, -c, log_statement=none]
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      # The Unix socket, shared with the one-shot roles (a tmpfs volume, so empty on every start).
+      - postgres-socket:/var/run/postgresql
       - {<<: *conf-mount, target: /docker-entrypoint-initdb.d, volume: {subpath: postgres-init}}
       - {<<: *conf-mount, volume: {subpath: postgres}}
       - {<<: *certs-mount, volume: {subpath: postgres}}
@@ -293,9 +295,27 @@ services:
       timeout: 5s
       retries: 12
 
+  # One-shot before the migrations: renames the database roles from before the rename to Fors (ume_* to fors_*,
+  # deploy/upgrade/0.12-rename-roles.sql), so a stack from 0.11 or earlier upgrades with "Update the stack" alone. It
+  # does nothing in a new stack and on every later start. It signs in as the Postgres superuser over the Unix socket
+  # (pg_hba.conf allows the superuser nowhere else) and has no network.
+  roles:
+    <<: *hardened
+    image: docker.io/library/postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    user: "70:70"
+    restart: "no"
+    network_mode: none
+    entrypoint: [/bin/sh, -c, 'PGPASSWORD="$$(cat /run/postgres-secrets/bootstrap_password)" exec psql -h /var/run/postgresql -U postgres -d postgres -v ON_ERROR_STOP=1 -q -f /run/config/rename-roles.sql']
+    volumes:
+      - postgres-socket:/var/run/postgresql
+      - {<<: *conf-mount, volume: {subpath: postgres}}
+      - {<<: *secrets-mount, target: /run/postgres-secrets, volume: {subpath: postgres}}
+    depends_on:
+      postgres: {condition: service_healthy}
+
   migrations:
     <<: *hardened
-    image: ${MIGRATIONS_IMAGE:-ghcr.io/thekim1/fors/migrations:0.12.1@sha256:2dd0329f7f7a040be9935bd6fb7d3666a28bbca073a66879b2d70f9f8e75d55e}
+    image: ${MIGRATIONS_IMAGE:-ghcr.io/thekim1/fors/migrations:0.12.2@sha256:8453ad2a26d1b8be766bd522a9a26fe640ea50cd99d5bc9e3b568b0f014e65bb}
     user: "1654:1654"
     restart: "no"
     environment:
@@ -314,11 +334,12 @@ services:
       - integration-secrets:/run/integration-secrets
     depends_on:
       postgres: {condition: service_healthy}
+      roles: {condition: service_completed_successfully}
     networks: [data]
 
   gateway:
     <<: *hardened
-    image: ${GATEWAY_IMAGE:-ghcr.io/thekim1/fors/gateway:0.12.1@sha256:5c38967a7235471a97df940e9a8bf3b2e086f4658dd3ef4403b814c32c8b488d}
+    image: ${GATEWAY_IMAGE:-ghcr.io/thekim1/fors/gateway:0.12.2@sha256:a7c126a912a49a848e0b199830e2f1f6835c85cd58c26c4add88dd9b09012b77}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -360,7 +381,7 @@ services:
 
   adminapi:
     <<: *hardened
-    image: ${ADMINAPI_IMAGE:-ghcr.io/thekim1/fors/adminapi:0.12.1@sha256:dd45f46b0ac3968fc80d25b7f9a0cf90f0d0cb72ad3388f488c59bc00b684581}
+    image: ${ADMINAPI_IMAGE:-ghcr.io/thekim1/fors/adminapi:0.12.2@sha256:8ab48705bebcb251ec383a503f2a2f0746c9b043049cc06ddf70996814263579}
     user: "1654:1654"
     restart: unless-stopped
     ports: ["${FORS_ADMIN_BIND:-0.0.0.0}:${FORS_ADMIN_PORT:-9443}:8443"]
@@ -415,7 +436,7 @@ services:
   dataapi:
     <<: *hardened
     profiles: [data]
-    image: ${DATAAPI_IMAGE:-ghcr.io/thekim1/fors/dataapi:0.12.1@sha256:7a46c610cf01ebaa43245d2c05837366f598fc0408449afecbe7961e6a427d05}
+    image: ${DATAAPI_IMAGE:-ghcr.io/thekim1/fors/dataapi:0.12.2@sha256:292c8a12b1848f0843103a8d580d9975ad734c45645f105fafeb03648b423f17}
     user: "1654:1654"
     restart: unless-stopped
     ports: ["${FORS_DATA_BIND:-0.0.0.0}:${FORS_DATA_PORT:-10443}:8443"]
@@ -1149,6 +1170,8 @@ configs:
       fi
       cp /config/postgres-init.sql "$$F/postgres-init/10-roles.sql"
       cp /config/pg_hba.conf "$$F/postgres/pg_hba.conf"
+      # The one-shot roles runs it before the migrations (renames the roles from before the rename to Fors; until 0.13).
+      cp /config/rename-roles.sql "$$F/postgres/rename-roles.sql"
       cp /config/redis.conf "$$F/redis/redis.conf"
       cp /config/app-roles.sql "$$F/migrations/app-roles.sql"
       chmod -R a+rX "$$F"
@@ -1312,6 +1335,29 @@ configs:
         END IF;
       END $$$$;
       COMMIT;
+  rename-roles:
+    content: |
+      -- Fors 0.12.0: renames the database roles from before the rename to Fors (ume_*) to fors_* (docs/upgrade-guide.md).
+      -- Runs as the Postgres superuser: the Compose forms' one-shot service `roles` runs it before `migrations` on every start
+      -- (from 0.12.2); Kubernetes and a manual fallback run it with psql. Idempotent: a role already renamed, or never created
+      -- (Data API, Keycloak), is skipped, so on a new installation and on every later start it does nothing.
+      -- The sessions of a role are ended before it is renamed, so a service of the old version still connected under the old
+      -- name does not keep working against the new schema; it cannot sign in again, because the name is gone.
+      -- SCRAM passwords survive the rename, so the services' passwords stay the same. Grants, ownership and the databases
+      -- follow the role; the retention function is renamed by the migration ForsRename.
+      DO $$$$
+      DECLARE
+        r text;
+      BEGIN
+        FOREACH r IN ARRAY ARRAY['migrator', 'gateway', 'admin', 'data', 'keycloak'] LOOP
+          IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'ume_' || r)
+             AND NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fors_' || r) THEN
+            PERFORM pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = 'ume_' || r;
+            EXECUTE format('ALTER ROLE %I RENAME TO %I', 'ume_' || r, 'fors_' || r);
+            RAISE NOTICE 'renamed role ume_% to fors_%', r, r;
+          END IF;
+        END LOOP;
+      END $$$$;
   kalla-bootstrap-script:
     content: |
       #!/bin/sh
@@ -2710,6 +2756,9 @@ networks:
 
 volumes:
   postgres-data:
+  # Postgres's socket directory, in memory like the tmpfs it was before, shared by postgres and roles.
+  postgres-socket:
+    driver_opts: {type: tmpfs, device: tmpfs, o: "uid=70,gid=70,mode=0700"}
   fors-certs:
   fors-secrets:
   fors-config:
