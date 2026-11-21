@@ -2,7 +2,7 @@
 
 State of the Källa work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`).
 **Last release `v0.9.0`** (2026-11-21, tag on #906's merge commit `1ed5bdd8`): the first under the names Källa and
-Fors, on Fors `v0.12.1`. `main` has nothing unreleased but the pin of its images (*Start here* 1). The
+Fors, on Fors `v0.12.1`. `main` holds two small changes since (*State*). The
 user's VM runs 0.5.0. Two machines work on it: `~/research/rag` (the user's, where sessions 49 to 52 ran) and
 `thekim1`'s (stream b, often stream a, and this release's preparation). Branch `main`, remote `origin` =
 https://github.com/thekim1/kalla (HTTPS through `gh auth git-credential`, handbook *Environment notes*).
@@ -48,32 +48,46 @@ sink" monolith. Design and code live in this repo.
   Say on its pull request what you are about to write.
 - **A decision for the user is asked as four alternatives with one recommendation** (the question tool).
 
-**Open when this was written** (2026-11-21 12:30 UTC): this file's pull request (#915, the plan clean-up) and
-Dependabot's first four after the release (#911 to #914). In Fors: the draft thekim1/fors#118. In order:
+**Open when this was written** (2026-11-21 13:00 UTC): this file's pull request (#915, the plan clean-up) and
+Dependabot's first four after the release (#911 to #914). In Fors: thekim1/fors#118, ready for review. **The user
+ended the session here and continues with the clean-up next time.** In order:
 
-1. **The first Audit run after the release** (the schedule says 04:17 UTC, the runs come around 13:00) scans
-   0.9.0's images and should be green: #907 has the three updates the scan of 0.8.0 asked for. It had not come when
-   this was written. If it is red: update, or a dated exception (#818's way).
-2. **Dependabot's pull requests #911 to #914** (uv in the parser image, the parser's and the admin UI's minor
-   groups, one NuGet package): read each, and where a pin is repeated (`.github/dependabot.yml`'s header) check that
-   every copy moved. Review as a comment; the merge is `thekim1`'s or the user's.
-3. **P2 wave 1 runs on `thekim1`'s machine** (Decisions "P2 starts before go-live"): B-60 is merged (#910), B-54 to
+1. **#915, the plan clean-up:** its checks are green; it waits for an approval (the user's or `thekim1`'s). When it
+   is merged, remove the worktree `~/research/rag-docs` and the branch. It closed M-16 in the queue; M-16's issue
+   #667 is `thekim1`'s to close, asked in #915's description.
+2. **Continue the clean-up with what #915 did not read:**
+   - **The design documents** (about 15,000 lines). Four agents were sent over them and stopped by the usage limit
+     before they reported (it resets 2026-11-26 19:00, Europe/Stockholm). Their shares: admin, `decisions.md`,
+     cost-attribution and `architecture.md`; chat, knowledge and tools; the three ingestion designs and the parser;
+     identity, data-model, repo-and-deployment and gateway-changes (with `adr-drafts.md` and
+     `prompt-gateway-session.md`: do they still have a purpose?). What to look for: statements that the code has
+     overtaken ("not built yet", "P2", an open pull request), names from before the rename that are not about the
+     old name on purpose, history that belongs in `plans/archive/design-history/`, and passages that repeat another
+     document. Known already: admin §5.8 to §5.10 still read as before and after M-16; `plans/tools/design.md` says
+     `rag-tools` once where the rest says `kalla-tools`.
+   - **Not read either:** `plans/to-verify.md`, the open items of the two stream queues, `postponed-decisions.md`
+     beyond its header, `plans/cases/support-assistant/` (written for 0.5.0), `plans/gold-set/README.md`, and
+     `docs/` (stream a's; only the accessibility statement's old working name was fixed).
+   - A design is binding: change what is plainly out of date, and bring anything that changes a rule to the user.
+3. **Dependabot's #911 to #914** are reviewed as comments (2026-11-21). **#912** (admin UI) and **#914**
+   (AngleSharp) are green and fine. **#911** (uv 0.13.9) is green but not ready: `parser.yml:77`, `audit.yml:101`
+   and the comment at `src/parser/Dockerfile:7` still say 0.13.8. **#913** (the parser's minor group) has
+   `parser-image` red: `src/parser/LICENSES.md` must be regenerated in the image with `scripts/licences.py`. Nothing
+   was pushed to their branches. The user was offered that this session makes the two fixes and had not answered;
+   look at what `thekim1`'s machine did first.
+4. **P2 wave 1 runs on `thekim1`'s machine** (Decisions "P2 starts before go-live"): B-60 is merged (#910), B-54 to
    B-59 are open in stream b's queue. The user was offered implementor agents on this machine for some of them and
    chose the plan clean-up instead; say on the issue before starting one.
-4. **The design documents were not read through at the clean-up.** The status files were (README, the roadmap, the
-   queues, the handbook, the proposals' status lines, this file); four agents sent over the designs were stopped by
-   the usage limit before they reported. What a sweep should look for: statements that the code has overtaken ("not
-   built yet", "P2", an open pull request), history that belongs in `plans/archive/design-history/`, and passages
-   that repeat another document. Known: admin §5.8 to §5.10 still read as before and after M-16.
-5. **This machine's development stack still has its old names** (*State*): nothing was moved at the rename. Ask the
-   user before copying secrets or volumes.
+5. **This machine's development stack still has its old names** (*State*): nothing was moved at the rename. The
+   user was told and asked whether to copy the secrets and volumes over; not answered. Do not move them unasked.
 6. **Repository variables:** since the rename the workflows read `vars.KALLA_TEST_HOST_RUNNER`,
    `vars.KALLA_TEST_HOST_DEPLOY_ENV`, `vars.KALLA_R1_*` and `secrets.KALLA_R1_API_KEY`. `gh variable list` shows
    none to `ume-nichlas` (both accounts here have write access, not admin); whoever set the `UME_RAG_*` ones creates
    them again (asked in #905, not answered; the user was told on 2026-11-21).
-7. **Fors's guide: thekim1/fors#118** (draft, the user's to merge): one paragraph in its upgrade guide's *0.12.0*,
-   *Portainer*, which sends a stack that also holds Källa to Källa's guide. Mark it ready when the user wants it;
-   its site build passed here. Fors's #112 and #113 (from the quick start run) are open.
+7. **Fors:** thekim1/fors#118 (one paragraph in the upgrade guide's *0.12.0*, *Portainer*, which sends a stack that
+   also holds Källa to Källa's guide) was marked ready on the user's word and is the user's to merge. `thekim1`
+   opened the drafts #119 to #122 there the same day (two are about #112 and #113 from the quick start run); the
+   main session has not read them.
 
 ### Waiting on the user
 
@@ -143,7 +157,9 @@ the reviews of #906) is in this file's history: `git log -- HANDOVER.md`.
   `--admin`: merged as `1ed5bdd8`, whose tree is `3ef38e8e`'s, tagged, and published at 10:28 UTC.
 - **The pin (#908)** compared with the release's own stack file, closed and reopened for its checks; `thekim1` merged
   it. **The handover (#904)** approved by `thekim1` and merged by the session.
-- **thekim1/fors#118** (draft): the line for Fors's upgrade guide.
+- **thekim1/fors#118:** the line for Fors's upgrade guide, marked ready on the user's word.
+- **After the release:** the first Audit run on 0.9.0's images is green (*State*); Dependabot's #911 to #914 read
+  and answered as comments (*Start here* 3); the worktrees `rag-small` and `rag-902` removed.
 - **The plan clean-up** (the user's choice of what to do next): the roadmap without its finished and duplicated
   parts; M-16 and M-17 closed and archived, with the lines in the admin design and Decisions that still called them
   open; the handbook sorted by subject and without what no longer holds; the README's CI section and document list;
@@ -225,6 +241,9 @@ the reviews of #906) is in this file's history: `git log -- HANDOVER.md`.
 - **Release:** `v0.9.0` published 2026-11-21 ([run 44892651954](https://github.com/thekim1/kalla/actions/runs/44892651954)),
   tag at `1ed5bdd8`, on Fors `v0.12.1`: `ghcr.io/thekim1/kalla/*`, Apache-2.0. `v0.8.0` and earlier are Ume.Rag
   (`ghcr.io/thekim1/ume-rag/*`, EUPL-1.2).
+- **Audit:** green on 2026-11-21 ([run 44905272366](https://github.com/thekim1/kalla/actions/runs/44905272366)),
+  the first run on 0.9.0's images and the first green one since the image scan was added (#819). The dated
+  exceptions are in *Watch*.
 - **What a deployer types in Portainer:** 1 value since 0.7.0 (`FORS_DOMAIN` since the rename, no secret).
 - **On `main`, unreleased** (notes in `changes/`): the guides say that Källa's images are public on ghcr.io (#909),
   and B-60 (#910: the admin shows evaluation questions whose documents were deleted). The compose files default to
@@ -235,7 +254,7 @@ the reviews of #906) is in this file's history: `git log -- HANDOVER.md`.
   B-54 to B-59 (P2 wave 1), B-42 to B-46 (the gateway phases' live checks) and its live items. Main: M-4.
 - **Open issues that matter:** #781 (watch), #667 (M-16's issue: the work is done, the issue is `thekim1`'s to
   close), #333, #511, #580 and #550. In Fors: #112 and #113. Open pull requests: this file's and Dependabot's #911
-  to #914; in Fors the draft #118.
+  to #914; in Fors #118 (ready) and `thekim1`'s drafts #119 to #122.
 - **Dependabot works:** grouped pull requests; `.github/dependabot.yml`'s header lists where a pin is repeated.
   Playwright is bumped by hand, in the package list, the renderer image and its lockfile together (#907).
 - **The user's machine (`~/research/rag`):** the main clone on `main` and one more checkout, `~/research/rag-docs`
