@@ -18,11 +18,11 @@
 #   - the end of kalla-bootstrap's log (its checklist) is printed, as the upgrade guide tells the operator to read it
 #
 # With --rename-0.9 (an earlier release before 0.9.0, the rename to Källa and Fors 0.12) the upgrade is the steps of
-# 0.9.0's upgrade note and of Fors 0.12's guide (both "Portainer") instead of that one step: the stack is stopped and its
-# variables renamed (rename-0.9.sh; the test's ports and binds too), the new file is applied with the old containers
-# pruned (both bootstraps copy the old volumes, both migrations fail to sign in), the roles are renamed in both
-# Postgres (deploy/upgrade/0.9-rename-roles.sql in kalla-postgres, Fors's statement in postgres), and the stack is
-# deployed again. The checks after the upgrade are the same; nothing is fenced, as the old services were stopped.
+# 0.9.0's docs/portainer.md, "Upgrade", instead of that one step: the services are stopped and the roles renamed in the
+# two old databases (deploy/upgrade/0.9-rename-roles.sql in rag-postgres, Fors's statement in postgres), then the stack
+# is stopped, its variables renamed (rename-0.9.sh; the test's ports and binds too) and the new file applied once with
+# the old containers pruned (both bootstraps copy the old volumes). The checks after the upgrade are the same; nothing
+# is fenced, as the old services were stopped.
 #
 #   deploy/tests/portainer-upgrade-boot.sh OLD-STACK.yaml NEW-STACK.yaml --from-env FILE [options]
 #
@@ -174,31 +174,28 @@ files_before="$(kept_files)"
 echo "  schema at $migration_before ($history_before migrations), embedding profiles: $profiles_before"
 
 if [ "$rename" = 1 ]; then
-  echo "== the upgrade to 0.9.0: stop the stack, rename its variables, update it, rename the roles, deploy it again"
+  echo "== the upgrade to 0.9.0: rename the roles in the old databases, stop the stack, rename its variables, update it"
+  # docs/portainer.md, "Upgrade", step 7: the services stopped, the two old databases running for their consoles.
   dc stop >/dev/null || fail "could not stop the earlier release"
-  "$here/rename-0.9.sh" "$from_env" "$work/renamed.env"
-  env_file="$work/renamed.env"; test_env="$work/test.env"; pg=kalla-postgres; migrate=kalla-migrate; volume_prefix=kalla
-  stack="$new"
-  dc pull --quiet || fail "could not pull the images of the new release"
-  # The first update stops at the migrations: their roles have the old names yet.
-  timeout "$wait_timeout" docker compose -p "$project" -f "$stack" ${files[@]+"${files[@]}"} --env-file "$env_file" \
-    --env-file "$test_env" up -d --remove-orphans >/dev/null 2>&1 || true
-  dc logs --no-color --no-log-prefix kalla-bootstrap 2>/dev/null | grep -F 'copied the database' >/dev/null \
-    || fail "kalla-bootstrap did not copy the old volumes (no 'copied the database' line)"
-  ok "kalla-bootstrap copied the rag-* volumes into the kalla-* volumes"
-  dc up -d --no-deps --wait --wait-timeout "$wait_timeout" postgres kalla-postgres || fail "the databases did not start"
-  # As the upgrade note's step 3: the Postgres superuser with the bootstrap password, the statements on stdin.
+  dc up -d --no-deps --wait --wait-timeout "$wait_timeout" postgres rag-postgres || fail "the old databases did not start"
+  # The Postgres superuser with the bootstrap password, the statements on stdin, as the step says.
   # shellcheck disable=SC2016 # expanded in the container
   as_superuser='PGPASSWORD="$(cat /run/postgres-secrets/bootstrap_password)" exec psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q'
-  dc exec -T kalla-postgres sh -c "$as_superuser" < "$here/../upgrade/0.9-rename-roles.sql" \
-    || fail "the roles in kalla-postgres could not be renamed"
+  dc exec -T rag-postgres sh -c "$as_superuser" < "$here/../upgrade/0.9-rename-roles.sql" \
+    || fail "the roles in rag-postgres could not be renamed"
   # Fors 0.12's guide, "Portainer", step 3 (its deploy/upgrade/0.12-rename-roles.sql).
   dc exec -T postgres sh -c "$as_superuser" <<'SQL' || fail "the roles in the gateway's postgres could not be renamed"
 DO $$ DECLARE r text; BEGIN FOREACH r IN ARRAY ARRAY['migrator','gateway','admin','data','keycloak'] LOOP
   IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'ume_' || r) AND NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fors_' || r)
   THEN EXECUTE format('ALTER ROLE %I RENAME TO %I', 'ume_' || r, 'fors_' || r); END IF; END LOOP; END $$;
 SQL
-  ok "the roles are renamed in kalla-postgres and in the gateway's postgres"
+  ok "the roles are renamed in the old rag-postgres and in the gateway's postgres"
+  # Steps 8 and 9: the stack stopped, its variables renamed, the new file applied once with "Prune services".
+  dc stop >/dev/null || fail "could not stop the old databases"
+  "$here/rename-0.9.sh" "$from_env" "$work/renamed.env"
+  env_file="$work/renamed.env"; test_env="$work/test.env"; pg=kalla-postgres; migrate=kalla-migrate; volume_prefix=kalla
+  stack="$new"
+  dc pull --quiet || fail "could not pull the images of the new release"
 else
   echo "== the upgrade: the new stack file over the same stack, variables unchanged"
   stack="$new"
@@ -209,6 +206,11 @@ dc config --images | grep kalla/ | sort -u | sed 's/^/  /'
 start "the new release"
 completed
 ok "the new release: both bootstraps and both migrations completed, every other container runs and none restarted"
+if [ "$rename" = 1 ]; then
+  dc logs --no-color --no-log-prefix kalla-bootstrap 2>/dev/null | grep -F 'copied the database' >/dev/null \
+    || fail "kalla-bootstrap did not copy the old volumes (no 'copied the database' line)"
+  ok "kalla-bootstrap copied the rag-* volumes into the kalla-* volumes, in one update"
+fi
 
 # Every service's container runs the image the new file names.
 while read -r svc want; do

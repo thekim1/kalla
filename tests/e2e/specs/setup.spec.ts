@@ -41,7 +41,7 @@ test.describe.serial('setup wizard', () => {
     const opened = page.waitForEvent('popup')
     await page.getByRole('button', { name: 'Test sign-in' }).click()
     const popup = await opened
-    await popup.waitForURL(/\/realms\/ume\//)
+    await popup.waitForURL(/\/realms\/fors\//)
     await popup.locator('#username').fill(user)
     await typeSecret(popup.locator('#password'), password())
     const closed = popup.waitForEvent('close', { timeout: 60_000 })

@@ -406,7 +406,10 @@ public sealed class HnswIndexHealthTests(RagDatabaseFixture database) : IAsyncLi
 
         run.Result.ShouldBeOfType<JobResult.Committed>();
         var result = ContractJson.Deserialize<CheckHnswIndexResult>(JsonDocument.Parse((await Sql.JobAsync(database.Connection(null), run.Job.Id)).Result!).RootElement);
-        result.ShouldBe(new CheckHnswIndexResult { Scopes = 1, Queries = 5, Recall = 1.0 });
+        // The recall is the approximate index's own (0.98 on a CI run, #906): healthy is at or above the default floor.
+        result.Recall.ShouldNotBeNull();
+        result.Recall.Value.ShouldBeInRange(HnswHealthSettings.DefaultRecallFloor, 1.0);
+        (result with { Recall = null }).ShouldBe(new CheckHnswIndexResult { Scopes = 1, Queries = 5, Recall = null });
         (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM audit."AuditLog" WHERE "EntityId" = $1""", profile.ToString("D")))
             .ShouldBe(0);
     }
