@@ -1386,7 +1386,7 @@ configs:
         [ ! -d /openwebui-data ] || cp -a "$$L/openwebui-data/." /openwebui-data/
         if [ -d /postgres-data ] && [ -f "$$L/postgres-data/PG_VERSION" ] && [ ! -f /postgres-data/PG_VERSION ]; then
           copy_last "$$L/postgres-data" /postgres-data PG_VERSION
-          echo "kalla-bootstrap: copied the database; rename its roles before kalla-migrate can sign in (docs/upgrade-guide.md, \"0.9.0\")"
+          echo "kalla-bootstrap: copied the database; its roles were to be renamed to kalla_* before this update (docs/portainer.md, \"Upgrade\", step 7): if kalla-migrate cannot sign in, rename them on kalla-postgres now and update the stack again"
         fi
         copy_last "$$L/secrets" "$$S" .pepper
       fi

@@ -21,34 +21,6 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release; f
   grading use `scripts/grading/` (README there).
 - **Done when:** the go-live gate is met, G1 is finished and the pilot is live; the roadmap moves P1b to Done.
 
-### [x] M-22 Deploy simplification (user, 2026-11-16; closed 2026-11-20, S8 as a standing rule)
-- **Do:** [`../proposals/deploy-simplification.md`](../proposals/deploy-simplification.md), starting with S1 (one
-  bootstrap for Compose and Portainer; decided 2026-11-16, Decisions "One deployment bootstrap"; the proposal's S1
-  lists its five steps, one pull request each), S3 with S9 (Open WebUI as a profile in Compose, off unless asked for
-  and invisible when off) and S4a (delete the upgrade paths older than the VM's version). Upgrades may break, but each
-  breaking change gets an upgrade path where one is feasible (user, 2026-11-16). The setup wizard works the same in
-  every form. M-17's C13 is absorbed by S1's step 3. S2, S5 and S7 were left to the main session (user, 2026-11-16).
-- **Paths:** `deploy/**`, `docs/**`, `.github/workflows/**` (stream a's: `main-session/<slug>` branches, no open `a/`
-  work at the start); the admin UI's texts for S9 are stream b's (announce on an issue first).
-- **Status (2026-11-16, session 46):** S1's four points decided. Merged: #798 (S1 steps 1 and 4: `bootstrap.sh` takes
-  its paths and inputs as variables, `create-secrets.sh` runs it; an existing Kubernetes installation keeps its
-  secrets), #799 (S4a: the upgrade sections older than 0.5.x, with a pointer to the `v0.7.0` guide) and #800 (S1 steps
-  2 and 3 with S3: `deploy/compose.rag.yaml` and its overlays, Compose on `kalla-bootstrap` and volumes, Open WebUI as a
-  profile, the 193-line `init-deployment.sh`; the Portainer stack renders as before; booted in dry run 43941252174).
-  Also merged: #806 (S9, the deploy part: Open WebUI out of the example's default profiles, nothing of it generated
-  without the profile); the design follows the new files (`repo-and-deployment.md` §1, §3, §5 to §10, Decisions
-  "Pilot containers" and "Deployment values across releases"); #808 (step 5: the operator guides; `--gateway-ca-file`
-  copies the gateway's CA certificate instead of mounting its directory; the bootstrap's checklist speaks for its
-  form). **S1 is done.** #809 (S9's guides: the Portainer first deploy finishes without Open WebUI, *Adding Open
-  WebUI*). #810 (S2: the quick start installs without host hardening, which is its step 7). Session 47: S4b and S4c in one pull
-  request (`kalla-migrate` fences the service roles a migration stops, data-model §10; an upgrade from 0.5.x is one
-  step, boot-tested from 0.5.1 in `release.yml`; `docs/portainer.md` has one *Upgrade* section; Decisions "Upgrades in
-  one step"), and S9's admin UI part (#816, closes #807). S6 (one escrow set: `escrow-keys.sh` with the pepper, the blob keys, the passphrase, the database passwords, the conversation id keys, the Data Protection certificate and the CA, by `--env-file`, `--project` or directories, with `--restore`; repo-and-deployment §7.4). Open: S8 as each page is touched. S5 and S7 are proposals in the gateway's
-  repository (thekim1/fors#108, #109).
-- **Done when:** a first install with Compose needs the same few values as the Portainer stack and no bootstrap logic
-  exists twice; an installation without Open WebUI shows no trace of it; each step shown by the deploy tests
-  (`deploy-checks`, the boot test) and, for a stack-file change, a boot.
-
 ### [ ] M-16 Connect an app in one go; the platform menu; the Settings page (user, 2026-11-13)
 - **Owner:** the session on stream b's machine (GitHub `thekim1`), by the user; it crosses both streams' paths, so
   each step is a PR on a `main-session/<slug>` branch, announced in the issue first (handbook, *How we work*).
