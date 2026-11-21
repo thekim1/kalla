@@ -1,16 +1,17 @@
 # Handover
 
 State of the Källa work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`).
-**Last release `v0.8.0`** (2026-11-19, the deploy simplification; tag on #856's merge commit `faa001dd`, on the
-gateway's `v0.11.0`). `main` after it has a release's worth of work (*State*). The user's VM runs 0.5.0. Two
-machines work on it: `~/research/rag` (the user's, where session 49 ran) and `~/git/kalla-platform` (`thekim1`'s,
-stream b and often stream a). Branch `main`, remote `origin` = https://github.com/thekim1/kalla (HTTPS
-through `gh auth git-credential`, handbook *Environment notes*).
+**Last release `v0.9.0`** (2026-11-21, tag on #906's merge commit `1ed5bdd8`): the first under the names Källa and
+Fors, on Fors `v0.12.1`. `main` has nothing unreleased but the pin of its images (*Start here* 1). The
+user's VM runs 0.5.0. Two machines work on it: `~/research/rag` (the user's, where sessions 49 to 52 ran) and
+`thekim1`'s (stream b, often stream a, and this release's preparation). Branch `main`, remote `origin` =
+https://github.com/thekim1/kalla (HTTPS through `gh auth git-credential`, handbook *Environment notes*).
 
 ## What this is
 
-**Källa** (working name, N1) is a RAG / crawling / chatbot platform for Umeå kommun: small .NET 10 services on top
-of the team's **LLM gateway** (https://github.com/thekim1/fors, `~/git/llmgateway`), as an add-on to it (Decisions
+**Källa** (`Kalla` in identifiers; Decisions "Product names", which closed N1) is a RAG / crawling / chatbot platform
+for Umeå kommun: small .NET 10 services on top of **Fors**, the team's LLM gateway (https://github.com/thekim1/fors,
+the local clone still `~/git/llmgateway`), as an add-on to it (Decisions
 "Shared sign-in with the gateway"). The user owns the gateway and wants to do better than **Eneo**, a slow "kitchen
 sink" monolith. Design and code live in this repo.
 
@@ -26,65 +27,66 @@ sink" monolith. Design and code live in this repo.
    `plans/archive/work/`), results in `results-a.md`, `results-b.md` and `results-main.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here (session 50)
+## Start here (session 53)
 
 **The rules of the repository:**
 - **`main` is protected** ("Protect main": a pull request with one approving review and the required checks; an
   author cannot approve their own, never `gh pr merge --admin` as `ume-nichlas`). Everything, `plans/**` and this
-  file included, goes through a `main-session/` branch; `thekim1` reviews the main session's pull requests.
-  `thekim1` merges its own green pull requests with `--admin`, which its review of #861 says the user allowed on
-  2026-11-19; #877 was merged before the main session's review was read, and the review was then answered in a
-  follow-up (#879).
-- **Release tags are protected** ("Protect release tags", `refs/tags/v*`: creation, update and deletion):
-  `ume-nichlas` cannot push one (GH013), and no workflow creates one. `thekim1` pushed `v0.8.0`; the next tag is
-  `thekim1`'s or the user's, on the release preparation's merge commit.
-- **On the user's machine the session cannot approve a pull request:** `gh pr review --approve` on #882 was stopped
-  by Claude Code's permission check. Review as a comment and say so; the approval is the user's or `thekim1`'s.
-- **Which GitHub account the session is, is not settled. Ask the user first.** `gh` on the user's machine has two
-  accounts, `ume-nichlas` (the main session's until now) and `Crotalus` (the user's own). The active one changed to
-  `Crotalus` on 2026-11-20 between 07:07 and 08:53 UTC, not by the session: the review of #884 and this handover's
-  pull request (#887) are under it, everything earlier under `ume-nichlas`. The user was asked whether it was on
-  purpose and which account to work as, and had not answered when the session ended. Run `gh auth status` before
-  anything is pushed or posted. A pull request the session opens as one account is never approved by the session
-  as the other.
+  file included, goes through a `main-session/` branch. `thekim1` merges green pull requests with `--admin` (allowed
+  by the user on 2026-11-19), the main session's too.
+- **Release tags are protected** (`refs/tags/v*`): `ume-nichlas` cannot push one (GH013), no workflow creates one.
+  A tag is `thekim1`'s or the user's to push, on the release preparation's merge commit.
+- **The session's GitHub account is `ume-nichlas`** (user, 2026-11-20). `gh` here also holds `Crotalus` (the user's
+  own), and the active account has switched to `Crotalus` by itself before. **Run `gh auth status` before every push
+  or post**, and `gh auth switch -u ume-nichlas` when it shows `Crotalus`.
+- **The session approves nothing on this machine.** `gh pr review --approve` as `ume-nichlas` is stopped by Claude
+  Code's permission check, and in session 52 so was approving as `Crotalus`, with the user's decision on record and
+  their go-ahead in the conversation. Review as a comment, say that it is not the approval, and give the user the
+  line to run (handbook, *Lessons*). What then merges a pull request is the user's approval or `thekim1`'s `--admin`.
+- **Look at the open pull requests before each step** (`gh pr list`): the other machine works at the same hour.
+  Say on its pull request what you are about to write.
+- **A decision for the user is asked as four alternatives with one recommendation** (the question tool).
 
-**Open when the session ended:** #887 (this file, with A-37, A-38 and B-53) and `thekim1`'s **#888** (a new
-`docs/how-it-works.md` and its place on the website; not read by the main session). No item of the main session
-waits on anything but the user. In order:
+**Open when this was written** (2026-11-21 10:45 UTC): **#908** (the pin of 0.9.0's images, opened by `release.yml`)
+and this file's pull request, #904. In Fors: the draft thekim1/fors#118. In order:
 
-1. **The daily Audit has not run since the release.** Its last run (2026-11-19 13:18 UTC) failed on 0.7.0's images,
-   as every run since #819; none had come by 2026-11-20 11:20 UTC. The schedule says 04:17 UTC, the runs come
-   around 13:00. The first run after
-   2026-11-19 20:55 UTC scans 0.8.0's images and should be green; if it is not, its findings are the work (#818's
-   way: update, or a dated exception in `scripts/audit/image-scan-exceptions.txt`).
-2. **The next release (0.9.0) has its content** (*State*): the support chatbot's F3 and F4, deletes, the demo seed,
-   the host-only Compose fix. It needs the preparation, a dry run with `e2e=true` (the browser tests ran on
-   `thekim1`'s machine after the demo seed, #882, not in CI), and the user's go-ahead for the tag.
-3. **Open queue items without an input:** stream b's **B-52** (`kalla.topics`, F8) and **B-53** (the purge of deleted
-   sources' and knowledge bases' rows); stream a's **A-37** (the 14-day purge of documents removed from a living
-   source, designed and never built) and **A-38** (evaluation questions whose expected documents are gone, which
-   starts with what the design says). `thekim1`'s machine has been taking both streams' items; say on the issue
-   before starting one.
-4. **#874**, the quick start's three smaller findings (stream a's paths): the bootstrap's wizard address has no
-   port, the setup script's bare error without root, the quick start does not say the cost read-back is off.
-5. **The gateway's repository:** thekim1/fors#112 (`realm-import` cannot read its trust store after
-   `init-keycloak.sh`, and `up --wait` reports success) and #113 (the release bundle has no `docs/`), both from the
-   quick start run; the wildcard DNS advice of Decisions "Host names" is not in the gateway's guides yet (a pull
-   request there; merges are the user's).
+1. **#908, the pin.** Its sixteen lines were compared with the release's own `compose.portainer.yaml`: the eight
+   digests are the same in both compose files. It was closed and reopened so that its checks ran, and
+   `deploy-checks` is green. It needs an approval or `thekim1`'s `--admin` (0.8.0's pin, #863, went in that way). Until
+   it is in, **`main`'s compose files still default to 0.8.0's `ghcr.io/thekim1/ume-rag/*` images**: nothing should
+   start from `main`'s defaults.
+2. **The first Audit run after the release** (the schedule says 04:17 UTC, the runs come around 13:00) scans
+   0.9.0's images and should be green: #907 has the three updates the scan of 0.8.0 asked for. The run of
+   2026-11-21 is the first; it had not come when this was written. If it is red: update, or a dated exception
+   (#818's way).
+3. **P2 wave 1 starts now** (Decisions "P2 starts before go-live"): B-60 (#893) and B-54 to B-59 in stream b's
+   queue. `thekim1`'s machine takes them by default. The user was offered implementor agents on this machine for
+   some of them in parallel and had not answered; say on the issue before starting one.
+4. **Repository variables:** since the rename the workflows read `vars.KALLA_TEST_HOST_RUNNER`,
+   `vars.KALLA_TEST_HOST_DEPLOY_ENV`, `vars.KALLA_R1_*` and `secrets.KALLA_R1_API_KEY`. `gh variable list` shows
+   none to `ume-nichlas` (both accounts here have write access, not admin); whoever set the `UME_RAG_*` ones creates
+   them again (asked in #905, not answered; the user was told on 2026-11-21).
+5. **Fors's guide: thekim1/fors#118** (draft, the user's to merge): one paragraph in its upgrade guide's *0.12.0*,
+   *Portainer*, which sends a stack that also holds Källa to Källa's guide. Its link points at `main`'s
+   `docs/portainer.md`, which has the steps since #906. Mark it ready when the user wants it; its site build passed
+   here. Fors's #112 and #113 (from the quick start run) are open.
 
 ### Waiting on the user
 
-- **The VM:** runs 0.5.0. It moves to 0.8.0 in one update by `docs/portainer.md`, *Upgrade* (steps 2 to 4 are the
-  0.5.x ones: the keys' residencies, the hand-made Open WebUI client, role groups); step 1 backs up the three files
-  (a 0.7.x or earlier stack has no escrow set), step 15 makes the first escrow set. Pulls that say "denied":
-  `docker logout ghcr.io`. Portainer's own *Update the stack* has never been run on an upgraded stack, and the
-  one-step upgrade only in CI, so this is the step with the most to learn. **0.5.1's admin image is gone from
-  ghcr.io** (found 2026-11-18; who deleted it and whether other 0.5.x images went is not known; the local `gh`
-  tokens have no `read:packages`): the VM has its 0.5.0 images locally, a host that must pull them again cannot.
+- **The VM:** runs 0.5.0 (Ume.Rag) with its gateway. **`v0.9.0` is out, so it can move now** (offered to the user
+  as the next thing to do, 2026-11-21; not answered): one update by `docs/portainer.md`, *Upgrade*: the 0.5.x steps
+  (the keys' residencies, the hand-made Open WebUI client, role groups), the integration renamed from `Ume.Rag` to
+  `Kalla`, then **the services stopped and the roles renamed in consoles on the old `rag-postgres` and
+  `postgres`**, the stack stopped, its variables renamed, and one update with *Prune services*. After the role
+  rename the old stack does not start again: the way back is the backup of step 1. Never Fors 0.12.0
+  (thekim1/fors#116). Pulls that say "denied": `docker logout ghcr.io`. Portainer's own *Update the stack* has never
+  been run on an upgraded stack, so this is the step with the most to learn. **0.5.1's admin image is gone from
+  ghcr.io** (found 2026-11-18): the VM has its 0.5.0 images locally, a host that must pull them again cannot.
 - **The live block** (the critical path to go-live, `plans/roadmap.md`): every item waits on an input, A-L1 (the
   umea.se inventory) first.
-- **The support-chatbot proposal** (`plans/proposals/support-chatbot-features.md`): F3 and F4 are built, F8 is
-  designed and queued (the user picked F8 only, 2026-11-20). The rest is the user's pick when F8 is in.
+- **The support-chatbot proposal** (`plans/proposals/support-chatbot-features.md`): F3, F4 and F8 are built. The
+  rest is the user's pick.
+- **P2's later waves** (the roadmap's *P2 Broaden*): the user picks the next theme when wave 1 is nearly done.
 - **The roadmap's T0 row** says *open* though T1, which depends on it, is deployed: the user knows its state.
 - **To-verify row 96:** the NVDA screen-reader pass of the admin UI, which needs Windows.
 - **To-verify row 110, a question to KB** (the user's call; the main session would send it before go-live): *"We
@@ -102,7 +104,12 @@ waits on anything but the user. In order:
 - **The dated exceptions expire:** the scan's FFmpeg CVEs in the parser's opencv wheel (eleven, until 2026-12-17,
   `scripts/audit/image-scan-exceptions.txt`, #818) and picomatch in the admin UI's build (until 2026-12-18,
   `scripts/audit/npm-production-exceptions.txt`, #853). Before then: a newer wheel or picomatch fix, a new date with
-  a reason, or drop the dependency.
+  a reason, or drop the dependency. **opencv-python-headless 5.1.0.95** came out 2026-11-17 (the pin is 4.14.0.94);
+  the parser's uv cutoff lets it in from about 2026-11-25: try it (Docling needs only `cv2.resize`, `cv2.dilate` and
+  border constants) and see whether its wheel bundles a fixed FFmpeg. picomatch had no fix on 2026-11-20.
+- **The Postgres image's `zlib1g` line** (`images/postgres/Dockerfile`, #907) goes when `pgvector/pgvector` has a
+  build newer than 2026-11-12: the tag `0.8.7-pg17-trixie` had not been rebuilt on 2026-11-20, so the fix is one
+  pinned package in our own Dockerfile. The AppHost and the TestKit pin the same base, unchanged.
 - **#781, the flaky "search unavailable" answer in `ChatApiTests`:** open until 2026-11-30; if it recurs, the job's log
   has *The query embedding of profile … is unavailable (…)*, which names the cause.
 - **`IntegrationReadbackTests.A_keys_usage_per_step_…` failed once** on #814 (the fake gateway answered 401,
@@ -111,46 +118,68 @@ waits on anything but the user. In order:
   the change didn't touch (`ChatApiTests`, `RenderTests.The_real_renderer_…`); run alone they pass.
 - **`gh pr edit` fails** on this repository with GitHub's *Projects (classic) is being deprecated* error and changes
   nothing; edit a pull request's body with `gh api -X PATCH repos/thekim1/kalla/pulls/<n> -F body=@file`.
+- **Tests that share the job queue:** the nightly purge re-queues `delete-source` for every deleted source with live
+  content (#884), so a test that queues a command for a deleted source can lose its lease (#897).
 - **The demo seed's slug in a test:** `openwebui.spec.ts` leaves out the assistant named `demo-assistent` (#882); a
   change of `DemoSeeder`'s slug brings its old failure back.
 
-## What session 49 did (2026-11-19 to 20)
+## What session 52 did (2026-11-21)
 
-On `~/research/rag`, as the main session, beside `thekim1`'s machine building stream b's and stream a's items.
+On `~/research/rag`, as the main session; short, and all of it the release.
 
-- **`v0.8.0` released** (2026-11-19): #861's handover reviewed and corrected, the tag pushed by `thekim1` after the
-  ruleset refused `ume-nichlas`, the pin #863; #864 brought the README, the roadmap and two guides' stale lines up
-  to the release.
-- **#858's open ends** (#862) with the user's decision that the unavailable text ends with the assistant's links,
-  else the platform's (B-49, #866).
-- **The Compose quick start run end to end** (gateway 0.11.0 and Källa 0.8.0 as two Compose projects on one host,
-  no proxy, the gateway bundle's Keycloak as provider). Passed: the gateway's install and wizard, the manifest's
-  three keys, Källa's install and wizard (the provider suggested from the gateway), sign-in, *Models*, the backup
-  stanza, `escrow-keys.sh` with `--verify`. Not run: a provider and models, so nothing from the embedding profile
-  on; `deploy/host/install.sh` and the hardening (no root). Not the guide as written: Källa's images were built
-  from the `v0.8.0` tag (no ghcr login; the bundle's `RAG_*_IMAGE` variables took them), root-only steps ran in
-  containers, both projects got a host entry and Källa's networks explicit subnets. Found: **#865** (kalla-admin did
-  not start without a domain or a gateway admin address; fixed in #867, tested in #872), **#874**, and the
-  gateway's **#112** and **#113**.
-- **How easy the setup is** (asked by the user; read in both repositories): Portainer is close to one typed value;
-  what is left is sign-in (two hand-made clients, two wizards, two codes from logs), DNS and TLS before any wizard,
-  and hand work after "healthy" that no page asks for (the gateway's provider and models, moving the integration,
-  assigned keys per department: the gateway's #108 and #109 would take most of it).
-- **Decisions "Host names"** (#875): each service keeps a host name of its own; one wildcard record and certificate
-  for a sub-domain of the installation's own; one name with ports for a test host; paths under one name not built
-  (the roadmap's open calls).
-- **Decisions "Deleting knowledge bases, sources and assistants"** (#880, for #878; six questions to the user):
-  built the same day on `thekim1`'s machine as B-50 (#883), A-36 (#884, #886) and B-51 (#885). Reviewed #884: the
-  nightly step now also takes sources that were already deleted. A deleted source was never searchable (the API's
-  snapshot leaves it out); what was missing was the cleanup.
-- **Decisions "Topics per request"** (#881): F8's design, B-52.
-- **M-22 closed** (user, 2026-11-20): its S8 is a standing rule in `plans/work/main.md`.
-- **#873, the dev seed's demo content:** built on `thekim1`'s machine as designed (#877, #879) while the user was
-  being asked which way to go; reviewed, and the browser tests then run there (#882).
-- **Housekeeping on the user's machine:** seven agent worktrees and 29 merged local branches removed.
+- **#906 checked and `v0.9.0` released.** The head `3ef38e8e` was read against the runs: its own checks green, the
+  release steps (smoke test, Portainer boot, the upgrade from 0.6.0 with the roles renamed first) in dry run
+  [44839739980](https://github.com/thekim1/kalla/actions/runs/44839739980), the browser tests in
+  [44846329548](https://github.com/thekim1/kalla/actions/runs/44846329548); the three commits after the dry run are
+  eight lines in three test files. No single dry run was green from end to end, and the comment on #906 says so.
+- **The approval did not go as decided.** The session could not approve as `Crotalus` (the permission check). The
+  user approved twice themselves, and GitHub dismissed both within seconds with *The merge-base changed after
+  approval* (handbook, *Lessons*). **The user then decided** (four alternatives) that `thekim1` merges with
+  `--admin`: merged 10:05 UTC as `1ed5bdd8`, whose tree is `3ef38e8e`'s, tagged, and the release run
+  [44892651954](https://github.com/thekim1/kalla/actions/runs/44892651954) published at 10:28 UTC.
+- **#908, the pin:** compared with the release, closed and reopened for its checks (*Start here* 1).
+- **thekim1/fors#118** (draft): the line for Fors's upgrade guide (*Start here* 5).
+- **Handbook:** three lessons (no approvals from this machine, the dismissed approvals, pushing in Fors's clone).
+  **Decisions log:** the `--admin` merge of #906.
+
+## What session 51 did (2026-11-20 to 21)
+
+On `~/research/rag`, as the main session, beside `thekim1`'s machine, which did the release preparation.
+
+- **What the rename left (#905, merged):** the review of #902's findings 3, 4 and 6 to 16.
+  - **Stored names kept** (the user's choice; Decisions "Product names"): the setup test's target is `rag-admin`
+    again and the two applied migrations have their 0.8.0 text; the Kubernetes blob claim keeps its name
+    `rag-blobs`. The Postgres StatefulSet's labels follow the rename, so the upgrade note has the operator delete
+    the StatefulSet object first (its claims stay).
+  - **The release tests:** the bundle's name in `release-smoke.sh`, the one-shots' names in `portainer-boot.sh`.
+  - **Three faults the review had missed:** `portainer-boot.sh` expected the gateway's old setup cookie;
+    `upgrade-to-0.9.sh` compared the backup target with its quotes on and so never kept the path `/ume-rag`; the same
+    script took a half-copied volume as done.
+  - **The volume copies resume:** the Portainer copy writes the pepper last and the database's `PG_VERSION` last.
+  - **Guides and the note:** the integration is `Kalla` with the keys `rag-api`, `rag-admin` and `rag-worker`; the
+    upgrade guide's unversioned sections; the note's Kubernetes steps, host state directory and SIEM category.
+- **The Audit's image updates (#907, merged):** the parser on a Debian snapshot of 2026-11-19 (LibreOffice
+  `deb13u12`), Playwright 1.65.1 in the worker and the renderer (Node 26.13.1 in the driver), `zlib1g` pinned in the
+  Postgres image. Each image built and tested here before the pull request.
+- **Closed #878 and #894** with an evidence comment.
+- **The release preparation (#906, `thekim1`'s), reviewed four times.** It was opened at the same hour as #905 and
+  folded the upgrade note as it was before #905; it was rebuilt on `main` after both merges. Its first dry run that
+  could reach the upgrade test failed there (the next one, with the new order, passed it and failed only in the
+  setup wizard's browser test, on a realm name that the main session's sweep of #905 had missed), and the fault was
+  in the upgrade as documented: in the joined stack
+  `kalla-bootstrap` waits for the gateway's `migrations`, which fail until the gateway's roles are renamed, so the
+  volumes were never copied and `kalla-postgres`, where the guide said to rename the roles, never started.
+- **The user's decisions (2026-11-21):** the Portainer upgrade renames the roles first, on the old databases with
+  the services stopped, and then updates once; `thekim1` makes that change in #906 (done, `24078efe`, read); the
+  main session approves #906 as `Crotalus` and merges it when it is green (session 52: it went another way).
+- **Handbook:** six lessons (the open pull requests, the account switch, quoted values in `deploy/.env`, a "done"
+  marker written last, the joined stack's start order, a base image with no newer build).
 
 ## Known gaps, documented, not fixed
 
+- **The Kubernetes upgrade to 0.9.0** (the upgrade guide's six steps) is read through, not run: no cluster, and
+  Kubernetes is rendered only. The Compose upgrade script `upgrade-to-0.9.sh` has no test of its own either: its
+  variable step was run by hand (#905), its volume copy only read.
 - **Not tested anywhere:** Portainer itself (an upgraded stack boots in CI since #817, with Compose; from 0.6.0 since
   0.8.0); both wizards completed against a real provider in one deployed stack (the boot test has no provider and
   stops at each wizard's state); Entra ID and AD FS; a real untrusted TLS certificate; Kubernetes beyond
@@ -200,7 +229,7 @@ On `~/research/rag`, as the main session, beside `thekim1`'s machine building st
   -f version=X.Y.Z-dryrun -f e2e=true`, about 30 minutes, with the runners idle). The boot-only run
   (`-f portainer_boot=X.Y.Z`) takes minutes but uses that version's images already on ghcr.io, so it only fits a change
   that needs no new image.
-- **Rebuild the Portainer stack:** `sh deploy/portainer/build-stack.sh v0.11.0` (or the gateway's next release);
+- **Rebuild the Portainer stack:** `sh deploy/portainer/build-stack.sh v0.12.1` (Fors's release; or its next one);
   `--check` is what `deploy-checks` runs.
 - **Try Källa's wizard locally** (a throwaway volume each time): `export FakeGateway__Enabled=true
   Seed__Enabled=false Parser__Mode=off Render__Mode=off OpenWebUi__Enabled=false ClamAv__Mode=off
@@ -219,44 +248,40 @@ On `~/research/rag`, as the main session, beside `thekim1`'s machine building st
 
 ## State
 
-- **Release:** `v0.8.0` published 2026-11-19 ([run 44609831965](https://github.com/thekim1/kalla/actions/runs/44609831965)),
-  tag at `faa001dd`; `deploy/portainer/` on `main` pins its images (#863). Migrations `DropMessageParentId` (stops
-  the old kalla-api and kalla-admin) and `ContinueRuns` (additive); *Rolling update: no*.
-- **What a deployer types in Portainer:** 1 value since 0.7.0 (`FORS_DOMAIN`, no secret).
-- **On `main` after `faa001dd`, unreleased** (notes in `changes/`, 13 files): source dates on citations (B-47) and
-  the escalation hand-off `kalla.escalation` (B-48), with the unavailable text's links (B-49); delete a knowledge
-  base, a source (B-50, A-36: the worker's `delete-source` and the nightly purge) and an assistant (B-51), names
-  free at once; the dev seed's demo knowledge base and *Demo-assistent* (#877); kalla-admin starting without a domain
-  (#865); the Geist fonts (#871); the wildcard guidance. Also the website (GitHub Pages, #868, #870). **Migrations
-  since the release are not listed here:** B-50 and B-51 change the slug indexes and add `Assistants.DeletedAt`;
-  read them at the release preparation for the *Rolling update* line.
-- **Queues:** stream a: A-37, A-38, then the live block (A-L1 to A-L10) and A-34 and A-35 with only their live
-  checks open. Stream b: B-52, B-53, then B-42 to B-46 (the gateway phases) and its live items. Main: M-4 (the
-  live block), M-16, M-17.
-- **Open issues that matter:** #878 (deletes: the three leftovers are A-37, A-38 and B-53), #874, #781 (watch),
-  #667 (M-16, `thekim1`'s machine), #333 (the exact-scan and recall checks on the test host), #511 (splitting the
-  worker), #580 and #550 (decisions to record). Open pull requests: #887, #888.
-- **Dependabot works:** its first grouped pull requests merged (#841 to #844); `.github/dependabot.yml`'s header lists
-  where a pin is repeated.
-- **The user's machine (`~/research/rag`):** the main clone on `main` and `~/research/rag-small` (the second
-  checkout, on whatever branch was last worked on); no other worktree. Docker works without sudo (the `docker`
-  group); there is no sudo. Volumes `kalla-m1-postgres`, `kalla-openwebui-data` and `kalla-clamav-db` are the
-  dev data and are kept. The quick start's test installation is torn down; the gateway's 0.11.0 images stay in the
-  local Docker. **Docker's default address pools are full there** (about 25 unused networks of other projects): a
-  new Compose project needs explicit subnets, or a `docker network prune` by the user. The machine's name is upper
-  case and does not resolve inside containers. `gh` has two accounts, `ume-nichlas` and `Crotalus` (the user's
-  own; which is active: *Start here*); neither token has `read:packages`, so Källa's images
-  cannot be pulled there. `actionlint` is installed (`/snap/bin/actionlint`; it hung once without `-shellcheck=
-  -pyflakes=`); `shellcheck` and `pwsh` are not; `grep` is ugrep (handbook, *Environment notes*). Playwright's
-  Chromium and Firefox are in `~/.cache/ms-playwright`; Edge needs sudo to install. The Aspire CLI is at
+- **Release:** `v0.9.0` published 2026-11-21 ([run 44892651954](https://github.com/thekim1/kalla/actions/runs/44892651954)),
+  tag at `1ed5bdd8`, on Fors `v0.12.1`: `ghcr.io/thekim1/kalla/*`, Apache-2.0. `v0.8.0` and earlier are Ume.Rag
+  (`ghcr.io/thekim1/ume-rag/*`, EUPL-1.2).
+- **What a deployer types in Portainer:** 1 value since 0.7.0 (`FORS_DOMAIN` since the rename, no secret).
+- **On `main` (`1ed5bdd8`), unreleased:** nothing; `changes/` holds only its README. **The image defaults in the
+  compose files are 0.8.0's until #908 is in** (*Start here* 1).
+- **Migrations in 0.9.0:** `CollectionSlugUniqueAmongLive`, `AssistantsDeletedAt`,
+  `PurgeDeletedSourcesAndCollections`; *Rolling update: no* (the rename).
+- **Queues:** stream a: the live block (A-L1 to A-L10), A-34 and A-35 with only their live checks open. Stream b:
+  B-60 (#893) and B-54 to B-59 (P2 wave 1), B-42 to B-46 (the gateway phases' live checks) and its live items.
+  Main: M-4, M-16, M-17.
+- **Open issues that matter:** #893 (B-60), #781 (watch), #667 (M-16), #333, #511, #580 and #550. In Fors: #112 and
+  #113. Open pull requests: #908 and this file's (#904); in Fors the draft #118.
+- **Dependabot works:** grouped pull requests; `.github/dependabot.yml`'s header lists where a pin is repeated.
+  Playwright is bumped by hand, in the package list, the renderer image and its lockfile together (#907).
+- **The user's machine (`~/research/rag`):** the main clone on `main`, and three more checkouts: `~/research/rag-main`
+  (on `main-session/handover-51`, this file's branch; it goes when #904 is merged), `~/research/rag-small` (the old
+  `main-session/handover-50`) and `~/research/rag-902` (detached, from the review of #902); the last two can go.
+  Docker works without sudo; there is no sudo. Volumes `kalla-m1-postgres` (development data, kept),
+  `kalla-openwebui-data` and `kalla-clamav-db`. Local images from session 51: `kalla.local/renderer:ci` (now
+  Playwright 1.65.1; the worker's render tests take it through `KALLA_TEST_RENDERER_IMAGE`),
+  `kalla.local/parser-test-env:bump09`,
+  `kalla.local/parser-test:bump09` and `kalla.local/postgres:bump09` (they can go). **Docker's default address pools
+  are full** (about 25 unused networks of other projects): a new Compose project needs explicit subnets, or a
+  `docker network prune` by the user. The machine's name is upper case and does not resolve inside containers.
+  Neither `gh` token has `read:packages`. `kubectl` is installed (`kubectl kustomize` renders the overlays);
+  `actionlint` is at `/snap/bin/actionlint`; `shellcheck` and `pwsh` are not installed; `grep` is ugrep.
+  Playwright's Chromium and Firefox are in `~/.cache/ms-playwright`. The Aspire CLI is at
   `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on PATH).
-- **`thekim1`'s machine (`~/git/kalla-platform`):** no extra worktrees; Docker is not in its WSL distro, so stack
-  and image tests run only in CI there; `shellcheck` and `actionlint` are not installed.
-- **The gateway on the user's machine:** `gh` as `ume-nichlas` can push to both repositories; merges and releases
-  in the gateway are the user's. Worktrees `~/git/llmgateway` (on `feat/98-99-domain-and-context-authority`),
-  `~/git/llmgateway-100`, `~/git/llmgateway-100-deploy` and `~/git/llmgateway-101` are on branches whose pull
-  requests are all merged: they can go, or `~/git/llmgateway` can move to `main` (read `origin/main` with `git
-  show` until then). Local images `ume-llm-gateway/*:setup-test` predate the release and can go. Ports 5000 and
-  5173 are held by something else: the gateway's IntegrationTests need `ASPNETCORE_URLS=http://127.0.0.1:0`. The
-  gateway's own rules: draft pull requests (drafts run no CI), the checks run locally first, squash-merge. Its pull
-  request #110 (a benchmark against Bifrost) is open.
+- **`thekim1`'s machine:** a fresh clone after the rename; its development data starts empty under `~/.kalla`.
+- **Fors on the user's machine:** `~/git/llmgateway` (and the worktrees `-100`, `-100-deploy`, `-101`) are clones of
+  `thekim1/fors` on merged branches; fetched through `v0.12.1` (read a release with `git show v0.12.1:<path>`). They
+  can go, or move to `main`. `~/git/llmgateway-kalla-note` holds the branch of the draft #118 and stays until it is
+  merged. The remote is still named `thekim1/llmgateway` there (GitHub redirects); push with the `gh` credential
+  helper. Merges and releases in Fors are the user's; its rules: draft pull requests (drafts run
+  no CI), checks run locally first, squash-merge. Ports 5000 and 5173 are taken here
+  (`ASPNETCORE_URLS=http://127.0.0.1:0` for its IntegrationTests).

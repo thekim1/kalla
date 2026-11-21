@@ -255,6 +255,48 @@ main session needs:
 - **Six pull requests at once fill both runners for an hour** (session 47): open the small ones first, and dispatch a
   dry run only after the pull request's own checks are done.
 
+- **A rename must not touch what is stored** (session 50, #902 and thekim1/fors#116): Data Protection's application
+  name and purposes, AES-GCM associated data, HMAC contexts, check-constraint values and applied migrations are
+  format, not product text. Both products' renames changed them, which an upgraded install would have paid for
+  with its secrets and encrypted blobs; fresh-database tests cannot see it. Review a rename by grepping the old
+  name in `CreateProtector`, `SetApplicationName`, `GetBytes(` and `Migrations/`.
+- **A second agent's sweep of a large diff** (session 50, #902: 1,353 files): give it the stated intent and the list
+  of deliberate exceptions, ask for producer/consumer mismatches with both sides read, and check each finding in
+  the files before posting. It found the data-losing ones; the main session's own reading found the Kubernetes one.
+
+- **Look at the open pull requests before each step, not only at the start** (session 51): `thekim1`'s machine
+  opened the 0.9.0 release preparation (#906) while the main session was doing the items before it, and merged the
+  main session's green pull requests itself within the half hour. Before approving as `Crotalus`, read the pull
+  request's `state`: #905 and #907 were merged already, and `mergeable: UNKNOWN` was the sign. Say on the other
+  machine's pull request what you are doing before you write something it may also be writing.
+- **Switch the account in a command of its own** (session 51): `gh auth switch` chained with `&&` behind a command
+  that failed did not run, and the approval after it went out under the wrong account (GitHub refused it).
+- **`deploy/.env` holds every value in single quotes** (`init-deployment.sh` writes them so): a script that reads a
+  value with `sed` and matches it with `case` compares the quotes too. `upgrade-to-0.9.sh` never kept the backup
+  path that way (#905). Read a value the way `init-deployment.sh`'s `get` does.
+- **What marks a copy as done is written last** (session 51, #905): the Portainer copy of the old volumes wrote the
+  pepper first and took it as "done", so a copy that failed after it was never done again. Test a resumable step by
+  making it fail part-way (a directory where a file goes) and running it again.
+- **In the joined Portainer stack `kalla-bootstrap` waits for the gateway's `migrations`** (the manifest's keys):
+  whatever makes those fail keeps all of Källa from starting, `kalla-postgres` included. The 0.9.0 upgrade as first
+  written (update, then rename the roles in a console on `kalla-postgres`) was a dead end for that reason, and only
+  the dry run's upgrade test showed it. An upgrade's steps are not final until that test has run them.
+- **A pinned base image with no newer build** (session 51, pgvector and `zlib1g`): pin the one fixed package in our
+  own Dockerfile, with a comment that the line goes when the base has the fix. `docker buildx imagetools inspect`
+  shows whether a tag was rebuilt; `apt-get -s upgrade` in the base shows what else an upgrade would move.
+- **On this machine the session does not approve as `Crotalus`** (session 52, #906): with the user's decision on
+  record and their go-ahead in the conversation, the permission check still stopped it, first the account switch and
+  then the approval itself. The approval is the user's own action: give them the one line to run
+  (`gh auth switch -u Crotalus && gh pr review <n> --approve && gh auth switch -u ume-nichlas`) or the browser.
+- **A pull request whose branch joins a rebuilt line to its old one loses every approval** (session 52, #906): the
+  release preparation was rebuilt on the new `main` and merged with its first version (`757153f3`), so the pull
+  request's stored base stayed at the old `main` (`gh api …/pulls/<n> --jq .base.sha`) while the merge base was the
+  new one. GitHub dismissed two approvals within seconds with *The merge-base changed after approval*, with no push
+  in between, and a third would have gone the same way. That the stored base is the cause is a reading, not checked.
+  Rebuild such a branch as a new branch and a new pull request. Others report that closing and reopening clears it.
+- **Pushing in Fors's clone** needs the `gh` credential helper as well (*Environment notes*, *Git over HTTPS*): a
+  plain `git push` there waits for the Windows credential manager and never returns (session 52, two minutes lost).
+
 ## Plan files (how they are kept, M-14)
 
 - **The plan ahead is only in `plans/roadmap.md`.** HANDOVER links to it; when a step lands or an input arrives, update
