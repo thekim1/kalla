@@ -23,6 +23,18 @@ and the release preparation folds the notes in here and writes the release's *Ro
 
 ## Unreleased
 
+## 0.9.2
+
+- **Rolling update: yes** from 0.9.1: no migration, no variable changes, the same gateway (Fors 0.12.2). Paste this
+  release's stack file (or set the image variables to 0.9.2's) and update the stack once. From 0.9.0 or earlier, straight
+  to 0.9.2 by the 0.9.1 section below.
+- **Sources that render JavaScript** (#927): on 0.9.0 and 0.9.1 their pages failed with `render.unavailable` and went
+  back to the queue. Nothing to do but update: the queued fetch jobs run once the new worker is up. A source whose fetch
+  mode was set to plain HTTP as a workaround can be set back to the browser mode.
+- **Topics:** a topic rule (*Edit processing* › *Topics*) whose `match` was written as an address
+  (`https://www.umea.se/…/`) tagged nothing until now. From 0.9.2 it matches; the topics appear when the pages are next
+  processed again (publish the processing, or reprocess the source).
+
 ## 0.9.1
 
 - **Rolling update: no** from 0.9.0, though there is no migration and no variable changes: the update recreates

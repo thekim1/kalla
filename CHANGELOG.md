@@ -6,6 +6,31 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
+## 0.9.2 (2026-11-21)
+
+A patch release: **JavaScript rendering works again** (every render failed on 0.9.0 and 0.9.1), and topics are easier
+to set. On **Fors 0.12.2**, as 0.9.1. No migration, no variable changes. **Rolling update: yes** from 0.9.1; from 0.9.0
+or earlier, as for 0.9.1 ([upgrade guide](docs/upgrade-guide.md#092)).
+
+### Fixed
+
+- **JavaScript rendering works again** (#927): since 0.9.0 every render failed with `render.unavailable`, because
+  Playwright 1.65.1's Node driver links `libatomic.so.1` and the worker's chiseled image had none (the worker logged
+  `error while loading shared libraries: libatomic.so.1`). The worker image now carries Ubuntu noble's
+  `libatomic1` (`14.2.0-4ubuntu2~24.04.1`, SHA-256-pinned) next to the driver, and CI and the release start the driver
+  inside the built image.
+- **Topic rules take a pasted address** (#929): a `path` rule on a website source may be written as the address from
+  the browser (`https://www.umea.se/bygga-bo-och-miljo/bygglov/`) or with the host first (`www.umea.se/…/**`). The host
+  must be the page's, and the query and fragment are dropped. Before this, such a rule was compared with the path alone
+  and tagged nothing. A rule that ends in `/` now also covers every page under it, for uploads too (`HR/`).
+
+### Changed
+
+- **Topics explain where and how to set them** (#929): the knowledge base's Topics tab links each source whose
+  processing holds the rules, says to choose *Edit processing* and fill in *Topics*, and shows how to write a rule with
+  an example. The *Topics* field in *Edit processing* describes the rule with an example in place of "Leave it as it
+  is if you are unsure".
+
 ## 0.9.1 (2026-11-21)
 
 The upgrade to Källa runs without SQL by hand: the stack's one-shots `kalla-roles` and Fors 0.12.2's `roles` rename
