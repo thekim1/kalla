@@ -114,6 +114,38 @@ tables in one migration of its own (no backward compatibility before production)
   Decisions entry (user's answers on #925, 2026-11-21).
 - **Read:** admin §4.5, §4.7, V26, §5.5.2, §5.5.3; processing §9.5; `proposals/pii-review.md`.
 
+## Support chatbot F10 and F7 (user, 2026-11-21)
+
+After P2 wave 1, or beside it when a wave item waits. Each adds its table in a migration of its own.
+
+### [ ] B-61 Cost per outcome (F10)
+- **Do:** the table `chat."AssistantDailyOutcomes"` (data-model §2.3, with the admin role's grant and §8's
+  retention); the writer's upsert per (day, assistant, client, level, outcome) with the turns and their summed
+  gateway and estimated cost, usage-only turns as `unavailable` or `error` (chat §12.2); the test panel's upsert
+  (admin §4.9); `outcomes` in `GET /api/assistants/{id}/costs` and the table by outcome on the *Cost* card
+  (admin §8.6).
+- **Paths:** `src/Kalla.Api/**`, `src/Kalla.AdminApi/**`, `src/Kalla.Infrastructure/**` (b's),
+  `src/Kalla.Domain/**` (b's), `src/Kalla.MigrationService/` (not `Templates/**`), `src/admin-ui/**` (not
+  `src/platform/**`), `tests/**`.
+- **Done when:** chat §18.9's *Cost per outcome* test passes, with the rows' cost summed equal to the day's
+  `AssistantDailyUsage`; an API test for `outcomes` and the department scope; the card shown in a browser on the demo
+  seed.
+- **Waits on:** nothing.
+- **Read:** Decisions "Cost per outcome"; chat §12.1, §12.2, §18.9; data-model §2.3, §8; admin §4.9, §8.6.
+
+### [ ] B-62 Content-gap report (F7)
+- **Do:** the table `chat."AssistantDailyGaps"` (data-model §2.3, §8's retention); the nearest hit on `ChatTurn`
+  (the first retrieval result's collection and document for a `not-found` or `answered-general` turn, *no hit*
+  otherwise) and the writer's upsert (chat §12.1, §12.2), never for the test panel; `GET /api/assistants/{id}/gaps`
+  with its CSV and the *Content gaps* card on the Statistics tab (admin §8.7).
+- **Paths:** as B-61.
+- **Done when:** chat §18.9's *Content gaps* test passes, with the negative proof that no row or column holds the
+  question; API tests for the ordering, *no hit*, a deleted document, the period limit and the department scope; the
+  card shown in a browser on the demo seed with a few not-found turns.
+- **Waits on:** nothing (B-61 first if both are taken at once: the same writer step).
+- **Read:** Decisions "Content-gap report"; chat §6.2, §12.1, §12.2, §18.9; data-model §2.3, §8; admin §8.6,
+  §8.7.
+
 ## Live (the live block, see the roadmap)
 
 

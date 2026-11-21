@@ -1312,8 +1312,8 @@ Draft  Test  Test questions (8)  Versions (3)  Audience  Storage  Statistics
   questions** (on the draft or the published version), and the latest report as the §7.2 card (§7.4).
 - **Copy** (in ⋯, P2) asks for name, slug, department and owner team and opens the copy's draft.
 
-The *Statistics* tab shows the date of last use, the *Cost* card of §8.6 (by step and client, gateway and estimated
-cost apart) and, from P2 (weakness review §1), the **latest answer evaluation**: faithfulness and citation precision of the last
+The *Statistics* tab shows the date of last use, the *Cost* card of §8.6 (by step, client and outcome, gateway and
+estimated cost apart), the *Content gaps* card of §8.7 and, from P2 (weakness review §1), the **latest answer evaluation**: faithfulness and citation precision of the last
 `answers` run with question counts, compared with the previous run, next to the live `uncited_answer` rate
 (processing §14.8, `AnswerEvaluationService` §2.2).
 
@@ -1938,7 +1938,7 @@ gateway's cost and the estimated cost (calls without a gateway cost, priced from
 
 | Method and path | Policy | Returns |
 |---|---|---|
-| `GET /api/assistants/{id}/costs` `?from=&to=&granularity=day\|month` | Read | per period, step and client: `calls`, `inputTokens`, `cachedInputTokens`, `outputTokens`, `costUsd`, `estimatedCostUsd`, `estimatedCalls`, and the totals |
+| `GET /api/assistants/{id}/costs` `?from=&to=&granularity=day\|month` | Read | per period, step and client: `calls`, `inputTokens`, `cachedInputTokens`, `outputTokens`, `costUsd`, `estimatedCostUsd`, `estimatedCalls`, and the totals; and `outcomes`, per period, outcome and client: `turns`, `costUsd`, `estimatedCostUsd` (`AssistantDailyOutcomes`, Decisions "Cost per outcome") |
 | `GET /api/collections/{id}/costs` (same query) | Read, own department only (a department the knowledge base is shared with sees no cost, §3.2) | per period and step, the same fields |
 | `GET /api/costs` `?from=&to=&granularity=&departmentId=&kind=assistant\|collection` (+ `&format=csv`) | Manage: department admins their departments, platform admins all | per period, department, object (assistant or knowledge base) and step, the same fields; the CSV has one row each |
 
@@ -1973,7 +1973,9 @@ gateway's cost and the estimated cost (calls without a gateway cost, priced from
 - **Assistant page, Statistics tab** (§5.5.4): a *Cost* card with a period picker (last 30 days, by day or month), the
   total with its gateway and estimated parts, and a table by step (*Answer*, *Condense*, *Long-question condense*,
   *Follow-up suggestions*, *Rerank*, *Query embedding*; P2 agent steps and test runs as their own rows) and by client
-  (*Test panel* for `admin-console`).
+  (*Test panel* for `admin-console`), and a table by outcome (*Answered*, *Answered from general knowledge*, *Not
+  found*, *Unavailable*, *Refused*, *Error*, *Cancelled*) with the turns, the cost and the cost per turn, real use
+  and the test panel apart.
 - **Knowledge base Overview** (§5.5.2): a *Cost* card for the last 30 days, split into indexing (`embed`) and
   evaluation (`eval-generate`, `eval-judge`, `eval-dedup`, `query-embed`, `rerank`), with a link to the Costs page
   filtered to the knowledge base's department for those who see that page.
@@ -1982,6 +1984,27 @@ gateway's cost and the estimated cost (calls without a gateway cost, priced from
   expandable by step, department totals, and **Download CSV**. A note under the table: "Estimated: {n} calls had no
   cost from the gateway and are priced from the model list." and "The gateway's figures are the record for internal
   charging; they also count retries and fallbacks."
+
+### 8.7 Content gaps (Decisions "Content-gap report")
+
+Which questions the knowledge does not answer, as counts: read from `chat."AssistantDailyGaps"` and the turn counts of
+`AssistantDailyTotals` (data-model §2.3). **No content**: no question, answer or subject, only the nearest document of
+each `not-found` and `answered-general` turn.
+
+| Method and path | Policy | Returns |
+|---|---|---|
+| `GET /api/assistants/{id}/gaps` `?from=&to=` (+ `&format=csv`) | Read | `turns` (`Messages`), `notFound`, `answeredGeneral` for the period; and per nearest document, most first, at most 200: `collectionId`, `documentId`, the knowledge base's name and the document's title (from the admin's snapshot and `content."Documents"`; a deleted one "(deleted)"), `notFound`, `answeredGeneral`; *no hit* as its own row |
+
+- **Periods and scope** as §8.6: inclusive Europe/Stockholm dates, default the last 30 days, at most 400 days (else
+  400 `period_too_long`); the caller's departments by the rows' `DepartmentId`. A knowledge base of another
+  department that the assistant links shows its name and the document's title, as the citations do.
+- **CSV**: `;`, English headers `knowledge_base;document;not_found;answered_general`. Reads and exports are not
+  audited: they hold no content.
+- **UI**: on the assistant's Statistics tab (§5.5.4), a *Content gaps* card under *Cost*: the period picker, the line
+  "{share} of the questions in this period were not answered from the knowledge ({notFound} not found, {general}
+  answered from general knowledge).", a table of the 20 nearest documents (title linked to the document in its
+  knowledge base for those who may open it, knowledge base, the two counts) with *Show all* and **Download CSV**,
+  and an empty state when the period has no such turn. Every label in `labels.ts`, every sentence in `messages.ts`.
 
 ## 9. Audit log and security-relevant views
 
