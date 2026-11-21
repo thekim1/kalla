@@ -54,7 +54,7 @@ In order:
 
 1. **Release `v0.9.0`: finish #906.** The user decided on 2026-11-21, for #906: *when its checks and a dry run are
    green, the main session approves it as `Crotalus`, merges it, and the go-ahead for the tag is given with that;
-   `thekim1` pushes the tag.* Where it stood at 2026-11-21 00:40 UTC:
+   `thekim1` pushes the tag.* Where it stood at 2026-11-21 00:35 UTC:
    - #906's head is `5ffe3506`. The dry run on `24078efe`,
      [44839739980](https://github.com/thekim1/kalla/actions/runs/44839739980), was **green in everything but the
      browser tests**: *Smoke test the bundle*, *Boot the Portainer stack*, **the upgrade from 0.6.0's stack with the
