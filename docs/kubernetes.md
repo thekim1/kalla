@@ -72,8 +72,8 @@ volume (NFS, CephFS, Azure Files, Longhorn RWX).
 3. **Make an overlay.** Copy `deploy/kubernetes/example` (for example to `deploy/kubernetes/prod`, or into your GitOps
    repository with the `../base` paths adjusted) and change:
    - `images`: the release's images (`ghcr.io/thekim1/kalla/<service>`), pinned by digest from the release notes.
-     A release bundle already pins the base and components. The packages may be private: give the namespace an
-     `imagePullSecret` for ghcr.io, or mirror them.
+     A release bundle already pins the base and components. The packages are public; a cluster without Internet
+     access mirrors them.
    - `Gateway__BaseUrl`, `Knowledge__PublicBaseUrl` (and the same address as kalla-admin's `Admin__ApiPublicUrl`) and,
      only for an identity provider without roles in its tokens, the break-glass
      `Oidc__RoleGroups__rag-platform-admin` (a `rag-` group name or an Entra object id); the other roles' groups are set

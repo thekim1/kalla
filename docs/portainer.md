@@ -26,8 +26,9 @@ gateway's `v0.11.0` or later: the `v0.6.0` asset has none of them.
 
 - A VM with Docker (Compose v2) and Portainer. Sizing: 4 vCPU, 16 GB RAM and 100 GB SSD for a pilot (floor 4 vCPU,
   8 GB, 50 GB; R1 sets the final numbers); ClamAV alone takes about 1 GB of RAM.
-- **Registry access:** Källa's images on `ghcr.io/thekim1/kalla/*` are private. In Portainer, *Registries → Add
-  registry → Custom*: `ghcr.io`, a GitHub user and a token with `read:packages`. The gateway's images are public.
+- **Registry access:** none needed. Källa's images on `ghcr.io/thekim1/kalla/*` and the gateway's are public, so
+  Portainer pulls them without a registry entry. (Ume.Rag's images up to 0.8.0, `ghcr.io/thekim1/ume-rag/*`, need a
+  `ghcr.io` registry with a GitHub user and a token holding `read:packages`.)
 - An **OIDC provider** (the shared Keycloak realm, AD FS or Entra ID) with clients for the gateway's admin
   (`fors-admin`) and Källa's admin (`kalla-admin`). The clients must exist
   before you set up sign-in. Their redirect URIs: `https://llm-admin.<domain>/signin-oidc` and
@@ -532,7 +533,7 @@ the gateway's.
 
 | Symptom | Look at |
 |---|---|
-| The stack won't deploy: `pull access denied` for `ghcr.io/thekim1/kalla/...` | the `ghcr.io` registry in Portainer and its token's `read:packages`; pick it on the stack |
+| The stack won't deploy: `pull access denied` for `ghcr.io/thekim1/...` | the image names (`kalla/*` and `fors/*` are public); for 0.8.0's `ume-rag/*`, a `ghcr.io` registry in Portainer whose token holds `read:packages`, picked on the stack; an expired login on the host (`docker logout ghcr.io`) |
 | `kalla-bootstrap` exits non-zero | its log; `the gateway's CA is missing` means the gateway's `bootstrap` didn't run first (keep the stack name) |
 | Källa's services log `gateway_key_missing` or the gateway answers `401` | the three `KALLA_*_GATEWAY_KEY` variables and `kalla-bootstrap`'s checklist; update the stack (`0.5.0`'s images: restart the service) |
 | The gateway answers `403` to Källa | the credential key's address list (the `llm` subnet) and its integration role *Credential* |

@@ -594,9 +594,7 @@ and [portainer.md](portainer.md) for a first deploy and each upgrade step by ste
 1. **Take the release's file:** the `compose.portainer.yaml` asset of the GitHub release (or the repository's copy at
    the release tag). It pins the gateway's images (the gateway release it was built from: Fors `v0.12.1` for Källa
    `0.9.0`, `v0.11.0` for `0.7.0` and `0.8.0`) and Källa's by digest, so no image variable is needed.
-2. **Registry:** Källa's images on `ghcr.io/thekim1/kalla/*` are private: add `ghcr.io` as a registry in Portainer
-   with a GitHub user and a token holding `read:packages`, and pick it when you create the stack. The gateway's images
-   are public.
+2. **Registry:** none needed. Källa's images on `ghcr.io/thekim1/kalla/*` and the gateway's are public.
 3. **Variables:** `FORS_DOMAIN`, which names the gateway API and its admin `llm.` and `llm-admin.<domain>`, and
    kalla-api, its admin and Open WebUI `rag.`, `rag-admin.` and `chat.<domain>` (or `FORS_GATEWAY_HOST`,
    `KALLA_API_HOST` and the other host variables instead), and `COMPOSE_PROFILES=clamav` (add `openwebui` for the

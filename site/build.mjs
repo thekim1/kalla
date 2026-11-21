@@ -118,7 +118,7 @@ const ghMark = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 1
 function layout({ page, title, description, path, body }) {
   const nav = NAV.map(([id, label, href]) => `<a href="${url(href)}"${id === page ? ' aria-current="page"' : ''}>${label}</a>`).join('')
   const footer = [
-    ['Product', [['Getting started', url('start/')], ['Changelog', url('docs/changelog/')], ['Ume AI Gateway', C.GATEWAY_SITE]]],
+    ['Product', [['Getting started', url('start/')], ['Changelog', url('docs/changelog/')], ['Fors gateway', C.GATEWAY_SITE]]],
     ['Docs', [['Quick start', url('docs/compose-quick-start/')], ['Production setup', url('docs/production-setup/')], ['Runbook', url('docs/runbook/')]]],
     ['Trust', [['Security events', url('docs/security-events/')], ['Accessibility statement', url('docs/accessibility-statement/')], ['GitHub', C.GH]]],
   ]
@@ -194,7 +194,7 @@ function homePage() {
 <section class="hero wrap" aria-labelledby="hero-h">
   <span class="pill"><span class="dot" aria-hidden="true"></span>Open source · .NET 10 · Built in Umeå</span>
   <h1 id="hero-h">Chat assistants that answer from your own websites and documents.</h1>
-  <p class="lead">Källa collects your organisation's web pages and documents, keeps them up to date, and lets assistants answer questions about them. Every answer shows the pages it is based on and how recent they are. Models are called through the <a href="${C.GATEWAY_SITE}">Ume AI Gateway</a>, so you decide where your data may go.</p>
+  <p class="lead">Källa collects your organisation's web pages and documents, keeps them up to date, and lets assistants answer questions about them. Every answer shows the pages it is based on and how recent they are. Models are called through <a href="${C.GATEWAY_SITE}">Fors</a>, the LLM gateway, so you decide where your data may go.</p>
   <div class="actions"><a class="btn btn-primary" href="${url('start/')}">Get started${icon('arrow_forward')}</a><a class="btn btn-ghost" href="${url('docs/')}">Read the docs</a></div>
 </section>
 <div class="wrap pt-64"><div class="frame frame-lg">${shot('overview-desktop', 'The admin UI\'s home page: an assistant\'s questions, not-found answers, feedback and cost this week, and the platform\'s health', 'r-20')}</div></div>
@@ -319,7 +319,7 @@ mkdirSync(dist, { recursive: true })
 const out = []
 const write = (path, html) => out.push([path, html])
 
-write('index.html', layout({ page: 'home', title: BRAND, path: '', description: 'An open-source RAG and chat platform for the public sector: crawled and uploaded sources, cited answers with source dates, and every model call through the Ume AI Gateway.', body: homePage() }))
+write('index.html', layout({ page: 'home', title: BRAND, path: '', description: 'An open-source RAG and chat platform for the public sector: crawled and uploaded sources, cited answers with source dates, and every model call through the Fors gateway.', body: homePage() }))
 write('start/index.html', layout({ page: 'start', title: 'Getting started', path: 'start/', description: 'Run Källa locally with demo data, or install a release next to Fors, and get your first cited answer.', body: startPage() }))
 const rendered = new Map(docs.map(d => [d, renderMarkdown(d.source)]))
 for (const d of docs) write(`${d.slug ? `docs/${d.slug}/` : 'docs/'}index.html`, layout({ page: 'docs', title: d.title, path: d.slug ? `docs/${d.slug}/` : 'docs/', description: d.lead, body: docPage(d, rendered.get(d)) }))

@@ -50,7 +50,7 @@ updates:
       - dependency-name: "*"
         update-types: [version-update:semver-major]
       - dependency-name: Microsoft.Playwright
-      # Pinned by the gateway too (llmgateway's Directory.Packages.props, 2026-11-17): moved with the gateway's pin.
+      # Pinned by the gateway too (Fors's Directory.Packages.props, 2026-11-17): moved with the gateway's pin.
       - dependency-name: "Aspire.*"
       - dependency-name: "CommunityToolkit.Aspire.*"
       - dependency-name: "Microsoft.AspNetCore.*"
