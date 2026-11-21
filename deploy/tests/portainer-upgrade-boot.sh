@@ -176,19 +176,6 @@ echo "  schema at $migration_before ($history_before migrations), embedding prof
 
 if [ "$rename" = 1 ]; then
   echo "== the upgrade to 0.9: rename the stack's variables, update it once over the running stack"
-  # ---- BEGIN gateway roles by hand (Fors 0.12.1). Remove this block once compose.portainer.yaml is built on Fors 0.12.2,
-  # ---- whose one-shot renames the gateway's roles itself (docs/portainer.md, "Upgrade"). Fors 0.12's guide,
-  # ---- "Portainer", step 3 (its deploy/upgrade/0.12-rename-roles.sql), in the running gateway's postgres: a role is
-  # ---- renamed beneath its sessions, and the update replaces the old gateway services.
-  # shellcheck disable=SC2016 # expanded in the container
-  as_superuser='PGPASSWORD="$(cat /run/postgres-secrets/bootstrap_password)" exec psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q'
-  dc exec -T postgres sh -c "$as_superuser" <<'SQL' || fail "the roles in the gateway's postgres could not be renamed"
-DO $$ DECLARE r text; BEGIN FOREACH r IN ARRAY ARRAY['migrator','gateway','admin','data','keycloak'] LOOP
-  IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'ume_' || r) AND NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fors_' || r)
-  THEN EXECUTE format('ALTER ROLE %I RENAME TO %I', 'ume_' || r, 'fors_' || r); END IF; END LOOP; END $$;
-SQL
-  ok "the gateway's roles are renamed in its postgres (by hand until Fors 0.12.2)"
-  # ---- END gateway roles by hand.
   # docs/portainer.md, "Upgrade": the variables renamed and the new file applied once with "Prune services", nothing
   # stopped first.
   "$here/rename-0.9.sh" "$from_env" "$work/renamed.env"
