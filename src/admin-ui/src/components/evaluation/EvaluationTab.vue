@@ -166,7 +166,9 @@ onMounted(load)
         </DataTable>
       </UiCard>
 
-      <EvaluationQuestions ref="questions" :collection-id="collectionId" :can-edit="canEdit" @changed="questionsChanged" />
+      <EvaluationQuestions
+        ref="questions" :collection-id="collectionId" :can-edit="canEdit" :deleted="counts.human?.stale ?? 0" @changed="questionsChanged"
+      />
     </div>
   </AsyncState>
 

@@ -101,7 +101,7 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     ])
     const run = (id: string, variant: string, recallAtK: number, candidate = false) => ({
       id, kind: 'nightly', variant, questionCount: 40, k: 10, found: 36, recallAtK, mrr: 0.8, wins: null, losses: null, comparedRunId: null, candidate,
-      thresholdProposal: null, startedAt: '2026-11-01T02:00:00Z', finishedAt: '2026-11-01T02:05:00Z',
+      thresholdProposal: null, startedAt: '2026-11-01T02:00:00Z', finishedAt: '2026-11-01T02:05:00Z', documentGone: null,
     })
     vi.spyOn(api.collections, 'evaluation').mockResolvedValue({
       hasSet: true, questions: [], latestRuns: [run('e3', 'hybrid', 0.95, true), run('e2', 'vector', 0.8), run('e1', 'hybrid', 0.91)],
@@ -295,7 +295,7 @@ describe('Knowledge base (admin design §5.5.2)', () => {
       latestRuns: [{
         id: 'r1', kind: 'nightly', variant: 'hybrid', questionCount: 2, k: 10, found: 1, recallAtK: 0.5, mrr: 0.5, wins: null, losses: null, comparedRunId: null,
         candidate: false, thresholdProposal: { answerable: 1, unanswerable: 1, coverageMaxDistance: { value: 0.4, misclassified: 0 } },
-        startedAt: '2026-11-01T02:00:00Z', finishedAt: '2026-11-01T02:01:00Z',
+        startedAt: '2026-11-01T02:00:00Z', finishedAt: '2026-11-01T02:01:00Z', documentGone: null,
       }],
     })
     vi.spyOn(api.evaluation, 'results').mockResolvedValue([])

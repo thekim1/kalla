@@ -11,7 +11,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 
 ## Code
 
-### [ ] B-60 The admin shows evaluation questions whose documents were deleted (#893, A-38's admin part)
+### [x] B-60 The admin shows evaluation questions whose documents were deleted (#893, A-38's admin part)
 - **Do:** admin §7.1: a `stale` human question (`State = 'stale'`, `RetiredAt` null) says "Its expected document was
   deleted" in the questions table, with re-point (edit) and retire; the report card (§7.2) shows the run result's
   `documentGone` ("N questions left out: their documents were deleted"). The fields are listed on #893.

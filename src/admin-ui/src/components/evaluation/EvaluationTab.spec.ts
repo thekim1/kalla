@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
+import { ApiError } from '@/api/client'
 import type { EvaluationResult, EvaluationRun } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { bffUser } from '@/test/fixtures'
@@ -18,7 +19,7 @@ const dialogButton = (label: string) => [...document.body.querySelectorAll('butt
 function run(overrides: Partial<EvaluationRun>): EvaluationRun {
   return {
     id: 'r2', kind: 'publish-report', variant: 'hybrid', questionCount: 4, k: 10, found: 2, recallAtK: 0.5, mrr: 0.4, wins: 0, losses: 1, comparedRunId: 'r1',
-    candidate: false, thresholdProposal: null, startedAt: '2026-10-30T10:02:00Z', finishedAt: '2026-10-30T10:05:00Z', ...overrides,
+    candidate: false, thresholdProposal: null, startedAt: '2026-10-30T10:02:00Z', finishedAt: '2026-10-30T10:05:00Z', documentGone: null, ...overrides,
   }
 }
 function result(questionId: string, layer: string, rank: number | null, answerable = true): EvaluationResult {
@@ -173,5 +174,63 @@ describe('Test questions and quality (admin design §7.1, §7.2)', () => {
     expect(wrapper.find('[data-test=run]').exists()).toBe(false)
     expect(wrapper.find('[data-test=generate]').exists()).toBe(false)
     expect(wrapper.find('[data-test=add-question]').exists()).toBe(false)
+  })
+
+  it('shows questions whose expected document was deleted, and the run’s count of them (processing design §13.3)', async () => {
+    signIn(['rag-editor'])
+    vi.spyOn(api.collections, 'evaluation').mockResolvedValue({
+      hasSet: true,
+      questions: [{ layer: 'human', state: 'active', count: 2 }, { layer: 'human', state: 'stale', count: 1 }],
+      latestRuns: [run({ documentGone: 2 })],
+    })
+    vi.spyOn(api.evaluation, 'results').mockResolvedValue([result('h1', 'human', 1)])
+    const stale = { id: 'q1', layer: 'human', state: 'stale', question: 'Var finns blanketten?', expectedAnswer: null, expectedDocumentIds: ['gone', 'd1'], origin: null, createdBy: 'anna', retiredAt: null }
+    const retiredGenerated = { ...stale, id: 'q2', layer: 'generated', question: 'Genererad fråga?', retiredAt: '2026-11-02T00:00:00Z' }
+    const questions = vi.spyOn(api.evaluation, 'questions').mockResolvedValue({ items: [stale, retiredGenerated], next: null })
+    vi.spyOn(api.documents, 'get').mockImplementation(async (id) => {
+      if (id === 'gone') throw new ApiError(404, 'GET', null)
+      return { id: 'd1', title: 'Blanketter', displayName: null, url: null } as never
+    })
+    const update = vi.spyOn(api.evaluation, 'updateQuestion').mockResolvedValue({ jobId: 'j', questionId: 'q1' })
+
+    const wrapper = mount(EvaluationTab, { props: { collectionId: 'c1', canEdit: true }, attachTo: document.body })
+    await flushPromises()
+
+    expect(wrapper.get('[data-test=document-gone]').text()).toBe('2 questions left out: their documents were deleted')
+    expect(wrapper.get('[data-test=deleted-notice]').text()).toContain('1 question expects a document that was deleted.')
+    await wrapper.get('[data-test=show-deleted]').trigger('click')
+    await flushPromises()
+    expect(questions).toHaveBeenLastCalledWith('c1', expect.objectContaining({ layer: 'human', state: 'stale' }))
+    expect(wrapper.find('[data-test=deleted-notice]').exists()).toBe(false)
+    // Only the human question says so; a generated stale question is retired at its top-up.
+    expect(wrapper.findAll('[data-test=document-deleted]').map((e) => e.text())).toEqual(['Its expected document was deleted'])
+    expect(wrapper.findAll('[data-test=retire-question]')).toHaveLength(1)
+
+    // Re-pointing: the deleted document is marked and has to go before the question is saved.
+    await wrapper.findAll('[data-test=edit-question]')[0]!.trigger('click')
+    await flushPromises()
+    expect(document.body.querySelector('[data-test=deleted-document]')!.textContent).toBe('Deleted document')
+    ;(document.body.querySelector('[data-test=save-question]') as HTMLButtonElement).click()
+    await flushPromises()
+    expect(update).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('Remove the deleted document and choose another one.')
+    ;(document.body.querySelector('[aria-label="Remove Deleted document"]') as HTMLButtonElement).click()
+    await flushPromises()
+    ;(document.body.querySelector('[data-test=save-question]') as HTMLButtonElement).click()
+    await flushPromises()
+    expect(update).toHaveBeenCalledWith('c1', 'q1', { question: 'Var finns blanketten?', expectedAnswer: null, expectedDocumentIds: ['d1'] })
+    wrapper.unmount()
+  })
+
+  it('leaves the count out when the run has none or its job is gone', async () => {
+    signIn(['rag-viewer'])
+    vi.spyOn(api.collections, 'evaluation').mockResolvedValue({ hasSet: true, questions: [], latestRuns: [run({ documentGone: null })] })
+    vi.spyOn(api.evaluation, 'results').mockResolvedValue([])
+    vi.spyOn(api.evaluation, 'questions').mockResolvedValue({ items: [], next: null })
+    const wrapper = mount(EvaluationTab, { props: { collectionId: 'c1', canEdit: false } })
+    await flushPromises()
+    expect(wrapper.find('[data-test=report]').exists()).toBe(true)
+    expect(wrapper.find('[data-test=document-gone]').exists()).toBe(false)
+    expect(wrapper.find('[data-test=deleted-notice]').exists()).toBe(false)
   })
 })
