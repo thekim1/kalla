@@ -74,12 +74,22 @@ removing the file from the source.
 Steps 2–4 need a Decisions entry and changes to processing §9.5, engine §14, admin §4.5 and V26, and data-model
 `Documents`.
 
-## For the user to decide
+## Decided (user, 2026-11-21)
 
-1. Should *reject* be a state of its own (as above), or is an exclude pattern for crawled pages and removing the file for
-   uploads enough? Its own state is fail-closed and works for both kinds of document; the shortcuts alone need no new
-   column but leave a held document with no decision on it.
-2. Should a *false positive* need the ticked types, or only the reason? The types are what make the summary useful.
-3. Who may decide: as today (department admin of the source, or platform admin), or platform admins only for
-   personnummer and samordningsnummer?
-4. Should step 1 go into P2 wave 1 now, before the rest is decided?
+Asked with four alternatives each on #925; recorded in `archive/decisions-log.md` (2026-11-21, session 53):
+
+1. **Reject is a state of its own** on the document, fail-closed, the same for crawled and uploaded documents. The
+   exclude-pattern shortcut stays as an offer in the dialog.
+2. **A false positive needs the ticked types**, not only the reason.
+3. **Who decides stays as today:** the admin of the source's department, or a platform admin, with a reason of at least
+   10 characters, audited.
+4. **Step 1 is queued now** in P2 wave 1 as stream b's **B-63** (`work/stream-b.md`): the *Clear* button and the
+   highlights. It needs no new decision (admin §4.5).
+
+Steps 2–4 get their Decisions entry and design changes from this proposal's session, with the review's two points
+(main session on #925):
+
+- *Reject* withdrawing a **live** set under `piiMode: report` goes further than *clear* does today: processing §9.5 and
+  the swap rule in engine §14 both have to say it.
+- The *Not reviewed* filter and the *Needs attention* count (B-59) both need "held with no decision". If B-59 lands
+  first, it counts held documents now and adds "no decision" with step 2.
