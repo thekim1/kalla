@@ -59,12 +59,15 @@ ended the session here and continues with the clean-up next time.** In order:
    - **The design documents** (about 15,000 lines). Four agents were sent over them and stopped by the usage limit
      before they reported (it resets 2026-11-26 19:00, Europe/Stockholm). Their shares: admin, `decisions.md`,
      cost-attribution and `architecture.md`; chat, knowledge and tools; the three ingestion designs and the parser;
-     identity, data-model, repo-and-deployment and gateway-changes (with `adr-drafts.md` and
-     `prompt-gateway-session.md`: do they still have a purpose?). What to look for: statements that the code has
+     identity, data-model, repo-and-deployment and gateway-changes (with `adr-drafts.md`: does it still have a
+     purpose?). What to look for: statements that the code has
      overtaken ("not built yet", "P2", an open pull request), names from before the rename that are not about the
      old name on purpose, history that belongs in `plans/archive/design-history/`, and passages that repeat another
      document. Known already: admin §5.8 to §5.10 still read as before and after M-16; `plans/tools/design.md` says
-     `rag-tools` once where the rest says `kalla-tools`.
+     `rag-tools` once where the rest says `kalla-tools`. **Checked at the clean-up:** every "not built" in the
+     designs against the source; one was wrong (`GatewayKeys` in data-model §2.1, corrected), the others hold. Where
+     dated lines and pull-request numbers are densest, and so where history is likeliest: repo-and-deployment,
+     connectors, identity and admin.
    - **Not read either:** `plans/to-verify.md`, the open items of the two stream queues, `postponed-decisions.md`
      beyond its header, `plans/cases/support-assistant/` (written for 0.5.0), `plans/gold-set/README.md`, and
      `docs/` (stream a's; only the accessibility statement's old working name was fixed).

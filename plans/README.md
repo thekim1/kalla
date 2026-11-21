@@ -61,7 +61,8 @@ Registers, kept current:
 (`passes/`, folded into the designs on 2026-11-01; each ends with a ledger of where its rules went), the first-level
 area plans (`area-plans/`, overtaken by the designs), the designs' process sections (`design-history/`: summaries,
 milestones, questions, deferred lists; a moved section keeps its heading with a pointer, so its citations resolve), the
-finished queue items (`work/`) and older proposals and reviews. Nothing there binds, except the
+finished queue items (`work/`), the prompt for the gateway session of release 1 (`gateway-changes/`) and older
+proposals and reviews. Nothing there binds, except the
 performance pass's capacity model as named in the roadmap.
 
 Plain-language overview for stakeholders: [`../docs/stakeholder-report.html`](../docs/stakeholder-report.html).
