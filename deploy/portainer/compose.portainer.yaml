@@ -71,7 +71,8 @@
 # The same stack also runs Källa: kalla-postgres, kalla-migrate, kalla-api (8543), kalla-admin (9543), kalla-worker,
 # kalla-parser and, with their profiles in COMPOSE_PROFILES, kalla-clamav (clamav) and kalla-renderer (render). Its one-shot
 # kalla-bootstrap creates RAG's certificates and secrets in the volumes <stack>_kalla-certs and <stack>_kalla-secrets on first
-# start. Keep the stack name: the gateway's volumes are found by it.
+# start; the one-shot kalla-roles renames the database roles from before 0.9 (ume_rag_*) before kalla-migrate. Keep the
+# stack name: the gateway's volumes are found by it.
 #
 # Start from deploy/portainer/stack.env.example (Portainer: "Load variables from .env file"); after each deploy the end
 # of kalla-bootstrap's log lists what is still missing. The gateway's image variables above are not needed: this file pins
@@ -497,6 +498,7 @@ services:
       - {source: kalla-postgres-hba, target: /config/pg_hba.conf}
       - {source: kalla-postgres-conf, target: /config/postgresql.conf}
       - {source: kalla-app-roles, target: /config/app-roles.sql}
+      - {source: kalla-rename-roles, target: /config/0.9-rename-roles.sql}
       - {source: kalla-proxy-conf-template, target: /config/nginx-proxy.conf.template}
       - {source: kalla-openwebui-setup-script, target: /config/feedback-key-setup.py}
       - {source: kalla-openwebui-start-script, target: /config/start-with-sign-in.py}
@@ -529,7 +531,6 @@ services:
     user: "999:999"
     restart: unless-stopped
     stop_grace_period: 60s
-    tmpfs: [/tmp, "/var/run/postgresql:uid=999,gid=999,mode=0700"]
     shm_size: 1g
     cpus: 2.0
     mem_reservation: 2g
@@ -546,6 +547,8 @@ services:
       - {<<: *kalla-conf-mount, volume: {subpath: postgres}}
       - {<<: *kalla-certs-mount, volume: {subpath: postgres}}
       - {<<: *kalla-secrets-mount, target: /run/postgres-secrets, volume: {subpath: postgres}}
+      # Its Unix socket, in memory, shared with kalla-roles: the superuser signs in only there (by peer, pg_hba.conf).
+      - {type: volume, source: kalla-postgres-socket, target: /var/run/postgresql}
     depends_on:
       kalla-bootstrap: {condition: service_completed_successfully}
     networks: [kalla-data]
@@ -554,6 +557,27 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+
+  kalla-roles:
+    # One-shot before every kalla-migrate: renames the database roles from before the rename to Källa (ume_rag_*, 0.8
+    # and earlier) to kalla_* (deploy/upgrade/0.9-rename-roles.sql, from kalla-config), so a database copied from the old
+    # rag-postgres-data needs no console (docs/upgrade-guide.md, "0.9.0"). It changes nothing where the roles have the
+    # new names. The Postgres superuser by peer over kalla-postgres's socket, as Postgres's own user: no password and
+    # no network.
+    <<: *hardened
+    image: ${KALLA_POSTGRES_IMAGE:-ghcr.io/thekim1/kalla/postgres:0.9.0@sha256:b0201ee9b3e4e63ad95f9787d2c30eaf2a1547a9751eae42502888cc844dd1b5}
+    user: "999:999"
+    restart: "no"
+    entrypoint: [psql, -X, -q, -v, ON_ERROR_STOP=1, -h, /var/run/postgresql, -U, postgres, -d, postgres, -f, /run/config/0.9-rename-roles.sql]
+    cpus: 0.5
+    mem_limit: 128m
+    pids_limit: 32
+    volumes:
+      - {<<: *kalla-conf-mount, volume: {subpath: roles}}
+      - {type: volume, source: kalla-postgres-socket, target: /var/run/postgresql, read_only: true}
+    depends_on:
+      kalla-postgres: {condition: service_healthy}
+    network_mode: none
 
   kalla-migrate:
     <<: *hardened
@@ -577,6 +601,7 @@ services:
       - {<<: *kalla-secrets-mount, volume: {subpath: migrations}}
     depends_on:
       kalla-postgres: {condition: service_healthy}
+      kalla-roles: {condition: service_completed_successfully}
     networks: [kalla-data]
 
   kalla-api:
@@ -1386,7 +1411,7 @@ configs:
         [ ! -d /openwebui-data ] || cp -a "$$L/openwebui-data/." /openwebui-data/
         if [ -d /postgres-data ] && [ -f "$$L/postgres-data/PG_VERSION" ] && [ ! -f /postgres-data/PG_VERSION ]; then
           copy_last "$$L/postgres-data" /postgres-data PG_VERSION
-          echo "kalla-bootstrap: copied the database; its roles were to be renamed to kalla_* before this update (docs/portainer.md, \"Upgrade\", step 7): if kalla-migrate cannot sign in, rename them on kalla-postgres now and update the stack again"
+          echo "kalla-bootstrap: copied the database; kalla-roles renames its roles to kalla_* next (if it fails: docs/portainer.md, \"Upgrade\")"
         fi
         copy_last "$$L/secrets" "$$S" .pepper
       fi
@@ -1644,7 +1669,7 @@ configs:
       # Whether the TLS proxy below serves kalla-admin's host name, for the setup wizard's address at the end.
       admin_proxied=""
       if [ -n "$$F" ]; then
-      mkdir -p "$$F/postgres-init" "$$F/postgres" "$$F/migrations" "$$F/openwebui-setup" "$$F/openwebui"
+      mkdir -p "$$F/postgres-init" "$$F/postgres" "$$F/migrations" "$$F/roles" "$$F/openwebui-setup" "$$F/openwebui"
       # kalla-openwebui-setup's script and kalla-openwebui's start wrapper (profile openwebui): those services are read-only, so they
       # read their scripts from kalla-config.
       cp "$$K"/feedback-key-setup.py "$$F/openwebui-setup/feedback-key-setup.py"
@@ -1661,6 +1686,8 @@ configs:
         done
       fi
       cp "$$K"/app-roles.sql "$$F/migrations/app-roles.sql"
+      # kalla-roles' statements (the role rename of 0.9.0), read-only like the others.
+      cp "$$K"/0.9-rename-roles.sql "$$F/roles/0.9-rename-roles.sql"
       # ClamAV's confs, only where the deployment gives the image's (repo-and-deployment §5.5): the image's unprivileged
       # entrypoint takes a setting only from a mounted file. A 24 GB host (kalla-clamav's 3g) keeps the old engine during a
       # reload and test-loads updates before using them; a freshclam proxy is for a host whose egress goes through one.
@@ -2089,6 +2116,36 @@ configs:
       GRANT EXECUTE ON FUNCTION content.rag_count_retrievals(date, uuid[], bytea[], uuid[], character varying[], integer[], integer[])
         TO kalla_api;
       COMMIT;
+  kalla-rename-roles:
+    content: |
+      -- Källa 0.9.0: renames the database roles from before the rename to Källa (ume_rag_*) to kalla_* (docs/upgrade-guide.md,
+      -- "0.9.0"), as the Postgres superuser. The one-shot kalla-roles runs it before every kalla-migrate (Compose and the
+      -- Portainer stack, deploy/compose.rag.yaml), and deploy/upgrade/upgrade-to-0.9.sh in the old rag-postgres; by hand it
+      -- is the fallback (Kubernetes, or a kalla-roles that failed). Idempotent: a role already renamed is skipped, so on a
+      -- database with the new names it changes nothing. A session still connected under an old name is ended first, waiting
+      -- up to 10 s for it: Postgres renames a role beneath its other sessions, which would go on under the new name. Nothing
+      -- should be connected, as the old services use the old database or are stopped. SCRAM passwords survive the rename,
+      -- so the services' passwords stay the same; grants, ownership, the database ragdb and the per-role settings follow the
+      -- role. The schema-admission table and function (public.kalla_service_fences, public.kalla_admit) are created anew by
+      -- kalla-migrate; the old ones (ume_rag_*) are dropped here.
+      DO $$$$
+      DECLARE
+        r text;
+      BEGIN
+        FOREACH r IN ARRAY ARRAY['migrator', 'api', 'admin', 'worker'] LOOP
+          IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'ume_rag_' || r)
+             AND NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'kalla_' || r) THEN
+            PERFORM pg_terminate_backend(pid, 10000) FROM pg_stat_activity WHERE usename = 'ume_rag_' || r;
+            EXECUTE format('ALTER ROLE %I RENAME TO %I', 'ume_rag_' || r, 'kalla_' || r);
+            RAISE NOTICE 'renamed role ume_rag_% to kalla_%', r, r;
+          END IF;
+        END LOOP;
+      END $$$$;
+      \connect ragdb
+      -- Without the notices of objects that are gone, which every run after the first would print.
+      SET client_min_messages = warning;
+      DROP FUNCTION IF EXISTS public.ume_rag_admit(text);
+      DROP TABLE IF EXISTS public.ume_rag_service_fences;
   kalla-openwebui-setup-script:
     content: |
       #!/usr/bin/env python3
@@ -2668,6 +2725,9 @@ volumes:
   kalla-config:
   kalla-blobs:
   kalla-clamav-db:
+  # kalla-postgres's Unix socket (kalla-roles signs in there), in memory: emptied when no container uses it.
+  kalla-postgres-socket:
+    driver_opts: {type: tmpfs, device: tmpfs, o: "uid=999,gid=999,mode=0700"}
   # Before the rename to Källa (0.8 and earlier): copied once into the kalla-* volumes by kalla-bootstrap, then unused.
   # Remove them once the stack runs (docs/upgrade-guide.md, "0.9.0"); in a new stack they stay empty.
   rag-postgres-data:

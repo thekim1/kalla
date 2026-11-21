@@ -3,7 +3,8 @@
 # The same stack also runs Källa: kalla-postgres, kalla-migrate, kalla-api (8543), kalla-admin (9543), kalla-worker,
 # kalla-parser and, with their profiles in COMPOSE_PROFILES, kalla-clamav (clamav) and kalla-renderer (render). Its one-shot
 # kalla-bootstrap creates RAG's certificates and secrets in the volumes <stack>_kalla-certs and <stack>_kalla-secrets on first
-# start. Keep the stack name: the gateway's volumes are found by it.
+# start; the one-shot kalla-roles renames the database roles from before 0.9 (ume_rag_*) before kalla-migrate. Keep the
+# stack name: the gateway's volumes are found by it.
 #
 # Start from deploy/portainer/stack.env.example (Portainer: "Load variables from .env file"); after each deploy the end
 # of kalla-bootstrap's log lists what is still missing. The gateway's image variables above are not needed: this file pins

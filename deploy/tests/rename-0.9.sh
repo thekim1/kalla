@@ -14,6 +14,8 @@ set -euo pipefail
 in="${1:?usage: rename-0.9.sh OLD.env NEW.env}"; out="${2:?usage: rename-0.9.sh OLD.env NEW.env}"
 sed -E -e 's/(^|[^A-Za-z0-9_])UME_RAG_/\1KALLA_/g' -e 's/(^|[^A-Za-z0-9_])RAG_([A-Z]+)_IMAGE/\1KALLA_\2_IMAGE/g' \
   -e 's/(^|[^A-Za-z0-9_])UME_/\1FORS_/g' "$in" > "$out"
+# A last line without its newline would run into the first line added below.
+[ ! -s "$out" ] || [ -z "$(tail -c 1 "$out")" ] || echo >> "$out"
 
 has() { grep -qE "^$1=" "$out"; }       # set, also empty
 set_to() { grep -qE "^$1=." "$out"; }   # set to a value

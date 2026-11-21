@@ -95,7 +95,7 @@ if [ ! -f "$S/.pepper" ] && [ -f "$L/secrets/.pepper" ]; then
   [ ! -d /openwebui-data ] || cp -a "$L/openwebui-data/." /openwebui-data/
   if [ -d /postgres-data ] && [ -f "$L/postgres-data/PG_VERSION" ] && [ ! -f /postgres-data/PG_VERSION ]; then
     copy_last "$L/postgres-data" /postgres-data PG_VERSION
-    echo "kalla-bootstrap: copied the database; its roles were to be renamed to kalla_* before this update (docs/portainer.md, \"Upgrade\", step 7): if kalla-migrate cannot sign in, rename them on kalla-postgres now and update the stack again"
+    echo "kalla-bootstrap: copied the database; kalla-roles renames its roles to kalla_* next (if it fails: docs/portainer.md, \"Upgrade\")"
   fi
   copy_last "$L/secrets" "$S" .pepper
 fi
@@ -353,7 +353,7 @@ proxy_todo=""
 # Whether the TLS proxy below serves kalla-admin's host name, for the setup wizard's address at the end.
 admin_proxied=""
 if [ -n "$F" ]; then
-mkdir -p "$F/postgres-init" "$F/postgres" "$F/migrations" "$F/openwebui-setup" "$F/openwebui"
+mkdir -p "$F/postgres-init" "$F/postgres" "$F/migrations" "$F/roles" "$F/openwebui-setup" "$F/openwebui"
 # kalla-openwebui-setup's script and kalla-openwebui's start wrapper (profile openwebui): those services are read-only, so they
 # read their scripts from kalla-config.
 cp "$K"/feedback-key-setup.py "$F/openwebui-setup/feedback-key-setup.py"
@@ -370,6 +370,8 @@ if [ "${KALLA_HOST_MEMORY:-16}" = 24 ]; then
   done
 fi
 cp "$K"/app-roles.sql "$F/migrations/app-roles.sql"
+# kalla-roles' statements (the role rename of 0.9.0), read-only like the others.
+cp "$K"/0.9-rename-roles.sql "$F/roles/0.9-rename-roles.sql"
 # ClamAV's confs, only where the deployment gives the image's (repo-and-deployment §5.5): the image's unprivileged
 # entrypoint takes a setting only from a mounted file. A 24 GB host (kalla-clamav's 3g) keeps the old engine during a
 # reload and test-loads updates before using them; a freshclam proxy is for a host whose egress goes through one.

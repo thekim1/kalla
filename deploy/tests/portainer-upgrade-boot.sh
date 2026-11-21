@@ -18,11 +18,12 @@
 #   - the end of kalla-bootstrap's log (its checklist) is printed, as the upgrade guide tells the operator to read it
 #
 # With --rename-0.9 (an earlier release before 0.9.0, the rename to Källa and Fors 0.12) the upgrade is the steps of
-# 0.9.0's docs/portainer.md, "Upgrade", instead of that one step: the services are stopped and the roles renamed in the
-# two old databases (deploy/upgrade/0.9-rename-roles.sql in rag-postgres, Fors's statement in postgres), then the stack
-# is stopped, its variables renamed (rename-0.9.sh; the test's ports and binds too) and the new file applied once with
-# the old containers pruned (both bootstraps copy the old volumes). The checks after the upgrade are the same; nothing
-# is fenced, as the old services were stopped.
+# docs/portainer.md, "Upgrade": the stack's variables are renamed (rename-0.9.sh; the test's ports and binds too) and
+# the new file applied once over the running stack, with the old containers pruned. Nothing is stopped and no role is
+# renamed by hand on Källa's side: kalla-bootstrap copies the old volumes and kalla-roles renames the roles ume_rag_* in
+# the copy before kalla-migrate signs in (its log must name the rename). Only the gateway's roles are still renamed by
+# hand, in a block marked below, until the stack is built on Fors 0.12.2, whose own one-shot does it. The checks after
+# the upgrade are the same; nothing is fenced, as the new database is a copy the old services never used.
 #
 #   deploy/tests/portainer-upgrade-boot.sh OLD-STACK.yaml NEW-STACK.yaml --from-env FILE [options]
 #
@@ -135,7 +136,7 @@ completed() {
   local name state exit_code restarts
   while read -r name state exit_code restarts; do
     case "$name" in
-      *-bootstrap-1|*-migrations-1|*-rag-migrate-1|*-kalla-migrate-1)
+      *-bootstrap-1|*-migrations-1|*-rag-migrate-1|*-kalla-roles-1|*-kalla-migrate-1)
         [ "$state $exit_code" = "exited 0" ] || fail "$name is $state (exit $exit_code), expected to have completed";;
       *-rag-openwebui-setup-1|*-kalla-openwebui-setup-1)
         [ "$state" = running ] || [ "$state $exit_code" = "exited 0" ] || fail "$name is $state (exit $exit_code)";;
@@ -174,24 +175,22 @@ files_before="$(kept_files)"
 echo "  schema at $migration_before ($history_before migrations), embedding profiles: $profiles_before"
 
 if [ "$rename" = 1 ]; then
-  echo "== the upgrade to 0.9.0: rename the roles in the old databases, stop the stack, rename its variables, update it"
-  # docs/portainer.md, "Upgrade", step 7: the services stopped, the two old databases running for their consoles.
-  dc stop >/dev/null || fail "could not stop the earlier release"
-  dc up -d --no-deps --wait --wait-timeout "$wait_timeout" postgres rag-postgres || fail "the old databases did not start"
-  # The Postgres superuser with the bootstrap password, the statements on stdin, as the step says.
+  echo "== the upgrade to 0.9: rename the stack's variables, update it once over the running stack"
+  # ---- BEGIN gateway roles by hand (Fors 0.12.1). Remove this block once compose.portainer.yaml is built on Fors 0.12.2,
+  # ---- whose one-shot renames the gateway's roles itself (docs/portainer.md, "Upgrade"). Fors 0.12's guide,
+  # ---- "Portainer", step 3 (its deploy/upgrade/0.12-rename-roles.sql), in the running gateway's postgres: a role is
+  # ---- renamed beneath its sessions, and the update replaces the old gateway services.
   # shellcheck disable=SC2016 # expanded in the container
   as_superuser='PGPASSWORD="$(cat /run/postgres-secrets/bootstrap_password)" exec psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q'
-  dc exec -T rag-postgres sh -c "$as_superuser" < "$here/../upgrade/0.9-rename-roles.sql" \
-    || fail "the roles in rag-postgres could not be renamed"
-  # Fors 0.12's guide, "Portainer", step 3 (its deploy/upgrade/0.12-rename-roles.sql).
   dc exec -T postgres sh -c "$as_superuser" <<'SQL' || fail "the roles in the gateway's postgres could not be renamed"
 DO $$ DECLARE r text; BEGIN FOREACH r IN ARRAY ARRAY['migrator','gateway','admin','data','keycloak'] LOOP
   IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'ume_' || r) AND NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fors_' || r)
   THEN EXECUTE format('ALTER ROLE %I RENAME TO %I', 'ume_' || r, 'fors_' || r); END IF; END LOOP; END $$;
 SQL
-  ok "the roles are renamed in the old rag-postgres and in the gateway's postgres"
-  # Steps 8 and 9: the stack stopped, its variables renamed, the new file applied once with "Prune services".
-  dc stop >/dev/null || fail "could not stop the old databases"
+  ok "the gateway's roles are renamed in its postgres (by hand until Fors 0.12.2)"
+  # ---- END gateway roles by hand.
+  # docs/portainer.md, "Upgrade": the variables renamed and the new file applied once with "Prune services", nothing
+  # stopped first.
   "$here/rename-0.9.sh" "$from_env" "$work/renamed.env"
   env_file="$work/renamed.env"; test_env="$work/test.env"; pg=kalla-postgres; migrate=kalla-migrate; volume_prefix=kalla
   stack="$new"
@@ -210,6 +209,10 @@ if [ "$rename" = 1 ]; then
   dc logs --no-color --no-log-prefix kalla-bootstrap 2>/dev/null | grep -F 'copied the database' >/dev/null \
     || fail "kalla-bootstrap did not copy the old volumes (no 'copied the database' line)"
   ok "kalla-bootstrap copied the rag-* volumes into the kalla-* volumes, in one update"
+  dc logs --no-color --no-log-prefix kalla-roles 2>/dev/null | grep -F 'renamed role ume_rag_migrator to kalla_migrator' >/dev/null \
+    || fail "kalla-roles did not rename the roles of the copied database (no 'renamed role ume_rag_migrator' line)"
+  [ "$(sql "SELECT count(*) FROM pg_roles WHERE rolname LIKE 'ume\\_rag\\_%'")" = 0 ] || fail "roles ume_rag_* are left in kalla-postgres"
+  ok "kalla-roles renamed the roles ume_rag_* to kalla_* in the copied database, with nothing done by hand"
 fi
 
 # Every service's container runs the image the new file names.
