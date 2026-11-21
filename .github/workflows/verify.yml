@@ -119,7 +119,7 @@ jobs:
           # moves with the image) or the container test changed, the evaluation smoke only when the code on its path
           # (ingestion, retrieval, answering) or the smoke set changed. A dispatch and release.yml run everything.
           images="$(git diff --name-only "$range" | grep -E '^(images/postgres/|images/clamav/|deploy/postgres/|\.github/workflows/verify\.yml$)' || true)"
-          renderer="$(git diff --name-only "$range" | grep -E '^(images/renderer/|src/Kalla\.Worker/Connectors/Render/|src/Kalla\.Worker/Connectors/Http/PageFetcher\.cs$|tests/Kalla\.Worker\.Tests/Connectors/RendererContainerTests\.cs$|Directory\.Packages\.props$|\.github/workflows/verify\.yml$)' || true)"
+          renderer="$(git diff --name-only "$range" | grep -E '^(images/renderer/|src/Kalla\.Worker/Connectors/Render/|src/Kalla\.Worker/Connectors/Http/PageFetcher\.cs$|src/Kalla\.Worker/(Kalla\.Worker\.csproj|Libatomic\.targets)$|Directory\.Build\.targets$|tests/Kalla\.Worker\.Tests/Connectors/RendererContainerTests\.cs$|Directory\.Packages\.props$|\.github/workflows/verify\.yml$)' || true)"
           smoke="$(git diff --name-only "$range" | grep -E '^(src/Kalla\.(Worker|Retrieval|Answering|Api|Infrastructure|Pipelines|Domain)/|tests/evaluation/|tests/Kalla\.Worker\.Tests/Evaluation|images/postgres/|Directory\.(Packages|Build)\.(props|targets)$|global\.json$|\.github/workflows/verify\.yml$)' || true)"
           { echo "code=$(flag "$code")"; echo "deploy=$(flag "$deploy")"; echo "adminui=$(flag "$adminui")"
             echo "images=$(flag "$images")"; echo "renderer=$(flag "$renderer")"; echo "smoke=$(flag "$smoke")"; } >> "$GITHUB_OUTPUT"
@@ -233,6 +233,14 @@ jobs:
         # without its secret path, Chromium's sandbox on, a routed page renders, no WebRTC candidate, and nothing outside
         # the network resolves or connects from inside the renderer (connectors design §8.3).
         run: bash images/renderer/test.sh kalla/renderer:ci
+      - name: The worker image starts Playwright's driver
+        # The driver's Node runs inside the worker (connectors design §8.3) and links libatomic.so.1, which the chiseled
+        # base lacks and Libatomic.targets adds (#927). The tests below run the driver on the runner, not in the image.
+        run: |
+          dotnet publish src/Kalla.Worker -c Release -t:PublishContainer --os linux --arch x64 --nologo \
+            -p:ContainerRepository=kalla.local/worker -p:ContainerImageTag=ci
+          docker run --rm --entrypoint /app/.playwright/node/linux-x64/node kalla.local/worker:ci \
+            /app/.playwright/package/cli.js --version
       - name: Worker renders through the image
         # The image as Compose runs it, on a network of its own (10.215.0.0/24). --fail-skips and
         # --minimum-expected-tests turn a skip (no image variable) or a filter that matches nothing into a failure.
