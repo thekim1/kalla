@@ -2,9 +2,9 @@
 
 State of the Källa work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`).
 **Last release `v0.9.1`** (2026-11-21, tag at `e9ec0597`, on Fors `v0.12.2`), the same day as `v0.9.0`, the first
-under the names Källa and Fors: 0.9.1 makes the upgrade need no SQL by hand. Nothing is unreleased on `main`. The
-user's VM runs 0.5.0. Two machines work on it: `~/research/rag` (the user's, where sessions 49 to 52 ran) and
-`thekim1`'s (stream b, often stream a, and this release's preparation). Branch `main`, remote `origin` =
+under the names Källa and Fors: 0.9.1 makes the upgrade need no SQL by hand. Unreleased on `main`: four dependency
+bumps. The user's VM runs 0.5.0. Two machines work on it: `~/research/rag` (the user's, where sessions 49 to 52
+ran) and `thekim1`'s (stream b, often stream a, and the releases' preparation). Branch `main`, remote `origin` =
 https://github.com/thekim1/kalla (HTTPS through `gh auth git-credential`, handbook *Environment notes*).
 
 ## What this is
@@ -39,48 +39,46 @@ sink" monolith. Design and code live in this repo.
 - **The session's GitHub account is `ume-nichlas`** (user, 2026-11-20). `gh` here also holds `Crotalus` (the user's
   own), and the active account has switched to `Crotalus` by itself before. **Run `gh auth status` before every push
   or post**, and `gh auth switch -u ume-nichlas` when it shows `Crotalus`.
-- **The session approves nothing on this machine.** `gh pr review --approve` as `ume-nichlas` is stopped by Claude
-  Code's permission check, and in session 52 so was approving as `Crotalus`, with the user's decision on record and
-  their go-ahead in the conversation. Review as a comment, say that it is not the approval, and give the user the
-  line to run (handbook, *How we work*). What then merges a pull request is the user's approval, `thekim1`'s
-  approval, or `thekim1`'s `--admin`.
+- **Approvals on this machine.** `gh pr review --approve` as `ume-nichlas` is stopped by Claude Code's permission
+  check. Approving as `Crotalus` goes through **only on the user's direct word in the conversation for named pull
+  requests** ("Approve it" for #915, "clear the PRs" for Dependabot's four, 2026-11-21); with a recorded decision
+  and a bare "ok go on" it was stopped twice the same morning. Without that word: review as a comment, say that it
+  is not the approval, and give the user the line to run (handbook, *How we work*). With it: read the pull request's
+  `state`, switch the account in a command of its own, approve, switch back at once. `thekim1`'s approval or its
+  `--admin` also bring a pull request in.
 - **Look at the open pull requests before each step** (`gh pr list`): the other machine works at the same hour.
   Say on its pull request what you are about to write.
 - **A decision for the user is asked as four alternatives with one recommendation** (the question tool).
 
-**Open when this was written** (2026-11-21 17:15 UTC): this file's pull request (#915, the plan clean-up) and
-Dependabot's four (#911 to #914). Nothing of the main session's is open in Fors. **The user
-ended the session here and continues with the clean-up next time.** In order:
+**Open when this was written** (2026-11-21 18:05 UTC): only this file's pull request, #922. Issue **#920** hands
+the VM's upgrade to `thekim1`. In order:
 
-1. **#915, the plan clean-up:** its checks are green; it waits for an approval (the user's or `thekim1`'s). When it
-   is merged, remove the worktree `~/research/rag-docs` and the branch. It closed M-16 in the queue; M-16's issue
-   #667 is `thekim1`'s to close, asked in #915's description.
-2. **Continue the clean-up with what #915 did not read:**
+1. **The clean-up of the design documents, in a session of its own** (user, 2026-11-21). The status files are done
+   (#915). Not read through yet:
    - **The design documents** (about 15,000 lines). Four agents were sent over them and stopped by the usage limit
      before they reported (it resets 2026-11-26 19:00, Europe/Stockholm). Their shares: admin, `decisions.md`,
      cost-attribution and `architecture.md`; chat, knowledge and tools; the three ingestion designs and the parser;
      identity, data-model, repo-and-deployment and gateway-changes (with `adr-drafts.md`: does it still have a
-     purpose?). What to look for: statements that the code has
-     overtaken ("not built yet", "P2", an open pull request), names from before the rename that are not about the
-     old name on purpose, history that belongs in `plans/archive/design-history/`, and passages that repeat another
-     document. Known already: admin §5.8 to §5.10 still read as before and after M-16; `plans/tools/design.md` says
-     `rag-tools` once where the rest says `kalla-tools`. **Checked at the clean-up:** every "not built" in the
-     designs against the source; one was wrong (`GatewayKeys` in data-model §2.1, corrected), the others hold. Where
-     dated lines and pull-request numbers are densest, and so where history is likeliest: repo-and-deployment,
-     connectors, identity and admin.
-   - **Not read either:** `plans/to-verify.md`, the open items of the two stream queues, `postponed-decisions.md`
-     beyond its header, `plans/cases/support-assistant/` (written for 0.5.0), `plans/gold-set/README.md`, and
-     `docs/` (stream a's; only the accessibility statement's old working name was fixed).
+     purpose?). What to look for: statements that the code has overtaken ("P2", "later", an open pull request),
+     names from before the rename that are not about the old name on purpose, history that belongs in
+     `plans/archive/design-history/`, and passages that repeat another document.
+   - **Known already:** admin §5.8 to §5.10 still read as before and after M-16; `plans/tools/design.md` says
+     `rag-tools` once where the rest says `kalla-tools`. Every "not built" in the designs was checked against the
+     source at #915 (one was wrong and is corrected). Dated lines and pull-request numbers are densest in
+     repo-and-deployment, connectors, identity and admin, so history is likeliest there.
+   - **Not read either:** `plans/to-verify.md`, the open items of the two stream queues, the rows of
+     `postponed-decisions.md`, `plans/cases/support-assistant/` (written for 0.5.0), `plans/gold-set/README.md`, and
+     `docs/` (stream a's).
    - A design is binding: change what is plainly out of date, and bring anything that changes a rule to the user.
-3. **Dependabot's #911 to #914** are reviewed as comments (2026-11-21). **#912** (admin UI) and **#914**
-   (AngleSharp) are green and fine. **#911** (uv 0.13.9) is green but not ready: `parser.yml:77`, `audit.yml:101`
-   and the comment at `src/parser/Dockerfile:7` still say 0.13.8. **#913** (the parser's minor group) has
-   `parser-image` red: `src/parser/LICENSES.md` must be regenerated in the image with `scripts/licences.py`. Nothing
-   was pushed to their branches. The user was offered that this session makes the two fixes and had not answered;
-   look at what `thekim1`'s machine did first.
-4. **P2 wave 1 runs on `thekim1`'s machine** (Decisions "P2 starts before go-live"): B-60 is merged (#910), B-54 to
-   B-59 are open in stream b's queue. The user was offered implementor agents on this machine for some of them and
-   chose the plan clean-up instead; say on the issue before starting one.
+2. **The VM's upgrade is `thekim1`'s** (user, 2026-11-21; issue #920): 0.5.0 to 0.9.1 on Fors 0.12.2 by
+   `docs/portainer.md`, *Upgrade*. Read what is reported there; a step that did not go as the guide says is a guide
+   fix, and the roadmap's T1 row follows the result.
+3. **Dependabot's first four after the release are in** (#911 to #914, 2026-11-21): uv 0.13.9 with the pin moved in
+   `parser.yml` and `audit.yml`, the admin UI's and the parser's minor groups (the parser's with `LICENSES.md`
+   regenerated), AngleSharp. They are unreleased on `main` and have no change notes: whether the next release's
+   notes name them is for its preparation. The next Audit run (around 13:00 UTC) is the first on that `main`.
+4. **P2 wave 1 runs on `thekim1`'s machine** (Decisions "P2 starts before go-live"): B-54 to B-59 are open in
+   stream b's queue. Say on the issue before starting one here.
 5. **This machine's development stack still has its old names** (*State*): nothing was moved at the rename. The
    user was told and asked whether to copy the secrets and volumes over; not answered. Do not move them unasked.
 6. **Repository variables:** since the rename the workflows read `vars.KALLA_TEST_HOST_RUNNER`,
@@ -88,22 +86,12 @@ ended the session here and continues with the clean-up next time.** In order:
    none to `ume-nichlas` (both accounts here have write access, not admin); whoever set the `UME_RAG_*` ones creates
    them again (asked in #905, not answered; the user was told on 2026-11-21).
 7. **Fors is on `v0.12.2`** (2026-11-21): its stack renames the gateway's database roles itself, and `thekim1`
-   merged #119 to #123 there (the release bundle's `docs/`, the Keycloak trust store, the setup callback limit, the
-   drain, the role rename), which the main session has not read. Whether #112 and #113 are closed by them is not
-   checked. **thekim1/fors#118, the main session's note for the upgrade guide, is closed:** 0.12.2 removed the dead
-   end it warned about, and its 0.12.2 section says how a stack that also holds Källa upgrades.
+   merged #119 to #123 there, which the main session has not read. Whether #112 and #113 are closed by them is not
+   checked.
 
 ### Waiting on the user
 
-- **The VM:** runs 0.5.0 (Ume.Rag) with its gateway. **It can move to `v0.9.1` now** (offered to the user as the
-  next thing to do, 2026-11-21; they chose the plan clean-up first): one update by `docs/portainer.md`, *Upgrade*:
-  back up, the 0.5.x steps (the keys' residencies, the hand-made Open WebUI client, role groups), a look through the
-  variables, then **rename the stack's variables, paste 0.9.1's file and update once**. The roles are renamed by
-  the stack's own one-shots (`kalla-roles`, and Fors 0.12.2's `roles`): no console and no SQL, which 0.9.0 still
-  needed. Read the guide's steps before the user starts: the main session has not read 0.9.1's version of them.
-  Never Fors 0.12.0 (thekim1/fors#116). Portainer's own *Update the stack* has never been run on an upgraded stack,
-  so this is the step with the most to learn. **0.5.1's admin image is gone from ghcr.io** (found 2026-11-18): the
-  VM has its 0.5.0 images locally, a host that must pull them again cannot.
+- **The umea.se inventory (A-L1):** the first input of the live block; the user was reminded on 2026-11-21.
 - **The live block** (the critical path to go-live, `plans/roadmap.md`): every item waits on an input, A-L1 (the
   umea.se inventory) first.
 - **The support-chatbot proposal** (`plans/proposals/support-chatbot-features.md`): F3, F4 and F8 are built. The
@@ -165,12 +153,17 @@ the reviews of #906) is in this file's history: `git log -- HANDOVER.md`.
   when Fors 0.12.2 made it wrong.
 - **`v0.9.1` came out while the clean-up was open** (`thekim1`'s: #916 to #919, on Fors 0.12.2): the role renames
   run in the stack. The main session did not review it; this file and the roadmap were brought up to it.
-- **After the release:** the first Audit run on 0.9.0's images is green (*State*); Dependabot's #911 to #914 read
-  and answered as comments (*Start here* 3); the worktrees `rag-small` and `rag-902` removed.
+- **After the release:** the first Audit run on 0.9.0's images is green (*State*); the worktrees `rag-small` and
+  `rag-902` removed.
+- **Dependabot's #911 to #914** read and answered; on the user's word ("clear the PRs") #912 and #914 approved as
+  `Crotalus` and merged; #911 and #913 fixed on their branches (the pin in two workflows; `LICENSES.md`), approved
+  by `thekim1` and merged.
+- **The user's decisions of the evening:** the VM's upgrade is `thekim1`'s (#920); the design documents are
+  cleaned in a new session.
 - **The plan clean-up** (the user's choice of what to do next): the roadmap without its finished and duplicated
   parts; M-16 and M-17 closed and archived, with the lines in the admin design and Decisions that still called them
   open; the handbook sorted by subject and without what no longer holds; the README's CI section and document list;
-  the proposals' status lines; this file.
+  the proposals' status lines; this file. Merged as #915 on the user's approval, given through the session.
 
 ## Known gaps, documented, not fixed
 
@@ -253,19 +246,20 @@ the reviews of #906) is in this file's history: `git log -- HANDOVER.md`.
   the first run on 0.9.0's images and the first green one since the image scan was added (#819). 0.9.1's images
   are scanned from the next run. The dated exceptions are in *Watch*.
 - **What a deployer types in Portainer:** 1 value since 0.7.0 (`FORS_DOMAIN` since the rename, no secret).
-- **On `main`, unreleased:** nothing (`changes/` holds only its README); the compose files default to 0.9.1's
-  images (#919).
+- **On `main`, unreleased:** Dependabot's four bumps (#911 to #914), with no change notes (`changes/` holds only its
+  README); the compose files default to 0.9.1's images (#919).
 - **Migrations in 0.9.0:** `CollectionSlugUniqueAmongLive`, `AssistantsDeletedAt`,
   `PurgeDeletedSourcesAndCollections`; *Rolling update: no* (the rename).
 - **Queues:** stream a: the live block (A-L1 to A-L10), A-34 and A-35 with only their live checks open. Stream b:
   B-54 to B-59 (P2 wave 1), B-42 to B-46 (the gateway phases' live checks) and its live items. Main: M-4.
 - **Open issues that matter:** #781 (watch), #667 (M-16's issue: the work is done, the issue is `thekim1`'s to
-  close), #333, #511, #580 and #550. In Fors: #112 and #113. Open pull requests: this file's and Dependabot's #911
-  to #914; none in Fors.
+  close), #920 (the VM's upgrade, `thekim1`'s), #333, #511, #580 and #550. In Fors: #112 and #113. Open pull
+  requests: this file's (#922); none in Fors.
 - **Dependabot works:** grouped pull requests; `.github/dependabot.yml`'s header lists where a pin is repeated.
   Playwright is bumped by hand, in the package list, the renderer image and its lockfile together (#907).
-- **The user's machine (`~/research/rag`):** the main clone on `main` and one more checkout, `~/research/rag-docs`
-  (this file's branch, #915; it goes when the pull request is merged). Docker works without sudo; there is no sudo.
+- **The user's machine (`~/research/rag`):** the main clone on `main` and one more checkout,
+  `~/research/rag-handover` (this file's branch, #922; it goes when the pull request is merged). Docker works
+  without sudo; there is no sudo.
   - **The development stack has not run since the rename, and its data is still under the old names**
     (checked 2026-11-21; this file said otherwise before): the AppHost's user secrets are under the old id
     `ume-rag-apphost-dev` and the new id `kalla-apphost-dev` has none; the volumes are `ume-rag-m1-postgres` (the
