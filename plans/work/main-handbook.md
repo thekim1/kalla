@@ -15,13 +15,15 @@ learned, not every session (the session's state is in [`../../HANDOVER.md`](../.
   checks. The main session owns `plans/**`, root `*.md` and `.github/stream-ownership.txt` and changes them on a
   `main-session/<slug>` branch; a design line that belongs to a code change goes into that pull request. Stream-a
   work is on `a/<id>-<slug>` branches; a pull request that touches another stream's paths uses `main-session/`.
-- **Who approves and merges.** The session approves nothing on this machine: the permission check stops
-  `gh pr review --approve` as `ume-nichlas` and as `Crotalus`, also with the user's go-ahead. Review as a comment,
-  say that it is not the approval, and give the user the line to run
-  (`gh auth switch -u Crotalus && gh pr review <n> --approve && gh auth switch -u ume-nichlas`). A pull request goes
-  in on the user's approval, on `thekim1`'s approval, or by `thekim1`'s `--admin` on a green one (allowed by the user,
-  2026-11-19). Never `gh pr merge --admin` as `ume-nichlas`. **Merge an approved, green pull request without
-  asking** and tell the user afterwards. Design, scope and destructive actions go to the user.
+- **Who approves and merges.** The permission check stops `gh pr review --approve` as `ume-nichlas`. As `Crotalus`
+  it goes through only on the user's direct word in the conversation for named pull requests ("Approve it", "clear
+  the PRs"; 2026-11-21); a recorded decision and a bare "ok go on" were stopped. With that word: read the pull
+  request's `state`, switch the account in a command of its own, approve, switch back at once. Without it: review
+  as a comment, say that it is not the approval, and give the user the line to run
+  (`gh auth switch -u Crotalus && gh pr review <n> --approve && gh auth switch -u ume-nichlas`). A pull request also
+  goes in on `thekim1`'s approval, or by `thekim1`'s `--admin` on a green one (allowed by the user, 2026-11-19).
+  Never `gh pr merge --admin` as `ume-nichlas`. **Merge an approved, green pull request without asking** and tell
+  the user afterwards. Design, scope and destructive actions go to the user.
 - **A decision for the user** is asked as four alternatives with one recommendation (the question tool).
 - **Handle GitHub on your own:** answer new or updated issues and pull requests; close verified-done issues with an
   evidence comment.
