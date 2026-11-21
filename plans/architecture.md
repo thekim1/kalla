@@ -52,7 +52,7 @@ flowchart LR
     backup[("Backup target<br/>pgBackRest WAL archive + PITR,<br/>upload copies, key escrow offline")]
 
     subgraph hosted["Hosted MCP servers (P2)"]
-        mcpsrv["ume-mcp-kommun<br/>(mock fee calculator first)"]
+        mcpsrv["kalla-mcp-kommun<br/>(mock fee calculator first)"]
     end
 
     gateway["LLM gateway (separate repo and database)<br/>release 1 (pilot): residency ceiling<br/>release 2 (P2): member groups from claims<br/>integration phases: credential and assigned keys, acting as a key<br/>chat, embeddings BGE-M3"]
@@ -108,7 +108,7 @@ role, Compose per host: three hosts in P2 (**D** data: Postgres, Redis, object s
 its own parser). A Postgres streaming standby is required before production beyond the pilot (register D1). Parser,
 renderer and clamd stay host-local to their worker; all hosts share the one Postgres, Redis and object store over a
 routed LAN with TLS. In the pilot, rate limits and the query-embedding cache are in process and admin sessions are in
-Postgres. A separate `rag-tools` service (mTLS hop, own database role) comes only with the first external,
+Postgres. A separate `kalla-tools` service (mTLS hop, own database role) comes only with the first external,
 OBO or write tool (P3).
 
 ## 2. Chat request (RAG assistant, P1)

@@ -1,6 +1,6 @@
 # Platform data model and storage: detailed design
 
-Detail round, step 1. Covers every table, role, index, queue, key and blob path of Källa. Builds on
+Covers every table, role, index, queue, key and blob path of Källa. Builds on
 [`../archive/area-plans/platform.md`](../archive/area-plans/platform.md) §2–4, §6, §8, §8a and §9 and the data parts of every service plan. Where this document had to choose
 something the plans leave open, or found two plans disagreeing, the choice is listed in §12 with a recommendation.
 Removed or deferred mechanisms are listed once, in §13 (reasoning: [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md))
@@ -8,7 +8,7 @@ and §15 (reasoning: [`../archive/passes/weakness-review.md`](../archive/passes/
 Where the schema is built, the EF model and migrations (`src/Kalla.Infrastructure/Persistence`) are the source;
 this document describes them and the parts still to build.
 
-**Gateway conventions mirrored** (`~/git/llmgateway`, user decision: be as compatible as possible):
+**Gateway conventions mirrored** (the gateway, Fors; user decision: be as compatible as possible):
 
 | Convention | Gateway source | Here |
 |---|---|---|
@@ -31,7 +31,7 @@ The gateway has no connection caps, `statement_timeout`, partitioning, schemas o
 
 ## 1. Database layout
 
-One Postgres 17 instance on the **stock `pgvector/pgvector` image** (pgvector 0.8.7; tag *to verify*), or managed
+One Postgres 17 instance on the **stock `pgvector/pgvector` image** (pgvector 0.8.7, `0.8.7-pg17-trixie` pinned by digest in `images/postgres/Dockerfile`), or managed
 Postgres where pgvector ≥ 0.8 and the settings below are available; database **`ragdb`** (gateway: `gatewaydb`),
 owned by the DDL role. Extension `vector` is created by `init.sql` as the bootstrap superuser (it is not a trusted
 extension). The `public` schema keeps only the extension; `REVOKE ALL ON SCHEMA public FROM PUBLIC` and `USAGE` for the
@@ -82,7 +82,7 @@ pooler up to 5 hosts**: a backend costs about 10 MB (no dictionaries load into P
 memory limit comes from the P0 measurement; PgBouncer (≥ 1.21, transaction mode) comes only when the budget no longer
 fits `max_connections`, e.g. a further api host at 5-host scale (performance pass §6 trigger). There is no
 `kalla_tools` role: the P2 tool hub runs in-process in `kalla-api` and `kalla-admin` (§1.2), and the role comes only with
-a separate `rag-tools` service (P3, §13). Code is **pooler-safe from P0**: no session `SET`, session advisory locks,
+a separate `kalla-tools` service (P3, §13). Code is **pooler-safe from P0**: no session `SET`, session advisory locks,
 `WITH HOLD` cursors, temporary tables other than `ON COMMIT DROP`, or SQL `PREPARE`; LISTEN runs on its own
 `ConnectionStrings__ragdb-listen` (§4.3), and the worker's HNSW rebuild, the one session `SET`
 (`statement_timeout = 0`), on its own `ConnectionStrings__ragdb-maintenance` (falls back to `ragdb`; never through a
@@ -117,7 +117,7 @@ No retrieval statement runs `SET LOCAL`; every collection uses these role defaul
 Revoke-and-grant in one transaction on every migration run, tables named one by one, so a new table is unreadable until
 listed here (copied from the gateway's file header). `S` select, `I` insert, `U` update, `D` delete, `X` execute.
 The P2 tool hub runs in-process in `kalla-api` (chat) and in `kalla-admin` (skill gate, discovery, drift polling; tools
-design §2), so both roles get the tool grants; there is no tool role before a separate `rag-tools` service (P3). The
+design §2), so both roles get the tool grants; there is no tool role before a separate `kalla-tools` service (P3). The
 worker runs only retrieval evaluation and reads no skill or tool tables and of the assistants only their published
 links: the HNSW index health check samples every scope an assistant link uses (knowledge design §6.4), so it reads
 `PublishedAssistantVersions` (`AssistantId`, `CollectionLinks`) and `Assistants` (`Id`, `State`, `DeletedAt`, to skip
@@ -850,8 +850,8 @@ delete; only from `tmp/`; returns `BlobWriteResult`, `AlreadyExisted` when the t
 `previews/` sweeps; `ListAsync` only for those sweeps and the weekly orphan audit, never on hot paths. The file system
 implementation serves dev and the single-host pilot; beyond one host an S3-compatible object store: the
 municipality's S3 service if IT offers one, else SeaweedFS (never MinIO, which is archived), decided with IT before
-the first multi-host deployment (postponed decision S2). The S3 implementation (`S3BlobStore`, not built yet; due in
-P1 with its contract tests) uses `AWSSDK.S3` (not the `Minio` client) with `ForcePathStyle = true`,
+the first multi-host deployment (postponed decision S2). The S3 implementation (`S3BlobStore`, not built; it comes with the first multi-host deployment and its contract
+tests) uses `AWSSDK.S3` (not the `Minio` client) with `ForcePathStyle = true`,
 `RequestChecksumCalculation`/`ResponseChecksumValidation` `WHEN_REQUIRED`, a 30 s timeout and `MaxErrorRetry` 2; it
 sends one PUT for a known length (≤ 5 GB) and multipart (8 MiB parts) only for an unknown length over 64 MiB; the
 contract tests run against each server in CI. Settings: `BlobStore:Kind`, `BlobStore:S3:ServiceUrl`,
@@ -971,10 +971,8 @@ Postgres). Every use states its behaviour when Redis is down; rate limits fall b
 
 ## 12. Open decisions and contradictions found
 
-**Review (2026-10-29):** recommendations 1–22 accepted and carried into the plans (platform §3, §8, §8a; worker §2,
-§4; knowledge §3; key prefixes everywhere). 23 is resolved by the Chat API detail design (§15.2 there). Rows 5–8, 10,
-13, 16, 18 and 19 are restated in the decided form of the simplification pass (2026-10-30); 24–25 come from its §15
-(many assistants per department).
+Each row states where its topic stands now; how the rows were reviewed and decided (2026-10-29, 2026-10-30) is in
+[`../archive/design-history/data-model.md`](../archive/design-history/data-model.md) §12.
 
 | # | Topic | Finding | Recommendation |
 |---|---|---|---|

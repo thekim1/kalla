@@ -63,12 +63,12 @@ Moved to [`../archive/design-history/tools.md`](../archive/design-history/tools.
 | Project | Owns (tools) | Notes |
 |---|---|---|
 | `Kalla.Domain` | `ToolPolicy` (pure, §5.2), `ToolBinding`, `ToolCallRequest`/`ToolCallOutcome`, port `IToolHub`, `SkillCatalog` (served version and inclusion mode per assistant), `AgentLimits`, `CostEstimate` (text subset of the gateway's `CostCalculator.Calculate`, `src/Fors.Domain/Services/CostCalculator.cs:37-61`), `LethalTrifecta` (pure validator), `SwedishCalendar`, `CanonicalJson` (definition hashes) | table-driven unit tests, no I/O |
-| **`Kalla.Tools`** (library) | `InProcessToolHub : IToolHub`, `ToolRegistrySnapshot` (per config version), `McpClientPool`, `ServerBulkhead`, `ClientCredentialsResolver`, `ToolCallExecutor`, `ResultNormaliser`, `DefinitionVerifier` (on connect), `DefinitionDriftMonitor` (leader only), `ToolCallAuditWriter` (BackgroundService, copy of the `UsageWriter` channel pattern, `Pipeline/UsageWriter.cs:16-40`, `:86-178`), `ToolRateLimiter` (over `IRateLimitStore`; Redis Lua as `RedisStores.cs:13-44` when Redis is configured), `ToolAuditHmac` | referenced by `Kalla.Api` and `Kalla.AdminApi` (never the worker); becomes the `rag-tools` service in P3 |
+| **`Kalla.Tools`** (library) | `InProcessToolHub : IToolHub`, `ToolRegistrySnapshot` (per config version), `McpClientPool`, `ServerBulkhead`, `ClientCredentialsResolver`, `ToolCallExecutor`, `ResultNormaliser`, `DefinitionVerifier` (on connect), `DefinitionDriftMonitor` (leader only), `ToolCallAuditWriter` (BackgroundService, copy of the `UsageWriter` channel pattern, `Pipeline/UsageWriter.cs:16-40`, `:86-178`), `ToolRateLimiter` (over `IRateLimitStore`; Redis Lua as `RedisStores.cs:13-44` when Redis is configured), `ToolAuditHmac` | referenced by `Kalla.Api` and `Kalla.AdminApi` (never the worker); becomes the `kalla-tools` service in P3 |
 | `Kalla.Answering` (admin design §2.1) | `AgentAnswerStrategy`, `AgentPromptBuilder`, `BuiltInTools` (`search_knowledge`, `load_skill`, `read_skill_file`, `current_date`), `ToolCallStreamParser`, `SkillFileCache` | shared by the chat role, the admin test panel and the skill gate |
 | `Kalla.Api` role `chat` | `AgentStatusEmitter` (Open WebUI `status` events, §6.7); hosts the agent strategy and the in-process hub | P2 |
 | `Kalla.Api` role `mcp` | `McpEndpoints` (SDK server, filters), `McpPlatformTools` | early P2; no hub |
 | `Kalla.AdminApi` | skill editor, publish/serve/rollback, share lists, `SkillGateRunner` (§3.7, read-only tools through the in-process hub), tool-server registration, discovery and connection test (in-process MCP client), approvals, pre-registrations, grants, drift leader; `GatewayModels` sync from P1 (admin design §4.10) | – |
-| `templates/mcp-server/` | `dotnet new ume-mcp-server` template (§8.1) | packaged as `Kalla.Templates` |
+| `templates/mcp-server/` | `dotnet new kalla-mcp-server` template (§8.1) | packaged as `Kalla.Templates` |
 
 The skills runtime is in the chat role: skills are configuration the chat role already holds in its snapshot (`api`
 has `SELECT` on `Skills`, `SkillVersions`, `SkillVersionLinks`, data-model §1.2), and `load_skill` must not cost a
@@ -91,7 +91,7 @@ servers run in their own zone `tools-hosted` (`cpu_shares` 256, `cpus` 0.5, `mem
 
 **Why in process in P2** (simplification pass §10): with `hosted` read-only servers and one service identity, a
 separate service would add an mTLS hop, a database role, a snapshot consumer and a deployable for no isolation gain.
-`rag-tools` returns when the hub must hold user tokens (OBO), reach the internet (`external`) or run write tools: then
+`kalla-tools` returns when the hub must hold user tokens (OBO), reach the internet (`external`) or run write tools: then
 credentials and egress belong in one process again (§16).
 
 ### 2.3 Interfaces
@@ -127,12 +127,12 @@ public sealed record ToolBinding(       // one entry of the model's tools list
 ```
 
 `IToolHub` is the only way any process reaches a tool server. The in-process hub re-runs `ToolPolicy.Authorize` (§5.2)
-against the same snapshot before every call; in P3 `rag-tools` repeats it against its own snapshot (the stricter
+against the same snapshot before every call; in P3 `kalla-tools` repeats it against its own snapshot (the stricter
 answer wins, as identity §4.8).
 
 ### 2.4 Tool hub internal API
 
-**Later (P3):** the `/internal/v1/tool-calls`, `discover` and `test` routes, with `rag-tools` (§16); P2 has no
+**Later (P3):** the `/internal/v1/tool-calls`, `discover` and `test` routes, with `kalla-tools` (§16); P2 has no
 internal hop. Discovery and the connection test run in the admin through the same library.
 
 ## 3. Skills
@@ -489,8 +489,8 @@ public sealed record ToolAuth(IReadOnlyDictionary<string, string> Headers, DateT
 
 | Mode | Phase | Stored | Resolution |
 |---|---|---|---|
-| `client-credentials` | P2 | `ToolServers.AuthSettings jsonb` `{ "scope": "api://ume-mcp-kommun/.default" }`; the secret is the certificate of the platform's tool identity (Entra app registration `kalla-tools`, one of RAG's own registrations, identity design §1.6) in `/run/certs/kalla-tools-entra.pfx`, mounted in `kalla-api` and `kalla-admin` only (never the worker); never in the database | in-house `ClientCredentialsTokenClient`: OIDC discovery of `KALLA_OIDC_AUTHORITY`, `client_credentials` grant with a `private_key_jwt` assertion (Entra) or the dev client secret (Keycloak), token cached until 5 min before expiry, one in-flight request per scope; `Authorization: Bearer …` |
-| `obo` | P3 | – | identity §9, with `rag-tools` |
+| `client-credentials` | P2 | `ToolServers.AuthSettings jsonb` `{ "scope": "api://kalla-mcp-kommun/.default" }`; the secret is the certificate of the platform's tool identity (Entra app registration `kalla-tools`, one of RAG's own registrations, identity design §1.6) in `/run/certs/kalla-tools-entra.pfx`, mounted in `kalla-api` and `kalla-admin` only (never the worker); never in the database | in-house `ClientCredentialsTokenClient`: OIDC discovery of `KALLA_OIDC_AUTHORITY`, `client_credentials` grant with a `private_key_jwt` assertion (Entra) or the dev client secret (Keycloak), token cached until 5 min before expiry, one in-flight request per scope; `Authorization: Bearer …` |
+| `obo` | P3 | – | identity §9, with `kalla-tools` |
 | `api-key`, `none` | P3 | – | with `municipal`/`external` servers |
 
 **Fail closed**: a process that runs the hub does not become ready while any active server uses `client-credentials`
@@ -659,7 +659,7 @@ filter (chat §9.4).
 - **P3** (outline): `write` tools always need confirmation (Bifrost's two lists); never for `public` assistants or
   anonymous subjects; only clients with `ToolPolicy = confirm`; the loop pauses with
   `AnswerEvent.ConfirmationRequired(callId, tool, arguments as shown)`, the client confirms within 5 minutes, idempotency
-  key `SHA-256(messageId ‖ callId)`; with `rag-tools` and risk acceptance.
+  key `SHA-256(messageId ‖ callId)`; with `kalla-tools` and risk acceptance.
 
 ## 6. Agent loop (`AgentAnswerStrategy`)
 
@@ -892,17 +892,17 @@ app.MapMcp("/mcp").RequireAuthorization("McpUse");
 
 ### 8.1 .NET template (answered 3: .NET only)
 
-`dotnet new ume-mcp-server -n Ume.Mcp.Kommun` from `templates/mcp-server/` (package `Kalla.Templates`):
+`dotnet new kalla-mcp-server -n Kalla.Mcp.Kommun` from `templates/mcp-server/` (package `Kalla.Templates`):
 
 ```
-Ume.Mcp.Kommun/
-├── src/Ume.Mcp.Kommun/
+Kalla.Mcp.Kommun/
+├── src/Kalla.Mcp.Kommun/
 │   ├── Program.cs                 # ServiceDefaults-lite, JwtBearer, AddMcpServer().WithHttpTransport(Stateless).WithTools<…>()
 │   ├── Tools/FeeTools.cs          # [McpServerToolType] class, one method per tool; later AddressTools, ContactTools
 │   ├── Data/                      # data files or clients of the wrapped systems
 │   ├── appsettings.json           # Mcp:Audience, Mcp:RequiredRole, Upstream:* (no secrets)
-│   └── Ume.Mcp.Kommun.csproj      # ModelContextProtocol.AspNetCore 2.3.0, container publish (chiseled, non-root)
-├── tests/Ume.Mcp.Kommun.Tests/    # contract, auth, golden tools/list, injection fixtures, limits
+│   └── Kalla.Mcp.Kommun.csproj      # ModelContextProtocol.AspNetCore 2.3.0, container publish (chiseled, non-root)
+├── tests/Kalla.Mcp.Kommun.Tests/    # contract, auth, golden tools/list, injection fixtures, limits
 ├── contracts/tools.golden.json    # the tools/list the owner pre-registers for approval
 ├── .github/workflows/verify.yml   # build, test, image, SBOM (gateway practice)
 └── README.md                      # owner, system owners per tool, data level, run book
@@ -911,7 +911,7 @@ Ume.Mcp.Kommun/
 | Convention | Rule |
 |---|---|
 | Transport | `MapMcp("/mcp")`, `HttpServerSessionMode.Stateless`, no legacy SSE |
-| Auth | Entra (Keycloak in dev) JWT: `aud` = the server's own app registration (`api://ume-mcp-<name>`), `tid` checked, app-only tokens only (`idtyp = app`), **app role `Tools.Invoke`** assigned only to the platform's tool identity `kalla-tools`; everything else 401/403 |
+| Auth | Entra (Keycloak in dev) JWT: `aud` = the server's own app registration (`api://kalla-mcp-<name>`), `tid` checked, app-only tokens only (`idtyp = app`), **app role `Tools.Invoke`** assigned only to the platform's tool identity `kalla-tools`; everything else 401/403 |
 | Tools | `[McpServerTool(Name = "calculate_fee", Title = "…", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]`; a unit test fails on any tool without `ReadOnly = true` (P2) |
 | Descriptions | Swedish, ≤ 600 characters, what and when, no instructions about other tools, no URLs; parameter descriptions on every property; enums for closed value sets |
 | Output | structured result + the SDK's text mirror; ≤ 64 KiB; no personal data in P2; each result names its data source and validity date |
@@ -933,7 +933,7 @@ Dropped: none of the first tools has an OpenAPI source (§16).
   allowing only those systems' addresses and ports (the `llm` network pattern, repo-and-deployment §6.1). A server
   never joins `data`, `llm` or `crawl`.
 - Secrets per server under `${KALLA_SECRETS_DIR}/mcp-<name>` (key-per-file); the server's Entra registration
-  (`ume-mcp-<name>`, app role `Tools.Invoke`, assignment to `kalla-tools`) is added to RAG's Bicep package (identity
+  (`kalla-mcp-<name>`, app role `Tools.Invoke`, assignment to `kalla-tools`) is added to RAG's Bicep package (identity
   §12).
 
 ### 8.4 Registration, ownership, versioning
@@ -941,14 +941,14 @@ Dropped: none of the first tools has an OpenAPI source (§16).
 - Registered by a platform admin (§4.4) with `Hosting = hosted`; the catalogue page shows owner team, system owners per
   tool, wrapped systems, repository, image digest, server version, data level, approvals, grants and drift
   observations.
-- Ownership: the platform team owns `ume-mcp-kommun` (code, deployment, on-call) and the template; each tool's system
+- Ownership: the platform team owns `kalla-mcp-kommun` (code, deployment, on-call) and the template; each tool's system
   owner (the department owning its data or system) approves its definition and owns its data (plan §5).
 - Versioning: SemVer image and `serverInfo.version`; a release that changes no definition needs nothing from the
   platform; a definition change is a golden-file diff, **pre-registered** before deployment (one approver) so the pin
   moves when the leader observes it (§4.4). Breaking schema changes ship as a new tool name (`calculate_fee_v2`) next to
   the old one, so skills can move over.
 
-### 8.5 First server: `ume-mcp-kommun` with the mock fee calculator
+### 8.5 First server: `kalla-mcp-kommun` with the mock fee calculator
 
 Reference for the template, the hub and the agent loop (plan question 1, O2). **Sample data only**: the numbers below
 are invented and marked as such in every result until the owning department supplies the real taxa. The address lookup
@@ -1110,7 +1110,7 @@ The nightly suite runs the same fixtures against the pilot's real gateway models
 
 - `/mcp` exercised with the SDK 2.3.0 client in three protocol versions (`2025-06-18`, `2025-11-25`, `2026-07-28`):
   stateless (no `Mcp-Session-Id`), 401 with `resource_metadata`, 403 `insufficient_scope`, ceiling filtering.
-- The template's contract tests (§8.1) run in the template's CI and, against `ume-mcp-kommun`, in ours.
+- The template's contract tests (§8.1) run in the template's CI and, against `kalla-mcp-kommun`, in ours.
 - Recorded traffic from real MCP clients (VS Code, Copilot Studio, Claude; M1) replayed at every SDK upgrade.
 - Open WebUI v0.12.5 (`deploy-e2e`): status events render, are stored, and do not break `source` events and `[n]` chips.
 

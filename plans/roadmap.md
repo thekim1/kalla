@@ -133,7 +133,7 @@ chatbot's assistant (T4) once it exists; until then FakeGateway and the demo see
 **Later waves: themes that need no input** (the user picks the order):
 
 - **Tools and MCP:** skills with know-how and tools, the in-process tool hub (`hosted` servers, read-only tools), the
-  agent loop, `/mcp` with `search_knowledge`, the mock municipal server `ume-mcp-kommun` (tools design; the gateway
+  agent loop, `/mcp` with `search_knowledge`, the mock municipal server `kalla-mcp-kommun` (tools design; the gateway
   passes function tools already). The SDK and validator re-checks
   of M1 and V1 come first (`postponed-decisions.md`).
 - **Ingestion breadth:** e-mail (`.eml`/`.msg`) and archives (Z1), site-profile learning and re-learning,

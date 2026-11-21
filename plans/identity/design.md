@@ -1,6 +1,6 @@
 # Identity, authentication and authorisation: detailed design
 
-Detail step 3 of the Källa design. Details [`../archive/area-plans/identity.md`](../archive/area-plans/identity.md) (archived: history, not binding; this design states every rule, the plan's answered questions in §15) and the
+Details [`../archive/area-plans/identity.md`](../archive/area-plans/identity.md) (archived: history, not binding; this design states every rule, the plan's answered questions in §15) and the
 Decisions table in [`../decisions.md`](../decisions.md). Consistent with
 [`../platform/data-model.md`](../platform/data-model.md) (step 1) and
 [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) (step 2); deviations are listed in §14.
@@ -8,7 +8,8 @@ The rules of the weakness review and the simplification pass are stated here (re
 [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md); its §15 gives assistant versions and owner-team scoping,
 §1.3, §4.3); what the pass removed is listed in §17, what the weakness review deferred in §18.
 
-Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5); Open WebUI citations are in
+Gateway citations are `path:line` in the gateway's repository (Fors) at `e25b491` (v0.8.5), so they keep the file names
+of then (`ume-realm.json`, `ume-data-dev`); Open WebUI citations are in
 `~/git/rag-platforms/open-webui`. "Copy" means the file is copied with namespace and names changed only; "adapt" means
 copied and changed as stated; "new" means there is no gateway counterpart.
 
@@ -17,7 +18,7 @@ copied and changed as stated; "new" means there is no gateway counterpart.
 | Phase | Provider | RAG's part |
 |---|---|---|
 | Dev and CI | each repo's own Keycloak in its AppHost, realm `fors` from `dev/keycloak/fors-realm.json`, with test users | §11.1 |
-| **P1 (pilot)** | **one Keycloak shared with Fors**: its own Compose project on the gateway's production host, defined in the gateway repo, database `keycloak` in the gateway's Postgres; one realm `fors` with both systems' clients and roles; local accounts without OTP (MFA returns with brokered Entra ID or AD), LDAP federation to the municipal AD later | a realm-additions file `deploy/keycloak/**` (stream B, P1 item 16 → J8), no test users (§11.2) |
+| **P1 (pilot)** | **one Keycloak shared with Fors**: its own Compose project on the gateway's production host, defined in the gateway repo, database `keycloak` in the gateway's Postgres; one realm `fors` with both systems' clients and roles; local accounts without OTP (MFA returns with brokered Entra ID or AD), LDAP federation to the municipal AD later | a realm-additions file `deploy/keycloak/**`, no test users (§11.2) |
 | **P2** | Entra ID, approval package 1 (`infra/entra/`; kept, not yet submitted) | §12 |
 | **Production** | AD and Entra ID, both: brokered through Keycloak or directly through `Oidc:*` (Decisions "Identity providers: AD and Entra ID through Keycloak, Källa standalone later") | §11.2 |
 
@@ -96,7 +97,7 @@ to it.
 | – | `DepartmentMembershipResolver` | new (§2) |
 
 Cookie names must differ from the gateway's: browsers ignore the port, so on `localhost` the gateway admin (5173)
-and ours (5174) would overwrite each other's `__Host-ume-admin` and `XSRF-TOKEN`. Ours: `__Host-kalla-admin`
+and ours (5174) would overwrite each other's `__Host-fors-admin` and `XSRF-TOKEN`. Ours: `__Host-kalla-admin`
 (session), `__Host-kalla-csrf` (antiforgery), `RAG-XSRF-TOKEN` (readable token; the copied admin UI's fetch helper
 reads this name).
 
@@ -145,8 +146,8 @@ with the `KALLA_` prefix; for local runs the same keys as `Oidc:<Setting>` in Ap
 | Env (`deploy/.env`) | Setting | Default | Notes |
 |---|---|---|---|
 | `KALLA_OIDC_AUTHORITY` | `Oidc:Authority` | – (required) | P1: the shared Keycloak, `https://<keycloak host>/realms/fors` (the gateway's form, `docs/identity-and-roles.md:156`); P2 Entra: `https://login.microsoftonline.com/<tid>/v2.0` |
-| `KALLA_OIDC_CLIENT_ID` | `Oidc:ClientId` | `kalla-admin` | P1: the Keycloak client id `kalla-admin` (the default); P2 Entra: the `kalla-admin` application id (`init-deployment.sh --oidc-client-id`, repo-and-deployment §7.1) |
-| (secret file) `Oidc__ClientSecret` | `Oidc:ClientSecret` | – | P1: the `kalla-admin` client's secret in the shared realm (§11.2); P2: the registration's own secret (§12.2); `init-deployment.sh --oidc-client-secret-file` as in the gateway |
+| `KALLA_OIDC_CLIENT_ID` | `Oidc:ClientId` | `kalla-admin` | P1: the Keycloak client id `kalla-admin` (the default); P2 Entra: the `kalla-admin` application id (the setup wizard, or declared with `init-deployment.sh --set`, repo-and-deployment §7.1) |
+| (secret file) `Oidc__ClientSecret` | `Oidc:ClientSecret` | – | P1: the `kalla-admin` client's secret in the shared realm (§11.2); P2: the registration's own secret (§12.2); typed in the setup wizard (§19), or declared as `KALLA_OIDC_CLIENT_SECRET` (`init-deployment.sh --set-file`) |
 | `KALLA_OIDC_ROLE_CLAIM` | `Oidc:RoleClaim` | `roles` | |
 | `KALLA_OIDC_DEPARTMENT_CLAIM` | `Oidc:DepartmentClaim` | `departmentCodes` | |
 | `KALLA_OIDC_TEAM_CLAIM` | `Oidc:TeamClaim` | `teamCodes` | |
@@ -222,9 +223,8 @@ may sign in to Open WebUI is open (§5.3, §16).
 **Phase:** the gateway delivers member groups with **v0.10.0** (#580, thekim1/fors#85, 2026-11-12): each
 department of `GET /v1/fors/context` carries `member_groups` under the scope `organisation.read` (feature
 `member-groups`). Department scope comes from the `departmentCodes` claim **plus the mirrored member groups**, matched
-against the `groups` claim by the resolver (§2.3). The user chose to wait for the gateway rather than build another
-source (2026-11-12), so the interim hand entry on Källa's department record goes with the sync that reads them
-(B-35). On the shared Keycloak both are set on the account: `departmentCodes` is a user attribute shared with the
+against the `groups` claim by the resolver (§2.3). They are never entered in Källa: the sync fills them (§2.1). On
+the shared Keycloak both are set on the account: `departmentCodes` is a user attribute shared with the
 gateway (one value scopes the user in both systems), and a member group is a Keycloak group name (§2.2, §2.5).
 
 ### 2.1 Where member groups live
@@ -255,8 +255,8 @@ where the group claim holds **names** (`docs/identity-and-roles.md:116`, `:146-1
 `Oidc:RoleGroups` already matches claim values case-insensitively (`AdminAuthentication.cs:40-48`). So a member group
 is **a value of the group claim**: an Entra object id, an AD FS/Keycloak group name. Matching is case-insensitive
 like `RoleGroups`. On Entra (P2) this is exactly the plan's "object id" rule; on Keycloak (dev and the P1 shared
-realm) it is a group name from a plain group mapper (repo-and-deployment §4.2, §11.2), so in P1 the hand-entered
-member groups (§2) are Keycloak group names, not object ids.
+realm) it is a group name from a plain group mapper (repo-and-deployment §4.2, §11.2), so in P1 the member groups the
+gateway's admins enter are Keycloak group names, not object ids.
 
 ### 2.3 Sign-in resolution order
 
@@ -368,8 +368,8 @@ public sealed record RagPrincipal(
 | MCP client (`/mcp` and `/mcp/skills/<slug>`, same principal) | delegated token, `scp` `Mcp.Use` (§8) | `EntraUser` | `oid` | `azp` (kind `mcp-client`) | P2 |
 | Worker → API internal attachment route (`POST /internal/attachments/{id}/chunks`, chat design §15.2) | internal service key, internal network only | `Application` | `svc:{keyId}` | client `rag-internal` (kind `internal`) | P2 |
 | Chat role → knowledge role over HTTP (`Retrieval:Mode=Http`) | internal `kalla-sk-` service key | `Application` + forwarded decision | `svc:{keyId}` | client `rag-internal` (kind `internal`) | when split |
-| Chat and `mcp` roles → `rag-tools` service (P2: in-process hub, no hop; tools design §2) | **mTLS** client certificate **and** internal `kalla-sk-` service key | `Application` + forwarded `ToolCallContext` | `svc:{keyId}` | client `rag-internal` (kind `internal`) | P3 |
-| Admin → `rag-tools` service (discovery, connection test; P2 in-process) | mTLS **and** service key | `Application` | `svc:{keyId}` | client `admin-console` (kind `internal`) | P3 |
+| Chat and `mcp` roles → `kalla-tools` service (P2: in-process hub, no hop; tools design §2) | **mTLS** client certificate **and** internal `kalla-sk-` service key | `Application` + forwarded `ToolCallContext` | `svc:{keyId}` | client `rag-internal` (kind `internal`) | P3 |
+| Admin → `kalla-tools` service (discovery, connection test; P2 in-process) | mTLS **and** service key | `Application` | `svc:{keyId}` | client `admin-console` (kind `internal`) | P3 |
 | Admin test panel | admin session (in-process, no HTTP) | `EntraUser` | admin `oid` (fallback `sub`; P1 Keycloak: `sub`) | client `admin-console` (kind `internal`) | P1 |
 | Browser following a citation link (`GET /v1/documents/{id}` and `/content` only) | signed download grant `?grant=g1.…` (knowledge design §4.6) | none (no subject; the grant carries ids only) | – | the grant's `cl` (client that received the citation) | P1 |
 
@@ -678,10 +678,10 @@ conversation** (keyed by the JWT `sub`), never grant access.
    credential on its own: replaying a captured JWT without the connection key gets nothing.
 2. Header present and ≤ 4 KB; exactly one.
 3. Header `alg` must be `HS256` (pinned `ValidAlgorithms = ["HS256"]`; `none`, `RS*`, `ES*` and a `kid` are refused).
-   Key: `OpenWebUi:JwtSecret` (secret file `OpenWebUi__JwtSecret`, ≥ 32 bytes, generated by `init-deployment.sh`,
+   Key: `OpenWebUi:JwtSecret` (secret file `OpenWebUi__JwtSecret`, ≥ 32 bytes, generated by `kalla-bootstrap`,
    repo-and-deployment §7.1). The JWT is trusted only for **the deployment's Open WebUI client**: the client of kind
    `open-webui` marked `IsManagedByDeployment` (Decisions "Deploy configuration"; M-17 C4). The deployment generates
-   its `kalla-sk-` key (`kalla-bootstrap` in the Portainer stack, `init-deployment.sh` with Compose) and gives it to
+   its `kalla-sk-` key (`kalla-bootstrap`, in every form) and gives it to
    Open WebUI and to `kalla-migrate`, which creates or updates that client and keeps exactly that key active on it
    (`OpenWebUi:ApiKey`, a secret file of kalla-migrate). No such client = not configured: kalla-api starts, and no Open
    WebUI user JWT is trusted. An `open-webui` client made by hand in the admin is never trusted with user JWTs. A
@@ -724,15 +724,15 @@ Failures: 401, reasons `user_jwt_missing`, `user_jwt_invalid` (signature, alg, i
   `OPENID_REDIRECT_URI=https://<owui host>/oauth/oidc/login/callback` (`:2629`; the `oidc` provider registers only
   with `OAUTH_CLIENT_ID`, `OPENID_PROVIDER_URL` and a client secret or PKCE method, `:2792`). The callback route
   is `/oauth/{provider}/login/callback`; the older `/oauth/{provider}/callback` is still served as a "legacy endpoint"
-  (`backend/open_webui/main.py:2932-2933` at v0.12.3). `deploy/compose.openwebui.yaml` (`OPENID_REDIRECT_URI`), the dev
+  (`backend/open_webui/main.py:2932-2933` at v0.12.3). `deploy/compose.rag.yaml` (profile `openwebui`, `OPENID_REDIRECT_URI`), the dev
   realm (`open-webui-dev`), the Entra Bicep and the P1 realm additions (`open-webui`, §11.2) all use
   `/oauth/oidc/login/callback`; they moved together at the go-live pin bump to v0.12.5 (A-4, #457), before the legacy
   route is removed (Decisions table "P0 integration, stream A"; to-verify #46).
 - **Provider per phase.** P1: the shared Keycloak, client `open-webui` in realm `fors` (§11.2), with
   `OPENID_PROVIDER_URL=https://<keycloak host>/realms/fors/.well-known/openid-configuration`
-  (`KALLA_OPENWEBUI_OIDC_PROVIDER_URL`, `init-deployment.sh --openwebui-oidc-provider-url`), `OAUTH_CLIENT_ID=open-webui`
-  and that client's secret in `OAUTH_CLIENT_SECRET`; `deploy/compose.openwebui.yaml` takes the provider URL and the
-  provider name (`KALLA_OPENWEBUI_OIDC_PROVIDER_NAME`, default "Umeå kommun") from `deploy/.env`. P2:
+  (the setup wizard's Open WebUI step, §19, or declared as `KALLA_OPENWEBUI_OIDC_PROVIDER_URL`), `OAUTH_CLIENT_ID=open-webui`
+  and that client's secret in `OAUTH_CLIENT_SECRET`; Open WebUI's start wrapper fetches the effective values from
+  kalla-api (§19), the provider's display name among them. P2:
   the Entra registration `kalla-open-webui` (§12.1), where *assignment required* on its enterprise app decides who
   can sign in (plan §5).
 - **Who may sign in to Open WebUI in P1** is not settled. Keycloak has no per-client assignment: every enabled
@@ -869,7 +869,7 @@ rotates or revokes).
 | Setting | Env | Default | Gateway counterpart |
 |---|---|---|---|
 | `RagApi:Authority` | `KALLA_API_AUTHORITY` | `KALLA_OIDC_AUTHORITY` | `DataApi:Authority` (`DataApiOptions.cs:15`, `compose.prod.yaml:181`) |
-| `RagApi:Audience` | `KALLA_API_AUDIENCE` | `kalla-api` (Keycloak, dev and P1: the `kalla-api` audience mapper, §11; P2 Entra v2: the `kalla-api` application id) | `DataApi:Audience` = `ume-data-api` (`DataApiOptions.cs:31-32`) |
+| `RagApi:Audience` | `KALLA_API_AUDIENCE` | `kalla-api` (Keycloak, dev and P1: the `kalla-api` audience mapper, §11; P2 Entra v2: the `kalla-api` application id) | `DataApi:Audience` = `fors-data-api` (`DataApiOptions.cs:32` at Fors `v0.12.2`) |
 | `RagApi:PermissionClaims` | – | `scope`, `scp`, `roles` | `DataApiOptions.cs:38` |
 | `RagApi:TenantId` | `KALLA_API_TENANT_ID` | `KALLA_OIDC_TENANT_ID` | new; unset in P1 (Keycloak has no `tid`, §1.7) |
 | `RagApi:RefuseGuests` | – | `true` | new |
@@ -893,7 +893,7 @@ Added checks after signature/issuer/audience/lifetime (JWKS cached by the handle
 
 **P1 (shared Keycloak).** Not built yet (there is no `RagApi` code). `RagApi:Authority` defaults to the admin's authority,
 so in P1 it is realm `fors` of the shared Keycloak, and `RagApi:Audience` stays `kalla-api`: RAG's realm additions
-define a client `kalla-api` (§11.2) as the audience, so a token for the gateway's Data API (`aud` `ume-data-api`)
+define a client `kalla-api` (§11.2) as the audience, so a token for the gateway's Data API (`aud` `fors-data-api`)
 never passes our audience check and ours never passes the gateway's. P1 has no token caller (every token row in §3 is
 P2 or later; integrations use keys), so a token that does validate still ends at step 3 with `client_unknown` until a
 platform admin registers its `azp` in `config."Clients"`. Which token-caller parts go into the P1 additions is open
@@ -978,7 +978,7 @@ scope value on one registration. This is stricter than the Data API's "any confi
   Should several tool-hub instances ever need a shared cache, it is Redis with Data Protection encryption and a key
   per user (plan §7).
 - P2 service-identity calls (client credentials) run in the in-process hub of `kalla-api` and `kalla-admin` (tools design
-  §4.6); OBO arrives with the separate `rag-tools` service (P3, tools design §2).
+  §4.6); OBO arrives with the separate `kalla-tools` service (P3, tools design §2).
 
 ### 9.3 Claims challenges and consent
 
@@ -1053,7 +1053,7 @@ policy denials (P2, `ResourceType` `tool`/`skill`, attributes + `ToolId`, `Skill
 `tool_grant_missing`, `tool_clearance`, `tool_unapproved`, `tool_drifted`, `tool_write_disabled`, `client_tool_policy`,
 `skill_audience` (tools design §9.3). The MAC key
 is `Security:ConversationIdKeys` (secret files `Security__ConversationIdKeys__<kid>`, ≥ 32 bytes, made by
-`init-deployment.sh`; newest signs, all verify, as the download-grant keys).
+`kalla-bootstrap`; newest signs, all verify, as the download-grant keys).
 
 Assistant versions and owner-team scoping (simplification pass §15) add **no event**: publish, restore, copy and
 archive are admin changes (6001 with `assistant.publish|restore|copy|archive`, admin design §9.2), a refused
@@ -1095,10 +1095,8 @@ from the gateway's file; passwords and secrets are import placeholders like `${F
 
 The pilot's Keycloak is the gateway's (Decisions table "P1 pilot sign-in"; plan §1): the gateway repo defines the
 Compose project, the base realm `fors` (the gateway's clients and roles, without test users) and its operation
-(`../archive/gateway-changes/prompt-gateway-session.md` §2). RAG contributes a **realm-additions file** in `deploy/keycloak/`
-(owned by stream B, `../archive/p1/README.md` §2; P1 item 16 → hand-off J8, through the user to the gateway session; J11 is the
-shared Keycloak with the additions imported and pilot accounts created). It is derived from §11.1 and differs as
-follows:
+(`../archive/gateway-changes/prompt-gateway-session.md` §2). Källa contributes a **realm-additions file** in
+`deploy/keycloak/`, derived from §11.1, which differs as follows:
 
 | Element | P1 additions (shared realm) | Differs from §11.1 |
 |---|---|---|
@@ -1110,19 +1108,17 @@ follows:
 | *Full scope allowed* | **off on every RAG client**, as on the gateway's, so a token carries only its own system's roles | dev keeps Keycloak's default (on) |
 | Password policy, brute-force protection, user profile | **in the gateway's base realm file**, not in RAG's additions (Q3); the additions file must not declare `userProfile` (keycloak-config-cli would replace the whole profile) | dev has neither |
 | OTP | **not enforced for the pilot** (Decisions "Gateway release 1 and shared Keycloak as built"): password policy and brute-force protection only; MFA comes with brokered Entra ID/AD; G1 records it | dev has none |
-| Users, groups | **no test users**; pilot accounts are local Keycloak accounts created by hand (J11, user item U-c); member groups for the pilot department are Keycloak groups whose names a platform admin enters on our department record (§2) | §11.1's users and groups stay dev-only |
-| Seed | none: the mirror is filled from the gateway (org sync) and by hand (§2) | – |
+| Users, groups | **no test users**; pilot accounts are local Keycloak accounts created by hand; member groups for the pilot department are Keycloak groups whose names the gateway's admins enter on the gateway's department (§2.1) | §11.1's users and groups stay dev-only |
+| Seed | none: the mirror is filled from the gateway (org sync, §2.1) | – |
 
 **Settled by the gateway session (#390, thekim1/fors#70, 2026-11-06).** Keycloak runs **26.8.1** (the gateway's pin,
 `quay.io/keycloak/keycloak:26.8.1-1@sha256:a78d6b79572168cb25886b80a8b5b8d4ed4390743e3eecb810538683e209dd6b`).
 **keycloak-config-cli** applies the realm on every `docker compose up` of the gateway's `deploy/keycloak` project: the
 gateway's `realm/10-gateway.json` first, then every `*.json` in the operator's additions directory in name order, each
-resource type with `no-delete` (a file adds and updates, never removes). RAG's `rag-additions.json` starts with
-`"realm": "ume"` and uses `$(env:NAME)` placeholders (`$(env:NAME:-default)` for defaults); the values
+resource type with `no-delete` (a file adds and updates, never removes). Källa's `rag-additions.json` names the realm `$(env:FORS_KEYCLOAK_REALM:-fors)` and uses `$(env:NAME)` placeholders (`$(env:NAME:-default)` for defaults); the values
 (`KALLA_ADMIN_PUBLIC_HOST`, `KALLA_OPENWEBUI_HOST`, `KALLA_OIDC_CLIENT_SECRET`,
-`KALLA_OPENWEBUI_OIDC_CLIENT_SECRET`) are in the gateway operator's env file. A RAG change reaches production when the
-operator pulls a new tagged RAG version of the file. `rag-realm-settings.json`, the OTP flow and `apply-additions.py`
-are not used for the shared realm; a standalone Källa realm declares password policy, brute-force protection and
+`KALLA_OPENWEBUI_OIDC_CLIENT_SECRET`) are in the gateway operator's env file. A Källa change reaches production when the
+operator pulls a new tagged Källa version of the file. A standalone Källa realm declares password policy, brute-force protection and
 the user profile in its own file, `deploy/keycloak/standalone/10-rag-realm.json` (laid out like the gateway's
 `realm/`, so it imports before the additions). Local redirect URIs stay out of the production additions directory:
 they are in `rag-additions.local.json` (test realms only), which declares the pilot URIs next to the local ones,
@@ -1156,7 +1152,7 @@ Decided by the user (Decisions "Shared sign-in with the gateway"): one group mem
 both products, with **no code in either product referring to the other's roles**.
 
 - **Keycloak (the shared realm `fors`):** operator-made groups carry realm-role mappings for both systems, e.g.
-  `ume-admins` → `gateway-admin` + `rag-platform-admin`, `fors-department-admins` → `department-admin` +
+  `fors-admins` → `gateway-admin` + `rag-platform-admin`, `fors-department-admins` → `department-admin` +
   `rag-department-admin`. The RAG-only roles (`rag-pipeline-editor`, `rag-reviewer`, `rag-skill-editor`) are mapped
   to groups the same way. These groups are **operator data** (the admin console or a site file such as
   `additions/90-groups.json`), never in `rag-additions.json`: a RAG file that maps to `gateway-admin` would fail on a
@@ -1194,7 +1190,7 @@ Enterprise applications.
 | `kalla-open-webui` registration (new) | Web redirect `https://<owui host>/oauth/oidc/login/callback` (§5.3); ID-token optional claims `email`, `acct`; delegated Graph `openid profile email` (user consent is enough, but granted tenant-wide by admin to avoid prompts); its own client secret (§12.2) | admin consent for the delegated scopes (recommended) |
 | Its service principal | `appRoleAssignmentRequired = true` | no |
 | Pilot groups (new) | `Källa pilot users` (Open WebUI access), `Källa platform admins`, `Källa department admins – <pilot department>` (names agreed with IT; no convention exists, plan answered question 5) | `Group.Create` or `Group.ReadWrite.All` for the deployer (open, §12.4) |
-| Tool identity and MCP server registrations (**package 2**, P2; not in `infra/entra/` yet) | app registration `kalla-tools` with a certificate credential (`keyCredentials`) for client credentials (`/run/certs/kalla-tools-entra.pfx`, mounted in `kalla-api` and `kalla-admin` only, tools design §4.6); per hosted MCP server a registration `ume-mcp-<name>` (first: `ume-mcp-kommun`) with app role `Tools.Invoke` (Application) and its assignment to `kalla-tools` (tools design §8.1, §8.3) | assignments need app ownership or `AppRoleAssignment.ReadWrite.All` (manual step, §12.3) |
+| Tool identity and MCP server registrations (**package 2**, P2; not in `infra/entra/` yet) | app registration `kalla-tools` with a certificate credential (`keyCredentials`) for client credentials (`/run/certs/kalla-tools-entra.pfx`, mounted in `kalla-api` and `kalla-admin` only, tools design §4.6); per hosted MCP server a registration `kalla-mcp-<name>` (first: `kalla-mcp-kommun`) with app role `Tools.Invoke` (Application) and its assignment to `kalla-tools` (tools design §8.1, §8.3) | assignments need app ownership or `AppRoleAssignment.ReadWrite.All` (manual step, §12.3) |
 | App role assignments | pilot users group → `kalla-open-webui` (default access); admin groups → `rag-platform-admin` / `rag-department-admin`, reviewer groups per department → `rag-reviewer` (P2: skill editor groups → `rag-skill-editor`) on `kalla-admin` | a manual approval step (§12.3) |
 
 ### 12.2 Credentials
@@ -1202,8 +1198,8 @@ Enterprise applications.
 The Graph Bicep extension cannot create client secrets: `passwordCredentials` appear on `applications` and
 `servicePrincipals`, but `secretText` is read-only and Microsoft's limitations page supports only `keyCredentials`
 (confirmed in P0, to-verify #84). **Decision (2026-10-29): client secrets, identical to the gateway's setup and code.** Our BFF's secret on
-`kalla-admin` is created by an operator with `az ad app credential reset --append` and passed to
-`init-deployment.sh --oidc-client-secret-file` (`Oidc__ClientSecret`), exactly as in the gateway. Open WebUI's OIDC
+`kalla-admin` is created by an operator with `az ad app credential reset --append` and typed in the setup wizard (§19) or declared as
+`KALLA_OIDC_CLIENT_SECRET`, as in the gateway. Open WebUI's OIDC
 client supports only a client secret (`OAUTH_CLIENT_SECRET`), created the same way. Certificates (`private_key_jwt`)
 can later be added to **both** systems together (a `gateway-changes` candidate), not to ours alone.
 
@@ -1329,7 +1325,7 @@ membership of the pilot groups is maintained by IT, not by IaC.
 ### 13.3 Integration (`Kalla.Api.Tests`, `Kalla.AdminApi.Tests`, `Kalla.IntegrationTests` with Keycloak and Postgres containers)
 
 - Sign in as each Keycloak user; `/bff/user` shows the expected roles, departments and sources (P0 checklist #9).
-- **P1 realm additions** (P1 item 16): the `deploy/keycloak/` file imports into a Keycloak 26.8.1 test container (the gateway's pin, B-15) next
+- **P1 realm additions** (`RealmAdditionsTests`): the `deploy/keycloak/` file imports into a Keycloak 26.8.1 test container (the gateway's pin) next
   to a minimal `fors` realm (standing in for the gateway's base realm) without collisions; a sign-in through `kalla-admin`
   shows the `rag-*` roles and `departmentCodes` in `/bff/user`, and its ID token carries no gateway role (full scope
   off); the file contains no users.
@@ -1344,7 +1340,7 @@ membership of the pilot groups is maintained by IT, not by IaC.
 - Config monitor stopped (Postgres `NOTIFY` and poll blocked) with `Config:MaxUnconfirmedSeconds = 5` ⇒ keyed
   requests keep working and `/health/ready` stays ready for 5 s, then every keyed request is 503 `config_unconfirmed`
   + 5004; resumes when the monitor confirms.
-- Open WebUI: real `open-webui` container (nightly e2e) sends the JWT; our API accepts it and stores the conversation
+- Open WebUI: real `open-webui` container (`tests/e2e/specs/openwebui.spec.ts`, run by hand) sends the JWT; our API accepts it and stores the conversation
   under (client, `sub`, chat id).
 
 ### 13.4 Negative and security tests
@@ -1384,8 +1380,8 @@ Moved to [`../archive/design-history/identity.md`](../archive/design-history/ide
   26.6.4, with `service_account` in the client's default scopes.
 - Entra: `acct` optional claim values and `idp` behaviour for B2B guests in ID and access tokens.
 - Open WebUI tag chosen at P0 (V1): **done** (to-verify #46): v0.12.3, JWT fields and fallback as
-  designed (`headers.py:41-86`), callback path per §5.3. Still open: an end-to-end request from Open WebUI to
-  `kalla-api` (needs the chat API, P1).
+  designed (`headers.py:41-86`), callback path per §5.3; the end-to-end request from Open WebUI to `kalla-api` is
+  `tests/e2e/specs/openwebui.spec.ts` (by hand).
 - **New**: Entra ID tokens of `kalla-admin` carry `oid` with the scopes the BFF requests (`openid profile email`).
   Not run in P0: needs the package 1 registration, now P2 (to-verify #151).
 - **New**: `groupMembershipClaims = SecurityGroup` puts cloud and synced member groups as object ids into the ID
@@ -1399,41 +1395,26 @@ Moved to [`../archive/design-history/identity.md`](../archive/design-history/ide
   shows, client scopes, the user profile, password and brute-force policy or authentication flows. Settled: the shared realm uses keycloak-config-cli instead
   (open question 2 below; Decisions "Gateway release 1 and shared Keycloak as built").
 
-**Answered for P1 (#390, 2026-11-06):** Q1 and Q6: the gateway operator holds realm admin for the pilot and demo
-(accounts, role grants, `departmentCodes`/`teamCodes`, resets; runbook in the gateway's `docs/keycloak.md`); brokered
-organisations manage accounts in their own directory. Q2: keycloak-config-cli, `no-delete`, name order (§11.2). Q3:
-realm-wide settings in the gateway's base file. Q4: OTP not enforced for the pilot (Decisions "Gateway release 1 and
-shared Keycloak as built"). Q8: audience only. The list below keeps the original questions; 5, 7 and 9 are unchanged.
+**Questions for P1 on the shared Keycloak** (numbered as first asked, 2026-10-31; the original wording and the
+answers' history are in [`../archive/design-history/identity.md`](../archive/design-history/identity.md) §16):
 
-**Open for P1 (shared Keycloak; not decided by the 2026-10-30 decision, 2026-10-31).** Each needs an answer before
-J11; the gateway session (`../archive/gateway-changes/prompt-gateway-session.md` §2) or the user decides, not the streams.
-
-1. **Who administers the shared realm** in production: accounts, role grants, `departmentCodes`, OTP resets, the
-   realm's admin users and their own OTP. The gateway session writes the runbook; who holds the Keycloak admin role
-   for realm `fors` (the gateway's operators, RAG's platform admins, or both, with which Keycloak admin roles) is open.
-2. **How RAG's additions are imported and kept in step** with the gateway's base realm: an import job, `kcadm`, or a
-   documented procedure (the gateway session chooses and says which); how a later change to `deploy/keycloak/**` (a new
-   redirect URI, a new `rag-*` role) reaches production, who applies it, and how a mistake in one system's part is
-   kept from breaking the other's sign-in.
-3. **Realm-level settings shared by both systems**: password policy, brute-force protection, the user profile
-   (`departmentCodes`, `teamCodes`) and the OTP flow apply to the whole realm, not per client. P1 item 16 puts them in
-   RAG's file (provisionally, §11.2); whether they belong in the gateway's base realm instead.
-4. **OTP for admins**: which accounts count as admins (every account with a `rag-*` role, only
-   `rag-platform-admin`/`rag-department-admin`, and the gateway's `gateway-admin`), and how it is enforced (the
-   *Configure OTP* required action per account, or a conditional browser flow on role). Provisionally (§11.2):
-   `rag-platform-admin` and `rag-department-admin`, by a conditional browser flow on role.
-5. **Who may sign in to Open WebUI** (§5.3): any account in the realm today; a role gate or a flow condition.
-6. **Account lifecycle**: who creates, disables and removes pilot accounts (leavers), how initial credentials and OTP
-   enrolment reach people, and who keeps `departmentCodes` and member-group membership current.
-7. **Identity continuity** when LDAP federation arrives and when P2 moves to Entra: the Keycloak `sub` of a local
-   account may differ from the federated one, and Entra's `oid` differs from both. Audit actors change (§1.1); Open
-   WebUI accounts appear to be keyed by the provider's `sub` with `OAUTH_MERGE_ACCOUNTS_BY_EMAIL=false`, so a switch may
-   create new Open WebUI users and new `SubjectId`s for our conversations (to verify). Whether the pilot's accounts and
-   chats are migrated or start over.
-8. **Token-caller parts in the P1 additions**: whether `kalla-api` in P1 is only the audience, or also brings the
-   `Chat.Use`/`Knowledge.Read`/`Mcp.Use` scopes, the app permissions `Knowledge.Read.All`/`Chat.Invoke.All` and a
-   client-credentials client (no P1 caller needs them, §7.1). Provisionally (§11.2): the audience client only.
-9. **E1 spike** (§9.4, weakness review §5): answered by the Decisions table "P1b briefs" (O3): E1 moves to P2 with
+1. Who administers the shared realm: **answered** (#390, 2026-11-06): the gateway operator holds realm admin for the
+   pilot and demo (accounts, role grants, `departmentCodes`/`teamCodes`, resets; runbook in the gateway's
+   `docs/keycloak.md`); brokered organisations manage accounts in their own directory.
+2. How Källa's additions are imported and kept in step: **answered**: keycloak-config-cli, `no-delete`, name order
+   (§11.2).
+3. Realm-level settings shared by both systems: **answered**: in the gateway's base realm file (§11.2).
+4. OTP for admins: **answered**: not enforced for the pilot (Decisions "Gateway release 1 and shared Keycloak as
+   built"); MFA comes with brokered Entra ID or AD.
+5. **Open: who may sign in to Open WebUI** (§5.3): any account in the realm today; a role gate or a flow condition.
+6. Account lifecycle: **answered** with 1 (the gateway operator).
+7. **Open: identity continuity** when LDAP federation arrives and when P2 moves to Entra: the Keycloak `sub` of a
+   local account may differ from the federated one, and Entra's `oid` differs from both. Audit actors change (§1.1);
+   Open WebUI accounts appear to be keyed by the provider's `sub` with `OAUTH_MERGE_ACCOUNTS_BY_EMAIL=false`, so a
+   switch may create new Open WebUI users and new `SubjectId`s for our conversations (to verify). Whether the pilot's
+   accounts and chats are migrated or start over.
+8. Token-caller parts in the P1 additions: **answered**: `kalla-api` is the audience client only (§11.2).
+9. E1 spike (§9.4, weakness review §5): **answered** by the Decisions table "P1b briefs" (O3): E1 moves to P2 with
    Entra.
 
 ## 17. Deferred or removed (simplification pass)
