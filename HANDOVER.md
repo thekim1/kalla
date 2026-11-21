@@ -94,7 +94,7 @@ the VM's upgrade to `thekim1`. In order:
 - **The live block** (the critical path to go-live, `plans/roadmap.md`): every item waits on an input, A-L1 (the
   umea.se inventory) first.
 - **The support-chatbot proposal** (`plans/proposals/support-chatbot-features.md`): F3, F4 and F8 are built; F10
-  and F7 are picked (2026-11-21) and the main session designs and queues them. The rest is the user's pick.
+  and F7 are picked (2026-11-21), designed and queued (B-61, B-62). The rest is the user's pick.
 - **P2's later waves** (the roadmap's *P2 Broaden*): the user picks the next theme when wave 1 is nearly done.
 - **To-verify row 96:** the NVDA screen-reader pass of the admin UI, which needs Windows.
 - **To-verify row 79:** whether `NerMinScore` moves for the int8 NER model (left at 0.80: the sample is small).

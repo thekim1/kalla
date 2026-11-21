@@ -880,6 +880,29 @@ searched, and a turn with nothing left to search ends `not-found`. Detail: `chat
 
 *From:* support chatbot proposal F8; picked by user, 2026-11-20.
 
+### Cost per outcome
+
+Every assistant turn adds its full cost (the sum of its model calls' gateway and estimated cost, as the per-step
+table) and one turn to a daily row per outcome (`chat."AssistantDailyOutcomes"`), usage-only turns and test-panel
+turns included (the test panel under its own client, shown apart). The assistant's *Cost* card shows, per outcome, the
+turns, the cost and the cost per turn, the gateway and estimated parts apart. Reporting only, like the rest of the
+cost report: the gateway stays the record for charging. Detail: `chat-api/design.md` §12.2;
+`platform/data-model.md` §2.3; `admin/design.md` §8.6.
+
+*From:* support chatbot proposal F10; picked by user, 2026-11-21.
+
+### Content-gap report
+
+A turn that ends `not-found` or `answered-general` adds one to a daily count by its **nearest hit**: the knowledge
+base and document of the search's first result, or *no hit* when the search found nothing
+(`chat."AssistantDailyGaps"`). No question text, no subject and no conversation are stored with it. The assistant's
+Statistics tab shows the share of such turns and the documents they came nearest to, most first, with a CSV export.
+Test-panel turns are left out. The proposal's "nearest topic" is the nearest document: topic tags are optional per
+link, a document is always there. Detail: `chat-api/design.md` §12.1, §12.2; `platform/data-model.md` §2.3;
+`admin/design.md` §8.7.
+
+*From:* support chatbot proposal F7; picked by user, 2026-11-21.
+
 ### Chat rate limit per key
 
 A key that is itself the chat subject is limited by `Keys.RequestsPerMinute`, else by the per-user value; Open WebUI

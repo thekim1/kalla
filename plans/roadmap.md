@@ -89,7 +89,7 @@ P2 wave 1 (*P2 Broaden* below) is the code work. Beside it, what is open without
   with Compose.
 - **Support chatbot F10 and F7** (cost per outcome, the content-gap report;
   [`proposals/support-chatbot-features.md`](proposals/support-chatbot-features.md)): picked by the user on 2026-11-21;
-  the main session designs them and queues them.
+  designed (Decisions "Cost per outcome", "Content-gap report") and queued as stream b's B-61 and B-62.
 - **CI:** what the test collections of one `Kalla.AdminApi.Tests` process wait for (not CPU, thread pool, disk or
   GC; a profiler would say); the project runs as five processes meanwhile.
 
