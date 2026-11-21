@@ -395,10 +395,11 @@ jobs:
           bash deploy/tests/portainer-boot.sh dist/compose.portainer.yaml --version "${{ steps.version.outputs.version }}"
       - name: Upgrade the oldest supported release's Portainer stack
         # docs/portainer.md, "Upgrade": the UPGRADE_FROM stack (its release asset, its variables) is booted, then this
-        # release's file is applied over it. From before 0.9.0 that is 0.9.0's steps (--rename-0.9: stop the stack,
-        # rename its variables, update it, rename the roles in both Postgres, deploy again), so nothing is fenced; the
-        # one-step upgrade with nothing added, changed or stopped by hand (and --expect-fenced kalla_api --expect-fenced
-        # kalla_admin, as from 0.6.0 across DropMessageParentId) applies again once UPGRADE_FROM is 0.9.0 or later.
+        # release's file is applied over it. From before 0.9.0 that is the rename's steps (--rename-0.9: the variables
+        # renamed, the stack updated once; kalla-roles renames Källa's roles, and the gateway's are renamed by hand until
+        # the stack is built on Fors 0.12.2), so nothing is fenced, the new database being a copy; the one-step upgrade
+        # with nothing added, changed or stopped by hand (and --expect-fenced kalla_api --expect-fenced kalla_admin, as
+        # from 0.6.0 across DropMessageParentId) applies again once UPGRADE_FROM is 0.9.0 or later.
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

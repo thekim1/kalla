@@ -3,7 +3,8 @@
 The pilot runs on one Linux host with Docker Compose, as the Compose project `kalla` from `deploy/compose.rag.yaml`:
 six long-running containers (`kalla-postgres`, with pgBackRest inside when backups are on, `kalla-api`, `kalla-admin`,
 `kalla-worker`, `kalla-parser` and, with the profile `clamav` (the default), `kalla-clamav`: *Malware scan*, below), with the
-profile `render` a seventh (`kalla-renderer`, below), and the one-shots `kalla-bootstrap` and `kalla-migrate`.
+profile `render` a seventh (`kalla-renderer`, below), and the one-shots `kalla-bootstrap`, `kalla-roles` (renames the
+database roles from before the rename to Källa, a no-op after that) and `kalla-migrate`.
 `kalla-bootstrap` creates the certificates and secrets in the volumes `kalla-certs` and `kalla-secrets` and copies the
 static configuration into `kalla-config`. The same file is the Källa part of the Portainer stack. `init-deployment.sh`
 writes `deploy/.env`, whose `COMPOSE_FILE` lists `compose.rag.yaml` and the overlays your options need, so every
@@ -63,6 +64,7 @@ picks the profile; 16 is the default.
 | `kalla-postgres` | data | 3.0 | 2g | 3g (`shared_buffers` 768MB) | 5g (`shared_buffers` 1536MB) |
 | `kalla-api` | data | 2.0 | 384m | 1g | 1.5g |
 | `kalla-admin` | control | 1.0 | 256m | 512m | 768m |
+| `kalla-roles` (one-shot) | – | 0.5 | – | 128m | 128m |
 | `kalla-migrate` (one-shot) | – | 1.0 | – | 512m | 512m |
 | `kalla-worker` | ingestion | 1.5 | 512m | 1.5g | 2g |
 | `kalla-parser` | ingestion | 4.0 | 2g | 3.5g (1 slot × 4 threads) | 6g (2 slots × 2 threads) |
