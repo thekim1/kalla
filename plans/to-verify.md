@@ -162,7 +162,7 @@ a queue item when a stream or the main session picks it up.
 | # | Item | Where | Phase | How | Status |
 |---|---|---|---|---|---|
 | 109 | Model and library licences in the parser image: Docling layout and TableFormer models, `olefile`, pypdfium2 (pdfium built without V8/XFA). **Partly done (P0, PR #9, 2026-10-30):** model licences (Apache-2.0, CDLA-Permissive-2.0, MIT) and pdfium without V8/XFA; `LICENSES.md` and SUC 3.0 terms remain | `parser/design.md` §9.2, §11, §12, §19; postponed P2 | P0 | source | done 2026-11-16; LibreOffice section and written offer: #793 (results-main) |
-| 110 | KB BERT NER model (MIT) and the SUC 3.0 terms for derived weights | `ingestion-worker/design-processing.md` §21; `parser/design.md` §12; postponed P2 | P1 | source + ask (KB) if unclear | done for the pilot 2026-11-16; a written question to KB is the user's call (results-main) |
+| 110 | KB BERT NER model (MIT) and the SUC 3.0 terms for derived weights | `ingestion-worker/design-processing.md` §21; `parser/design.md` §12; postponed P2 | P1 | source + ask (KB) if unclear | done 2026-11-16; the MIT licence is taken as covering the weights, no question to KB (user, 2026-11-21; results-main) |
 
 ### Performance and scale
 

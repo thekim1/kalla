@@ -29,7 +29,7 @@ nobody needs to read them end to end.
 **Proposals** (not binding until adopted in `decisions.md`), in [`proposals/`](proposals/), each with a status line.
 With something still to choose from:
 - [`support-chatbot-features.md`](proposals/support-chatbot-features.md): ten candidates for a support chatbot; F3,
-  F4 and F8 are built, the rest is the user's pick.
+  F4 and F8 are built, F10 and F7 are picked next (2026-11-21), the rest is the user's pick.
 - [`architecture-plans.md`](proposals/architecture-plans.md): knowledge, assistants and models (2026-11-02); the roadmap
   names the items still open.
 - [`upload-quality-review.md`](proposals/upload-quality-review.md): how well uploaded files are handled, the gaps U1–U7
