@@ -23,8 +23,8 @@ public sealed class ServingSchemaTests(RagDatabaseFixture database)
     public async Task P2_tables_columns_and_values_are_absent()
     {
         var superuser = database.Connection(null);
-        // data-model §15 (weakness review §1): built in P2.
-        foreach (var table in new[] { "AssistantTestQuestions", "AssistantTemplates", "AssistantCollections", "AssistantSkills" })
+        // data-model §15 (weakness review §1): built in P2. AssistantTemplates came with B-54.
+        foreach (var table in new[] { "AssistantTestQuestions", "AssistantCollections", "AssistantSkills" })
         {
             (await Sql.ScalarAsync<string>(superuser, $"SELECT to_regclass('config.\"{table}\"')::text")).ShouldBeNull(table);
         }
