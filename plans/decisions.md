@@ -506,7 +506,7 @@ its AppHost. `kalla-api` is an audience only. Detail: `identity/design.md` §11.
 
 ### Shared sign-in with the gateway
 
-One group membership gives roles in both products: operator-made Keycloak groups map realm roles of both systems (e.g. `ume-admins` → `gateway-admin` + `rag-platform-admin`), never in `rag-additions.json`. Each system's client token carries only its own roles. On the direct Entra route each product has its own app registration with app roles, and one security group is assigned in both. Neither product's code names the other's roles; Källa's role groups keep the `rag-` names. The two
+One group membership gives roles in both products: operator-made Keycloak groups map realm roles of both systems (e.g. `fors-admins` → `gateway-admin` + `rag-platform-admin`), never in `rag-additions.json`. Each system's client token carries only its own roles. On the direct Entra route each product has its own app registration with app roles, and one security group is assigned in both. Neither product's code names the other's roles; Källa's role groups keep the `rag-` names. The two
 products are separate Compose projects with the same layout, and Källa's ports stay clear of the gateway's. Detail: `identity/design.md` §11.3.
 
 *From:* log rows 74, 118; decided by user, 2026-11-07.
@@ -562,7 +562,7 @@ The gateway never depends on Källa; any key may send a residency ceiling. Relea
 
 ### Interim gateway for P1a
 
-A test/dev gateway on a fixed HTTPS host with EU embedding and chat models is the interim gateway (J10); its Keycloak holds the shared realm `fors` (J11). FakeGateway serves CI and tests. Its address and keys are only in user secrets, `deploy/.env` and secret files, never in the repository. Detail: `gateway-changes/design.md` §13.4.
+A test/dev gateway on a fixed HTTPS host with EU embedding and chat models is the interim gateway (J10); its Keycloak holds the shared realm `fors` (J11). FakeGateway serves CI and tests. Its address and keys are only in user secrets, `deploy/.env` and secret files, never in the repository. Detail: `archive/design-history/gateway-changes.md` (the release plan, §13 as planned).
 
 *From:* log rows 78, 83; decided by user, 2026-10-31.
 
