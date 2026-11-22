@@ -72,11 +72,15 @@ public static class AssistantEndpoints
                     admin.Db.Assistants.Add(assistant);
                     await admin.Db.SaveChangesAsync(attempt);
                     // Created with only a draft: no published version, so no client lists it (admin design §4.5). The draft starts from
-                    // the platform's citizen-service instructions (Settings.Chat.defaultSystemPrompt, P1b item 39).
+                    // the chosen template's instructions, not-found texts and query steps, copied with no link kept (admin design §5
+                    // step 9, P2); without one, from the platform's citizen-service instructions (Settings.Chat.defaultSystemPrompt,
+                    // P1b item 39).
+                    var template = request.TemplateId is { } templateId ? await AssistantTemplateEndpoints.ForNewAssistantAsync(admin, templateId, attempt) : null;
                     var draft = new AssistantVersion
                     {
-                        AssistantId = assistant.Id, Number = 1, SystemPrompt = await DefaultSystemPromptAsync(admin, attempt), CreatedBy = admin.Actor, CreatedAt = admin.Now,
-                        UpdatedAt = admin.Now, UpdatedBy = admin.Actor,
+                        AssistantId = assistant.Id, Number = 1, SystemPrompt = template?.SystemPrompt ?? await DefaultSystemPromptAsync(admin, attempt),
+                        NotFound = template?.NotFound ?? "{}", QuerySteps = template?.QuerySteps ?? "{}",
+                        CreatedBy = admin.Actor, CreatedAt = admin.Now, UpdatedAt = admin.Now, UpdatedBy = admin.Actor,
                     };
                     admin.Db.AssistantVersions.Add(draft);
                     await admin.Db.SaveChangesAsync(attempt);
@@ -690,9 +694,7 @@ public static class AssistantEndpoints
     public static async Task<string> DefaultSystemPromptAsync(AdminContext admin, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(admin);
-        var chat = await admin.Db.Settings.AsNoTracking().Select(s => s.Chat).SingleOrDefaultAsync(ct);
-        var value = (JsonNode.Parse(string.IsNullOrWhiteSpace(chat) ? "{}" : chat) as JsonObject)?[ChatDefaults.SystemPromptKey];
-        return value is JsonValue v && v.GetValueKind() == JsonValueKind.String ? v.GetValue<string>() : ChatDefaults.SystemPrompt;
+        return ChatDefaults.SystemPromptFrom(await admin.Db.Settings.AsNoTracking().Select(s => s.Chat).SingleOrDefaultAsync(ct));
     }
 
     /// <summary>A version's <c>answer.generalKnowledge</c> (admin design §5.5.4 badge): the stored value, <c>off</c> when unset or unknown.</summary>
@@ -1060,6 +1062,12 @@ public sealed record AssistantCreateRequest : AssistantFields
 
     [StringLength(100), RegularExpression(Slugs.Pattern)]
     public string? Slug { get; init; }
+
+    /// <summary>
+    /// The assistant template the first draft starts from (admin design §5 step 9): its instructions, not-found texts and
+    /// query steps are copied, and no link is kept. Without one, the draft starts from <c>Settings.Chat.defaultSystemPrompt</c>.
+    /// </summary>
+    public Guid? TemplateId { get; init; }
 }
 
 public sealed record AssistantUpdateRequest : AssistantFields

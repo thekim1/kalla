@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
 namespace Kalla.Domain;
 
 /// <summary>
@@ -21,4 +24,15 @@ public static class ChatDefaults
         Använd en punktlista när svaret har flera steg, och berätta vad personen behöver göra härnäst.
         Be aldrig om personuppgifter. Om frågan gäller ett enskilt ärende, hänvisa till kommunens kontaktcenter.
         """;
+
+    /// <summary>
+    /// The instructions a new assistant starts from, given the stored <c>Settings.Chat</c> (a JSON object): the saved
+    /// <see cref="SystemPromptKey"/>, also when an admin emptied it; <see cref="SystemPrompt"/> when the key is missing (a
+    /// row from before the key existed) or there is no row yet.
+    /// </summary>
+    public static string SystemPromptFrom(string? settingsChat)
+    {
+        var value = (JsonNode.Parse(string.IsNullOrWhiteSpace(settingsChat) ? "{}" : settingsChat) as JsonObject)?[SystemPromptKey];
+        return value is JsonValue v && v.GetValueKind() == JsonValueKind.String ? v.GetValue<string>() : SystemPrompt;
+    }
 }

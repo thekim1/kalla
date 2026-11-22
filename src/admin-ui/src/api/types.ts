@@ -1159,6 +1159,23 @@ export interface AssistantCreate {
   description: string | null
   contactName: string | null
   contactEmail: string | null
+  /** The template the first draft starts from (copied, never linked); null: `Settings.Chat.defaultSystemPrompt`. */
+  templateId?: string | null
+}
+
+/** `GET /api/assistant-templates` (admin design §4.5, P2): a starting point for new assistants. */
+export interface AssistantTemplate {
+  id: string
+  name: string
+  description: string
+  systemPrompt: string
+  notFound: Record<string, unknown>
+  querySteps: Record<string, unknown>
+  /** Offered when an assistant is created. */
+  isActive: boolean
+  updatedAt: IsoDateTime
+  updatedBy: string | null
+  version: string
 }
 
 export interface RuleWarning {

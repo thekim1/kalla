@@ -15,7 +15,7 @@ namespace Kalla.MigrationService;
 /// (<c>Migration:RolesSqlPath</c>, set by production compose; dev runs as the bootstrap superuser without the service
 /// roles; with them, the service fences of <see cref="ServiceAdmission"/>, one log line per role fenced) and the run-item
 /// partition maintenance, in Development the HNSW defaults on the database
-/// (<see cref="DevDatabaseSettings"/>), then the platform pipelines (<see cref="PipelineTemplateSeeder"/>), the first settings row (<see cref="SettingsSeeder"/>), the
+/// (<see cref="DevDatabaseSettings"/>), then the platform pipelines (<see cref="PipelineTemplateSeeder"/>), the first settings row (<see cref="SettingsSeeder"/>), the assistant templates (<see cref="AssistantTemplateSeeder"/>), the
 /// test panel's client (<see cref="AdminConsoleClientSeeder"/>), the deployment's Open WebUI client (<see cref="OpenWebUiClientSeeder"/>) when
 /// <c>OpenWebUi:ApiKey</c> is set, and the <see cref="DevSeeder"/> when <c>Seed:Enabled</c> (with the dev Open WebUI
 /// client when <c>Seed:DevKey</c> is set, and the <see cref="DemoSeeder"/> when <c>Seed:DemoDirectory</c> is set), and exits
@@ -54,6 +54,9 @@ public sealed partial class MigrationWorker(
             await SettingsSeeder.SeedAsync(db,
                 configuration.GetSection(SettingsSeedOptions.SectionName).Get<SettingsSeedOptions>() ?? new SettingsSeedOptions(),
                 TimeProvider.System, logger, stoppingToken);
+            // The assistant templates, into an empty table only (admin design §4.5, P2); after the settings row, whose
+            // default instructions the first template takes.
+            LogAssistantTemplates(logger, await AssistantTemplateSeeder.SeedAsync(db, TimeProvider.System, stoppingToken));
             // The admin test panel's client, in every deployment (identity design §4.1, #712).
             LogAdminConsoleClient(logger, await AdminConsoleClientSeeder.SeedAsync(db, TimeProvider.System, stoppingToken));
             // The deployment's own Open WebUI client, from the key the deployment generated (identity design §5.2, M-17 C4).
@@ -101,6 +104,9 @@ public sealed partial class MigrationWorker(
             lifetime.StopApplication();
         }
     }
+
+    [LoggerMessage(LogLevel.Information, "Assistant templates seeded: {Count}")]
+    private static partial void LogAssistantTemplates(ILogger logger, int count);
 
     [LoggerMessage(LogLevel.Information, "The admin test panel's client admin-console: {Outcome}")]
     private static partial void LogAdminConsoleClient(ILogger logger, AdminConsoleClientSeeder.Outcome outcome);

@@ -114,6 +114,70 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database, Assis
     private static IEnumerable<string> Codes(JsonElement warnings) => warnings.EnumerateArray().Select(w => w.GetProperty("code").GetString()!);
 
     [Fact]
+    public async Task An_assistant_created_from_a_template_starts_with_a_copy_that_a_later_template_change_leaves_alone()
+    {
+        // B-54 (admin design §5 step 9): the template's instructions, not-found texts and query steps are copied into the first
+        // draft, and no link is kept.
+        var seed = await SeedAsync();
+        var factory = host.Factory;
+        using var platform = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
+        using var made = await platform.PostAsJsonAsync("/api/assistant-templates", new
+        {
+            name = "Intern policy " + seed.Code, systemPrompt = "Svara bara utifrån dokumenten och ange dokumentets ägare.",
+            notFound = new { sv = "Det står inte i policyerna.", links = new[] { new { title = "HR", url = "https://intranat.umea.se/hr" } } },
+            querySteps = new { answer = new { maxOutputTokens = 900 } },
+        }, Ct);
+        made.StatusCode.ShouldBe(HttpStatusCode.Created, await made.Content.ReadAsStringAsync(Ct));
+        var template = await Json(made);
+        var templateId = template.GetProperty("id").GetGuid();
+
+        using var created = await admin.PostAsJsonAsync("/api/assistants", new
+        {
+            name = "Policyhjälpen " + seed.Code, departmentId = seed.Department, classification = "internal", templateId,
+        }, Ct);
+        created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync(Ct));
+        var id = (await Json(created)).GetProperty("id").GetGuid();
+
+        Task<JsonElement> DraftAsync(Guid assistant) => admin.GetFromJsonAsync<JsonElement>($"/api/assistants/{assistant}/draft", Ct);
+        var draft = await DraftAsync(id);
+        draft.GetProperty("systemPrompt").GetString().ShouldBe("Svara bara utifrån dokumenten och ange dokumentets ägare.");
+        draft.GetProperty("notFound").GetProperty("sv").GetString().ShouldBe("Det står inte i policyerna.");
+        draft.GetProperty("notFound").GetProperty("links")[0].GetProperty("url").GetString().ShouldBe("https://intranat.umea.se/hr");
+        draft.GetProperty("querySteps").GetProperty("answer").GetProperty("maxOutputTokens").GetInt32().ShouldBe(900);
+
+        // The template changes and is then switched off: the assistant keeps its copy, and no new assistant starts from it.
+        using (var changed = await platform.PutAsJsonAsync($"/api/assistant-templates/{templateId}", new
+               {
+                   name = "Intern policy " + seed.Code, systemPrompt = "Ny text.", isActive = false, version = template.GetProperty("version").GetString(),
+               }, Ct))
+        {
+            changed.StatusCode.ShouldBe(HttpStatusCode.OK, await changed.Content.ReadAsStringAsync(Ct));
+        }
+
+        var kept = await DraftAsync(id);
+        (kept.GetProperty("systemPrompt").GetString(), kept.GetProperty("notFound").GetProperty("sv").GetString())
+            .ShouldBe(("Svara bara utifrån dokumenten och ange dokumentets ägare.", "Det står inte i policyerna."));
+        foreach (var unavailable in new[] { templateId, Guid.NewGuid() })
+        {
+            using var refused = await admin.PostAsJsonAsync("/api/assistants", new
+            {
+                name = "Policyhjälpen 2 " + seed.Code, departmentId = seed.Department, classification = "internal", templateId = unavailable,
+            }, Ct);
+            refused.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+            (await Json(refused)).GetProperty("errorCodes").GetProperty("templateId")[0].GetProperty("code").GetString().ShouldBe("not_found");
+        }
+
+        // Without a template the draft starts from Settings.Chat.defaultSystemPrompt, as in P1.
+        using var plain = await admin.PostAsJsonAsync("/api/assistants", new { name = "Utan mall " + seed.Code, departmentId = seed.Department, classification = "internal" }, Ct);
+        plain.StatusCode.ShouldBe(HttpStatusCode.Created);
+        var plainDraft = await DraftAsync((await Json(plain)).GetProperty("id").GetGuid());
+        await using var db = TestPostgres.Context(database.Connection(null));
+        plainDraft.GetProperty("systemPrompt").GetString().ShouldBe(ChatDefaults.SystemPromptFrom(await db.Settings.AsNoTracking().Select(s => s.Chat).FirstOrDefaultAsync(Ct)));
+        plainDraft.GetProperty("notFound").EnumerateObject().ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task An_assistant_is_drafted_published_offered_to_a_client_and_republished()
     {
         var seed = await SeedAsync();

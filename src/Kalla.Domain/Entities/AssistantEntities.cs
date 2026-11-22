@@ -79,6 +79,37 @@ public static class AssistantVersionStates
 }
 
 /// <summary>
+/// A starting point for new assistants (data-model <c>AssistantTemplates</c>, P2; admin design §4.5), maintained by the
+/// platform team: its instructions, not-found texts and query steps are copied into a new assistant's first draft, and
+/// no link is kept, so a later change to the template touches no assistant. Read only by <c>kalla-admin</c>.
+/// </summary>
+public sealed class AssistantTemplate
+{
+    public const int MaxName = 200;
+    public const int MaxDescription = 500;
+
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+    public required string Name { get; set; }
+    public string Description { get; set; } = "";
+
+    /// <summary>The instructions the first draft starts from.</summary>
+    public string SystemPrompt { get; set; } = "";
+
+    /// <summary>Not-found texts and contact links (<c>jsonb</c>, as <see cref="AssistantVersion.NotFound"/>).</summary>
+    public string NotFound { get; set; } = "{}";
+
+    /// <summary>Query steps (<c>jsonb</c>, as <see cref="AssistantVersion.QuerySteps"/>).</summary>
+    public string QuerySteps { get; set; } = "{}";
+
+    /// <summary>Offered when an assistant is created; an inactive template is kept but not offered.</summary>
+    public bool IsActive { get; set; } = true;
+
+    public DateTimeOffset UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+    public uint Version { get; set; }
+}
+
+/// <summary>
 /// A version of an assistant's settings (<c>config."AssistantVersions"</c>, data-model §2.1): at most one open draft and
 /// one published version per assistant; published and superseded rows are immutable. A draft carries its own stamps and
 /// <c>xmin</c> token, so editing it never touches <see cref="Assistant"/>, and its rows do not bump the config version
