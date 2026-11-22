@@ -3,7 +3,7 @@
 State of the Källa work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`).
 **Last release `v0.9.2`** (2026-11-21, tag at `c7d5de47`, on Fors `v0.12.2`): JavaScript rendering works again and topic
 rules take a pasted address. Nothing unreleased on `main` but plan files. The user's VM runs 0.5.0. Two machines work
-on it: `~/research/rag` (the user's, where sessions 49 to 53 ran) and `thekim1`'s (stream b, often stream a, the
+on it: `~/research/rag` (the user's, where sessions 49 to 54 ran) and `thekim1`'s (stream b, often stream a, the
 releases, and a coordinating session that writes proposals). Branch `main`, remote `origin` =
 https://github.com/thekim1/kalla (HTTPS through `gh auth git-credential`, handbook *Environment notes*).
 
@@ -26,7 +26,7 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
    `plans/archive/work/`), results in `results-a.md`, `results-b.md` and `results-main.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here (session 54)
+## Start here (session 55)
 
 **The rules of the repository:**
 - **`main` is protected** ("Protect main": a pull request with one approving review and the required checks; an
@@ -43,58 +43,49 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
   comment, say that it is not the approval, and give the user the line to run (handbook, *How we work*). **Stacked or
   overlapping pull requests:** after the first is squash-merged the next conflicts; a rebase and push dismisses its
   approval, so it needs the word again (session 53: the same word for the same named pull requests was accepted).
+- **Push with `gh` as the credential helper:** a plain `git push` here asks the Windows credential manager and hangs.
+  Use `git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push …` (session 54).
 - **Look at the open pull requests before each step** (`gh pr list`): the other machine works at the same hour. Say on
   its pull request what you are about to write; review its pull requests as comments (claims checked against the code).
 - **A decision for the user is asked as four alternatives with one recommendation** (the question tool).
 
-**Open when this was written** (2026-11-22, 10:00 UTC): `thekim1`'s #935 (a schedule per source in the admin UI; one
-commit, unchanged since the review) and #932 (the topics-editor proposal; no answer to the main session's comment),
-and this file's pull request. No issue moved overnight; #905 and #920 have no reply. In order:
+**Open when this was written** (2026-11-22, afternoon UTC): `thekim1`'s #935 (a schedule per source in the admin UI;
+one commit, unchanged since the main session's review comment) and this file's pull request. No issue moved during
+session 54; #905 (the repository variables) and #920 (the VM) have no reply. In order:
 
-1. **#932, the topics editor** (#929 steps 2 to 4; the user's preference: pick topics from the sections found). The
-   main session's view and its answers to the proposal's four questions are on the pull request (keep `EditPipelines`;
-   depth 1 with the next level on demand; the path segment as the name; one topic across sources; levels respected in
-   the suggestions; the re-chunk count from the publication plan). **The user decides** whether to accept those
-   answers and whether to write the Decisions entry and the designs (admin §5.5.2, processing §7) now or after P2 wave 1;
-   the main session recommended now. Ask with four alternatives if they haven't said.
-2. **#935, a source's schedule** (stream b): reviewed as a comment. The rule matches the worker's `SyncScheduler`;
-   asked for a browser check and noted that the rule could live once in `Kalla.Pipelines` (both the admin and the worker
-   reference it). `thekim1` merges it.
+1. **#935, a source's schedule** (stream b): reviewed as a comment (the rule matches the worker's `SyncScheduler`; a
+   browser check asked; the rule could live once in `Kalla.Pipelines`). `thekim1` merges it.
+2. **The newly queued work is the streams'** (session 54): A-42, then B-64 and B-65 (the topics editor, Decisions
+   "Topics editor"); B-66 (support-chatbot F6, Decisions "Downvotes per document"); B-67 to B-69 (P2 wave 2:
+   the drawn Map, *Archive* and *Keep* on unused assistants, the evaluation trend chart). Review their pull requests
+   as comments against those designs; #929 closes with B-65.
 3. **#925's steps 2 to 4** (personal-data verdicts, *reject*, the false-positive summary): the user answered the four
-   questions (decisions log, 2026-11-21); the Decisions entry and the design changes are left to `thekim1`'s session
-   (said on #925). Step 1 is stream b's B-63.
-4. **The design clean-up is done** (#926, #936 to #938). Share 1 was read line by line; shares 2 to 4 were scanned for
-   the kinds of staleness share 1 found and each hit's section read, so a stale passage that matches no such pattern
-   can remain. A full read of those three shares is possible once agents can run again (the usage limit resets
-   2026-11-26 19:00, Europe/Stockholm). Left open: admin §4.5's row on manual model rows ("`SupportsTools` until the
-   gateway sends `features`; not built yet") says unclearly what isn't built (check `GatewayEndpoints.cs`);
-   repo-and-deployment §14 and data-model §14 repeat `plans/to-verify.md`; the FakeGateway's per-level dev keys,
-   "kept until Källa moves to credential keys", are still in the code although it has moved. Not read at all:
-   `plans/to-verify.md`, the open queue items, `postponed-decisions.md`, `plans/cases/support-assistant/`,
-   `plans/gold-set/README.md`, `docs/` (stream a's).
-5. **The VM's upgrade is `thekim1`'s** (#920): it can now go from 0.5.0 straight to 0.9.2 (`docs/portainer.md`,
-   *Upgrade*). Read what is reported; a step that did not go as the guide says is a guide fix, and the roadmap's T1 row
-   follows the result. No report yet.
-6. **Repository variables:** the workflows read `vars.KALLA_TEST_HOST_RUNNER`, `vars.KALLA_TEST_HOST_DEPLOY_ENV`,
-   `vars.KALLA_R1_*` and `secrets.KALLA_R1_API_KEY`, and none exist (`gh variable list` empty on 2026-11-22). On the
-   user's decision `thekim1` was asked on #905 (2026-11-21) with the full list; no answer yet.
-7. **P2 wave 1 runs on `thekim1`'s machine:** B-54 to B-59 and B-63 open in stream b's queue, then B-61 and B-62
-   (support-chatbot F10 and F7). Say on the issue before starting one here.
+   questions (decisions log, 2026-11-21); the Decisions entry and the design changes are `thekim1`'s session's (said on
+   #925). Step 1 is stream b's B-63.
+4. **opencv 5.1 from 2026-11-25** (*Watch*): try `opencv-python-headless` 5.1.0.95 in the parser once its uv cutoff
+   lets it in; it may retire the eleven FFmpeg exceptions before 2026-12-17.
+5. **A full read of design shares 2 to 4** once agents can run again (the usage limit resets 2026-11-26 19:00,
+   Europe/Stockholm). Session 53 scanned them for known kinds of staleness; session 54 settled the three things left
+   open (#941). Not read at all: `plans/to-verify.md` beyond the rows #941 touched, the open queue items,
+   `postponed-decisions.md`, `plans/cases/support-assistant/`, `plans/gold-set/README.md`, `docs/` (stream a's).
+6. **The VM's upgrade is `thekim1`'s** (#920): 0.5.0 straight to 0.9.2 (`docs/portainer.md`, *Upgrade*). A step that did
+   not go as the guide says is a guide fix; the roadmap's T1 row follows the result. No report yet.
+7. **Repository variables:** the workflows read `vars.KALLA_TEST_HOST_RUNNER`, `vars.KALLA_TEST_HOST_DEPLOY_ENV`,
+   `vars.KALLA_R1_*` and `secrets.KALLA_R1_API_KEY`, and none exist; `thekim1` was asked on #905 (2026-11-21), no
+   answer yet.
 
 ### Waiting on the user
 
 - **The umea.se inventory (A-L1):** the first input of the live block (`plans/roadmap.md`); every live item waits on an
   input, A-L1 first.
-- **#932's questions** (above, item 1).
-- **The support-chatbot proposal** (`plans/proposals/support-chatbot-features.md`): F3, F4 and F8 built; F10 and F7
-  queued (B-61, B-62); the rest is the user's pick.
-- **P2's later waves** (the roadmap's *P2 Broaden*): the user picks the next theme when wave 1 is nearly done.
-- **To-verify row 96:** the NVDA screen-reader pass of the admin UI, which needs Windows.
+- **The NVDA pass (to-verify row 96):** the user's team runs it on Windows with `plans/work/nvda-pass.md` (decided
+  2026-11-22); the result goes in `results-main.md`.
+- **The support-chatbot proposal:** F3, F4, F8 built; F10, F7, F6 queued (B-61, B-62, B-66); F1, F2, F5, F9 are the
+  user's pick (F2 and F1 best after DoIT's real tickets).
+- **P2's wave 3** (the roadmap's *P2 Broaden*): the user picks when wave 2 is nearly done; the remaining themes with no
+  input are Tools and MCP, ingestion breadth, a public widget and operations.
 - **To-verify row 79:** whether `NerMinScore` moves for the int8 NER model (left at 0.80: the sample is small).
 - **U1 (pictures in uploads)** waits for DoIT's files at T6 (decided 2026-11-15).
-- **The old development data on this machine:** the `ume-rag-*` volumes and the `ume-rag-apphost-dev` secrets are kept
-  beside their copies until the user lets them go; three older `ume.rag.apphost-*-postgres-data` volumes and the
-  ignored build output under `src/Ume.Rag.*` can go too. Don't remove them unasked.
 
 ### Watch
 
@@ -119,27 +110,22 @@ and this file's pull request. No issue moved overnight; #905 and #920 have no re
   content (#884), so a test that queues a command for a deleted source can lose its lease (#897).
 - **The demo seed's slug in a test:** `openwebui.spec.ts` leaves out the assistant named `demo-assistent` (#882).
 
-## What session 53 did (2026-11-21 and 22)
+## What session 54 did (2026-11-22)
 
-On `~/research/rag`, as the main session. Session 52's work is in this file's history.
+On `~/research/rag`, as the main session. Session 53's work is in this file's history.
 
-- **Twelve of the user's decisions** (four alternatives each; decisions log): the design clean-up one share at a time;
-  no question to KB (the NER model's MIT licence is taken as covering the weights, to-verify 110 closed); the Eneo PDF
-  stays outside the repository; T0 done with 0.5.0; support-chatbot F10 and F7 next; `thekim1` asked for the
-  repository variables; the development stack copied to the new names; and four answers on #925 (personal-data
-  review: *reject* a state of its own, false positives need the types, deciders as today, step 1 queued as B-63).
-- **Recorded and designed:** #923 (the answers, B-63), #924 (F10 cost per outcome and F7 content gaps: Decisions
-  entries, chat §12, data-model `AssistantDailyOutcomes` and `AssistantDailyGaps`, admin §8.6 and §8.7, B-61 and B-62).
-- **The design clean-up** in four pull requests: #926 (repo-and-deployment, identity, data-model, gateway-changes, read
-  in full; `adr-drafts.md` archived; `ume-mcp-*` and `rag-tools` renamed in every plan; Decisions "CI on the
-  self-hosted runner" states the protected `main`), #936 (chat, knowledge, tools), #937 (ingestion, parser), #938
-  (admin §5.8 to §5.10 as built, Decisions' interim-gateway pointer, architecture's rerank).
-- **This machine:** the dev secrets and volumes copied to the new names (the old ones kept) and a start on the copy
-  checked (migrations up, five knowledge bases); the old images and Fors worktrees removed, `~/git/llmgateway` on
-  `main`.
-- **GitHub:** reviews as comments on #925, #932, #933 and #935; the cancelled 0.9.2 dry run reported on #933.
-  `thekim1` released 0.9.2 (#933, pin #934) and closed #927. All of the main session's pull requests (#923, #924, #926, #936 to #939)
-  were approved as `Crotalus` on the user's word and merged; #939 was the first version of this file. Fors #112 and #113 are closed.
+- **Six of the user's decisions** (four alternatives each; decisions log): the topics editor adopted with the main
+  session's answers and written now (#932); support-chatbot F6 next; P2 wave 2 is *assistants, the rest*; the NVDA
+  pass by the user's team on Windows; the old development data removed, including the `ume-rag-apphost-dev` secrets.
+- **#932** (Decisions "Topics editor"; admin §4.5, §5.5.2, §5.8; processing §7, which also settles #930's deviation on
+  the path forms; A-42, B-64, B-65). **#941** (the clean-up's leftovers: the model-sync row and the FakeGateway's dev
+  keys as built; the two To-verify sections name their rows and the closed rows' results). **#942** (Decisions
+  "Downvotes per document": `chat."DocumentDailyFeedback"`, chat §14, admin §8.8, B-66; wave 2 as B-67 to B-69 with
+  `Assistants.UnusedKeptUntil` and `…/keep`; `plans/work/nvda-pass.md`). All three approved as `Crotalus` on the user's
+  word and merged. #929 told where its steps 2 to 4 went.
+- **This machine:** the `ume-rag-*` and `ume.rag.apphost-*` volumes, the `ume-rag-*` user secrets and the ignored
+  `src/Ume.Rag.*` and `tests/Ume.Rag.*` output removed; only the `kalla-*` copies remain. Worktrees cleaned; the merged
+  `main-session/` branches still exist on GitHub.
 
 ## Known gaps, documented, not fixed
 
@@ -221,17 +207,19 @@ On `~/research/rag`, as the main session. Session 52's work is in this file's hi
   0.9.2's images are scanned from the next run. The dated exceptions are in *Watch*.
 - **What a deployer types in Portainer:** 1 value since 0.7.0 (`FORS_DOMAIN`, no secret).
 - **On `main`, unreleased:** plan files only; `changes/` holds only its README.
-- **Queues:** stream a: the live block (A-L1 to A-L10), A-34 and A-35 with only their live checks open. Stream b:
-  B-54 to B-59 and B-63 (P2 wave 1), B-61 and B-62 (F10, F7), B-42 to B-46 (the gateway phases' live checks) and its
-  live items. Main: M-4.
-- **Open issues that matter:** #781 and #921 (watch), #920 (the VM's upgrade, `thekim1`'s), #929 (topics; steps 2 to 4
-  are #932), #667 (M-16's issue: the work is done, `thekim1`'s to close), #333, #511, #580 and #550. In Fors: proposals
+- **Queues:** stream a: A-42 (the shared path-rule matcher), the live block (A-L1 to A-L10), A-34 and A-35 with only
+  their live checks open. Stream b: B-54 to B-59 and B-63 (P2 wave 1), B-61, B-62 and B-66 (F10, F7, F6), B-64 and B-65
+  (the topics editor), B-67 to B-69 (P2 wave 2), B-42 to B-46 (the gateway phases' live checks) and its live items.
+  Main: M-4.
+- **Open issues that matter:** #781 and #921 (watch), #920 (the VM's upgrade, `thekim1`'s), #929 (topics; closes with
+  B-65), #667 (M-16's issue: the work is done, `thekim1`'s to close), #333, #511, #580 and #550. In Fors: proposals
   #108 and #109, #99, #91, and a flaky test #124; no open pull requests.
 - **Dependabot works:** grouped pull requests; `.github/dependabot.yml`'s header lists where a pin is repeated.
   Playwright is bumped by hand, in the package list, the renderer image and its lockfile together (#907).
 - **The user's machine (`~/research/rag`):** the main clone on `main`, and a worktree per open `main-session/` pull
   request. Docker works without sudo; there is no sudo.
-  - **The development stack is under the new names** (session 53): secrets in `kalla-apphost-dev`, data in
+  - **The development stack is under the new names** (session 53; the old `ume-rag` data removed in session 54):
+    secrets in `kalla-apphost-dev`, data in
     `kalla-dev-postgres`, `kalla-openwebui-data` and `kalla-clamav-db`. A start against a real gateway needs
     `Gateway:Services:<service>:Key` first; until then start with `FakeGateway__Enabled=true` (handbook, *Local stack*).
     Stop it with `aspire stop --apphost src/Kalla.AppHost/Kalla.AppHost.csproj` (the permission check stops `--all`).
