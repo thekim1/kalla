@@ -1008,18 +1008,20 @@ Moved to [`../archive/design-history/data-model.md`](../archive/design-history/d
 
 ## 14. To verify (simplification pass)
 
-| Item | Phase | How |
-|---|---|---|
-| `pgvector/pgvector` tag for pgvector 0.8.7 on Postgres 17 (digest), and that it ships `pg_stat_statements` | P0 | source |
-| Recall difference between `SwedishDecompounder` and Postgres `ispell` with the same `sv_SE` word list on a word sample | P0 | measure |
-| `INSERT … ON CONFLICT ("DedupKey") WHERE "State" IN ('queued','running') DO NOTHING` infers the partial unique index under concurrent enqueues | P0 | test |
-| Pool sizes and role limits of §1.1 (api 12 with `MaxConcurrentSearches` 4, admin 5, worker 10; `max_connections` 100) under the R1 load | P0 (measure), P1 (R1) | measure |
-| Swap transaction duration: flipping `DeletedAt` on a set's chunks is a non-HOT update that inserts every newly visible chunk into the partial HNSW and GIN indexes inside the swap; p95 per document (sets of 50–500 chunks) during a large publish, and whether it stays short beside chat traffic | P1 | measure |
-| `content.rag_tsquery_or_agg` over the built-in `tsquery_or` on the stock image; `rag_or_query` returns an OR query and `NULL` for stop words only | P0 | test |
-| `ALTER ROLE … SET hnsw.*` accepted before the `vector` library is loaded in the session, and visible via `SHOW` on each role's connections | P0 | test |
-| Bucket-key creation race: one `DataKeys` row per (level, month) under concurrent first writes | when A1 allows stored content (weakness review §4) | test |
-| `PostgresAdminSessionStore` with the copied `AdminTicketStore`: sign-out ends every copy of the cookie, an expired row is not returned, extension stops at 12 h, the retention step deletes expired rows | P0 | test |
-| Config snapshot with many assistants: build time and memory of the api snapshot with 300 assistants' published versions (instructions up to 20 KB each), reloaded whole on any assistant change; if a reload exceeds 50 ms, reload by the outbox `EntityId` instead; draft saves do not bump the config version (`WHEN` clauses, §5) | P1 | measure + test |
+The checks this document raised, each with its row in [`../to-verify.md`](../to-verify.md), which tracks their state (closed rows are in [`../archive/to-verify-closed.md`](../archive/to-verify-closed.md)); a resolved row's result is written here.
+
+| Item | Phase | How | Row |
+|---|---|---|---|
+| `pgvector/pgvector` tag for pgvector 0.8.7 on Postgres 17 (digest), and that it ships `pg_stat_statements` | P0 | source | 127, resolved (2026-10-30): `0.8.7-pg17-trixie` by digest, ships `pg_stat_statements` |
+| Recall difference between `SwedishDecompounder` and Postgres `ispell` with the same `sv_SE` word list on a word sample | P0 | measure | 128, resolved (2026-10-30): the .NET decompounder loses no recall against `ispell` on a 103-word sample |
+| `INSERT … ON CONFLICT ("DedupKey") WHERE "State" IN ('queued','running') DO NOTHING` infers the partial unique index under concurrent enqueues | P0 | test | 10, resolved (2026-10-30): concurrent single-row and 500-row batch enqueues insert each key once |
+| Pool sizes and role limits of §1.1 (api 12 with `MaxConcurrentSearches` 4, admin 5, worker 10; `max_connections` 100) under the R1 load | P0 (measure), P1 (R1) | measure | 140, open |
+| Swap transaction duration: flipping `DeletedAt` on a set's chunks is a non-HOT update that inserts every newly visible chunk into the partial HNSW and GIN indexes inside the swap; p95 per document (sets of 50–500 chunks) during a large publish, and whether it stays short beside chat traffic | P1 | measure | 141, open |
+| `content.rag_tsquery_or_agg` over the built-in `tsquery_or` on the stock image; `rag_or_query` returns an OR query and `NULL` for stop words only | P0 | test | 142, resolved (2026-10-30): an OR query, `NULL` for stop words only, a 300-case fuzz never errors |
+| `ALTER ROLE … SET hnsw.*` accepted before the `vector` library is loaded in the session, and visible via `SHOW` on each role's connections | P0 | test | 2, resolved (2026-10-30): effective before and after `vector` loads; set in `init.sql` only (§1.1) |
+| Bucket-key creation race: one `DataKeys` row per (level, month) under concurrent first writes | when A1 allows stored content (weakness review §4) | test | 144, open |
+| `PostgresAdminSessionStore` with the copied `AdminTicketStore`: sign-out ends every copy of the cookie, an expired row is not returned, extension stops at 12 h, the retention step deletes expired rows | P0 | test | 163, resolved (2026-10-30): the copied `AdminSessionTests` pass |
+| Config snapshot with many assistants: build time and memory of the api snapshot with 300 assistants' published versions (instructions up to 20 KB each), reloaded whole on any assistant change; if a reload exceeds 50 ms, reload by the outbox `EntityId` instead; draft saves do not bump the config version (`WHEN` clauses, §5) | P1 | measure + test | 164, open |
 
 ## 15. Deferred or removed (weakness review)
 
