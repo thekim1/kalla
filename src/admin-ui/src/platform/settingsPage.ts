@@ -4,7 +4,7 @@ import type { ModelField } from './modelFields'
 /**
  * The Settings page's sections (admin design §5.10), in the order of the section list. A `settings` section is one
  * section of `config."Settings"` (`GET`/`PUT /api/settings/{section}`, admin design §4.8); `prompt-texts` is the chat
- * section's prompt panel; a `resource` section is a platform object's list (site profiles, data protection).
+ * section's prompt panel; a `resource` section is a platform object's list (site profiles, data protection, assistant templates).
  */
 
 /** The sections of `config."Settings"`. */
@@ -63,7 +63,7 @@ export type SettingsGroup = keyof typeof SETTINGS_PAGE.groups
 export type SettingsPageSection =
   | { id: SettingsSectionName; kind: 'settings'; group: SettingsGroup; label: string }
   | { id: 'prompt-texts'; kind: 'prompt-texts'; group: SettingsGroup; label: string }
-  | { id: 'site-profiles' | 'data-protection'; kind: 'resource'; group: SettingsGroup; label: string }
+  | { id: 'site-profiles' | 'data-protection' | 'assistant-templates'; kind: 'resource'; group: SettingsGroup; label: string }
 
 const S = PLATFORM.settingsSections
 
@@ -71,6 +71,8 @@ export const SETTINGS_PAGE_SECTIONS: readonly SettingsPageSection[] = [
   { id: 'chat', kind: 'settings', group: 'answers', label: S.chat },
   { id: 'prompt-texts', kind: 'prompt-texts', group: 'answers', label: PROMPT_TEXTS.title },
   { id: 'retrieval', kind: 'settings', group: 'answers', label: S.retrieval },
+  // Assistant templates (admin design §4.5, B-54): the starting points the create-assistant drawer offers.
+  { id: 'assistant-templates', kind: 'resource', group: 'answers', label: PLATFORM.resources.assistantTemplates.label },
   { id: 'crawl', kind: 'settings', group: 'content', label: S.crawl },
   { id: 'site-profiles', kind: 'resource', group: 'content', label: PLATFORM.resources.siteProfiles.label },
   { id: 'worker', kind: 'settings', group: 'content', label: S.worker },

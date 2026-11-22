@@ -154,6 +154,27 @@ async function runAction(action: RowAction): Promise<void> {
   }
 }
 
+// The row's delete (admin design §5.8): asked first; the row's version guards it like an edit.
+const removing = ref(false)
+async function remove(): Promise<void> {
+  const r = resource.value!
+  const row = selected.value!
+  if (!r.remove || !window.confirm([PLATFORM.actions.deleteConfirm(rowTitle(row)), r.remove.deleteNote].filter(Boolean).join(' '))) return
+  removing.value = true
+  openError.value = null
+  try {
+    await request('DELETE', urlOf(r.remove.path, row, r.key), { query: { version: String(row.version ?? '') } })
+    drawerOpen.value = false
+    openForm.value = null
+    ui.notify(PLATFORM.form.deleted)
+    void load()
+  } catch (e) {
+    openError.value = e
+  } finally {
+    removing.value = false
+  }
+}
+
 function saved(response: unknown): void {
   const value = response && typeof response === 'object' ? (response as Row) : null
   // A new, rotated or revealed key carries its secret once (identity design §6.4).
@@ -233,6 +254,9 @@ watch(() => props.resource, () => {
         </template>
         <div v-if="selected && resource.actions?.length && openForm?.operation === resource.update" class="mb-6 flex flex-wrap gap-2">
           <UiButton v-for="action in resource.actions" :key="action.id" :data-test="`action-${action.id}`" @click="runAction(action)">{{ action.label }}</UiButton>
+        </div>
+        <div v-if="selected && resource.remove && openForm?.operation === resource.update" class="mb-6 flex justify-end">
+          <UiButton variant="danger" icon="delete" :loading="removing" data-test="delete" @click="remove">{{ PLATFORM.actions.delete }}</UiButton>
         </div>
         <GenericForm
           v-if="openForm" :key="formKey" :form-id="`platform-${resource.id}`" :fields="openForm.fields" :initial="openForm.initial"

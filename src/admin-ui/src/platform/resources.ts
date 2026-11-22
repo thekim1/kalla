@@ -68,6 +68,11 @@ export interface PlatformResource {
   /** The values an edit starts from; the row itself when absent. */
   load?: (row: Row) => Promise<Row>
   actions?: RowAction[]
+  /**
+   * The row's DELETE (`{param}` replaced by the row's key, its `version` sent as the query's `version`); the drawer of an
+   * existing row then has a Delete button that asks first, adding `deleteNote`.
+   */
+  remove?: { path: string; deleteNote?: string }
   /** A heading above the list, for a page whose panels come first. */
   listTitle?: string
   /** Panels shown above the list, in order. */
@@ -149,6 +154,22 @@ export const platformResources: PlatformResource[] = [
       return { presetId: row.presetId, profile: applied.profile, version: row.appliedVersion }
     },
     actions: [{ id: 'rollback', label: PLATFORM.actions.rollback, method: 'post', path: '/api/site-profiles/{id}/rollback' }],
+  },
+  {
+    // Assistant templates (admin design §4.5, B-54): a section of the Settings page, under Chat and answers.
+    id: 'assistant-templates',
+    ...L.assistantTemplates,
+    icon: 'library_books',
+    list: '/api/assistant-templates',
+    key: 'id',
+    columns: [
+      { key: 'name', label: PLATFORM.columns.name },
+      { key: 'description', label: PLATFORM.fields.description! },
+      { key: 'isActive', label: PLATFORM.columns.enabled },
+    ],
+    create: { method: 'post', path: '/api/assistant-templates' },
+    update: { method: 'put', path: '/api/assistant-templates/{id}' },
+    remove: { path: '/api/assistant-templates/{id}', deleteNote: L.assistantTemplates.deleteNote },
   },
   {
     id: 'gateway-models',
