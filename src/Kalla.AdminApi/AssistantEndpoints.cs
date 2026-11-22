@@ -292,7 +292,11 @@ public static class AssistantEndpoints
                     var published = assistant.PublishedVersionId is { } p ? await admin.Db.AssistantVersions.SingleAsync(v => v.Id == p, attempt) : null;
                     if (published is not null && draft.Number < published.Number && !request.ConfirmBaseChanged)
                     {
-                        throw AdminFaults.Of(AdminErrorCodes.DraftBaseChanged);
+                        // With what publishing would change against the published version (P2, B-56), for the confirmation dialog.
+                        throw AdminFaults.Of(AdminErrorCodes.DraftBaseChanged, extensions: new Dictionary<string, object?>
+                        {
+                            ["diff"] = await DiffAsync(admin, published, draft, toDraft: true, attempt),
+                        });
                     }
 
                     var audience = await AudienceClientsAsync(admin, id, attempt);
@@ -375,6 +379,32 @@ public static class AssistantEndpoints
                 return VersionDto.Of(version, restoredFrom);
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("GetAssistantVersion").WithSummary("One version's settings");
+
+        // The structured diff (admin design §4.5, P2; B-56): from version {number} to `against` (a number or `draft`; without it,
+        // the draft when there is one, else the published version).
+        assistants.MapGet("/{id:guid}/versions/{number}/diff", async (Guid id, string number, [Microsoft.AspNetCore.Mvc.FromQuery] string? against, AdminContext admin,
+                CancellationToken ct) =>
+            {
+                var assistant = await LoadAsync(admin, id, ct, tracked: false);
+                var from = await VersionAsync(admin, id, number, ct);
+                var toDraft = against == "draft" || (against is null && assistant.DraftVersionId is not null);
+                AssistantVersion to;
+                if (toDraft)
+                {
+                    to = assistant.DraftVersionId is { } d ? await admin.Db.AssistantVersions.AsNoTracking().SingleAsync(v => v.Id == d, ct) : throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                }
+                else if (against is not null)
+                {
+                    to = await VersionAsync(admin, id, against, ct);
+                }
+                else
+                {
+                    to = assistant.PublishedVersionId is { } p ? await admin.Db.AssistantVersions.AsNoTracking().SingleAsync(v => v.Id == p, ct) : throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                }
+
+                return await DiffAsync(admin, from, to, toDraft, ct);
+            })
+            .RequireAuthorization(AdminPolicies.Read).WithName("DiffAssistantVersions").WithSummary("What changed between two versions, or a version and the draft");
 
         assistants.MapPost("/{id:guid}/versions/{number}/restore", async (Guid id, string number, RestoreRequest request, AdminContext admin, GatewayModelCheck models,
                 CancellationToken ct) =>
@@ -504,6 +534,14 @@ public static class AssistantEndpoints
             .RequireAuthorization(AdminPolicies.Manage).WithName("SetAssistantRetention").WithSummary("History mode and retention days within the level's policy (V10)");
 
         return api;
+    }
+
+    /// <summary>The diff of two versions, with the names of the knowledge bases they link (deleted ones too).</summary>
+    private static async Task<VersionDiffDto> DiffAsync(AdminContext admin, AssistantVersion from, AssistantVersion to, bool toDraft, CancellationToken ct)
+    {
+        var ids = from.LinkedCollectionIds().Concat(to.LinkedCollectionIds()).Distinct().ToList();
+        var names = await admin.Db.Collections.IgnoreQueryFilters().AsNoTracking().Where(c => ids.Contains(c.Id)).ToDictionaryAsync(c => c.Id, c => c.Name, ct);
+        return AssistantVersionDiff.Of(from, to, toDraft, names);
     }
 
     /// <summary>Version <paramref name="number"/> of the assistant, or 404 (the number is parsed here, so any route value reaches the policy first).</summary>

@@ -1546,6 +1546,33 @@ export const CANCEL_RUN = {
   failed: (reason: string) => `The run could not be cancelled: ${reason}`,
 } as const
 
+/** The structured diff of two assistant versions (admin design §4.5, §5.5.4; B-56). */
+export const VERSION_DIFF = {
+  nothing: 'Nothing differs.',
+  settings: 'Settings',
+  setting: 'Setting',
+  before: 'Before',
+  after: 'After',
+  none: '(none)',
+  /** Setting names in plain words; any other is shown by its path. */
+  names: {
+    model: 'Model',
+    'notFound.links': 'Not-found links',
+  } as Record<string, string>,
+  knowledge: 'Knowledge bases',
+  added: (name: string) => `Added: ${name}`,
+  removed: (name: string) => `Removed: ${name}`,
+  topics: (name: string, from: string, to: string) => `${name}: topics ${from} → ${to}`,
+  allTopics: 'all topics',
+  unknownCollection: 'A deleted knowledge base',
+  instructions: 'Instructions',
+  notFoundSv: 'Not found text (sv)',
+  notFoundEn: 'Not found text (en)',
+  tooLong: 'Changed. The text is too long to show line by line (over 20,000 characters).',
+  inserted: 'Added line',
+  deleted: 'Removed line',
+} as const
+
 /** Run item outcomes as the worker writes them; an unknown one is shown as written. */
 export const RUN_OUTCOME_LABEL: Record<string, string> = {
   added: 'New',
@@ -1655,7 +1682,13 @@ export const ASSISTANT = {
   warnings: 'Fix this before you publish',
   publish: 'Publish',
   published: (n: number) => `Version ${n} is published.`,
-  baseChanged: 'The draft is based on an older version. Publish anyway?',
+  baseChangedTitle: 'Publish a draft based on an older version?',
+  baseChangedLead: 'A version was restored after this draft was started. Publishing replaces the published version with these changes:',
+  publishAnyway: 'Publish anyway',
+  compare: 'Compare',
+  compareTitle: (from: number, to: string) => `Version ${from} compared with ${to}`,
+  compareDraft: 'the draft',
+  compareVersion: (n: number) => `version ${n}`,
   question: 'Question',
   ask: 'Test',
   askHint: 'The test uses the draft and is not saved.',
