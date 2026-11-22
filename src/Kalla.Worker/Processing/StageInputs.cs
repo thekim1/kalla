@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Kalla.Pipelines.Definitions;
 using Kalla.Pipelines.Jobs;
+using Kalla.Pipelines.Processing;
 using Kalla.Pipelines.Json;
 using Kalla.Pipelines.SiteProfiles;
 using Kalla.Worker.Processing.Chunking;

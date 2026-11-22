@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Kalla.Pipelines.Jobs;
+using Kalla.Pipelines.Processing;
 using Kalla.Worker.Processing.Chunking;
 using Kalla.Worker.Processing.Clean;
 using Kalla.Worker.Processing.Detect;

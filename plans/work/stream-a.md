@@ -11,7 +11,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 
 ## Code
 
-### [ ] A-42 One path-rule matcher in `Kalla.Pipelines`, for the Topics tab (Decisions "Topics editor")
+### [x] A-42 One path-rule matcher in `Kalla.Pipelines`, for the Topics tab (Decisions "Topics editor")
 - **Do:** move the reading and matching of `pathRules` (`PathRule`, `ReadRules`, the `path` glob with its pasted-address,
   host-first and trailing-`/` forms, `path-regex`, `host`, `title-regex`, `mediaType`, the tag format) from
   `Kalla.Worker/Processing/Chunking/Metadata.cs` into `Kalla.Pipelines` (processing §7 *One matcher*), as a public
