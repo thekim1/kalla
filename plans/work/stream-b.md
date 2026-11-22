@@ -17,7 +17,7 @@ Start these once `v0.9.0` is tagged (the roadmap's *P2 Broaden*); B-52 and B-53 
 tables in one migration of its own (no backward compatibility before production). The UI texts go in `labels.ts` and
 `messages.ts`; show each page in a real browser before the PR (FakeGateway stack with the demo seed).
 
-### [x] B-54 Assistant templates: three seeded starting points
+### [x] B-54 Assistant templates: three seeded starting points (#950)
 - **Do:** admin §4.5 `GET/POST/PUT/DELETE /api/assistant-templates[/{id}]` (Read / Admin, audited
   `assistanttemplate.*`), the table `config."AssistantTemplates"` (data-model), the seeder `AssistantTemplateSeeder`
   with the three presets of admin §4.5 (into an empty table only), the platform page through the generic form (§5.8),
