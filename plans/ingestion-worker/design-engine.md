@@ -1,6 +1,6 @@
 # Ingestion worker, part A: pipeline engine, stages, jobs, runs, preview and publish
 
-Detail step 6a of the Källa design. Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §2, §4 and §8–§10 (archived: history, not binding;
+Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §2, §4 and §8–§10 (archived: history, not binding;
 this design states every rule, the plan's answered items in §22) within the limits set by [`../platform/data-model.md`](../platform/data-model.md) §2, §4–§9,
 [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) §3, §6, §9, [`../parser/design.md`](../parser/design.md)
 §7, §8, §10 and [`../gateway-changes/design.md`](../gateway-changes/design.md) §3, §5, §7.1. The engine runs fixed
@@ -14,7 +14,7 @@ internals, crawl frontier, site-profile learning, change detection, deletion gua
 personal data, embedding, evaluation). This document defines the contracts they plug into. Changes it needs elsewhere
 are listed in §21; questions in §22; removed mechanisms in §24.
 
-**Gateway conventions copied** (`~/git/llmgateway`, read-only):
+**Gateway conventions copied** (the gateway, Fors; read-only):
 
 | Convention | Gateway source | Here |
 |---|---|---|
@@ -629,7 +629,7 @@ writes, resume from the checkpoint; data-model §2.2), or its tasks become idemp
 A `BackgroundService` on every instance; the instance holding `pg_try_advisory_xact_lock(<scheduler key>)` in its
 1-minute tick does the work (gateway `ModelListSync.cs:148-153` pattern).
 
-- **Cron** (`Sources.Schedule`, 5 fields, Cronos *to verify*) evaluated in Europe/Stockholm; DST gaps run once at the
+- **Cron** (`Sources.Schedule`, 5 fields, Cronos 0.13.0) evaluated in Europe/Stockholm; DST gaps run once at the
   next valid minute, overlaps once. As Cronos 0.13.0 does it (to-verify 16, `CronScheduleTests`): `30 2 * * *` runs at
   03:00 on the spring-forward night, and once, at the first 02:30, on the fall-back night; an interval expression
   (`*/30 * * * *`) runs at both offsets of the repeated hour. An expression that does not parse as 5 fields (6 fields, a
@@ -1105,7 +1105,7 @@ Moved to [`../archive/design-history/ingestion-engine.md`](../archive/design-his
 - **Embedding throughput** of the pilot's EU embedding profile and, once register M2's hardware exists, of the
   gateway's on-prem BGE-M3 provider (tokens/s, batch size, effect on chat query embeddings): decides whether 10,000
   pages/hour is reachable (§18).
-- `Cronos`: version, 5-field syntax, `TimeZoneInfo` DST behaviour (repo-and-deployment §2.2 marks it *to verify*).
+- `Cronos`: checked (to-verify 16, `CronScheduleTests`; 0.13.0, 5 fields, DST as in the cron bullet above).
 - HNSW insert cost per row on the pilot host for the `unnest` batches of §14 (to-verify #21, #119).
 - `INSERT … ON CONFLICT DO NOTHING` against the partial unique `DedupKey` index (index inference with the `WHERE`
   predicate) under 500-row batch enqueues.
