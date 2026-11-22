@@ -26,7 +26,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Waits on:** nothing. B-64 and B-65 use it.
 - **Read:** processing §7; admin §4.5 (`topic-suggestions`, `topic-rules/preview`); Decisions "Topics editor".
 
-### [ ] A-43 One schedule rule in `Kalla.Pipelines`, for the worker and the admin's next run
+### [x] A-43 One schedule rule in `Kalla.Pipelines`, for the worker and the admin's next run
 - **Do:** move the rule that decides when a source is next fetched into `Kalla.Pipelines` (with the Cronos reference):
   the schedule in force (the source's own, else `Settings.DefaultSchedules` when it names at least one type,
   else the built-in defaults: `url-list` 02:00 nightly, `crawl` Saturday 01:00; never for uploads), the next occurrence
