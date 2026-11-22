@@ -64,6 +64,12 @@ public sealed class GatewayFeatures
     /// <summary>The context carries <c>gateway.oidc_authority</c> (gateway setup mode, llmgateway#99; M-20 S8).</summary>
     public const string OidcAuthorityFeature = "oidc-authority";
 
+    /// <summary>
+    /// The gateway's Integration API serves the admin console's logo (<c>GET /integration/v1/branding/logo</c>; thekim1/fors
+    /// after <c>v0.12.2</c>). The context itself carries no logo.
+    /// </summary>
+    public const string OrganisationLogoFeature = "organisation-logo";
+
     /// <summary>The longest provider address taken from the context: the setup wizard's own limit for the authority.</summary>
     public const int OidcAuthorityMaxLength = 500;
 
@@ -90,6 +96,9 @@ public sealed class GatewayFeatures
     /// or before the first context answer. Shown in the admin UI before sign-in, so it is not a secret.
     /// </summary>
     public string? OrganisationName => _organisationName;
+
+    /// <summary>The gateway serves its admin console's logo on the Integration API (<see cref="OrganisationLogoFeature"/>).</summary>
+    public bool OrganisationLogo => _features.Contains(OrganisationLogoFeature);
 
     /// <summary>
     /// The gateway's Integration API base address, ending in <c>/integration/v1</c> (the context's

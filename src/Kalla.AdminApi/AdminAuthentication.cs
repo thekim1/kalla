@@ -279,7 +279,7 @@ public static partial class AdminAuthentication
             return Results.Challenge(new AuthenticationProperties { RedirectUri = destination }, [OpenIdConnectDefaults.AuthenticationScheme]);
         });
         app.MapGet(UserPath, async (HttpContext http, IAntiforgery antiforgery, IHostEnvironment environment, IOptions<AdminOptions> admin, GatewayFeatures gateway,
-            AdminSignIn signIn, TimeProvider time, IConfiguration configuration) =>
+            AdminSignIn signIn, TimeProvider time, IConfiguration configuration, GatewayBranding branding) =>
         {
             var tokens = antiforgery.GetAndStoreTokens(http);
             http.Response.Cookies.Append(AdminCookies.XsrfToken, tokens.RequestToken!, new CookieOptions
@@ -294,6 +294,8 @@ public static partial class AdminAuthentication
                 environment = environment.EnvironmentName,
                 // The gateway's organisation (its context's organisation_name, M-17 C12); null before the first context answer.
                 organisationName = gateway.OrganisationName,
+                // Its logo, from kalla-admin's own origin (GatewayBranding); null: the built-in mark.
+                logoUrl = (await branding.GetAsync(http.RequestAborted))?.Url,
                 name = http.User.Identity?.Name,
                 email = http.User.FindFirstValue("email"),
                 roles = http.User.FindAll(AdminClaims.Roles).Select(c => c.Value).ToArray(),

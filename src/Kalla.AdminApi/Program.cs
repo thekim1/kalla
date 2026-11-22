@@ -99,6 +99,9 @@ builder.Services.AddMemoryCache();
 // circuit exceptions escaped the client's catch); one try within IntegrationApiClient.Timeout instead.
 builder.Services.AddHttpClient(IntegrationApiClient.HttpClientName, c => c.Timeout = IntegrationApiClient.Timeout).RemoveStandardResilienceHandler();
 builder.Services.AddSingleton<IntegrationApiClient>();
+// The organisation's logo from the same Integration API, served from this origin; GatewayBranding.ReadTimeout bounds each read.
+builder.Services.AddHttpClient(GatewayBranding.HttpClientName).RemoveStandardResilienceHandler();
+builder.Services.AddSingleton<GatewayBranding>();
 builder.Services.AddSingleton<GatewayModelSync>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<GatewayModelSync>());
 builder.Services.AddScoped<GatewayModelCheck>();
@@ -161,6 +164,7 @@ app.UseMiddleware<SetupGateMiddleware>();
 app.UseMiddleware<AdminAntiforgeryMiddleware>();
 app.MapDefaultEndpoints();
 app.MapAdminAuthentication();
+app.MapGatewayBranding();
 app.MapSetupMode();
 
 // /api needs a rag-* role (Read); each endpoint adds its own policy from the permission matrix (admin design §3.4).

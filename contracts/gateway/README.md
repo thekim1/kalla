@@ -4,7 +4,9 @@
 github.com/thekim1/fors), copied unchanged: `/v1/fors/context`, `/v1/models` with the `fors` facts, and the parts
 of `/v1/chat/completions` and `/integration/v1` an integration uses.
 
-- **Taken from:** release `v0.12.0` (`1032bf1`, the rename to Fors), unchanged in `v0.12.1` (`1e79093`). It renames `ume` to `fors` throughout (the context's `object` `fors.context`, the model facts
+- **Taken from:** thekim1/fors#126 (branch `fix/favicon-logo`, after `v0.12.2`, not yet released): adds only the Integration
+  API's `GET /integration/v1/branding/logo` and the feature `organisation-logo` in the context's feature list. Before
+  that, release `v0.12.0` (`1032bf1`, the rename to Fors), unchanged in `v0.12.1` (`1e79093`). It renames `ume` to `fors` throughout (the context's `object` `fors.context`, the model facts
   under `fors`, the `x-fors-*` headers) and keeps a deprecated copy of the facts under `ume`. Release `v0.11.0`
   (`d128f57`) differs from release `v0.10.3` (`ba22f43`) only in the context's `gateway.oidc_authority` (feature `oidc-authority`), required and
   null when unset. `v0.10.3` is unchanged since `v0.10.2` (`81d3e43`), which differs from `v0.10.1` (`d828732`) only in
