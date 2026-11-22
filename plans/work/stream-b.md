@@ -229,6 +229,30 @@ After wave 1, or beside it when a wave-1 item waits.
 - **Waits on:** nothing.
 - **Read:** admin §7.1, §10.1; the gateway's `TimeSeriesChart.vue`.
 
+## Sources (user, 2026-11-22)
+
+### [ ] B-70 Pause and resume a source from its page
+- **Do:** admin §5.5.3's **Pause** in the source page's header beside **Fetch now**, **Resume** while the source is
+  paused (`POST /api/sources/{id}/pause` and `/resume` with the source's `version`, both there since P1, `Edit`); a
+  paused source says so on its page and in the sources list, and its *Next scheduled fetch* reads *None: the source is
+  paused* (#935). A 409 version conflict reloads the source and says so; texts in `labels.ts` and `messages.ts`.
+- **Paths:** `src/admin-ui/**` (not `src/platform/**`), `tests/**`; `src/Kalla.AdminApi/**` only if the list lacks the
+  state.
+- **Done when:** Vitest: the button by state and role (hidden without `Edit`), the call with the version, the page
+  after it; pause, then resume, shown in a browser on the demo seed, the next scheduled fetch changing with it.
+- **Waits on:** #935 (the next-run row).
+- **Read:** admin §3 (`Edit` row), §4 (the sources table: pause/resume), §5.5.3.
+
+### [ ] B-71 The admin's next run from the shared schedule rule
+- **Do:** `Kalla.AdminApi`'s `scheduleInForce` and `nextRunAt` (#935) call A-43's rule in `Kalla.Pipelines` instead of
+  repeating it; `CronSchedules` keeps only the save-time validation (`IsValid`, `Invalid`), and the AdminApi's own
+  Cronos reference goes if nothing else needs it. No behaviour change.
+- **Paths:** `src/Kalla.AdminApi/**`, `tests/Kalla.AdminApi.Tests/**`.
+- **Done when:** `Kalla.AdminApi.Tests` green, `SourceEndpointsTests` unchanged; the tests of the rule itself live in
+  `Kalla.Pipelines.Tests` (A-43), not here.
+- **Waits on:** A-43.
+- **Read:** engine §9.6; #935.
+
 ## Live (the live block, see the roadmap)
 
 
