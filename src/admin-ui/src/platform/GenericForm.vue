@@ -153,6 +153,10 @@ async function save(): Promise<void> {
         v-else-if="field.kind === 'json' || field.kind === 'list'" :id="idOf(field.name)" v-model="values[field.name] as string" :label="field.label"
         :hint="hint(field)" :error="form.errors[field.name]" :rows="field.kind === 'json' ? 8 : 3" mono
       />
+      <TextAreaField
+        v-else-if="field.kind === 'longtext'" :id="idOf(field.name)" v-model="values[field.name] as string" :label="field.label"
+        :hint="hint(field)" :error="form.errors[field.name]" :rows="8"
+      />
       <TextField
         v-else-if="field.kind === 'datetime'" :id="idOf(field.name)" v-model="values[field.name] as string" type="datetime-local" :label="field.label" :hint="field.help"
         :disabled="readOnly.includes(field.name)" :error="form.errors[field.name]"

@@ -22,6 +22,7 @@ export type JsonSchema = {
   description?: string
   minimum?: number
   maximum?: number
+  maxLength?: number
   default?: unknown
 }
 
@@ -30,7 +31,11 @@ export type OpenApiDocument = {
   components?: { schemas?: Record<string, JsonSchema> }
 }
 
-export type FieldKind = 'switch' | 'select' | 'number' | 'text' | 'datetime' | 'list' | 'json' | 'model'
+/** `longtext`: a string longer than {@link LONG_TEXT} characters (an assistant template's instructions), edited on several lines. */
+export type FieldKind = 'switch' | 'select' | 'number' | 'text' | 'longtext' | 'datetime' | 'list' | 'json' | 'model'
+
+/** A string whose `maxLength` is above this is a text area: a one-line input would drop its line breaks. */
+export const LONG_TEXT = 1000
 
 export interface FieldSpec {
   name: string
@@ -100,7 +105,9 @@ function fieldFor(doc: OpenApiDocument, name: string, raw: JsonSchema, required:
     const item = resolve(doc, schema.items) ?? {}
     return { ...base, kind: types(item).includes('string') && !item.properties ? 'list' : 'json' }
   }
-  if (t.includes('string')) return { ...base, kind: schema.format === 'date-time' ? 'datetime' : 'text' }
+  if (t.includes('string')) {
+    return { ...base, kind: schema.format === 'date-time' ? 'datetime' : (schema.maxLength ?? 0) > LONG_TEXT ? 'longtext' : 'text' }
+  }
   return { ...base, kind: 'json' }
 }
 

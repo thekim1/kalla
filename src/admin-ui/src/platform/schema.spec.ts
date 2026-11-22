@@ -79,4 +79,12 @@ describe('fieldLabel', () => {
     expect(fieldLabel('portalUrl')).toBe('Portal URL')
     expect(fieldLabel('name')).toBe('Name')
   })
+
+  it('makes a long string a text area that keeps its line breaks (an assistant template\'s instructions, B-54)', () => {
+    const schema = { properties: { name: { type: 'string', maxLength: 200 }, systemPrompt: { type: 'string', maxLength: 20000 } } }
+    const fields = fieldsOf({ paths: {} }, schema)
+    expect(fields.map((f) => [f.name, f.kind])).toEqual([['name', 'text'], ['systemPrompt', 'longtext']])
+    const prompt = fields[1]!
+    expect(fromInput(prompt, toInput(prompt, 'Rad ett.\nRad två.'))).toBe('Rad ett.\nRad två.')
+  })
 })
