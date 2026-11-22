@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Kalla.Pipelines.Processing;
 using Kalla.Pipelines.SiteProfiles;
 using Kalla.Worker.Parsing;
 using Kalla.Worker.Processing;
@@ -118,7 +119,7 @@ public sealed class GoldenTests
         {
             SiteProfile = profile,
             Chunk = chunk,
-            PathRules = Metadata.ReadRules(settings["pathRules"] is { } rules ? JsonSerializer.SerializeToElement(rules) : null),
+            PathRules = PathRules.Read(settings["pathRules"] is { } rules ? JsonSerializer.SerializeToElement(rules) : null),
             RequestId = "golden",
         };
 

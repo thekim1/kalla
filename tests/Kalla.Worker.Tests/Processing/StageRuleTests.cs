@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Text;
 using Kalla.Pipelines.Jobs;
+using Kalla.Pipelines.Processing;
 using Kalla.Pipelines.SiteProfiles;
 using Kalla.Retrieval.Text;
 using Kalla.Worker.Processing;
@@ -501,7 +502,7 @@ public sealed class StageRuleTests
     [Fact]
     public void Metadata_path_rules_tags_type_and_date_in_order()
     {
-        var rules = Metadata.ReadRules(System.Text.Json.JsonDocument.Parse("""
+        var rules = PathRules.Read(System.Text.Json.JsonDocument.Parse("""
             [ { "match": "/bygga/**", "on": "path", "tags": ["Bygglov", "ogiltig tagg"], "documentType": "page" },
               { "match": "^/protokoll/(?<y>\\d{4})/", "on": "path-regex", "tags": ["protokoll"], "date": "${y}-01-01" },
               { "match": "application/pdf", "on": "mediaType", "tags": ["pdf"] } ]
@@ -517,55 +518,6 @@ public sealed class StageRuleTests
         (page.DocumentType, page.SourceModifiedAt, page.Tags.Single()).ShouldBe(("page", new DateOnly(2026, 1, 15), "bygglov"));
         Metadata.Apply([], new MetadataInput(ProcessingMediaTypes.Html) { HttpLastModified = DateTimeOffset.Parse("2026-10-01T00:00:00Z", System.Globalization.CultureInfo.InvariantCulture) })
             .SourceModifiedAt.ShouldBe(new DateOnly(2026, 10, 1));
-    }
-
-    [Fact]
-    public void An_upload_path_rule_matches_its_folders_with_or_without_a_leading_slash()
-    {
-        // admin design §5.5.7: a folder upload's display name is its relative path, and a topic rule on the path tags its documents.
-        var rules = Metadata.ReadRules(System.Text.Json.JsonDocument.Parse("""
-            [ { "match": "HR/**", "on": "path", "tags": ["hr"] },
-              { "match": "/HR/Policys/*.pdf", "on": "path", "tags": ["policy"] },
-              { "match": "Ekonomi/**", "on": "path", "tags": ["ekonomi"] } ]
-            """).RootElement);
-        Metadata.Apply(rules, new MetadataInput(ProcessingMediaTypes.Pdf) { DisplayName = "HR/Policys/semester.pdf" }).Tags.ShouldBe(["hr", "policy"]);
-        Metadata.Apply(rules, new MetadataInput(ProcessingMediaTypes.Pdf) { DisplayName = "HR/Policys/Arkiv/gammal.pdf" }).Tags.ShouldBe(["hr"]);
-        Metadata.Apply(rules, new MetadataInput(ProcessingMediaTypes.Pdf) { DisplayName = "semester.pdf" }).Tags.ShouldBeEmpty();
-
-        // A website path is matched as it is: HR/** does not match the URL path /HR/….
-        Metadata.Apply(rules, new MetadataInput(ProcessingMediaTypes.Pdf) { Url = new Uri("https://x.se/HR/Policys/semester.pdf") }).Tags.ShouldBe(["policy"]);
-    }
-
-    [Fact]
-    public void A_website_path_rule_takes_a_pasted_address_or_a_host_led_glob_and_a_trailing_slash_means_everything_under_it()
-    {
-        // #929: an editor pastes the section's address from the browser; matched as the path alone it tagged nothing.
-        var rules = Metadata.ReadRules(System.Text.Json.JsonDocument.Parse("""
-            [ { "match": "https://www.umea.se/bygga-bo-och-miljo/bygglov/?utm=x#top", "on": "path", "tags": ["bygglov"] },
-              { "match": "WWW.Umea.se/kommun-och-politik/**", "on": "path", "tags": ["politik"] },
-              { "match": "https://www.vakin.se/", "on": "path", "tags": ["vakin"] },
-              { "match": "/utbildning/", "on": "path", "tags": ["utbildning"] } ]
-            """).RootElement);
-        Tags("https://www.umea.se/bygga-bo-och-miljo/bygglov/ansok.html").ShouldBe(["bygglov"]);
-        Tags("https://www.umea.se/bygga-bo-och-miljo/bygglov/").ShouldBe(["bygglov"]);
-        Tags("https://www.umea.se/bygga-bo-och-miljo/bygglov").ShouldBeEmpty("the section's own address without its slash is another path");
-        Tags("https://umea.se/bygga-bo-och-miljo/bygglov/ansok.html").ShouldBeEmpty("the host is the rule's: www.umea.se");
-        Tags("https://www.umea.se/kommun-och-politik/protokoll/2024/ks.pdf").ShouldBe(["politik"]);
-        Tags("https://www.vakin.se/sortera/glas").ShouldBe(["vakin"]);
-        Tags("https://www.umea.se/utbildning/forskola/plats.html").ShouldBe(["utbildning"]);
-        Tags("https://www.vakin.se/utbildning/").ShouldBe(["vakin", "utbildning"]);
-
-        // The forms the rule is reduced to; an upload's relative path is never read as a host.
-        Metadata.PathGlob("https://www.umea.se/a/b.html?x=1", website: true).ShouldBe(("www.umea.se", "/a/b.html"));
-        Metadata.PathGlob("http://xn--rebro-iua.se:8080/a/*", website: true).ShouldBe(("xn--rebro-iua.se", "/a/*"));
-        Metadata.PathGlob("https://örebro.se/a/", website: true).ShouldBe(("xn--rebro-iua.se", "/a/**"));
-        Metadata.PathGlob("umea.se", website: true).ShouldBe(("umea.se", "/**"));
-        Metadata.PathGlob("/a/b?.html", website: true).ShouldBe((null, "/a/b?.html"));
-        Metadata.PathGlob("HR/**", website: true).ShouldBe((null, "HR/**"));
-        Metadata.PathGlob("protokoll.2024/**", website: false).ShouldBe((null, "protokoll.2024/**"));
-        Metadata.PathGlob("HR/", website: false).ShouldBe((null, "HR/**"));
-
-        IReadOnlyList<string> Tags(string url) => Metadata.Apply(rules, new MetadataInput(ProcessingMediaTypes.Html) { Url = new Uri(url) }).Tags;
     }
 
     [Fact]
