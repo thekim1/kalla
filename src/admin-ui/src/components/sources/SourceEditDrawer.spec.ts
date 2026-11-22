@@ -8,7 +8,7 @@ import SourceEditDrawer from './SourceEditDrawer.vue'
 const collection = { id: 'c1', classification: 'public' } as Collection
 const source: Source = {
   id: 's1', collectionId: 'c1', type: 'crawl', name: 'umea.se/bygga', classification: 'public', state: 'active', schedule: '0 1 * * 6', pipelineId: 'p1',
-  containsThirdPartyText: true, updatedAt: '', updatedBy: null, version: '7',
+  scheduleInForce: '0 1 * * 6', nextRunAt: null, containsThirdPartyText: true, updatedAt: '', updatedBy: null, version: '7',
   settings: {
     startUrls: ['https://www.umea.se/bygga'], include: ['www.umea.se/bygga/**'], exclude: ['**/sok?*'], maxPages: 10000, maxDepth: 10, piiMode: 'hold',
     demote: [{ pattern: 'www.umea.se/bygga/**/arkiv/**', factor: 0.5 }], conditionalGet: true,
@@ -30,6 +30,38 @@ async function open() {
 }
 
 describe('Edit source (admin design §5.5.3, V25)', () => {
+  it('sets the source’s own schedule: a preset, a cron of its own with its spaces tidied, or back to the default', async () => {
+    vi.spyOn(api.sources, 'impact').mockResolvedValue({ effects: [], liveDocuments: 0, usedBy: [], impactToken: null })
+    const update = vi.spyOn(api.sources, 'update').mockResolvedValue({ ...source, version: '8' })
+    const wrapper = await open()
+    const select = document.body.querySelector<HTMLSelectElement>('#edit-schedule')!
+    expect(select.value).toBe('weekly')
+
+    select.value = 'custom'
+    select.dispatchEvent(new Event('change'))
+    await flushPromises()
+    input('#edit-schedule-custom', '30 3 * *')
+    click('save-source')
+    await flushPromises()
+    expect(document.body.textContent).toContain('Enter five fields separated by spaces')
+    expect(update).not.toHaveBeenCalled()
+
+    input('#edit-schedule-custom', ' 30  3 * * * ')
+    click('save-source')
+    await flushPromises()
+    expect(update).toHaveBeenLastCalledWith('s1', expect.objectContaining({ schedule: '30 3 * * *' }))
+    wrapper.unmount()
+
+    const again = await open()
+    const reopened = document.body.querySelector<HTMLSelectElement>('#edit-schedule')!
+    reopened.value = 'default'
+    reopened.dispatchEvent(new Event('change'))
+    click('save-source')
+    await flushPromises()
+    expect(update).toHaveBeenLastCalledWith('s1', expect.objectContaining({ schedule: null }))
+    again.unmount()
+  })
+
   it('shows the impact of a scope change and saves only with Save anyway, sending the token and keeping other settings', async () => {
     const impact = vi.spyOn(api.sources, 'impact').mockResolvedValue({
       effects: ['scope'], liveDocuments: 840, impactToken: 'tok',

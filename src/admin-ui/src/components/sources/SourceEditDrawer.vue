@@ -3,7 +3,9 @@ import { computed, ref, watch } from 'vue'
 import { api } from '@/api'
 import type { Collection, Level, Source, SourceImpact } from '@/api/types'
 import FetchModeFields from '@/components/sources/FetchModeFields.vue'
+import ScheduleField from '@/components/sources/ScheduleField.vue'
 import { type FetchMode, READY_SELECTOR_MAX, fetchForm, withFetchSettings } from '@/components/sources/fetchMode'
+import { type SchedulePreset, scheduleForm, scheduleShapeValid, scheduleValue } from '@/components/sources/schedule'
 import { sitemapsValid } from '@/components/sources/sitemaps'
 import InlineError from '@/components/ui/InlineError.vue'
 import SelectField from '@/components/ui/SelectField.vue'
@@ -18,8 +20,9 @@ import { COMMON, LEVEL_LABEL, SOURCE, SOURCE_EDIT } from '@/utils/labels'
 // element and scrolling), Nedprioritera (demote patterns with a factor) and the personal-data mode. Saving first asks
 // POST /api/sources/{id}/impact; a scope or identity change shows what it does (documents may leave the index, the
 // assistants that use the collection) and saves only with Spara ändå, sending the impact token; a fetch change
-// (refetch: every page fetched again in the new way) is shown the same way and needs no token. Settings the form does not
-// show are kept as they are.
+// (refetch: every page fetched again in the new way) is shown the same way and needs no token. Fetch again sets the
+// source's own schedule (empty: the platform default, engine design §9.6); a schedule has no impact. Settings the form does
+// not show are kept as they are.
 const props = defineProps<{ open: boolean; source: Source; collection: Collection | null }>()
 const emit = defineEmits<{ (e: 'update:open', value: boolean): void; (e: 'saved', source: Source): void }>()
 
@@ -38,10 +41,12 @@ const piiMode = ref<'hold' | 'report'>('hold')
 const fetchMode = ref<FetchMode>('http')
 const readySelector = ref('')
 const scrollToLoad = ref(false)
+const schedulePreset = ref<SchedulePreset>('default')
+const scheduleCustom = ref('')
 const impact = ref<SourceImpact | null>(null)
 const saving = ref(false)
 const form = useFormErrors({
-  name: 'edit-name', urls: 'edit-urls', sitemaps: 'edit-sitemaps', demote: 'edit-demote', maxPages: 'edit-max-pages', maxDepth: 'edit-max-depth', readySelector: 'edit-ready-selector',
+  name: 'edit-name', urls: 'edit-urls', sitemaps: 'edit-sitemaps', demote: 'edit-demote', maxPages: 'edit-max-pages', maxDepth: 'edit-max-depth', readySelector: 'edit-ready-selector', schedule: 'edit-schedule-custom',
 })
 
 const crawl = computed(() => props.source.type === 'crawl')
@@ -78,6 +83,9 @@ watch(
     fetchMode.value = fetch.fetchMode
     readySelector.value = fetch.readySelector
     scrollToLoad.value = fetch.scrollToLoad
+    const schedule = scheduleForm(props.source.schedule)
+    schedulePreset.value = schedule.preset
+    scheduleCustom.value = schedule.custom
     impact.value = null
     form.clear()
   },
@@ -121,12 +129,13 @@ function valid(): boolean {
     maxPages: crawl.value && !integer(maxPages.value) && SOURCE.numberInvalid,
     maxDepth: crawl.value && !integer(maxDepth.value) && SOURCE.numberInvalid,
     readySelector: fetchMode.value === 'browser' && readySelector.value.trim().length > READY_SELECTOR_MAX && SOURCE.readySelectorInvalid,
+    schedule: !scheduleShapeValid(schedulePreset.value, scheduleCustom.value) && SOURCE.scheduleInvalid,
   })
 }
 
 async function put(token: string | null): Promise<void> {
   const saved = await api.sources.update(props.source.id, {
-    name: name.value.trim(), classification: level.value, settings: settings(), schedule: props.source.schedule, version: props.source.version,
+    name: name.value.trim(), classification: level.value, settings: settings(), schedule: scheduleValue(schedulePreset.value, scheduleCustom.value), version: props.source.version,
     ...(token ? { impactToken: token } : {}),
   })
   emit('saved', saved)
@@ -164,6 +173,10 @@ async function save(): Promise<void> {
       <FetchModeFields
         v-model:fetch-mode="fetchMode" v-model:ready-selector="readySelector" v-model:scroll-to-load="scrollToLoad" id-prefix="edit"
         :ready-selector-error="form.errors.readySelector"
+      />
+      <ScheduleField
+        v-model:preset="schedulePreset" v-model:custom="scheduleCustom" id-prefix="edit"
+        :default-schedule="source.schedule ? null : source.scheduleInForce" :error="form.errors.schedule"
       />
       <template v-if="crawl">
         <TextAreaField id="edit-sitemaps" v-model="sitemaps" :label="SOURCE.sitemaps" :hint="SOURCE.sitemapsHint" :error="form.errors.sitemaps" mono />

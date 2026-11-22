@@ -312,6 +312,45 @@ public sealed class SourceEndpointsTests(AdminDatabaseFixture database, AdminHos
     }
 
     [Fact]
+    public async Task A_source_has_its_own_schedule_or_the_default_and_says_when_it_next_runs()
+    {
+        // Engine design §9.6: Sources.Schedule overrides the type's default; the source answers the cron in force and the
+        // next scheduled run (jitter included), none while paused.
+        var (collection, code) = await CollectionAsync();
+        using var admin = await AdminDatabaseFixture.UserAsync(host.Factory, RagRoles.DepartmentAdmin, code);
+        var path = $"/api/collections/{collection}/sources";
+
+        using (var refused = await admin.PostAsJsonAsync(path, new { type = "url-list", name = "A", classification = "internal", settings = UrlList("https://a.se/x"), schedule = "0 2 * * * *" }, Ct))
+        {
+            var text = await refused.Content.ReadAsStringAsync(Ct);
+            refused.StatusCode.ShouldBe(HttpStatusCode.BadRequest, text);
+            JsonDocument.Parse(text).RootElement.GetProperty("errors").TryGetProperty("schedule", out _).ShouldBeTrue(text);
+        }
+
+        using var created = await admin.PostAsJsonAsync(path, new { type = "url-list", name = "Nightly", classification = "internal", settings = UrlList("https://a.se/x"), schedule = "30 3 * * *" }, Ct);
+        created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync(Ct));
+        var body = await Json(created);
+        var id = body.GetProperty("id").GetGuid();
+        (body.GetProperty("schedule").GetString(), body.GetProperty("scheduleInForce").GetString()).ShouldBe(("30 3 * * *", "30 3 * * *"));
+        var next = body.GetProperty("nextRunAt").GetDateTimeOffset();
+        next.ShouldBeGreaterThan(DateTimeOffset.UtcNow);
+        next.ShouldBeLessThan(DateTimeOffset.UtcNow.AddDays(2));
+        // 03:30 Stockholm plus a jitter below the setting (default 90 minutes; other tests may change it, so a day's bound).
+        TimeZoneInfo.ConvertTime(next, StockholmTime.Zone).TimeOfDay.ShouldBeGreaterThanOrEqualTo(new TimeSpan(3, 30, 0));
+
+        using var back = await admin.PutAsJsonAsync($"/api/sources/{id}",
+            new { name = "Nightly", classification = "internal", settings = UrlList("https://a.se/x"), schedule = (string?)null, version = body.GetProperty("version").GetString() }, Ct);
+        back.StatusCode.ShouldBe(HttpStatusCode.OK, await back.Content.ReadAsStringAsync(Ct));
+        var reverted = await Json(back);
+        reverted.GetProperty("schedule").ValueKind.ShouldBe(JsonValueKind.Null);
+        reverted.GetProperty("scheduleInForce").ValueKind.ShouldBe(JsonValueKind.String);
+
+        using var paused = await admin.PostAsJsonAsync($"/api/sources/{id}/pause", new { version = reverted.GetProperty("version").GetString() }, Ct);
+        paused.StatusCode.ShouldBe(HttpStatusCode.OK, await paused.Content.ReadAsStringAsync(Ct));
+        (await Json(paused)).GetProperty("nextRunAt").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    [Fact]
     public async Task Sync_now_enqueues_once_answers_the_running_run_and_runs_are_listed_and_cancelled()
     {
         var (collection, code) = await CollectionAsync();

@@ -87,6 +87,7 @@ describe('Add source (admin design §5.4 steps 3, 4, 6)', () => {
     await flushPromises()
     expect(create).toHaveBeenCalledWith('c1', {
       type: 'url-list', name: 'Taxor', classification: 'public', settings: { urls: ['https://www.umea.se/taxa', 'https://www.umea.se/avgifter'], piiMode: 'hold' },
+      schedule: null,
     })
     expect(sync).toHaveBeenCalledWith('s1')
     expect(wrapper.emitted('saved')?.[0]).toEqual([saved, true])
@@ -191,7 +192,27 @@ describe('Add source (admin design §5.4 steps 3, 4, 6)', () => {
     expect(create).toHaveBeenCalledWith('c1', {
       type: 'url-list', name: 'Appen', classification: 'public',
       settings: { urls: ['https://app.example.se/'], piiMode: 'hold', fetchMode: 'browser', readySelector: '#app h1', scrollToLoad: true },
+      schedule: null,
     })
+    wrapper.unmount()
+  })
+
+  it('saves a schedule of its own for a URL list, here every night (engine design §9.6)', async () => {
+    const create = vi.spyOn(api.collections, 'addSource').mockResolvedValue({ id: 's3', name: 'Nyheter' } as Source)
+    vi.spyOn(api.sources, 'sync').mockResolvedValue({ jobId: 'j', runId: null, alreadyRunning: false, kind: 'sync' })
+    const wrapper = await open()
+
+    document.body.querySelector<HTMLInputElement>('[data-test=type-url-list] input')!.click()
+    await flushPromises()
+    const schedule = document.body.querySelector<HTMLSelectElement>('#source-schedule')!
+    expect(schedule.value).toBe('default')
+    schedule.value = 'nightly'
+    schedule.dispatchEvent(new Event('change'))
+    input('#source-name', 'Nyheter')
+    input('#source-urls', 'https://www.umea.se/nyheter')
+    click('save')
+    await flushPromises()
+    expect(create).toHaveBeenCalledWith('c1', expect.objectContaining({ type: 'url-list', schedule: '0 2 * * *' }))
     wrapper.unmount()
   })
 
