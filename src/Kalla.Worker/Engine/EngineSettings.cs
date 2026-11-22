@@ -3,6 +3,7 @@ using Npgsql;
 using Kalla.Infrastructure.Jobs;
 using Kalla.Pipelines.Json;
 using Kalla.Pipelines.Processing;
+using Kalla.Pipelines.Sources;
 using Kalla.Worker.Connectors.Deletion;
 using Kalla.Worker.Processing.Pii;
 
@@ -21,11 +22,7 @@ public sealed record EngineSettingsValues
     public int ScheduleJitterMinutes { get; init; } = 90;
 
     /// <summary><c>Settings.DefaultSchedules</c> by source type; the design's defaults when the group names none (engine design §9.6).</summary>
-    public IReadOnlyDictionary<string, string> DefaultSchedules { get; init; } = new Dictionary<string, string>(StringComparer.Ordinal)
-    {
-        ["url-list"] = "0 2 * * *",
-        ["crawl"] = "0 1 * * 6",
-    };
+    public IReadOnlyDictionary<string, string> DefaultSchedules { get; init; } = SourceSchedules.Defaults;
 
     public int BlobPurgeDelayDays { get; init; } = 35;
 
@@ -84,14 +81,12 @@ public sealed partial class EngineSettings(JobDatabase database, TimeProvider ti
                 return EngineSettingsValues.Default;
             }
 
-            var defaults = EngineSettingsValues.Default;
-            var schedules = JsonSerializer.Deserialize<Dictionary<string, string>>(reader.GetString(2)) ?? [];
             using var rules = JsonDocument.Parse(reader.GetString(4));
             return new EngineSettingsValues
             {
                 DegradedFailureRatio = reader.GetDecimal(0),
                 ScheduleJitterMinutes = reader.GetInt32(1),
-                DefaultSchedules = schedules.Count > 0 ? schedules : defaults.DefaultSchedules,
+                DefaultSchedules = SourceSchedules.ReadDefaults(reader.GetString(2)),
                 BlobPurgeDelayDays = reader.GetInt32(3),
                 PiiFlagRules = rules.RootElement.EnumerateObject().Any() ? ContractJson.Deserialize<PiiFlagRules>(rules.RootElement) : PiiFlagRules.Default,
                 PiiOwnDomains = reader.GetFieldValue<string[]>(5),

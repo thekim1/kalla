@@ -100,14 +100,6 @@ public sealed class SchedulingRulesTests
     }
 
     [Fact]
-    public void The_jitter_is_stable_per_source_and_within_the_setting()
-    {
-        SyncScheduler.Jitter(Source, 90).ShouldBe(SyncScheduler.Jitter(Source, 90));
-        SyncScheduler.Jitter(Source, 90).ShouldBeLessThan(TimeSpan.FromMinutes(90));
-        SyncScheduler.Jitter(Source, 0).ShouldBe(TimeSpan.Zero);
-    }
-
-    [Fact]
     public void Uploads_are_never_scheduled_and_a_null_schedule_takes_the_default()
     {
         var since = DateTimeOffset.Parse("2026-10-10T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);

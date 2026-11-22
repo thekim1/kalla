@@ -1,13 +1,11 @@
-using System.Security.Cryptography;
-using Cronos;
 using Microsoft.Extensions.Options;
 using Npgsql;
-using Kalla.Domain;
 using Kalla.Domain.Entities;
 using Kalla.Domain.Ports;
 using Kalla.Infrastructure.Jobs;
 using Kalla.Pipelines.Jobs;
 using Kalla.Pipelines.Json;
+using Kalla.Pipelines.Sources;
 using Kalla.Worker.Connectors.Persistence;
 using Kalla.Worker.Jobs;
 
@@ -112,42 +110,24 @@ public sealed partial class SyncScheduler(
         return enqueued;
     }
 
-    /// <summary>The occurrence due now and when it became due (occurrence + jitter), or null.</summary>
+    /// <summary>
+    /// The occurrence due now and when it became due (occurrence + jitter), or null: not while a run of the source is
+    /// running, and by the shared rule otherwise (<see cref="SourceSchedules"/>, which the admin's next-run row uses too).
+    /// </summary>
     public static (DateTimeOffset Occurrence, DateTimeOffset At)? Due(ScheduledSource source, EngineSettingsValues values, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(values);
-        var cron = source.Schedule ?? (source.Type == SourceTypes.Upload ? null : values.DefaultSchedules.GetValueOrDefault(source.Type));
-        if (source.Running || cron is null || !CronExpression.TryParse(cron, CronFormat.Standard, out var expression))
+        if (source.Running)
         {
             return null;
         }
 
-        if (expression.GetNextOccurrence(source.LastScheduledFor ?? source.CreatedAt, StockholmTime.Zone) is not { } next)
-        {
-            return null;
-        }
-
-        // Missed occurrences collapse into the latest one that has passed.
-        while (expression.GetNextOccurrence(next, StockholmTime.Zone) is { } later && later + Jitter(source.SourceId, values.ScheduleJitterMinutes) <= now)
-        {
-            next = later;
-        }
-
-        var at = next + Jitter(source.SourceId, values.ScheduleJitterMinutes);
-        return at <= now ? (next, at) : null;
-    }
-
-    /// <summary>Deterministic per source: the first eight bytes of SHA-256 of the id, modulo the jitter minutes.</summary>
-    public static TimeSpan Jitter(Guid sourceId, int jitterMinutes)
-    {
-        if (jitterMinutes <= 0)
-        {
-            return TimeSpan.Zero;
-        }
-
-        var hash = SHA256.HashData(sourceId.ToByteArray());
-        return TimeSpan.FromMinutes((double)(BitConverter.ToUInt64(hash, 0) % (ulong)jitterMinutes));
+        var schedule = SourceSchedules.InForce(source.Type, source.Schedule, values.DefaultSchedules);
+        return SourceSchedules.Next(schedule, source.SourceId, values.ScheduleJitterMinutes, source.CreatedAt, source.LastScheduledFor, now) is { } run
+            && run.At <= now
+            ? (run.Occurrence, run.At)
+            : null;
     }
 
     [LoggerMessage(LogLevel.Information, "Source {SourceId}: scheduled sync for {ScheduledFor} enqueued ({LagSeconds:F0} s after due)")]

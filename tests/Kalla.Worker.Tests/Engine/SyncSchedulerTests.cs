@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
+using Kalla.Pipelines.Sources;
 using Kalla.TestKit;
 using Kalla.Worker.Engine;
 using Kalla.Worker.Jobs;
@@ -41,7 +42,7 @@ public sealed class SyncSchedulerTests(RagDatabaseFixture database) : IAsyncLife
                 """, seed.SourceId, CreatedAt, FirstOccurrence.AddSeconds(1));
             var db = database.Database(RagDatabase.Worker);
             var settings = new EngineSettings(db, TimeProvider.System, NullLogger<EngineSettings>.Instance);
-            var jitter = SyncScheduler.Jitter(seed.SourceId, (await settings.GetAsync(Ct)).ScheduleJitterMinutes);
+            var jitter = SourceSchedules.Jitter(seed.SourceId, (await settings.GetAsync(Ct)).ScheduleJitterMinutes);
             var time = new FakeTimeProvider(FirstOccurrence + jitter - TimeSpan.FromMinutes(1));
             var scheduler = new SyncScheduler(db, database.Queue(RagDatabase.Worker), settings, Options.Create(new WorkerOptions()), time,
                 NullLogger<SyncScheduler>.Instance);
