@@ -839,6 +839,7 @@ open it again; the next re-open needs another new value.
 
 | Symptom | Where to look and what to do |
 |---|---|
+| After signing in (back from Keycloak to Källa's or the gateway's admin) the browser shows `502 Bad Gateway`; a private window or clearing the site's cookies works; the proxy's log says `upstream sent too big header` | The sign-in response's cookies are larger than the proxy's header buffer (nginx's default is 4 KB). The stack's proxy and `deploy/proxy/nginx.conf.example` have room for them (`proxy_buffer_size 32k`, `proxy_buffers 8 32k`, `proxy_busy_buffers_size 64k`, `large_client_header_buffers 4 32k`); add the same to a proxy of your own (an F5 or other proxy: its response header limit, at least 32 KB) |
 | Postgres log: archive command failed, pgBackRest error `[103]`; `rag_backup_wal_archive_failed_total` rising | The stanza does not exist yet: `dc exec -T kalla-postgres pgbackrest --stanza=ragdb stanza-create` (once per new database or repository) |
 | `rag_backup_repo_status` 99 | pgBackRest cannot read the repository: is the share mounted (`KALLA_BACKUP_DIR`), are the S3 endpoint and credentials right, does the firewall's `backup` rule have the endpoint? `dc exec -T kalla-postgres pgbackrest --stanza=ragdb info` shows the error |
 | `rag_backup_wal_archive_age_seconds` above 300 | WAL is not being archived: `dc logs --since 30m kalla-postgres`, and `SELECT * FROM pg_stat_archiver` through `dc exec -T kalla-postgres psql -U postgres -d ragdb` |
