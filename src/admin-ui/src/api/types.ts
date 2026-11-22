@@ -515,7 +515,12 @@ export interface DocumentSummary {
 
 export interface Source extends SourceSummary {
   settings: Record<string, unknown>
+  /** Its own cron; null: the platform default for the type (engine design §9.6). */
   schedule: string | null
+  /** The cron it runs on (its own or the default); null for uploads. */
+  scheduleInForce: string | null
+  /** When the next scheduled fetch starts, the spread included; not after now: due; null when paused or unscheduled. */
+  nextRunAt: IsoDateTime | null
   pipelineId: string
   containsThirdPartyText: boolean
   updatedAt: IsoDateTime
@@ -641,6 +646,7 @@ export interface SourceCreate {
   name: string
   classification: Level
   settings: Record<string, unknown>
+  schedule?: string | null
 }
 
 export interface SyncStarted {

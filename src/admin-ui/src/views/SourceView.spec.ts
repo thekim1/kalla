@@ -12,7 +12,8 @@ vi.mock('vue-router', async (original) => ({ ...(await original<typeof import('v
 
 const source: Source = {
   id: 's1', collectionId: 'c1', type: 'crawl', name: 'umea.se/bygga', classification: 'public', state: 'active',
-  settings: { startUrls: ['https://www.umea.se/bygga'], maxPages: 2500 }, schedule: null, pipelineId: 'p', containsThirdPartyText: true,
+  settings: { startUrls: ['https://www.umea.se/bygga'], maxPages: 2500 }, schedule: null, scheduleInForce: '0 1 * * 6',
+  nextRunAt: '2099-11-28T00:44:00Z', pipelineId: 'p', containsThirdPartyText: true,
   updatedAt: '2026-11-01T10:00:00Z', updatedBy: null, version: '3',
 }
 
@@ -47,6 +48,9 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     await flushPromises()
 
     expect(wrapper.get('[data-test=addresses]').text()).toBe('https://www.umea.se/bygga')
+    // Engine design §9.6: the schedule in force, said to be the default, and when the next scheduled fetch starts.
+    expect(wrapper.get('[data-test=schedule]').text()).toBe('Every Saturday night at 01:00 (the platform default)')
+    expect(wrapper.get('[data-test=next-run]').text()).toMatch(/2099/)
     expect(wrapper.text()).toMatch(/2\s500/)
     expect(wrapper.text()).toContain('Done')
     expect(wrapper.text()).toContain('40 added, 2 changed, 1 removed')
@@ -79,6 +83,21 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     expect(row.getComponent(RouterLinkStub).props('to')).toEqual({ name: 'run', params: { id: 'r1' } })
     await row.findAll('td')[0]!.trigger('click')
     expect(push).toHaveBeenCalledWith({ name: 'run', params: { id: 'r1' } })
+  })
+
+  it('says a source’s own schedule as it is, and that a paused source has no next scheduled fetch (engine design §9.6)', async () => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = bffUser({ roles: ['rag-editor'] })
+    auth.status = 'authenticated'
+    vi.spyOn(api.sources, 'get').mockResolvedValue({ ...source, schedule: '0 6 * * 1-5', scheduleInForce: '0 6 * * 1-5', state: 'paused', nextRunAt: null })
+    vi.spyOn(api.sources, 'runs').mockResolvedValue({ items: [], next: null })
+    vi.spyOn(api.sources, 'piiReport').mockResolvedValue(null as never)
+
+    const wrapper = mount(SourceView, { props: { id: 's1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
+    await flushPromises()
+    expect(wrapper.get('[data-test=schedule]').text()).toBe('0 6 * * 1-5')
+    expect(wrapper.get('[data-test=next-run]').text()).toBe('None: the source is paused')
   })
 
   it('offers Continue beside Sync now when the latest crawl run can be continued, and reloads the runs (#804)', async () => {

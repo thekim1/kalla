@@ -7,6 +7,7 @@ import CancelRunButton from '@/components/runs/CancelRunButton.vue'
 import ContinueRunButton from '@/components/runs/ContinueRunButton.vue'
 import FilesPanel from '@/components/files/FilesPanel.vue'
 import SourceEditDrawer from '@/components/sources/SourceEditDrawer.vue'
+import { describeSchedule } from '@/components/sources/schedule'
 import HeldDocuments from '@/components/sources/HeldDocuments.vue'
 import PipelineCard from '@/components/sources/PipelineCard.vue'
 import SourceQuarantine from '@/components/sources/SourceQuarantine.vue'
@@ -29,7 +30,8 @@ import { runProgressText, runStateTone } from '@/utils/runs'
 import { problemMessage } from '@/utils/problem'
 
 // Källa (admin design §5.5.3, §5.4 step 6; #278 slice 2): the source's settings with Ändra (impact confirmation, V25),
-// Hämta nu, Avbryt körning on an active run (#488 part 3), its runs (each opens the run page with the crawl report) and the personal-data report (§4.5 pii-report).
+// Hämta nu, Avbryt körning on an active run (#488 part 3), the schedule in force with the next scheduled fetch (engine
+// design §9.6), its runs (each opens the run page with the crawl report) and the personal-data report (§4.5 pii-report).
 const props = defineProps<{ id: string }>()
 const auth = useAuthStore()
 const ui = useUiStore()
@@ -120,6 +122,19 @@ const addresses = computed(() => {
   return list
 })
 const sitemaps = computed(() => ((source.data.value?.settings.sitemaps ?? []) as string[]))
+const scheduleText = computed(() => {
+  const current = source.data.value
+  const text = describeSchedule(current?.scheduleInForce ?? null)
+  if (!current || !text) return null
+  return current.schedule ? text : SOURCE_PAGE.scheduleDefault(text)
+})
+const nextRunText = computed(() => {
+  const current = source.data.value
+  if (!current) return null
+  if (current.state === 'paused') return SOURCE_PAGE.nextRunPaused
+  if (!current.nextRunAt) return null
+  return new Date(current.nextRunAt).getTime() <= Date.now() ? SOURCE_PAGE.nextRunDue : formatDateTime(current.nextRunAt)
+})
 const demoted = computed(() =>
   ((source.data.value?.settings.demote ?? []) as { pattern: string; factor?: number }[]).map((d) => `${d.pattern} ×${String(d.factor ?? 0.5).replace('.', ',')}`),
 )
@@ -208,6 +223,12 @@ onMounted(load)
           </DetailRow>
           <DetailRow v-if="source.data.value.type === 'crawl'" :label="SOURCE_PAGE.maxPages">
             <span class="tabular">{{ formatNumber(Number(source.data.value.settings.maxPages ?? 10000)) }}</span>
+          </DetailRow>
+          <DetailRow v-if="scheduleText" :label="SOURCE_PAGE.schedule">
+            <span data-test="schedule">{{ scheduleText }}</span>
+          </DetailRow>
+          <DetailRow v-if="nextRunText" :label="SOURCE_PAGE.nextRun">
+            <span class="tabular" data-test="next-run">{{ nextRunText }}</span>
           </DetailRow>
           <DetailRow v-if="demoted.length" :label="SOURCE_EDIT.demoted">
             <span class="font-mono text-small" data-test="demoted">{{ demoted.join(', ') }}</span>

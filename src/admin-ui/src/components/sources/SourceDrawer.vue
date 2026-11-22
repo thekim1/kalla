@@ -4,7 +4,9 @@ import { api } from '@/api'
 import type { CheckState, Collection, Level, PreflightResult, Source, SourceType, StagePreviewResult } from '@/api/types'
 import FetchModeFields from '@/components/sources/FetchModeFields.vue'
 import PreviewResult from '@/components/sources/PreviewResult.vue'
+import ScheduleField from '@/components/sources/ScheduleField.vue'
 import { type FetchMode, READY_SELECTOR_MAX, withFetchSettings } from '@/components/sources/fetchMode'
+import { type SchedulePreset, scheduleShapeValid, scheduleValue } from '@/components/sources/schedule'
 import { sitemapsValid } from '@/components/sources/sitemaps'
 import InlineError from '@/components/ui/InlineError.vue'
 import SelectField from '@/components/ui/SelectField.vue'
@@ -25,7 +27,8 @@ import { problemMessage } from '@/utils/problem'
 // failed check blocks saving; per rendered page the raw and rendered word counts and, when the raw page holds under half
 // the text, "This site seems to need JavaScript" with a button that sets Fetch pages with to a browser, §5.5.3),
 // Förhandsgranska (stage-preview of up to 5 of the addresses on the pipeline the source would get, §6.4: Före / Efter and
-// each stage's output), then Spara och hämta: the source is created and its first sync enqueued.
+// each stage's output), then Spara och hämta: the source is created and its first sync enqueued. Fetch again (URL lists
+// and crawls) sets its own schedule; the default leaves it to the platform's default for the type (§9.6).
 const props = defineProps<{ open: boolean; collection: Collection }>()
 const emit = defineEmits<{ (e: 'update:open', value: boolean): void; (e: 'saved', source: Source, syncing: boolean): void }>()
 
@@ -50,6 +53,8 @@ const piiMode = ref<'hold' | 'report'>('hold')
 const fetchMode = ref<FetchMode>('http')
 const readySelector = ref('')
 const scrollToLoad = ref(false)
+const schedulePreset = ref<SchedulePreset>('default')
+const scheduleCustom = ref('')
 const saving = ref(false)
 const checkError = ref<unknown>(null)
 const preflight = useJobPoll<PreflightResult>()
@@ -59,7 +64,7 @@ const previewStarting = ref(false)
 /** The worker previews at most 5 documents (preview.limit_documents). */
 const PREVIEW_URLS = 5
 const form = useFormErrors({
-  name: 'source-name', urls: 'source-urls', sitemaps: 'source-sitemaps', maxPages: 'source-max-pages', maxDepth: 'source-max-depth', readySelector: 'source-ready-selector',
+  name: 'source-name', urls: 'source-urls', sitemaps: 'source-sitemaps', maxPages: 'source-max-pages', maxDepth: 'source-max-depth', readySelector: 'source-ready-selector', schedule: 'source-schedule-custom',
 })
 
 const levelOptions = computed(() =>
@@ -96,6 +101,8 @@ watch(
     fetchMode.value = 'http'
     readySelector.value = ''
     scrollToLoad.value = false
+    schedulePreset.value = 'default'
+    scheduleCustom.value = ''
     preflight.stop()
     preflight.job.value = null
     resetPreview()
@@ -144,6 +151,7 @@ function valid(forSave: boolean): boolean {
     maxPages: type.value === 'crawl' && !integer(maxPages.value) && SOURCE.numberInvalid,
     maxDepth: type.value === 'crawl' && !integer(maxDepth.value) && SOURCE.numberInvalid,
     readySelector: fetchMode.value === 'browser' && readySelector.value.trim().length > READY_SELECTOR_MAX && SOURCE.readySelectorInvalid,
+    schedule: forSave && !scheduleShapeValid(schedulePreset.value, scheduleCustom.value) && SOURCE.scheduleInvalid,
   })
 }
 
@@ -185,6 +193,7 @@ async function save(): Promise<void> {
   try {
     const source = await api.collections.addSource(props.collection.id, {
       type: type.value, name: name.value.trim(), classification: level.value, settings: settings(),
+      ...(type.value === 'upload' ? {} : { schedule: scheduleValue(schedulePreset.value, scheduleCustom.value) }),
     })
     // Step 6: the first sync starts at once; if enqueueing fails the source still exists and Hämta nu is on its page. An upload
     // source has nothing to fetch yet: its files are uploaded on its page, and each upload starts a sync.
@@ -234,6 +243,7 @@ async function save(): Promise<void> {
           v-model:fetch-mode="fetchMode" v-model:ready-selector="readySelector" v-model:scroll-to-load="scrollToLoad" id-prefix="source"
           :ready-selector-error="form.errors.readySelector"
         />
+        <ScheduleField v-model:preset="schedulePreset" v-model:custom="scheduleCustom" id-prefix="source" :error="form.errors.schedule" />
         <details v-if="type === 'crawl'" class="rounded-card border border-border p-4">
           <summary class="cursor-pointer font-medium">{{ SOURCE.advanced }}</summary>
           <div class="mt-4 grid gap-5">

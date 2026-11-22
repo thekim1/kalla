@@ -82,14 +82,14 @@ public static class SourceEndpoints
                         DepartmentId = collection.DepartmentId, Classification = source.Classification, Also = also,
                     };
                 }, ct);
-                return Results.Created($"/api/sources/{created.Id}", SourceDto.Of(created));
+                return Results.Created($"/api/sources/{created.Id}", await SourceDto.LoadAsync(admin, created, ct));
             })
             .RequireAuthorization(AdminPolicies.Edit).WithTags("Sources").WithName("CreateSource").WithSummary("Add a source to a collection (V1, V25)");
 
         var sources = api.MapGroup("/sources").WithTags("Sources");
 
         sources.MapGet("/{id:guid}", async (Guid id, AdminContext admin, CancellationToken ct) =>
-                SourceDto.Of(await Scoped(admin).AsNoTracking().SingleOrDefaultAsync(s => s.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound)))
+                await SourceDto.LoadAsync(admin, await Scoped(admin).AsNoTracking().SingleOrDefaultAsync(s => s.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound), ct))
             .RequireAuthorization(AdminPolicies.Read).WithName("GetSource").WithSummary("One source");
 
         sources.MapPost("/{id:guid}/impact", async (Guid id, SourceImpactRequest request, AdminContext admin, CancellationToken ct) =>
@@ -106,7 +106,7 @@ public static class SourceEndpoints
             .RequireAuthorization(AdminPolicies.Edit).WithName("SourceImpact").WithSummary("What a settings change does; the token a scope or identity change needs");
 
         sources.MapPut("/{id:guid}", async (Guid id, SourceUpdateRequest request, AdminContext admin, CancellationToken ct) =>
-                SourceDto.Of(await admin.WriteAsync(async attempt =>
+                await SourceDto.LoadAsync(admin, await admin.WriteAsync(async attempt =>
                 {
                     var source = await Scoped(admin).SingleOrDefaultAsync(s => s.Id == id, attempt) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
                     admin.ExpectVersion(source, request.Version);
@@ -132,7 +132,7 @@ public static class SourceEndpoints
                     {
                         DepartmentId = collection.DepartmentId, Classification = source.Classification,
                     };
-                }, ct)))
+                }, ct), ct))
             .RequireAuthorization(AdminPolicies.Edit).WithName("UpdateSource").WithSummary("Change a source (V1, V25; scope and identity changes need the impact token)");
 
         sources.MapDelete("/{id:guid}", async (Guid id, [Microsoft.AspNetCore.Mvc.FromQuery] string? version, AdminContext admin, CancellationToken ct) =>
@@ -257,7 +257,7 @@ public static class SourceEndpoints
     }
 
     private static async Task<SourceDto> SetStateAsync(Guid id, string state, VersionRequest request, AdminContext admin, CancellationToken ct) =>
-        SourceDto.Of(await admin.WriteAsync(async attempt =>
+        await SourceDto.LoadAsync(admin, await admin.WriteAsync(async attempt =>
         {
             var source = await Scoped(admin).SingleOrDefaultAsync(s => s.Id == id, attempt) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
             admin.ExpectVersion(source, request.Version);
@@ -269,7 +269,7 @@ public static class SourceEndpoints
             {
                 DepartmentId = await DepartmentOfAsync(admin, source, attempt), Classification = source.Classification,
             };
-        }, ct));
+        }, ct), ct);
 
     /// <summary>V13's input: <c>ContainsThirdPartyText</c> is writable by platform admins only (tools §5.4).</summary>
     private static void CheckThirdPartyText(AdminContext admin, bool? requested, bool current)
@@ -487,15 +487,26 @@ public sealed record SourceSummary(
 
 public sealed record SourceLastRun(Guid Id, string State, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt);
 
+/// <summary>
+/// A source. <see cref="Schedule"/> is its own cron (null: the platform default for its type); <see cref="ScheduleInForce"/>
+/// the cron it runs on (null for uploads); <see cref="NextRunAt"/> when the scheduler enqueues its next scheduled sync,
+/// jitter included (null when paused or unscheduled; not after now: due, <see cref="CronSchedules.NextRun"/>).
+/// </summary>
 public sealed record SourceDto(
-    Guid Id, Guid CollectionId, string Type, string Name, string Classification, JsonElement Settings, string? Schedule, Guid PipelineId,
-    bool ContainsThirdPartyText, string State, DateTimeOffset UpdatedAt, string? UpdatedBy, string Version)
+    Guid Id, Guid CollectionId, string Type, string Name, string Classification, JsonElement Settings, string? Schedule, string? ScheduleInForce,
+    DateTimeOffset? NextRunAt, Guid PipelineId, bool ContainsThirdPartyText, string State, DateTimeOffset UpdatedAt, string? UpdatedBy, string Version)
 {
-    public static SourceDto Of(Source s)
+    /// <summary>The source with its schedule in force and next run (engine design §9.6).</summary>
+    public static async Task<SourceDto> LoadAsync(AdminContext admin, Source s, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(admin);
         ArgumentNullException.ThrowIfNull(s);
+        var platform = await admin.Db.Settings.AsNoTracking().SingleOrDefaultAsync(ct) ?? new PlatformSettings();
+        var inForce = CronSchedules.InForce(s, platform);
+        var last = await admin.Db.Runs.AsNoTracking().Where(r => r.SourceId == s.Id && r.Trigger == RunTriggers.Schedule).MaxAsync(r => r.ScheduledFor, ct);
         using var settings = JsonDocument.Parse(s.Settings);
-        return new(s.Id, s.CollectionId, s.Type, s.Name, s.Classification, settings.RootElement.Clone(), s.Schedule, s.PipelineId, s.ContainsThirdPartyText,
+        return new(s.Id, s.CollectionId, s.Type, s.Name, s.Classification, settings.RootElement.Clone(), s.Schedule, inForce,
+            CronSchedules.NextRun(s, inForce, platform.ScheduleJitterMinutes, last, admin.Now), s.PipelineId, s.ContainsThirdPartyText,
             s.State, s.UpdatedAt, s.UpdatedBy, s.Version.ToString(CultureInfo.InvariantCulture));
     }
 }

@@ -678,6 +678,20 @@ export const SOURCE = {
   readySelectorInvalid: 'Enter at most 500 characters.',
   scrollToLoad: 'Scroll to load more content',
   scrollToLoadHint: 'For pages that load more content as you scroll. Slower.',
+  schedule: 'Fetch again',
+  scheduleHint:
+    'When the source is fetched again to pick up changes, in Swedish time. Each source starts a fixed while after the time (up to 90 minutes by default) so they do not all start at once. Fetch now works at any time.',
+  schedulePresets: {
+    default: 'The platform default for this type',
+    nightly: 'Every night at 02:00',
+    weekly: 'Every Saturday night at 01:00',
+    custom: 'At a time of my own (cron)',
+  } as Record<'default' | 'nightly' | 'weekly' | 'custom', string>,
+  scheduleDefaultIs: (schedule: string) => `The platform default (${schedule})`,
+  scheduleCustom: 'Cron expression',
+  scheduleCustomHint:
+    'Five fields: minute, hour, day of the month, month, day of the week. For example 30 3 * * * for every night at 03:30, or 0 6 * * 1-5 for weekdays at 06:00.',
+  scheduleInvalid: 'Enter five fields separated by spaces, for example 30 3 * * *.',
   piiMode: 'If a document may contain personal data',
   piiModes: {
     hold: 'Keep it out of the search until someone has looked at it',
@@ -1414,6 +1428,11 @@ export const SOURCE_PAGE = {
   startAddresses: 'Start addresses',
   sitemaps: 'Sitemaps',
   maxPages: 'Maximum number of pages',
+  schedule: 'Fetched again',
+  scheduleDefault: (schedule: string) => `${schedule} (the platform default)`,
+  nextRun: 'Next scheduled fetch',
+  nextRunDue: 'Due now',
+  nextRunPaused: 'None: the source is paused',
   syncNow: 'Fetch now',
   syncStarted: 'Fetching has started.',
   alreadyRunning: 'A fetch is already running.',
