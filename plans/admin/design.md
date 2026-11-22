@@ -1,6 +1,6 @@
 # Admin API and admin UI: detailed design
 
-Detail step 10 of the Källa design. The rules of the weakness review and the simplification, performance and
+The rules of the weakness review and the simplification, performance and
 consistency passes are stated here (reasoning: [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md) §1, §2, §5,
 §7–§10, §13, §15). Details [`../archive/area-plans/admin.md`](../archive/area-plans/admin.md) (archived: history, not binding; this design states every rule, the plan's answered questions in §14) and the Decisions table
 in [`../decisions.md`](../decisions.md). Consumes, without redesigning: the BFF, claim mapping,
@@ -19,7 +19,7 @@ build, images, networks, CI and observability of [`../platform/repo-and-deployme
 Where the code exists (`src/Kalla.AdminApi`, `src/admin-ui`), the text states what it does. Changes needed
 elsewhere: §13; questions: §14; unverified facts: §15; deferred or removed: §16.
 
-Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5); `AdminApi/` = `src/Fors.AdminApi/`,
+Gateway citations are `path:line` in the gateway's repository (Fors) at `e25b491` (v0.8.5); `AdminApi/` = `src/Fors.AdminApi/`,
 `ui/` = `src/admin-ui/src/`. "Copy" = copied with names changed; "adapt" = copied and changed as stated; "new" = no
 gateway counterpart.
 
@@ -27,7 +27,7 @@ gateway counterpart.
 
 | Source | Version | Used for |
 |---|---|---|
-| Gateway `~/git/llmgateway` | `e25b491` (v0.8.5) | admin API conventions (endpoints, validation, problem details, audit, pagination, CSP), admin UI (stack, shell, router, client, forms, tables, charts), Data API catalogue, E2E and accessibility tests, `docs/admin-ui.md`, `docs/admin-api.md`, `docs/accessibility-statement.md` |
+| Gateway (Fors) | `e25b491` (v0.8.5) | admin API conventions (endpoints, validation, problem details, audit, pagination, CSP), admin UI (stack, shell, router, client, forms, tables, charts), Data API catalogue, E2E and accessibility tests, `docs/admin-ui.md`, `docs/admin-api.md`, `docs/accessibility-statement.md` |
 | Open WebUI `~/git/rag-platforms/open-webui` | `f7ac7ee` (v0.12.5) | fixed feedback reason keys (`src/lib/components/chat/Messages/RateComment.svelte:17-35`, `:186-212`) |
 
 **Gateway facts this design relies on** (checked in the source):
@@ -111,7 +111,7 @@ Moved to [`../archive/design-history/admin.md`](../archive/design-history/admin.
   limit (`Admin:RequestsPerMinute` 120), antiforgery, `/api` group with `AdminValidationFilter` (`:84-85`),
   `UseDefaultFiles`/`UseStaticFiles`/`MapFallbackToFile("index.html")` (`:96-98`). Authorization runs before the
   antiforgery check, as in the gateway, so an anonymous unsafe call is challenged before the CSRF check. OpenAPI and
-  Scalar are the P1a set-up surface (§12).
+  Scalar remain for what no page offers (§5.8).
 - CSP holds for everything new: fonts self-hosted (fontsource), no inline script. Preview outputs, CSV exports and
   conversation views are fetched from `/api` (never blob URLs from another origin).
 - Cross-links to the gateway admin (separate app, plan answered 1): the context's `admin_url` (gateway phase 1), else
@@ -966,15 +966,16 @@ Assistants, Feedback, Menu.
 │   Costs                  │                                                                                      │
 │   Conversation review    │                                                                                      │
 │ PLATFORM                 │                                                                                      │
+│   Apps and keys          │                                                                                      │
+│   Models                 │                                                                                      │
+│   Settings               │                                                                                      │
 │   Organisation           │                                                                                      │
-│   Platform objects (forms): Settings · Data protection · Clients · Keys · Templates                               │
-│     Assistant templates · Site profiles · Embedding profiles · Gateway models                                     │
-│   Audit log                                                                                                       │
+│   Audit log              │                                                                                      │
 │ ↗ API (Scalar) · ↗ AI gateway admin                                                                               │
 └──────────────────────────┴──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-The Platform group of the drawing is replaced by §5.10's (Apps and keys, Models, Settings, Organisation, Audit log).
+The Platform group is §5.10's.
 
 **Home** shows the selected department's setup checklists, attention items and a one-line summary with its contacts;
 **Knowledge bases** has the tabs *Ours*, *Shared with us* and *All* (`view=`, §4.5). The department picker in the
@@ -1448,13 +1449,12 @@ The main session owns this feature's code (user, 2026-11-09), on `main-session/`
 
 ### 5.8 Generic forms for platform objects (P1)
 
-Platform-admin objects get no dedicated pages in P1 (reasoning: simplification pass §10). In P1a they are set up
-through Scalar only; the generic forms below come in P1b (Decisions "P1a plan answers"): settings sections, data protection,
-clients, keys, templates, assistant templates (simplification pass §15; P2, weakness review §1), site profiles, embedding profiles (read),
-gateway models, organisation mirror (read); P2 department settings (owner-team scoping, also for department admins).
+Platform objects that have no page of their own are edited through generic forms (reasoning: simplification pass §10):
+the Settings page's sections and its two lists, data protection and site profiles, and the gateway models on the Models
+page (§5.10); P2 adds assistant templates (B-54) and department settings (owner-team scoping, also for department
+admins). Apps and keys have a page of their own (§5.9).
 
-- One **Platform objects** page (`/plattform`, platform admins) lists the resources; each opens a list and a form in a
-  drawer. A registry in the UI (`platform/resources.ts`) names each resource's list, create, update and action endpoints
+- Each generic resource is a list with a form in a drawer, on the page §5.10 puts it on. A registry in the UI (`platform/resources.ts`) names each resource's list, create, update and action endpoints
   and its list columns; the form's fields come from that operation's request schema in the OpenAPI document
   (`/openapi/v1.json`, generated from the same DataAnnotations the API validates with, so the form and the server agree;
   Admin-only, the audience of these forms). Controls follow the table of §6.3; `jsonb` members (e.g. a site profile,
@@ -1477,22 +1477,20 @@ gateway models, organisation mirror (read); P2 department settings (owner-team s
   edit (the umea.se Sitevision preset first): no proposals, so only editing and **Restore**.
 - Gateway models: a **Check embedding canary** button (`POST /api/gateway/canary-check`, processing §11) shows each active profile's similarity, pass or fail and time; on opening, the page shows the last check from `GET /api/gateway/canary-check` and calls nothing that reaches the gateway. It is the only way the canary runs.
 - The same concurrency (`version`), error codes, audit and accessibility rules apply.
-- Clients and keys left the generic forms (§5.9, user 2026-11-13). Every generic form shows the row's `id` with a copy
-  button, a schema `enum` as a select, and a `date-time` field as a date and time input.
-- §5.10 puts each platform page in the side menu, drops this index page and gives Settings a page of
-  its own; §5.9.1 removes the generic `keys` resource.
+- Every generic form shows the row's `id` with a copy button, a schema `enum` as a select, a `date-time` field as a
+  date and time input, and a field that takes another object's id as a select of that object's rows by name (§5.9.1).
 
 ### 5.9 Clients and keys (user, 2026-11-13)
 
-Connecting an app took two generic forms, free-text kinds and levels, a client GUID nobody could see and a JSON scope
-object (session 34 review). Clients get a page of their own, and keys are made from their client.
+Clients (**apps** in the UI) have a page of their own, and keys are made from their app; §5.9.1 adds what an app may
+use and how to connect it (both built in 0.6.0, M-16).
 
-**Page `/plattform/clients`** (platform admins; it replaces the generic resource `clients` and keeps its place in the
-Platform index). The list shows name, kind (its label), information class, enabled and the number of active keys.
-**Add client** opens a drawer in three steps:
+**Page `/plattform/clients`** (platform admins; **Apps and keys**). The list shows name, kind (its label), information
+class, enabled, the number of active keys and when a key was last used. **Add app** opens a drawer in four steps (the
+third, *What it may use*, is §5.9.1's):
 
-1. **Kind**, as cards with one sentence each (`PLATFORM_CLIENTS.kinds` in `labels.ts`). `open-webui`, `integration`
-   and `internal` can be picked; `widget`, `own-client`, `teams`, `mcp-client` and `entra-app` show "Later" and are
+1. **Kind**, as cards with one sentence each (`PLATFORM_CLIENTS.kinds` in `labels.ts`). `integration` and `internal`
+   can be picked (`open-webui` is set up by the deployment, §5.9.1); `widget`, `own-client`, `teams`, `mcp-client` and `entra-app` show "Later" and are
    disabled (P2).
 2. **Fields for that kind** only:
 
@@ -1507,22 +1505,18 @@ Platform index). The list shows name, kind (its label), information class, enabl
    | Enabled | switch, default on | all |
 
    `toolPolicy` is not shown (P2): the server's default stays. `allowedOrigins` waits for `widget`.
-3. **First key**: "Create a key now" (on by default) with the key's name (default "<client name> key"). Created with
-   the client in one transaction. The result shows the secret once with a copy button and the client's id with a copy
-   button; for `open-webui` also the two stack lines `KALLA_OPENWEBUI_API_KEY=<secret>` and
-   `KALLA_OPENWEBUI_CLIENT_ID=<id>` with one copy button, and the sentence that Open WebUI picks them up when the
-   stack is updated.
+4. **First key**: "Create a key now" (on by default) with the key's name (default "<client name> key"). Created with
+   the client in one transaction. The result is *How to connect* (§5.9.1), with the secret shown once.
 
 **A client's drawer** has the facts (id with copy, kind, created/updated), the edit form of step 2 (the kind is fixed
-after creation), **Keys** (this client's keys: name, prefix, status, expiry; **Rotate**, **Reveal**, **Revoke** and
-**New key** in place) and **Used by** (the assistants whose audience includes it, linked to their pages; "No assistant
-yet: add this client under an assistant's *Who can use it*" when there is none).
+after creation), **Keys** (this client's keys: name, prefix, status, expiry, last use; **Rotate**, **Reveal**, **Revoke** and
+**New key** in place), *How to connect* and the assistants it may use (§5.9.1).
 
 **Key form** (`KeyForm.vue`, in the client's drawer and on the Keys page): name, description, team (a picker of the
 organisation's teams, optional), **Limit to assistants** and **Limit to knowledge bases** (multi-selects; hint "Empty:
 everything this client's audience allows"), expiry (a date; empty never expires), allowed IP ranges (one per line),
-requests per minute (with the hint of §5.8). On the Keys page a new key first picks its client from a select; the list
-gains a client column.
+requests per minute (with the hint of §5.8); §5.9.1 says which are under *Restrictions*. Every key with its app is on
+the *All keys* tab (§5.9.1).
 
 **API** (contract for the page):
 - `ClientRequest`'s `kind`, `classificationCeiling` and `toolPolicy` carry their allowed values as `enum` in the OpenAPI
@@ -1536,12 +1530,10 @@ gains a client column.
   `assistants: [{ id, name, departmentId, published }]` (the assistants with a `client` audience row for it).
 - `GET /api/keys` keeps its `clientId` filter; `KeyDto` adds `clientName`.
 
-#### 5.9.1 Second pass: connect an app in one go (user, 2026-11-13; M-16, built in 0.6.0)
+#### 5.9.1 Connect an app in one go (user, 2026-11-13; M-16, built in 0.6.0)
 
-After §5.9's first pass a new client still cannot use anything (access is given on each assistant's page, one at a
-time), an integration's result is a secret and a GUID with no address or model name, the key form shows every assistant
-and knowledge base of the platform, and keys have a second page. This pass changes §5.9 as follows; where it differs
-from the text above, this wins once built.
+What an app may use, how to connect it, and the keys' place on the page. The history of the two passes is in
+[`../archive/design-history/admin.md`](../archive/design-history/admin.md) §5.9.
 
 **Name.** The page is **Apps and keys** in the UI (`labels.ts`); the API, the tables and the code keep `client`.
 
@@ -1580,7 +1572,7 @@ can be unticked. **Limit to knowledge bases** lists every knowledge base: it als
 `internal` app calls without an assistant (`Knowledge:OpenToClientKinds`), and an assistant whose published knowledge
 bases are all outside it (the access policy's key scope).
 
-**Keys page.** The generic resource `keys` and `/plattform/keys` go. The Apps and keys page has two tabs: **Apps** and
+**Keys.** The Apps and keys page has two tabs (`/plattform/keys` redirects to the second): **Apps** and
 **All keys** (every key with its app, status, expiry and last use; filter by status; a row opens its app's drawer at
 the key). Department admins' keys of own teams (§3.3) have no page today and get none here.
 
@@ -1603,22 +1595,20 @@ no form asks for a typed GUID.
 
 ### 5.10 Platform menu and the Settings page (user, 2026-11-13; M-16, built in 0.6.0)
 
-Today the side menu's Platform group has one item, **Platform**, that opens an index of seven cards (§5.8), so every
-platform object is two clicks away; Organisation is both a menu item and a card; and Settings is a table of nine
-sections that each open a drawer with a generated form, several members as JSON text. Once built, this section
-replaces §5.2's Platform group and §5.8's index page.
+The side menu's Platform group lists the platform pages directly, and Settings is one page (built in 0.6.0; it replaced
+a single *Platform* item that opened an index of cards).
 
 **Menu.** The Platform group lists its pages directly, filtered by role as before:
 
 | Item | Route | Holds | Roles |
 |---|---|---|---|
 | Apps and keys | `/plattform/clients` | §5.9, §5.9.1 | platform admin |
-| Models | `/plattform/gateway-models` | gateway models with their limits, the gateway's context, embedding profiles and the canary (the page as it is) | platform admin |
+| Models | `/plattform/gateway-models` | gateway models with their limits, the gateway's context, embedding profiles and the canary | platform admin |
 | Settings | `/plattform/settings/:section?` | below | platform admin |
-| Organisation | `/organisation` | the page as it is, plus the member groups, the sharing summary and the gateway link of the generic resource `organisation`, which goes | every role |
+| Organisation | `/organisation` | the organisation page, with the member groups, the sharing summary and the gateway link | every role |
 | Audit log | `/audit` | unchanged | as today |
 
-The index `/plattform` and `PlatformIndexView` go; search (Ctrl K) lists each page and each settings section. On
+`/plattform` redirects to Settings; search (Ctrl K) lists each page and each settings section. On
 phones the items are under Menu as today.
 
 **Settings** is one page: the sections in a list on the left (a select above the form on phones), the chosen
@@ -1633,8 +1623,7 @@ the first section opens. Sections, grouped by what they affect:
 | Quality | Evaluation |
 | Platform | Network, Role groups (`identity`) |
 
-Site profiles and Data protection are lists (a row opens its form in a drawer, as today); they move here from the
-index. **Role groups** (`GET/PUT /api/settings/identity`, M-17 C10) has one list field per role (one group per line):
+Site profiles and Data protection are lists (a row opens its form in a drawer). **Role groups** (`GET/PUT /api/settings/identity`, M-17 C10) has one list field per role (one group per line):
 platform admin, department admin, pipeline editor, reviewer, editor, viewer. A group must be a `rag-` name or an Entra
 object id; groups are trimmed and de-duplicated case-insensitively, and a role without groups isn't stored. The hints say
 that a role in the sign-in token counts too, that the deployment's break-glass group (`KALLA_OIDC_GROUPS_PLATFORM_ADMIN`)

@@ -142,7 +142,7 @@ sequenceDiagram
         K->>G: embed query on-prem on a miss
     end
     K->>P: V: vector candidates (exact scan or halfvec HNSW, CollectionId filter)
-    K->>K: RRF fusion, dedup, cap 3 per document (P2: IReranker), coverage
+    K->>K: RRF fusion, dedup, rerank (IReranker, when the assistant reranks), cap 3 per document, coverage
     K->>P: H+D: hydrate hits, sections, documents, breadcrumbs (one batch)
     K-->>C: results, sections, citations, coverage
     alt coverage low (best distance above threshold and keyword list below its floor)

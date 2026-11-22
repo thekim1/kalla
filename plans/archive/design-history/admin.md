@@ -176,3 +176,22 @@ Per [weakness review §5](../passes/weakness-review.md#5-the-pilots-critical-pat
 | Item | Where it went |
 |---|---|
 | Delegation echo in the gateway status check (§4); `memberGroups` and team `code` in the organisation sync | the echo with the gateway's integration phase 2, member groups and codes with release 2; P1 checks the ceiling with the pilot team's per-level keys and syncs departments and teams without them |
+
+## 5.9 Clients and keys: the two passes (moved 2026-11-21)
+
+Moved here from the design in session 53's clean-up; the design states the page as built (0.6.0, M-16).
+
+**First pass (user, 2026-11-13).** Connecting an app took two generic forms, free-text kinds and levels, a client GUID
+nobody could see and a JSON scope object (session 34 review). Clients got a page of their own, replacing the generic
+resource `clients` and keeping its place in the Platform index; keys were made from their client; *Add client* had three
+steps; an `open-webui` client's result showed the stack lines `KALLA_OPENWEBUI_API_KEY` and `KALLA_OPENWEBUI_CLIENT_ID`;
+the drawer had *Used by*; the Keys page picked a client first.
+
+**Second pass (§5.9.1).** After the first pass a new client still could not use anything (access was given on each
+assistant's page, one at a time), an integration's result was a secret and a GUID with no address or model name, the
+key form showed every assistant and knowledge base of the platform, and keys had a second page. The pass added *What it
+may use*, *How to connect*, the collapsed *Restrictions*, the two tabs, and took `open-webui` out of *Add app*.
+
+**§5.10 before it was built.** The side menu's Platform group had one item, *Platform*, that opened an index of seven
+cards (§5.8), so every platform object was two clicks away; Organisation was both a menu item and a card; Settings was a
+table of nine sections that each opened a drawer with a generated form, several members as JSON text.
