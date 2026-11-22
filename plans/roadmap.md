@@ -91,6 +91,10 @@ P2 wave 1 (*P2 Broaden* below) is the code work. Beside it, what is open without
 - **Support chatbot F10 and F7** (cost per outcome, the content-gap report;
   [`proposals/support-chatbot-features.md`](proposals/support-chatbot-features.md)): picked by the user on 2026-11-21;
   designed (Decisions "Cost per outcome", "Content-gap report") and queued as stream b's B-61 and B-62.
+- **The topics editor** (#929 steps 2 to 4; [`proposals/topics-editor.md`](proposals/topics-editor.md)): adopted by
+  the user on 2026-11-22 (Decisions "Topics editor"); designed in admin §4.5, §5.5.2 and processing §7 and queued as
+  A-42 (one matcher in `Kalla.Pipelines`), then B-64 (pick from the sections found) and B-65 (the form and the match
+  preview).
 - **CI:** what the test collections of one `Kalla.AdminApi.Tests` process wait for (not CPU, thread pool, disk or
   GC; a profiler would say); the project runs as five processes meanwhile.
 

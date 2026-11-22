@@ -9,6 +9,23 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 
 Finished items move to [`../archive/work/`](../archive/work/) at each release (the main session); find one by its ID.
 
+## Code
+
+### [ ] A-42 One path-rule matcher in `Kalla.Pipelines`, for the Topics tab (Decisions "Topics editor")
+- **Do:** move the reading and matching of `pathRules` (`PathRule`, `ReadRules`, the `path` glob with its pasted-address,
+  host-first and trailing-`/` forms, `path-regex`, `host`, `title-regex`, `mediaType`, the tag format) from
+  `Kalla.Worker/Processing/Chunking/Metadata.cs` into `Kalla.Pipelines` (processing §7 *One matcher*), as a public
+  matcher that takes a rule and a document's URL or display name, title and media type and answers whether it matches
+  (and with which tags, `documentType` and date groups). The worker's `Metadata.Apply` keeps its behaviour and calls
+  it. No behaviour change: the existing worker tests pass unchanged; the matching tests move to
+  `Kalla.Pipelines.Tests`.
+- **Paths:** `src/Kalla.Pipelines/**`, `src/Kalla.Worker/**`, `tests/Kalla.Pipelines.Tests/**`,
+  `tests/Kalla.Worker.Tests/**`.
+- **Done when:** `Kalla.Worker.Tests` (`StageRuleTests`, `UploadEngineTests`, `ChunkDateEngineTests`, `PreviewTests`,
+  `GoldenTests`) and `Kalla.Pipelines.Tests` green; the golden chunk output unchanged.
+- **Waits on:** nothing. B-64 and B-65 use it.
+- **Read:** processing §7; admin §4.5 (`topic-suggestions`, `topic-rules/preview`); Decisions "Topics editor".
+
 ## Live (the live block, see the roadmap)
 
 ### [ ] A-L1 umea.se inventory and the `lastmod` sample's first pass
