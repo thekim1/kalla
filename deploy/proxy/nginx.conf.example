@@ -8,6 +8,16 @@
 # WebSocket upgrade (Open WebUI's live connection); other requests keep the pooled keep-alive connection.
 map $http_upgrade $kalla_connection { default upgrade; '' ''; }
 
+# Room for big response headers: the sign-in callback (/signin-oidc) sets the chunked session cookie and deletes
+# stale chunks and sign-in cookies in one response. With the old session still in the browser after a release, that
+# can exceed nginx's default 4 KB, and nginx answers 502 ("upstream sent too big header") until the user clears
+# their cookies. The buffer holds the response headers even where proxy_buffering is off. The browser sends the
+# cookies back on the next request, hence the larger request header buffers too.
+proxy_buffer_size 32k;
+proxy_buffers 8 32k;
+proxy_busy_buffers_size 64k;
+large_client_header_buffers 4 32k;
+
 # With compose.rolling.yaml (init-deployment.sh --rolling) kalla-api and kalla-admin have a second slot; nginx sends
 # requests to both and retries on the other when one fails while it is replaced (proxy_next_upstream below).
 # See docs/zero-downtime-updates.md.

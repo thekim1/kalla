@@ -652,7 +652,10 @@ Two ways to put TLS with real certificates in front:
   for nginx once its placeholders are filled in and your certificates added. For another proxy, the routes:
   each host name forwarded over HTTPS to its port, preserving the `Host` header; `client_max_body_size 60m` and
   `proxy_request_buffering off` on `PUT /api/upload-batches/{batchId}/files/{n}` of the admin host, 2 MB on the api host
-  (and on Open WebUI's), because `/v1/chat/completions` takes up to 2 MB of conversation, and 1 MB elsewhere.
+  (and on Open WebUI's), because `/v1/chat/completions` takes up to 2 MB of conversation, and 1 MB elsewhere. Give
+  response headers at least 32 KB (nginx: `proxy_buffer_size 32k`, `proxy_buffers 8 32k`, `proxy_busy_buffers_size
+  64k`, and `large_client_header_buffers 4 32k` for the cookies sent back): the sign-in callback's cookies outgrow
+  nginx's 4 KB default, and the proxy then answers 502 after sign-in (runbook, *Where to look first*).
 
 Only the proxy should reach the published ports. With `--hardened`, `--proxy-address` makes the host firewall accept new
 connections to them only from the proxy's addresses; otherwise restrict them in a network firewall, or publish them on
