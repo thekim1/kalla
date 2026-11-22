@@ -94,6 +94,59 @@ public static class AssistantEndpoints
             })
             .RequireAuthorization(AdminPolicies.Edit).WithName("CreateAssistant").WithSummary("Create an assistant with a draft that starts from the default instructions");
 
+        // Copy (admin design §4.5, P2; B-55): a new assistant whose only version is a draft equal to the source's published
+        // version (its draft when never published). Audiences, the gateway key, the other versions and the statistics are not
+        // copied. The caller reads the source and edits in the target department; V11/V12 come back as warnings.
+        assistants.MapPost("/{id:guid}/copy", async (Guid id, AssistantCopyRequest request, AdminContext admin, CancellationToken ct) =>
+            {
+                var (copy, draft) = await admin.WriteAsync(async attempt =>
+                {
+                    var source = await LoadAsync(admin, id, attempt, tracked: false);
+                    if (!await admin.Departments().AnyAsync(d => d.Id == request.DepartmentId, attempt))
+                    {
+                        throw AdminFaults.Field("departmentId", AdminErrorCodes.NotInScope);
+                    }
+
+                    await CheckTeamAsync(admin, request.DepartmentId, request.OwnerTeamId, attempt);
+                    var ownerTeam = request.OwnerTeamId ?? await admin.DefaultOwnerTeamAsync(request.DepartmentId, attempt);
+                    var slug = string.IsNullOrWhiteSpace(request.Slug) ? Slugs.From(request.Name) : request.Slug;
+                    if (await admin.Db.Assistants.AsNoTracking().AnyAsync(a => a.Slug == slug, attempt))
+                    {
+                        throw AdminFaults.Field("slug", AdminErrorCodes.AlreadyExists);
+                    }
+
+                    var from = (source.PublishedVersionId ?? source.DraftVersionId) is { } versionId
+                        ? await admin.Db.AssistantVersions.AsNoTracking().SingleAsync(v => v.Id == versionId, attempt)
+                        : null;
+                    // The assistant's own settings come along; who may use it (audiences, origins) and whose budget it runs on
+                    // (the gateway key) do not.
+                    var copy = new Assistant
+                    {
+                        Slug = slug, Name = request.Name.Trim(), Description = source.Description, ContactName = source.ContactName, ContactEmail = source.ContactEmail,
+                        DepartmentId = request.DepartmentId, OwnerTeamId = ownerTeam, Classification = source.Classification, HistoryMode = source.HistoryMode,
+                        RetentionDays = source.RetentionDays, UpdatedAt = admin.Now, UpdatedBy = admin.Actor,
+                    };
+                    admin.Db.Assistants.Add(copy);
+                    await admin.Db.SaveChangesAsync(attempt);
+                    var draft = new AssistantVersion
+                    {
+                        AssistantId = copy.Id, Number = 1, GatewayModel = from?.GatewayModel, SystemPrompt = from?.SystemPrompt ?? "", QuerySteps = from?.QuerySteps ?? "{}",
+                        NotFound = from?.NotFound ?? "{}", CollectionLinks = from?.CollectionLinks ?? [],
+                        CreatedBy = admin.Actor, CreatedAt = admin.Now, UpdatedAt = admin.Now, UpdatedBy = admin.Actor,
+                    };
+                    admin.Db.AssistantVersions.Add(draft);
+                    await admin.Db.SaveChangesAsync(attempt);
+                    copy.DraftVersionId = draft.Id;
+                    var origin = from is null ? $"{source.Slug}" : $"{source.Slug} version {from.Number.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+                    return new AdminChange<(Assistant, AssistantVersion)>((copy, draft), "copy", AuditEntityTypes.Assistant, copy.Id, null, AssistantAudit.Of(copy))
+                    {
+                        DepartmentId = copy.DepartmentId, Classification = copy.Classification, Reason = $"Copied from {origin} ({source.Id})",
+                    };
+                }, ct);
+                return Results.Created($"/api/assistants/{copy.Id}", AssistantCopyDto.Of(await DetailAsync(admin, copy, ct), await WarningsAsync(admin, copy, draft, ct)));
+            })
+            .RequireAuthorization(AdminPolicies.Edit).WithName("CopyAssistant").WithSummary("Copy an assistant into a draft of a new one; V11/V12 for the target department as warnings");
+
         assistants.MapPut("/{id:guid}", async (Guid id, AssistantUpdateRequest request, AdminContext admin, GatewayModelCheck models, CancellationToken ct) =>
             {
                 await WarmUpdateAsync(admin, models, id, request, ct);
@@ -1068,6 +1121,28 @@ public sealed record AssistantCreateRequest : AssistantFields
     /// query steps are copied, and no link is kept. Without one, the draft starts from <c>Settings.Chat.defaultSystemPrompt</c>.
     /// </summary>
     public Guid? TemplateId { get; init; }
+}
+
+/// <summary><c>POST /api/assistants/{id}/copy</c> (admin design §4.5): the copy's name, slug, department and owner team.</summary>
+public sealed record AssistantCopyRequest : AdminRequest
+{
+    [Required, StringLength(200, MinimumLength = 1)]
+    public string Name { get; init; } = "";
+
+    [StringLength(100), RegularExpression(Slugs.Pattern)]
+    public string? Slug { get; init; }
+
+    [Required]
+    public Guid DepartmentId { get; init; }
+
+    public Guid? OwnerTeamId { get; init; }
+}
+
+/// <summary>The copy and its draft's V-rule warnings for the target department (V11, V12 and the others a draft save returns), shaped as a draft's.</summary>
+public sealed record AssistantCopyDto(AssistantDto Assistant, IReadOnlyList<object> Warnings)
+{
+    public static AssistantCopyDto Of(AssistantDto assistant, IReadOnlyList<RuleProblem> warnings) =>
+        new(assistant, [.. warnings.Select(w => (object)new { code = w.Code.Code, @params = w.Params, affected = w.Affected })]);
 }
 
 public sealed record AssistantUpdateRequest : AssistantFields

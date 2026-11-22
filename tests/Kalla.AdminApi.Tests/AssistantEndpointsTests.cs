@@ -114,6 +114,103 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database, Assis
     private static IEnumerable<string> Codes(JsonElement warnings) => warnings.EnumerateArray().Select(w => w.GetProperty("code").GetString()!);
 
     [Fact]
+    public async Task A_copy_into_another_department_is_a_draft_of_the_published_version_without_key_or_audience_and_warns_on_an_unshared_collection()
+    {
+        // B-55 (admin design §4.5): the copy's only version is a draft equal to the source's published version; audiences,
+        // the key, the other versions and the statistics stay behind; V11 is checked for the target department as a warning.
+        var seed = await SeedAsync();
+        var other = await SeedAsync();
+        var factory = host.Factory;
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, $"{seed.Code},{other.Code}");
+        using var outsider = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, other.Code);
+
+        using var created = await admin.PostAsJsonAsync("/api/assistants", new
+        {
+            name = "Bygglovshjälpen " + seed.Code, departmentId = seed.Department, classification = "internal", description = "Svarar om bygglov.",
+            contactName = "Bygglov", contactEmail = "bygglov@umea.se",
+        }, Ct);
+        created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync(Ct));
+        var source = await Json(created);
+        var id = source.GetProperty("id").GetGuid();
+        var version = source.GetProperty("version").GetString();
+        var draftVersion = source.GetProperty("draft").GetProperty("version").GetString();
+        var links = new[] { new { collectionId = seed.Collection, tags = new[] { "bygglov" } } };
+        using (var draft = await admin.PutAsJsonAsync($"/api/assistants/{id}/draft", new
+               {
+                   gatewayModel = Model, systemPrompt = "Publicerad text.", collectionLinks = links, notFound = new { sv = "Hittar inget." }, version = draftVersion,
+               }, Ct))
+        {
+            draftVersion = (await Json(draft)).GetProperty("version").GetString();
+        }
+
+        using (var published = await admin.PostAsJsonAsync($"/api/assistants/{id}/publish", new { version, draftVersion }, Ct))
+        {
+            published.StatusCode.ShouldBe(HttpStatusCode.OK, await published.Content.ReadAsStringAsync(Ct));
+            version = (await Json(published)).GetProperty("version").GetString();
+        }
+
+        using (var audience = await admin.PutAsJsonAsync($"/api/assistants/{id}/audiences", new { clientIds = new[] { seed.InternalClient }, version }, Ct))
+        {
+            audience.StatusCode.ShouldBe(HttpStatusCode.OK, await audience.Content.ReadAsStringAsync(Ct));
+        }
+
+        // A newer draft is not what is copied: the published version is.
+        using (var newer = await admin.PutAsJsonAsync($"/api/assistants/{id}/draft", new { gatewayModel = Model, systemPrompt = "Utkast som inte kopieras.", collectionLinks = links }, Ct))
+        {
+            newer.StatusCode.ShouldBe(HttpStatusCode.OK, await newer.Content.ReadAsStringAsync(Ct));
+        }
+
+        var before = (await admin.GetFromJsonAsync<JsonElement>($"/api/assistants/{id}", Ct)).GetRawText();
+
+        using var copied = await admin.PostAsJsonAsync($"/api/assistants/{id}/copy", new { name = "Bygglovshjälpen kopia " + other.Code, departmentId = other.Department }, Ct);
+        copied.StatusCode.ShouldBe(HttpStatusCode.Created, await copied.Content.ReadAsStringAsync(Ct));
+        var result = await Json(copied);
+        Codes(result.GetProperty("warnings")).ShouldContain(AdminErrorCodes.CollectionNotShared.Code);
+        var copy = result.GetProperty("assistant");
+        var copyId = copy.GetProperty("id").GetGuid();
+        copyId.ShouldNotBe(id);
+        (copy.GetProperty("departmentId").GetGuid(), copy.GetProperty("classification").GetString(), copy.GetProperty("description").GetString())
+            .ShouldBe((other.Department, "internal", "Svarar om bygglov."));
+        copy.GetProperty("publishedVersion").ValueKind.ShouldBe(JsonValueKind.Null);
+        copy.GetProperty("gatewayKeyId").ValueKind.ShouldBe(JsonValueKind.Null);
+        copy.GetProperty("audienceClientIds").GetArrayLength().ShouldBe(0);
+        copy.GetProperty("draft").GetProperty("number").GetInt32().ShouldBe(1);
+
+        var copyDraft = await admin.GetFromJsonAsync<JsonElement>($"/api/assistants/{copyId}/draft", Ct);
+        (copyDraft.GetProperty("systemPrompt").GetString(), copyDraft.GetProperty("gatewayModel").GetString(), copyDraft.GetProperty("notFound").GetProperty("sv").GetString())
+            .ShouldBe(("Publicerad text.", Model, "Hittar inget."));
+        copyDraft.GetProperty("collectionLinks")[0].GetProperty("collectionId").GetGuid().ShouldBe(seed.Collection);
+        (await admin.GetFromJsonAsync<JsonElement>($"/api/assistants/{copyId}/versions", Ct)).GetArrayLength().ShouldBe(1);
+
+        // The source is unchanged, and the outsider (only the target department) can't read it to copy it.
+        (await admin.GetFromJsonAsync<JsonElement>($"/api/assistants/{id}", Ct)).GetRawText().ShouldBe(before);
+        (await outsider.PostAsJsonAsync($"/api/assistants/{id}/copy", new { name = "Stöld " + other.Code, departmentId = other.Department }, Ct)).StatusCode
+            .ShouldBe(HttpStatusCode.NotFound);
+
+        // Into its own department the link is fine; a taken slug and a department outside the caller's scope are refused.
+        using (var same = await admin.PostAsJsonAsync($"/api/assistants/{id}/copy", new { name = "Bygglov kopia 2 " + seed.Code, departmentId = seed.Department }, Ct))
+        {
+            same.StatusCode.ShouldBe(HttpStatusCode.Created);
+            Codes((await Json(same)).GetProperty("warnings")).ShouldNotContain(AdminErrorCodes.CollectionNotShared.Code);
+        }
+
+        using (var taken = await admin.PostAsJsonAsync($"/api/assistants/{id}/copy", new { name = "x", slug = source.GetProperty("slug").GetString(), departmentId = seed.Department }, Ct))
+        {
+            taken.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        }
+
+        using (var outside = await outsider.PostAsJsonAsync($"/api/assistants/{copyId}/copy", new { name = "Utanför " + seed.Code, departmentId = seed.Department }, Ct))
+        {
+            outside.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+            (await Json(outside)).GetProperty("errorCodes").GetProperty("departmentId")[0].GetProperty("code").GetString().ShouldBe(AdminErrorCodes.NotInScope.Code);
+        }
+
+        await using var db = TestPostgres.Context(database.Connection(null));
+        var audit = await db.AuditLog.AsNoTracking().SingleAsync(a => a.EntityType == "assistant" && a.EntityId == copyId.ToString(), Ct);
+        (audit.Action, audit.Reason).ShouldBe(("copy", $"Copied from {source.GetProperty("slug").GetString()} version 1 ({id})"));
+    }
+
+    [Fact]
     public async Task An_assistant_created_from_a_template_starts_with_a_copy_that_a_later_template_change_leaves_alone()
     {
         // B-54 (admin design §5 step 9): the template's instructions, not-found texts and query steps are copied into the first

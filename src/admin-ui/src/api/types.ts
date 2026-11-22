@@ -1152,6 +1152,20 @@ export interface DataProtectionPolicy {
   version: string
 }
 
+/** `POST /api/assistants/{id}/copy` (admin design §4.5): the copy's name and department; slug and owner team default. */
+export interface AssistantCopyRequest {
+  name: string
+  departmentId: string
+  slug?: string | null
+  ownerTeamId?: string | null
+}
+
+/** The copy and its draft's V-rule warnings for the target department. */
+export interface AssistantCopyResult {
+  assistant: Assistant
+  warnings: RuleWarning[]
+}
+
 export interface AssistantCreate {
   name: string
   departmentId: string
