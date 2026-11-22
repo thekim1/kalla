@@ -1,6 +1,6 @@
 # Ingestion worker, part B: connectors, crawl frontier, change detection, deletion guard
 
-Detail step 6b of the Källa design. Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §3 and §8 (archived: history, not binding; this design
+Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §3 and §8 (archived: history, not binding; this design
 states every rule, the plan's answered items in §21)
 and consumes the contracts of [`design-engine.md`](design-engine.md) (6a): fetch stages `http-fetch`, `crawl` and
 `upload`, the `sync`/`fetch` jobs and their fan-out (§9.2), dedup keys, `EnsureCurrent` and the drift sweep (§2.3),
@@ -689,7 +689,7 @@ public enum EgressPurpose { Fetch, Robots, Sitemap, Preflight, Preview, Render }
 | Any-address rule | if **any** resolved address is blocked, the host is refused (round-robin rebinding cannot win by luck) |
 | Blocked IPv4 | `0.0.0.0/8`, `10/8`, `100.64/10`, `127/8`, `169.254/16`, `172.16/12` (covers our compose subnets), `192.0.0/24`, `192.0.2/24`, `192.88.99/24`, `192.168/16`, `198.18/15`, `198.51.100/24`, `203.0.113/24`, `224/4`, `240/4` |
 | Blocked IPv6 | `::/128`, `::1`, `fc00::/7`, `fe80::/10`, `ff00::/8`, `2001:db8::/32`, `100::/64`; addresses that **embed** IPv4 (`::ffff:0:0/96`, `::/96`, `64:ff9b::/96`, `64:ff9b:1::/48`, 6to4 `2002::/16`, Teredo `2001::/32`) are judged by the embedded address (Open WebUI `_embedded_ipv4`, `owui/retrieval/web/utils.py:73-93`): `::ffff:0:0/96` as its IPv4 address, NAT64 `64:ff9b::/96`, 6to4 and Teredo by the embedded one. Stricter still: an IPv6 address outside global unicast `2000::/3` (and outside NAT64 `64:ff9b::/96`) is blocked whole (`reserved`); local-use NAT64 `64:ff9b:1::/48` and IPv4-compatible `::/96` are blocked whole too, because where an IPv4 address would sit in them is not fixed. IPv4 is tried first; the `crawl` network may have no IPv6 at all (*to verify*, §22) |
-| Allowed exceptions | CIDRs in `Crawl:AllowedPrivateRanges`, set from the same `KALLA_CRAWL_ALLOW` that feeds the host firewall (`init-deployment.sh --crawl-allow`, repo-and-deployment §7.1); nothing else can lift the block |
+| Allowed exceptions | CIDRs in `Crawl:AllowedPrivateRanges`, set from the same `KALLA_CRAWL_ALLOW` that feeds the host firewall (`init-deployment.sh --set KALLA_CRAWL_ALLOW=…`, repo-and-deployment §7.1); nothing else can lift the block |
 | URL rules | `http`/`https`; ports 80 and 443 (`Settings.Crawl.AllowedPorts` may add e.g. 8443); no userinfo; IP-literal hosts only if global or allow-listed; IDN hosts checked in A-label form after UTS 46 mapping, so homograph spellings resolve to the same rules. Numeric IPv4 host spellings (decimal `2130706433`, octal `0177.0.0.1`, hex `0x7f.1`, which `IPAddress.TryParse` reads) are canonicalised to dotted quads (§3.1 rule 2) before the guard judges them (to-verify #27) |
 | Redirects | manual; ≤ 5 hops; each hop through `CheckUrl` + `ResolveAsync` + scope + robots (§3.2) |
 | Firewall | the `crawl` network drops RFC 1918, link-local, loopback and the host's addresses except the allow-list (repo-and-deployment §6.1; `deploy/host/docker-user-firewall.sh`); the guard is the first layer and decides the outcome text. Every host that runs `fetch` gets the same `crawl` network, firewall script and `KALLA_CRAWL_ALLOW` |

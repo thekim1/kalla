@@ -1,6 +1,6 @@
 # Parser sidecar: detailed design
 
-Detail step 5 of the Källa design. Details [`../archive/area-plans/parser.md`](../archive/area-plans/parser.md) (archived: history, not binding; this design states every rule, the plan's answered items in §18) within
+Details [`../archive/area-plans/parser.md`](../archive/area-plans/parser.md) (archived: history, not binding; this design states every rule, the plan's answered items in §18) within
 the limits set by [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) §2.4, §5.3, §6 and §9,
 [`../platform/data-model.md`](../platform/data-model.md) §2.2 and §9, and [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md)
 §4–§8. Built in `src/parser/` (P0 and P1a); items still to come are marked with their phase. Removed and deferred
@@ -565,7 +565,7 @@ Models baked (sizes approximate, *to verify* at P0):
 |---|---|---|---|
 | Docling layout model (current default, e.g. "heron") | Hugging Face `docling-project/…`, pinned revision | ≈ 150–200 MB | *to verify* (model card) |
 | TableFormer fast + accurate | same repository family | ≈ 200 MB | *to verify* |
-| KB BERT NER (`KBLab/bert-base-swedish-cased-ner`, rev `f3c83af`) | Hugging Face, pinned revision + SHA-256 | ≈ 499 MB fp32 | MIT (SUC 3.0 training data: terms *to verify*); uses `transformers`, `tokenizers`, `safetensors` (Apache-2.0, already present) |
+| KB BERT NER (`KBLab/bert-base-swedish-cased-ner`, rev `f3c83af`) | Hugging Face, pinned revision + SHA-256 | ≈ 499 MB fp32 | MIT (SUC 3.0 training data: the MIT licence is taken as covering the weights, user 2026-11-21, to-verify 110); uses `transformers`, `tokenizers`, `safetensors` (Apache-2.0, already present) |
 | Tesseract `swe` | Debian package | ≈ 10–30 MB | Apache-2.0 |
 | Garble bigram table | built in-repo from public Swedish/English text | ≈ 50 KB | own |
 

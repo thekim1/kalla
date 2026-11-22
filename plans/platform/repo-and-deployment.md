@@ -161,7 +161,7 @@ scripts/Start-Dev.ps1  scripts/Start-E2E.ps1
 | | `CommunityToolkit.VectorData.PgVector`, `Microsoft.Extensions.VectorData.Abstractions` | 1.0.2 / 10.11.0 | **not added**: retrieval is hand-written SQL (knowledge design §6) |
 | AI | `Microsoft.Extensions.AI`, `Microsoft.Extensions.AI.OpenAI` | 10.11.0 | NuGet-checked (`.OpenAI` 10.11.0 released 2026-10-14 with the abstractions, Stage 0); **not used by the chat role**, whose gateway calls are a raw `HttpClient` + copied `SseReader` (response headers must be read before the body, chat design §2.1) |
 | | `Microsoft.ML.Tokenizers` | 2.0.1 | NuGet-checked (chunk sizing) |
-| Ingestion | `AngleSharp` 1.8.6, `SmartReader` 0.11.1 | as listed | NuGet-checked (the worker parses HTML, text, Markdown and CSV only; every PDF goes to the parser) |
+| Ingestion | `AngleSharp` (1.10.3 in `Directory.Packages.props`), `SmartReader` 0.11.1 (**not added**: the fallback extractor is not built, processing §21) | as listed | NuGet-checked (the worker parses HTML, text, Markdown and CSV only; every PDF goes to the parser) |
 | | `Microsoft.Graph` | 6.9.0 | NuGet-checked; P2, worker only (SharePoint). The P2 Graph member-group lookup needs no SDK: the admin copies the gateway's plain `GraphTokenClient` + `HttpClient` (identity design §2.4, gateway design §4.4) |
 | | `Microsoft.Playwright` | same as renderer image (§5.4) | the worker's renderer client; exact match with the server required (to-verify #29) |
 | | `Cronos` | 0.13.0 (2026-04-29; syntax and DST tests with the scheduler) | schedules (worker) |

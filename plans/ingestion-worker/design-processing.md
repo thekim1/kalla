@@ -1,6 +1,6 @@
 # Ingestion worker, part C: processing stages, personal data, embedding and evaluation
 
-Detail step 6c of the Källa design. Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §4–§7 (archived: history, not binding; this design
+Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §4–§7 (archived: history, not binding; this design
 states every rule, the plan's answered items in §20) and
 specifies the internals of the stages [`design-engine.md`](design-engine.md) (6a) marks "6c" in its stage table
 (`design-engine.md` §6). It consumes, without redesigning: the stage values (6a §2.2), the stage interface and results
@@ -512,7 +512,7 @@ per request, deadline 15 s; errors as parser §7.5). Worker-side rules:
   `ORG/PRS`, `PRS/WRK`, `LOC/PRS` → `person_ambiguous`, not counted in P1 (measured on fixtures).
 - Units are batched up to the limits; a set needing more requests sends them sequentially in the same job.
 - Model, process and licence are the parser's (parser design §10.1, §12): `KBLab/bert-base-swedish-cased-ner` at the
-  pinned revision in one warm `ner-0` process; model MIT, SUC 3.0 terms for derived weights *to verify* (§21).
+  pinned revision in one warm `ner-0` process; model MIT; the MIT licence is taken as covering the weights (user, 2026-11-21; to-verify 110).
   KBLab marks the model experimental (answered 18): P1 measures it (§17).
 
 Swedish pitfalls (fixtures in §17):
