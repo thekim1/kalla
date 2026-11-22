@@ -75,7 +75,7 @@ table says "user".
 P2 wave 1 (*P2 Broaden* below) is the code work. Beside it, what is open without an input:
 
 - **Checks before go-live:** done 2026-11-16 (results in [`work/results-main.md`](work/results-main.md)) but for
-  row 96, the NVDA pass, which needs a Windows screen reader; row 110 needs no question to KB (user, 2026-11-21). The
+  row 96, the NVDA pass, which the user's team runs on Windows with [`work/nvda-pass.md`](work/nvda-pass.md) (user, 2026-11-22); row 110 needs no question to KB (user, 2026-11-21). The
   live block's rows are listed in [`to-verify.md`](to-verify.md) under each step.
 - **Step 3 starts on working tools:** the grading tools ran end to end on a FakeGateway stack (2026-11-15: `answer` →
   graded CSV → `totals`, which exits 1 on a failing gate and 2 on an inconsistent file). The pilot assistant needs a
@@ -88,9 +88,10 @@ P2 wave 1 (*P2 Broaden* below) is the code work. Beside it, what is open without
 - **Not tried anywhere yet:** Portainer's own *Update the stack* on an upgraded stack (the VM's move to `v0.9.1` is
   the first), and both setup wizards completed against a real provider in one stack. CI boots and upgrades the stack
   with Compose.
-- **Support chatbot F10 and F7** (cost per outcome, the content-gap report;
-  [`proposals/support-chatbot-features.md`](proposals/support-chatbot-features.md)): picked by the user on 2026-11-21;
-  designed (Decisions "Cost per outcome", "Content-gap report") and queued as stream b's B-61 and B-62.
+- **Support chatbot F10, F7 and F6** (cost per outcome, the content-gap report, downvotes per document;
+  [`proposals/support-chatbot-features.md`](proposals/support-chatbot-features.md)): F10 and F7 picked by the user on
+  2026-11-21, F6 on 2026-11-22; designed (Decisions "Cost per outcome", "Content-gap report", "Downvotes per document")
+  and queued as stream b's B-61, B-62 and B-66.
 - **The topics editor** (#929 steps 2 to 4; [`proposals/topics-editor.md`](proposals/topics-editor.md)): adopted by
   the user on 2026-11-22 (Decisions "Topics editor"); designed in admin §4.5, §5.5.2 and processing §7 and queued as
   A-42 (one matcher in `Kalla.Pipelines`), then B-64 (pick from the sections found) and B-65 (the form and the match
@@ -135,6 +136,14 @@ nearly done.
 Each later item needs the earlier ones only where its row says so in the queue. The live check of wave 1 is the test
 chatbot's assistant (T4) once it exists; until then FakeGateway and the demo seed.
 
+**Wave 2: assistants, the rest** (user, 2026-11-22). Designed; no input needed:
+
+| Item | What | Design |
+|---|---|---|
+| B-67 | The drawn Map beside the table | admin §5.5.6 |
+| B-68 | Unused assistants: the attention item with *Archive* and *Keep* | admin §4.5 (`…/keep`), §5.5.1; data-model `Assistants.UnusedKeptUntil` |
+| B-69 | The evaluation trend chart (`TimeSeriesChart`, copied from the gateway) | admin §7.1 |
+
 **Later waves: themes that need no input** (the user picks the order):
 
 - **Tools and MCP:** skills with know-how and tools, the in-process tool hub (`hosted` servers, read-only tools), the
@@ -145,7 +154,6 @@ chatbot's assistant (T4) once it exists; until then FakeGateway and the demo see
   parse-profile proposals, a crawl frontier shared between sources, publish plans from effect tags, adaptive
   embedding concurrency; the renderer's replay check and path rules (after measurement) and, for external
   single-page apps, a per-page burst of the page's own subrequests and an asset cache kept across runs (A-13).
-- **Assistants, the rest:** the drawn Map, unused-assistant attention items, the `TimeSeriesChart` trend.
 - **Chat:** a public widget.
 - **Operations:** flake-hunt, scale and fuzz workflows.
 

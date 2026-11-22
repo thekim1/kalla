@@ -1191,7 +1191,7 @@ pilot.
 conversations (`ClientId`, `SubjectId`), upsert `chat."Feedback"` by (`MessageId`, `Source = api`), encrypt `reason` +
 `comment` as one JSON plaintext under the rated message's bucket key (§12.3; data-model §7: comments are personal
 data, same retention; in P1, mode `none`, a comment is refused with `comment_not_stored`), store `ReasonCategory` in plaintext (the reason if it is one of the fixed Open WebUI keys,
-`RateComment.svelte:17-35`, or one of the API reasons of §3.5, else `other`; admin design §8.1), adjust `AssistantDailyTotals.ThumbsUp/Down` by the delta.
+`RateComment.svelte:17-35`, or one of the API reasons of §3.5, else `other`; admin design §8.1), adjust `AssistantDailyTotals.ThumbsUp/Down` by the delta, and `DocumentDailyFeedback` by the same delta for each document the message cited (`MessageSources.Used`, one count per document however many of its chunks were cited; Decisions "Downvotes per document"), in the same transaction.
 
 ### 14.2 Open WebUI import job (`FeedbackImporter`)
 
@@ -1204,7 +1204,7 @@ data, same retention; in P1, mode `none`, a comment is refused with `comment_not
 | Fields used | `id`, `user_id`, `updated_at`, `data.rating` (1/−1), `data.details.rating` (1–10, optional), `data.reason`, `data.comment`, `data.model_id`, `meta.chat_id`, `meta.message_id` (`ow/models/feedbacks.py:77-90`, front end `ResponseMessage.svelte:506-524`) |
 | Discarded at once | `user.email`, `user.name` and every other user field of the response, `data.tags`, `meta.base_models`; never logged |
 | Mapping | `data.model_id` must be one of our assistant slugs (else skipped: not ours); conversation by (client, `SubjectId = user_id`, `ExternalChatId = meta.chat_id`, assistant of `model_id`); message by `Messages.ExternalMessageId = meta.message_id` (= the assistant message id we received as `X-Rag-Owui-Message-Id`, `ow/main.py:1842-1847`) |
-| Upsert | `chat."Feedback"` by (`Source = owui-import`, `ExternalId = id`): rating, score, `ReasonCategory` (plaintext, as §14.1), `reason` + `comment` encrypted under the message's bucket key, `UpdatedAt`; daily totals adjusted by the delta (a changed rating moves one count) |
+| Upsert | `chat."Feedback"` by (`Source = owui-import`, `ExternalId = id`): rating, score, `ReasonCategory` (plaintext, as §14.1), `reason` + `comment` encrypted under the message's bucket key, `UpdatedAt`; daily totals and `DocumentDailyFeedback` adjusted by the delta as §14.1 (a changed rating moves one count) |
 | Privacy | comments are personal data: encrypted, conversation retention, readable only through the review path (§14.4); the importer runs with the API's keys and grants (chat writer). In P1 every conversation is in mode `none`, so the import stores ratings only and drops `reason` + `comment` (§14.3) |
 
 ### 14.3 When mapping fails

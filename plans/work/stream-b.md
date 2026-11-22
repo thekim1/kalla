@@ -178,6 +178,57 @@ Beside P2 wave 1: take B-64 when a wave item waits, or after it. `proposals/topi
 - **Waits on:** B-64.
 - **Read:** Decisions "Topics editor"; admin §4.5, §5.5.2, §5.8; processing §7.
 
+## Support chatbot F6 (user, 2026-11-22)
+
+### [ ] B-66 Downvotes per document (F6)
+- **Do:** Decisions "Downvotes per document": the table `chat."DocumentDailyFeedback"` (data-model §2.3) in a migration
+  of its own; its delta in `POST /v1/feedback` and the Open WebUI importer (chat §14.1, §14.2: one count per cited
+  document, in the rating's transaction, never below 0); admin §4.5's `GET /api/collections/{id}/feedback` (+ CSV);
+  the Feedback page's `documentId` filter (§8.1); the *Feedback on documents* card on the knowledge base's Overview
+  (§8.8, §5.5.2). The attention kind (§5.5.1) goes into B-59's list when that has landed, else in B-59.
+- **Paths:** `src/Kalla.Api/**`, `src/Kalla.AdminApi/**`, `src/Kalla.Infrastructure/**` (b's), `src/Kalla.Domain/**`
+  (b's), `src/Kalla.MigrationService/` (not `Templates/**`), `src/admin-ui/**` (not `src/platform/**`), `tests/**`.
+- **Done when:** API tests: a downvote on an answer citing two documents counts each once (also with two chunks of one);
+  a changed rating moves one count; an imported rating counts like an API one; the endpoint's scope (owning department,
+  not a shared one) and CSV; Vitest for the card and the filter; shown in a browser on the demo seed with ratings sent
+  through `POST /v1/feedback`.
+- **Waits on:** nothing (B-59 only for the attention kind).
+- **Read:** Decisions "Downvotes per document"; chat §14; data-model §2.3; admin §4.5, §5.5.1, §5.5.2, §8.1, §8.8.
+
+## P2 wave 2: assistants, the rest (user, 2026-11-22; Decisions "P2 starts before go-live")
+
+After wave 1, or beside it when a wave-1 item waits.
+
+### [ ] B-67 The drawn Map
+- **Do:** admin §5.5.6's drawing beside the existing table (**Table** / **Drawing**): one column per stage, plain SVG
+  lines next to lists that carry the same relations as text, selecting an item highlights what it feeds and what feeds
+  it; from the same `GET /api/organisation/departments/{id}/map` (sources added to its rows if missing).
+- **Paths:** as B-54.
+- **Done when:** Vitest for the layout and the text relations; the accessibility spec over the drawing in three themes;
+  shown in a browser on the demo seed.
+- **Waits on:** nothing.
+- **Read:** admin §5.5.6, §10.1, §10.2 (no graph library).
+
+### [ ] B-68 Unused assistants: *Archive* and *Keep*
+- **Do:** admin §5.5.1's unused-assistant attention item (published ≥ 90 days ago, no message in 90 days in
+  `AssistantDailyTotals`) with **Archive** (`…/archive`) and **Keep** (`POST /api/assistants/{id}/keep`, the column
+  `Assistants.UnusedKeptUntil` in a migration of its own, audited `assistant.keep`).
+- **Paths:** as B-54.
+- **Done when:** API tests: raised, gone after Archive, not raised while kept, raised again after 90 days; shown in a
+  browser.
+- **Waits on:** B-59 (the attention list).
+- **Read:** admin §4.5, §5.5.1; data-model `Assistants`.
+
+### [ ] B-69 The evaluation trend chart
+- **Do:** copy the gateway's `components/usage/TimeSeriesChart.vue` (and its spec) unchanged; on Test questions and
+  quality (admin §7.1) the trend of recall@10 and MRR over the latest 30 runs as a chart, the `human` layer first, with
+  the table of the same runs under it as its text view.
+- **Paths:** as B-54.
+- **Done when:** Vitest for the chart's data mapping; the accessibility spec over the page in three themes; shown in a
+  browser on the demo seed with several evaluation runs.
+- **Waits on:** nothing.
+- **Read:** admin §7.1, §10.1; the gateway's `TimeSeriesChart.vue`.
+
 ## Live (the live block, see the roadmap)
 
 

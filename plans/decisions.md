@@ -68,9 +68,11 @@ roadmap's critical path) go on in parallel as their inputs arrive, and their liv
 phase-start rule binds go-live, not the start of P2 code. P2 runs in waves: wave 1 is **assistants and answer
 quality** (assistant templates, copy, version diff, per-assistant test questions, the nightly answer run, Home's
 attention items); the themes that wait on people (gateway release 2, Entra ID, SharePoint access, stored chat content
-under A1, ask-a-file workspaces, multi-host) are listed with their inputs. Detail: `roadmap.md` "P2 Broaden".
+under A1, ask-a-file workspaces, multi-host) are listed with their inputs. Wave 2 is **assistants, the rest**: the
+drawn Map, the unused-assistant attention item with *Archive* and *Keep*, and the evaluation trend chart. Detail:
+`roadmap.md` "P2 Broaden".
 
-*From:* decided by user, 2026-11-20 (the first wave picked from four themes).
+*From:* decided by user, 2026-11-20 (the first wave picked from four themes); wave 2 by user, 2026-11-22.
 
 ### Two streams
 
@@ -902,6 +904,20 @@ link, a document is always there. Detail: `chat-api/design.md` §12.1, §12.2; `
 `admin/design.md` §8.7.
 
 *From:* support chatbot proposal F7; picked by user, 2026-11-21.
+
+### Downvotes per document
+
+Every rated answer adds its rating to a daily count per **cited document** (`chat."DocumentDailyFeedback"`): a
+thumbs-down or thumbs-up from `POST /v1/feedback` or the Open WebUI import counts once for each document the answer
+cited (`MessageSources.Used`), adjusted by the delta when a rating changes. The count outlives conversations, so it
+works in history mode `none` and after retention. No question, answer or comment is stored with it. The knowledge
+base's Overview shows the documents most often cited in downvoted answers (the downvotes, the upvotes, the assistants),
+with a CSV export, for the owning department, over every assistant that cites them; the Feedback page filters by
+document. A document cited in 3 or more downvoted answers in 7 days is an attention item on Home. A downvote says the
+document was cited in a bad answer, not that the document is wrong: the page says so. Detail: `chat-api/design.md`
+§14.1, §14.2; `platform/data-model.md` §2.3; `admin/design.md` §5.5.1, §8.1, §8.8.
+
+*From:* support chatbot proposal F6; picked by user, 2026-11-22.
 
 ### Chat rate limit per key
 

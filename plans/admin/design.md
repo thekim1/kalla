@@ -390,6 +390,7 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 | `GET /api/collections/{id}/topics` | Read (also a department the collection is shared with) | the tags on the collection's live chunks with document counts; for the owning department also the path rules that set each one (`sourceId`, `sourceName`, `on`, `match`), `rules: null` for a department it is only shared with (path rules are source settings, §3.2); read from `content`, no text. For the owning department, a tag that a published rule sets while the source's `reprocess` sync is queued or running, and which no live chunk carries yet, is listed with `pending: true` and no count (§5.5.2) |
 | `GET /api/collections/{id}/topic-suggestions?sourceId=&under=` | Read, owning department only (404 for a department it is only shared with) | Decisions "Topics editor": per source (or the one named), the sections of its live documents: the first path segment of `Documents.Url` (website) or the first folder of `DisplayName` (upload); with `under=/bygga-bo-och-miljo/` the next level under that one section only. Each: `path`, `documents`, `title` (the live document whose path is the section itself, if crawled), `suggestedTag` (the segment, lower case, cut to the tag format of processing §7) and `coveredBy` (the existing topics whose `path` rules match the section path, through the shared matcher of processing §7). Sections under 5 documents are left out. A grouping query over `content."Documents"` from the source ids in scope (§4.8); no URL or display name is logged |
 | `POST /api/collections/{id}/topic-rules/preview` `{ sourceId, rule }` | EditPipelines, owning department only | one rule of the processing §7 shape against the source's live documents, through the shared matcher: `{ matched, total, sample: [{ documentId, title, url \| displayName }] }` (≤ 10). `title-regex` matches the stored title; `mediaType` the document's type. Validation as V24 for the one rule (an invalid regex is 400). Nothing is saved |
+| `GET /api/collections/{id}/feedback` `?from=&to=` (+ `&format=csv`) | Read, owning department only | Decisions "Downvotes per document": per document of the collection, most downvotes first, at most 200: `documentId`, `title` (a deleted one "(deleted)"), `thumbsDown`, `thumbsUp`, `assistants` (how many assistants' rated answers cited it); summed from `chat."DocumentDailyFeedback"` over every assistant (§8.8) |
 | `PUT /api/collections/{id}/retrieval-settings` | Edit | saved directly within the V16 ranges; enqueues an advisory evaluation run (§4.7) whose report is compared with the previous run (none when the collection has no evaluation set) |
 | `POST /api/collections/{id}/test-retrieval` | Edit, EditPipelines | retrieval-only test panel (§4.9), incl. unpublished |
 | `POST /api/collections/{id}/publish` | Manage | sets `PublishedAt`; the latest evaluation report (if any) is shown before confirm; never blocked |
@@ -478,6 +479,7 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 | `POST /api/assistants/{id}/versions/{n}/restore` `{ version, confirmGeneralKnowledge? }` | Edit | one click: a **new** version with version n's settings (`RestoredFromVersionId`), published at once exactly as publish; an open draft is kept (its base is now older); refused with the list when a link no longer resolves (V34); restoring the draft or the published version is refused (409 `version_not_restorable`) |
 | `POST /api/assistants/{id}/copy` `{ name, slug, departmentId, ownerTeamId }` (P2, weakness review §1) | Read (source) + Edit (target department) | new assistant with only a draft = the source's published version (its draft if never published); test questions copied; audiences, keys, versions and statistics not copied; V11/V12 for the target department as warnings; audited `assistant.copy` |
 | `POST /api/assistants/{id}/archive`, `/unarchive` | Edit | `State = archived` hides the assistant from every client (identity §4.3 step 5) and keeps versions, audiences and statistics; unarchive returns `State = active` with the same published version |
+| `POST /api/assistants/{id}/keep` `{ version }` | Edit | **Keep** on the unused-assistant attention item (§5.5.1): sets `UnusedKeptUntil` to now + 90 days; audited `assistant.keep`; 409 on a stale `version` |
 | `GET/POST/PUT/DELETE /api/assistants/{id}/test-questions[/{qid}]` (P2, weakness review §1) | Read / Edit | V33; the expected document is picked by title search in the draft's collections |
 | `POST /api/assistants/{id}/test-runs` `{ target: draft \| published }`; `GET /api/assistants/{id}/test-runs` (P2, weakness review §1) | Edit / Read | §7.4: on demand (the publish run starts by itself); one running run per assistant (409 `test_run_running`); results through `GET /api/evaluation-runs/{id}/results` |
 | `PUT /api/assistants/{id}/audiences` | Manage | P1 kind `client` only; V7–V9; not versioned |
@@ -1106,7 +1108,8 @@ the mirror (§4.10) and, from gateway phase 3, the key's budgets (`exhausted`, �
 `402` or key refusal seen by chat or the worker shows in the turn outcomes (`unavailable`) and the run's reason
 (`gateway.budget_exhausted`, `gateway.key_unavailable`, engine §7.3); template versions without a supporting worker; from P2 (weakness review §1): site-profile proposals (platform
 admins) and published assistants without a message in 90 days (`AssistantDailyTotals`; published ≥ 90 days ago), with
-**Archive** and **Keep** (dismissed for 90 days) (simplification pass §15); a test report on an assistant's new
+**Archive** (`…/archive`) and **Keep** (`…/keep`: not raised again while `UnusedKeptUntil` is ahead, 90 days) (simplification pass §15); a document cited in 3 or more downvoted answers in the last 7 days
+(`DocumentDailyFeedback`, §8.8), for the knowledge base's owning department, linked to its *Feedback on documents* card; a test report on an assistant's new
 version with more questions not as expected than the previous version's (P2); P2 drift and pending approvals.
 
 #### 5.5.2 Knowledge base
@@ -1218,7 +1221,7 @@ assigned keys of the knowledge base's department; indexing, re-embedding and eva
 *State* card shows the key's name, its read-only settings, its status (an unusable key: "Fetching is paused: the
 gateway key is disabled", with the reason) and from gateway phase 3 its budget status, with a link to the key in the
 gateway; without a key it says "Charged to the platform: choose a gateway key". Below it the Overview has the *Cost*
-card of §8.6 (indexing and evaluation, last 30 days), for the owning department only. A level change is saved with the rest; a refusal
+card of §8.6 (indexing and evaluation, last 30 days) and the *Feedback on documents* card of §8.8, both for the owning department only. A level change is saved with the rest; a refusal
 (`collection_level_conflict`: sources above the new level; `assistant_below_collection`: published assistants below
 it) is shown in the drawer after **Save** with the affected objects by name.
 
@@ -1368,7 +1371,7 @@ Import from Open WebUI: Last run 10:45 · 2 could not be matched to an answer in
 
 #### 5.5.6 Map (department map; P1b as a table)
 
-P1b builds the **table**; the drawing below follows later. The table has one row per department → knowledge base →
+P1b builds the **table**; the drawing below is P2 wave 2 (B-67). The table has one row per department → knowledge base →
 assistant → audience path, with the responsible contact of each, and filters for department and object. Archived
 assistants are left out (the map shows who uses what now, #374):
 
@@ -1831,8 +1834,9 @@ demonstrably need custom flows (§16).
   human questions (expected documents picked by title search, at most 10); a generated question is changed by saving it as a new human question. `edit-eval-question` changes only the `human` layer
   (`question_not_human` otherwise), so a generated question is not retired by hand.
 - Reports: latest runs (after publish, nightly, after a retrieval-settings change, on demand **Run evaluation**), each
-  as the §7.2 card; the trend of recall@10 and MRR is a table of the latest 10 runs (the `TimeSeriesChart` view is
-  P2); per-question drill-down (rank per run).
+  as the §7.2 card; the trend of recall@10 and MRR over the latest 30 runs is a chart (`components/usage/TimeSeriesChart.vue`,
+  copied from the gateway; one line per metric and layer, the `human` layer first) with the table of the same runs
+  under it as its text view (§10.1; P2 wave 2); per-question drill-down (rank per run).
 - **Headline metric** ([weakness review §2](../archive/passes/weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)): the card and the trend lead with the `human` layer (the
   pilot gold set: recall@10 on answerable questions, false not-found, unanswerable questions answered "not found");
   the generated layer follows as a regression signal only.
@@ -1920,7 +1924,8 @@ review, `sensitive` flow, access log) are built when A1 allows stored content.
   `wrong_sources`, `not_relevant`, `other`), else `other` (the column has no CHECK, so a reason keeps its own category); the free text stays in the ciphertext (in P1 it is not stored, weakness review §4). English
   labels in `labels.ts`.
 - `ReviewState` (`open`/`reviewed`/`dismissed`) set by `FeedbackComments` holders ("Mark as handled"). Filters:
-  period, assistant, rating, outcome, has comment, state. Totals from `AssistantDailyTotals`.
+  period, assistant, rating, outcome, has comment, state, cited document (`documentId`: the rows whose message cited it;
+  the link from §8.8). Totals from `AssistantDailyTotals`.
 - Import health per Open WebUI client from `FeedbackImportState` (last run, outcome, unmapped) (chat §14.2–§14.3).
 
 ### 8.2 Comment reveal (`FeedbackComments`; when A1 allows stored content)
@@ -2033,6 +2038,23 @@ each `not-found` and `answered-general` turn.
   answered from general knowledge).", a table of the 20 nearest documents (title linked to the document in its
   knowledge base for those who may open it, knowledge base, the two counts) with *Show all* and **Download CSV**,
   and an empty state when the period has no such turn. Every label in `labels.ts`, every sentence in `messages.ts`.
+
+### 8.8 Feedback on documents (Decisions "Downvotes per document")
+
+Which documents the downvoted answers cited, as counts: read from `chat."DocumentDailyFeedback"` (data-model §2.3),
+written with every rating (chat §14.1, §14.2). **No content**: no question, answer or comment.
+
+- **API:** `GET /api/collections/{id}/feedback` (§4.5). Periods as §8.6 (default 30 days, at most 400). Scope: the
+  collection's owning department, summed over every assistant that cites it, its own and other departments'
+  (assistants are counted, never named across departments). A department the collection is shared with doesn't see it.
+- **CSV**: `;`, English headers `document;thumbs_down;thumbs_up;assistants`. Not audited: no content.
+- **UI**: on the knowledge base's Overview (§5.5.2), for the owning department, a *Feedback on documents* card: the
+  period picker, the 10 documents with the most downvotes (title linked to the document, the downvotes, the upvotes),
+  *Show all* and **Download CSV**, and under each title **Show the ratings**, which opens the Feedback page (§8.1)
+  filtered by that document (the caller's own assistants' rows). The card says: "A document counts each time an answer
+  that cited it was rated. A downvote may be about the answer, not the document." Empty state: "No rated answer cited
+  this knowledge base in this period." Every label in `labels.ts`, every sentence in `messages.ts`.
+- **Attention item** (§5.5.1): a document with 3 or more downvotes in the last 7 days.
 
 ## 9. Audit log and security-relevant views
 
