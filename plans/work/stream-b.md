@@ -243,6 +243,16 @@ After wave 1, or beside it when a wave-1 item waits.
 - **Waits on:** #935 (the next-run row).
 - **Read:** admin §3 (`Edit` row), §4 (the sources table: pause/resume), §5.5.3.
 
+### [ ] B-71 The admin's next run from the shared schedule rule
+- **Do:** `Kalla.AdminApi`'s `scheduleInForce` and `nextRunAt` (#935) call A-43's rule in `Kalla.Pipelines` instead of
+  repeating it; `CronSchedules` keeps only the save-time validation (`IsValid`, `Invalid`), and the AdminApi's own
+  Cronos reference goes if nothing else needs it. No behaviour change.
+- **Paths:** `src/Kalla.AdminApi/**`, `tests/Kalla.AdminApi.Tests/**`.
+- **Done when:** `Kalla.AdminApi.Tests` green, `SourceEndpointsTests` unchanged; the tests of the rule itself live in
+  `Kalla.Pipelines.Tests` (A-43), not here.
+- **Waits on:** A-43.
+- **Read:** engine §9.6; #935.
+
 ## Live (the live block, see the roadmap)
 
 
