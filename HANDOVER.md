@@ -220,8 +220,8 @@ On `~/research/rag`, as the main session. Session 53's work is in this file's hi
   (the topics editor), B-67 to B-69 (P2 wave 2), B-42 to B-46 (the gateway phases' live checks) and its live items.
   Main: M-4.
 - **Open issues that matter:** #781 and #921 (watch), #920 (the VM's upgrade, `thekim1`'s), #929 (topics; closes with
-  B-65), #667 (M-16's issue: the work is done, `thekim1`'s to close), #333, #511, #580 and #550. In Fors: #125 (open,
-  the user's to merge), proposals #108 and #109, #99, #91, and a flaky test #124; no open pull requests.
+  B-65), #667 (M-16's issue: the work is done, `thekim1`'s to close), #333, #511, #580 and #550. In Fors: the open pull
+  request #125 (the user's to merge), proposals #108 and #109, #99, #91, and a flaky test #124.
 - **Dependabot works:** grouped pull requests; `.github/dependabot.yml`'s header lists where a pin is repeated.
   Playwright is bumped by hand, in the package list, the renderer image and its lockfile together (#907).
 - **The user's machine (`~/research/rag`):** the main clone on `main`, and a worktree per open `main-session/` pull
