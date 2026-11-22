@@ -155,7 +155,7 @@ a queue item when a stream or the main session picks it up.
 | # | Item | Where | Phase | How | Status |
 |---|---|---|---|---|---|
 | 95 | Browser PDF viewers with `CSP default-src 'none'` and `#page=n` on download URLs | `knowledge-api/design.md` §3.5, §10.4 | P1 | test (Edge, Chrome, Firefox) | done 2026-11-16; Edge by inference from Chromium (results-main) |
-| 96 | DOS-lagen scope for an intranet admin app and its tillgänglighetsredogörelse | `admin/design.md` §10.1 | P1 | ask (municipal web/accessibility coordinator) | open (scope and statement accepted by the user 2026-11-06, B-4; the NVDA pass is still to run; results-b) |
+| 96 | DOS-lagen scope for an intranet admin app and its tillgänglighetsredogörelse | `admin/design.md` §10.1 | P1 | ask (municipal web/accessibility coordinator) | open (scope and statement accepted by the user 2026-11-06, B-4; the NVDA pass is still to run, by the user's team on Windows with `work/nvda-pass.md`, user 2026-11-22; results-main) |
 
 ### Licences and external data
 
