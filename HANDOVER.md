@@ -49,28 +49,35 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
   its pull request what you are about to write; review its pull requests as comments (claims checked against the code).
 - **A decision for the user is asked as four alternatives with one recommendation** (the question tool).
 
-**Open when this was written** (2026-11-22, afternoon UTC): `thekim1`'s #935 (a schedule per source in the admin UI;
-one commit, unchanged since the main session's review comment) and this file's pull request. No issue moved during
-session 54; #905 (the repository variables) and #920 (the VM) have no reply. In order:
+**Open when this was written** (2026-11-22, 18:45 UTC): `thekim1`'s #944 (the TLS proxy's header buffers) and #935
+(a schedule per source in the admin UI), Fors #125 (the same proxy fix for the gateway), and this file's pull request.
+No issue moved during session 54; #905 (the repository variables) and #920 (the VM) have no reply. In order:
 
-1. **#935, a source's schedule** (stream b): reviewed as a comment (the rule matches the worker's `SyncScheduler`; a
+1. **#944 and Fors #125, the 502 after sign-in** (`thekim1`, a reported fault): the sign-in callback's cookies outgrow
+   nginx's 4 KB header buffer when old cookies are still in the browser, so users got `502 Bad Gateway` after an
+   update until they cleared cookies. Both raise the buffers to 32 KB. Reviewed as comments (2026-11-22): #944 is right
+   for the stack proxy and a proxy of your own, but its Kubernetes example (ingress-nginx, `proxy-buffer-size` also 4k)
+   lacks `nginx.ingress.kubernetes.io/proxy-buffer-size: 32k` on the `kalla-admin` Ingress, which Fors #125 has; asked
+   for it and a Kubernetes sentence in the upgrade note. `thekim1` merges #944 once that's in. **Fors #125 is the user's
+   to merge** (green, nothing to change): `gh pr review 125 -R thekim1/fors --approve`, then merge.
+2. **#935, a source's schedule** (stream b): reviewed as a comment (the rule matches the worker's `SyncScheduler`; a
    browser check asked; the rule could live once in `Kalla.Pipelines`). `thekim1` merges it.
-2. **The newly queued work is the streams'** (session 54): A-42, then B-64 and B-65 (the topics editor, Decisions
+3. **The newly queued work is the streams'** (session 54): A-42, then B-64 and B-65 (the topics editor, Decisions
    "Topics editor"); B-66 (support-chatbot F6, Decisions "Downvotes per document"); B-67 to B-69 (P2 wave 2:
    the drawn Map, *Archive* and *Keep* on unused assistants, the evaluation trend chart). Review their pull requests
    as comments against those designs; #929 closes with B-65.
-3. **#925's steps 2 to 4** (personal-data verdicts, *reject*, the false-positive summary): the user answered the four
+4. **#925's steps 2 to 4** (personal-data verdicts, *reject*, the false-positive summary): the user answered the four
    questions (decisions log, 2026-11-21); the Decisions entry and the design changes are `thekim1`'s session's (said on
    #925). Step 1 is stream b's B-63.
-4. **opencv 5.1 from 2026-11-25** (*Watch*): try `opencv-python-headless` 5.1.0.95 in the parser once its uv cutoff
+5. **opencv 5.1 from 2026-11-25** (*Watch*): try `opencv-python-headless` 5.1.0.95 in the parser once its uv cutoff
    lets it in; it may retire the eleven FFmpeg exceptions before 2026-12-17.
-5. **A full read of design shares 2 to 4** once agents can run again (the usage limit resets 2026-11-26 19:00,
+6. **A full read of design shares 2 to 4** once agents can run again (the usage limit resets 2026-11-26 19:00,
    Europe/Stockholm). Session 53 scanned them for known kinds of staleness; session 54 settled the three things left
    open (#941). Not read at all: `plans/to-verify.md` beyond the rows #941 touched, the open queue items,
    `postponed-decisions.md`, `plans/cases/support-assistant/`, `plans/gold-set/README.md`, `docs/` (stream a's).
-6. **The VM's upgrade is `thekim1`'s** (#920): 0.5.0 straight to 0.9.2 (`docs/portainer.md`, *Upgrade*). A step that did
+7. **The VM's upgrade is `thekim1`'s** (#920): 0.5.0 straight to 0.9.2 (`docs/portainer.md`, *Upgrade*). A step that did
    not go as the guide says is a guide fix; the roadmap's T1 row follows the result. No report yet.
-7. **Repository variables:** the workflows read `vars.KALLA_TEST_HOST_RUNNER`, `vars.KALLA_TEST_HOST_DEPLOY_ENV`,
+8. **Repository variables:** the workflows read `vars.KALLA_TEST_HOST_RUNNER`, `vars.KALLA_TEST_HOST_DEPLOY_ENV`,
    `vars.KALLA_R1_*` and `secrets.KALLA_R1_API_KEY`, and none exist; `thekim1` was asked on #905 (2026-11-21), no
    answer yet.
 
@@ -122,7 +129,8 @@ On `~/research/rag`, as the main session. Session 53's work is in this file's hi
   keys as built; the two To-verify sections name their rows and the closed rows' results). **#942** (Decisions
   "Downvotes per document": `chat."DocumentDailyFeedback"`, chat §14, admin §8.8, B-66; wave 2 as B-67 to B-69 with
   `Assistants.UnusedKeptUntil` and `…/keep`; `plans/work/nvda-pass.md`). All three approved as `Crotalus` on the user's
-  word and merged. #929 told where its steps 2 to 4 went.
+  word and merged; #943 was the first version of this file. #929 told where its steps 2 to 4 went; #944 and Fors #125
+  reviewed as comments.
 - **This machine:** the `ume-rag-*` and `ume.rag.apphost-*` volumes, the `ume-rag-*` user secrets and the ignored
   `src/Ume.Rag.*` and `tests/Ume.Rag.*` output removed; only the `kalla-*` copies remain. Worktrees cleaned; the merged
   `main-session/` branches still exist on GitHub.
@@ -212,8 +220,8 @@ On `~/research/rag`, as the main session. Session 53's work is in this file's hi
   (the topics editor), B-67 to B-69 (P2 wave 2), B-42 to B-46 (the gateway phases' live checks) and its live items.
   Main: M-4.
 - **Open issues that matter:** #781 and #921 (watch), #920 (the VM's upgrade, `thekim1`'s), #929 (topics; closes with
-  B-65), #667 (M-16's issue: the work is done, `thekim1`'s to close), #333, #511, #580 and #550. In Fors: proposals
-  #108 and #109, #99, #91, and a flaky test #124; no open pull requests.
+  B-65), #667 (M-16's issue: the work is done, `thekim1`'s to close), #333, #511, #580 and #550. In Fors: #125 (open,
+  the user's to merge), proposals #108 and #109, #99, #91, and a flaky test #124; no open pull requests.
 - **Dependabot works:** grouped pull requests; `.github/dependabot.yml`'s header lists where a pin is repeated.
   Playwright is bumped by hand, in the package list, the renderer image and its lockfile together (#907).
 - **The user's machine (`~/research/rag`):** the main clone on `main`, and a worktree per open `main-session/` pull
