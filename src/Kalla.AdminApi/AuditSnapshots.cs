@@ -15,6 +15,7 @@ public static class AuditEntityTypes
     public const string EvaluationQuestion = "evaluationquestion";
     public const string SiteProfile = "siteprofile";
     public const string Assistant = "assistant";
+    public const string AssistantTemplate = "assistanttemplate";
     public const string Source = "source";
     public const string Run = "run";
     public const string Document = "document";
@@ -61,7 +62,7 @@ public static class AuditSnapshots
     [
         typeof(ClientAudit), typeof(NetworkSettings), typeof(RetentionSettings), typeof(DeletionGuardSettings), typeof(EvaluationSettings),
         typeof(JsonSectionSettings), typeof(PiiSettings), typeof(WorkerSettings), typeof(DataProtectionDto),
-        typeof(CollectionAudit), typeof(SourceAudit), typeof(KeyAudit), typeof(AssistantAudit), typeof(DraftAudit),
+        typeof(CollectionAudit), typeof(SourceAudit), typeof(KeyAudit), typeof(AssistantAudit), typeof(DraftAudit), typeof(AssistantTemplateAudit),
         typeof(SignInAudit), typeof(SignInCredentialAudit),
     ];
 }

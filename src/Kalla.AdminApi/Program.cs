@@ -174,6 +174,7 @@ api.MapFeedback();
 api.MapEvaluation();
 api.MapSiteProfiles();
 api.MapAssistants();
+api.MapAssistantTemplates();
 api.MapSources();
 api.MapRuns();
 api.MapPiiReport();

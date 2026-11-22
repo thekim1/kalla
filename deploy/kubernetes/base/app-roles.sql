@@ -70,6 +70,9 @@ GRANT SELECT ON config."Assistants", config."AssistantAudiences", config."Publis
 GRANT SELECT ON config."GatewayModels" TO kalla_worker;
 GRANT SELECT ("AssistantId", "CollectionLinks") ON config."PublishedAssistantVersions" TO kalla_worker;
 GRANT SELECT ("Id", "State") ON config."Assistants" TO kalla_worker;
+-- Assistant templates (P2, data-model AssistantTemplates): starting points copied into a new assistant's first draft,
+-- read and written only by kalla-admin.
+GRANT SELECT, INSERT, UPDATE, DELETE ON config."AssistantTemplates" TO kalla_admin;
 
 -- content: the worker owns it; the admin reads it and enqueues jobs (decisions are command jobs, data-model §12.2).
 GRANT SELECT, INSERT, UPDATE, DELETE ON content."Jobs", content."WorkerInstances", content."RunItems" TO kalla_worker;

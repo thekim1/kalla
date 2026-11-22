@@ -28,7 +28,7 @@ public sealed class IngestionSchemaTests(RagDatabaseFixture database)
         foreach (var table in new[]
                  {
                      "content.CrawlClaims", "content.LeaderLeases", "config.CollectionAudiences",
-                     "config.DepartmentSettings", "config.AssistantTestQuestions", "config.AssistantTemplates",
+                     "config.DepartmentSettings", "config.AssistantTestQuestions",
                      "config.SkillShares", "config.SkillVersionFiles", "config.ToolDepartmentGrants",
                  })
         {
@@ -103,11 +103,12 @@ public sealed class IngestionSchemaTests(RagDatabaseFixture database)
             triggers.ShouldContain(trigger);
         }
 
-        // Every config table has the trigger except the ones §5 names.
+        // Every config table has the trigger except the ones §5 names (AssistantTemplates is admin-only, B-54).
         (await Sql.ListAsync(database.Connection(null), """
             SELECT c.relname::text FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
             WHERE n.nspname = 'config' AND c.relkind = 'r'
-              AND c.relname NOT IN ('KeyLastUse', 'DataProtectionKeys', 'AdminSessions', 'SetupSessions', 'SetupTests', 'ConfigVersion', 'ConfigOutbox', '__EFMigrationsHistory')
+              AND c.relname NOT IN ('KeyLastUse', 'DataProtectionKeys', 'AdminSessions', 'SetupSessions', 'SetupTests', 'ConfigVersion', 'ConfigOutbox', '__EFMigrationsHistory',
+                                'AssistantTemplates')
               AND NOT EXISTS (SELECT 1 FROM pg_trigger t WHERE t.tgrelid = c.oid AND t.tgfoid = 'config.rag_config_changed'::regproc)
             """)).ShouldBeEmpty();
 

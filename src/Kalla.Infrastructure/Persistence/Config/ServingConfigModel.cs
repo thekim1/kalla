@@ -89,6 +89,19 @@ internal static class ServingConfigModel
             IngestionConfigModel.ChangeStamps(e);
         });
 
+        // Starting points for new assistants (data-model AssistantTemplates, P2): admin-only, so no config-changed trigger.
+        modelBuilder.Entity<AssistantTemplate>(e =>
+        {
+            e.ToTable("AssistantTemplates", ConfigSchema, t => t.HasCheckConstraint("CK_AssistantTemplates_Name", "btrim(\"Name\") <> ''"));
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.Name).HasMaxLength(AssistantTemplate.MaxName);
+            e.Property(x => x.Description).HasMaxLength(AssistantTemplate.MaxDescription);
+            e.Property(x => x.NotFound).HasColumnType("jsonb");
+            e.Property(x => x.QuerySteps).HasColumnType("jsonb");
+            e.HasIndex(x => x.Name).IsUnique();
+            IngestionConfigModel.ChangeStamps(e);
+        });
+
         modelBuilder.Entity<AssistantAudience>(e =>
         {
             e.ToTable("AssistantAudiences", ConfigSchema, t =>

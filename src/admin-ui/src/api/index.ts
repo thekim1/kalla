@@ -16,6 +16,7 @@ import type {
   Topic,
   Assistant,
   AssistantCreate,
+  AssistantTemplate,
   AssistantDraft,
   AssistantSummary,
   AssistantTestResult,
@@ -199,6 +200,10 @@ export const api = {
     continue: (id: string) => http.post<SyncStarted>(`/api/runs/${id}/continue`),
     items: (id: string, query: { outcome?: string; after?: number; limit?: number } = {}) =>
       http.get<KeysetPage<RunItem, number>>(`/api/runs/${id}/items`, query),
+  },
+  assistantTemplates: {
+    /** Every role reads them: the create-assistant drawer offers the active ones (admin design §5 step 9). */
+    list: () => http.get<AssistantTemplate[]>('/api/assistant-templates'),
   },
   assistants: {
     list: (query: { q?: string; page?: number; pageSize?: number } = {}) => http.get<Page<AssistantSummary>>('/api/assistants', query),

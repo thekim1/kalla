@@ -41,7 +41,8 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
 
         // Serving (P1 item 3, data-model §1.2): the api reads published versions only through the view; the worker reads
         // no assistant table whole (column grants below); the admin also writes evaluation runs and results (answer-level runs in kalla-admin).
-        string[] servingConfig = ["config.Assistants", "config.AssistantVersions", "config.AssistantAudiences", "config.GatewayModels"];
+        // Assistant templates (P2) are admin-only: copied into a new assistant's first draft, never read by the api.
+        string[] servingConfig = ["config.Assistants", "config.AssistantVersions", "config.AssistantAudiences", "config.GatewayModels", "config.AssistantTemplates"];
         string[] apiServingConfig = ["config.Assistants", "config.AssistantAudiences", "config.PublishedAssistantVersions", "config.GatewayModels"];
         string[] evaluationWrites = ["content.EvaluationRuns", "content.EvaluationResults"];
         string[] servingContent = ["content.EvaluationSets", "content.EvaluationQuestions", .. evaluationWrites, "content.RetrievalStats"];

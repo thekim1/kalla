@@ -964,6 +964,13 @@ export const PLATFORM = {
     reviewer: 'Reviewers',
     editor: 'Editors',
     viewer: 'Read access',
+    // Assistant templates (admin design §4.5, B-54).
+    name: 'Name',
+    description: 'Description',
+    systemPrompt: 'Instructions',
+    notFound: 'When nothing is found',
+    querySteps: 'Query steps',
+    isActive: 'Offered when an assistant is created',
     oAuthClientId: 'OAuth client ID',
     classificationCeiling: 'Highest information class',
     storesHistory: 'Stores chat history',
@@ -1006,6 +1013,8 @@ export const PLATFORM = {
   } as Record<string, string>,
   /** Hints under generic form fields, before the API schema's own description. */
   fieldHints: {
+    notFound: 'The texts and links shown when the search finds nothing: sv, en and links [{ title, url }]. Empty: the platform’s texts.',
+    querySteps: 'As an assistant’s query steps. Empty: the platform’s defaults.',
     platformAdmin:
       'Sign-in groups whose members get this role, one per line: a rag- name or an Entra object id. A role in the sign-in token counts too, and the deployment’s break-glass group for platform administrators always applies.',
     departmentAdmin: 'Sign-in groups whose members get this role, one per line: a rag- name or an Entra object id.',
@@ -1053,6 +1062,12 @@ export const PLATFORM = {
     dataProtection: { label: 'Data protection', description: 'History, retention and encryption per information class' },
     siteProfiles: { label: 'Site profiles', description: 'How a website’s pages are read: content, noise and identity' },
     gatewayModels: { label: 'Models', description: 'The models from the AI gateway’s catalogue, the gateway’s status and the embedding profiles' },
+    assistantTemplates: {
+      label: 'Assistant templates',
+      description: 'Starting points offered when an assistant is created: instructions, not-found texts and query steps',
+      keywords: ['templates', 'presets', 'instructions'],
+      deleteNote: 'Assistants created from it keep their copy.',
+    },
   },
   settingsSections: {
     network: 'Network',
@@ -1096,6 +1111,8 @@ export const PLATFORM = {
     revoke: 'Revoke',
     revokeConfirm: 'The key stops working at once. Calls with it are refused.',
     rollback: 'Restore to version',
+    delete: 'Delete',
+    deleteConfirm: (name: string) => `Delete ${name}?`,
   },
   canary: {
     title: 'Embedding canary',
@@ -1265,6 +1282,7 @@ export const PLATFORM = {
     copy: 'Copy',
     copied: 'Copied',
     id: 'ID',
+    deleted: 'Deleted',
   },
 } as const
 
@@ -1552,6 +1570,9 @@ export const ASSISTANTS = {
   descriptionHint: 'What the assistant helps with. Shown to the users.',
   contactName: 'Contact person',
   contactEmail: 'Contact person’s email',
+  template: 'Start from',
+  templateNone: 'No template: the platform’s default instructions',
+  templateHint: 'The template’s instructions and not-found texts are copied into the first draft, where you can change them. A later change to the template does not change this assistant.',
   published: 'Published',
   draftOnly: 'Draft only',
   archived: 'Archived',
@@ -2347,6 +2368,7 @@ export const SETTINGS_PAGE = {
     retrieval: 'How knowledge bases are searched and the results ranked, unless an assistant or knowledge base says otherwise.',
     crawl: 'How hard each website may be fetched, and the other fetching settings.',
     'site-profiles': 'How a website’s pages are read: content, noise and identity.',
+    'assistant-templates': 'The starting points offered when an assistant is created. An assistant keeps its copy when a template changes.',
     worker: 'How much processing runs at once, schedules and the preview budget.',
     pii: 'What counts as personal data in documents, and how sure the detection must be.',
     'data-protection': 'Chat history, retention and encryption for each information class.',

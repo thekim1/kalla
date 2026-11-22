@@ -75,6 +75,7 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
     // Serving, P1 (data-model §2.1, §2.2): configured in Config/ServingConfigModel.cs and Content/ServingContentModel.cs.
     public DbSet<Assistant> Assistants => Set<Assistant>();
     public DbSet<AssistantVersion> AssistantVersions => Set<AssistantVersion>();
+    public DbSet<AssistantTemplate> AssistantTemplates => Set<AssistantTemplate>();
     public DbSet<AssistantAudience> AssistantAudiences => Set<AssistantAudience>();
     public DbSet<GatewayModel> GatewayModels => Set<GatewayModel>();
     public DbSet<EvaluationSet> EvaluationSets => Set<EvaluationSet>();

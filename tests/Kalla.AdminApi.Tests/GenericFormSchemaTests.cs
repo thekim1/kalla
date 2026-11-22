@@ -28,6 +28,7 @@ public sealed class GenericFormSchemaTests(AdminHost host) : IClassFixture<Admin
         ("put", "/api/data-protection/{level}"),
         ("post", "/api/site-profiles"), ("put", "/api/site-profiles/{id}"), ("post", "/api/site-profiles/{id}/rollback"),
         ("post", "/api/embedding-profiles"), ("put", "/api/embedding-profiles/{id}"), ("put", "/api/gateway/models/{name}"),
+        ("post", "/api/assistant-templates"), ("put", "/api/assistant-templates/{id}"),
     ];
 
     private static async Task<JsonObject> OpenApiAsync(HttpClient admin) =>
