@@ -47,8 +47,9 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
   its pull request what you are about to write; review its pull requests as comments (claims checked against the code).
 - **A decision for the user is asked as four alternatives with one recommendation** (the question tool).
 
-**Open when this was written** (2026-11-22): `thekim1`'s #935 (a schedule per source in the admin UI) and #932 (the
-topics-editor proposal), and this file's pull request. In order:
+**Open when this was written** (2026-11-22, 10:00 UTC): `thekim1`'s #935 (a schedule per source in the admin UI; one
+commit, unchanged since the review) and #932 (the topics-editor proposal; no answer to the main session's comment),
+and this file's pull request. No issue moved overnight; #905 and #920 have no reply. In order:
 
 1. **#932, the topics editor** (#929 steps 2 to 4; the user's preference: pick topics from the sections found). The
    main session's view and its answers to the proposal's four questions are on the pull request (keep `EditPipelines`;
@@ -137,8 +138,8 @@ On `~/research/rag`, as the main session. Session 52's work is in this file's hi
   checked (migrations up, five knowledge bases); the old images and Fors worktrees removed, `~/git/llmgateway` on
   `main`.
 - **GitHub:** reviews as comments on #925, #932, #933 and #935; the cancelled 0.9.2 dry run reported on #933.
-  `thekim1` released 0.9.2 (#933, pin #934) and closed #927. All of the main session's pull requests were approved as
-  `Crotalus` on the user's word and merged. Fors #112 and #113 are closed.
+  `thekim1` released 0.9.2 (#933, pin #934) and closed #927. All of the main session's pull requests (#923, #924, #926, #936 to #939)
+  were approved as `Crotalus` on the user's word and merged; #939 was the first version of this file. Fors #112 and #113 are closed.
 
 ## Known gaps, documented, not fixed
 
