@@ -387,7 +387,9 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 | `GET/POST /api/collections`, `GET/PUT/DELETE /api/collections/{id}` | Read / Edit / Manage (delete) | create: name, slug (from name, ASCII), department, owner team, classification, contact, optional `gatewayKeyId` (V39); profile = default; an empty owner team becomes the creator's first active team in the department by name (from the `teamCodes` claim), none when the creator has no team there; the owner's detail (`shared: false`) carries `sharedWith`, `sharedWithDepartmentIds` (with `selected`) and `usedBy[]` (assistants whose published version or draft links it, with `published`/`draft`), which the save drawer shows as "Affects the assistants: …"; delete (Decisions "Deleting knowledge bases, sources and assistants"; a soft delete, the slug free at once, the documents out of the index at once) refused while a published version or a draft of an assistant that is not deleted links it, an archived one too (409 `collection_in_use` with the list; superseded versions do not block, a restore of one fails V34); also refused while it has sources that are not deleted (same code, `sources` in the list), so the worker never writes into a deleted collection: delete the sources first. A department the collection is shared with gets the shared summary of the list row (`shared: true`) from `GET …/{id}`, the read-only Overview of §5.5.2; every other route of the collection answers it 404 |
 | `GET /api/collections?view=mine\|shared\|all` | Read | `mine` (default): the caller's departments' collections; `shared`: collections of other departments shared with one of the caller's departments or with the municipality, as the shared summary (name, owning department, level, contact, document count, topics; no sources); `all`: both. The assistant's collection picker reads `all` |
 | `PUT /api/collections/{id}/sharing` `{ sharedWith, departmentIds, version }` | Manage | `sharedWith` = `department`/`selected`/`municipality`; `departmentIds` only with `selected`, at least one, active departments other than the owner (otherwise 400 `invalid_value`); at the other levels the share rows are kept but unused; narrowing is refused (V35) with the linking assistants and their departments; audited `collection.share`; the detail's `usedBy[]` lists other departments' assistants too |
-| `GET /api/collections/{id}/topics` | Read (also a department the collection is shared with) | the tags on the collection's live chunks with document counts; for the owning department also the path rules that set each one (`sourceId`, `sourceName`, `on`, `match`), `rules: null` for a department it is only shared with (path rules are source settings, §3.2); read from `content`, no text |
+| `GET /api/collections/{id}/topics` | Read (also a department the collection is shared with) | the tags on the collection's live chunks with document counts; for the owning department also the path rules that set each one (`sourceId`, `sourceName`, `on`, `match`), `rules: null` for a department it is only shared with (path rules are source settings, §3.2); read from `content`, no text. For the owning department, a tag that a published rule sets while the source's `reprocess` sync is queued or running, and which no live chunk carries yet, is listed with `pending: true` and no count (§5.5.2) |
+| `GET /api/collections/{id}/topic-suggestions?sourceId=&under=` | Read, owning department only (404 for a department it is only shared with) | Decisions "Topics editor": per source (or the one named), the sections of its live documents: the first path segment of `Documents.Url` (website) or the first folder of `DisplayName` (upload); with `under=/bygga-bo-och-miljo/` the next level under that one section only. Each: `path`, `documents`, `title` (the live document whose path is the section itself, if crawled), `suggestedTag` (the segment, lower case, cut to the tag format of processing §7) and `coveredBy` (the existing topics whose `path` rules match the section path, through the shared matcher of processing §7). Sections under 5 documents are left out. A grouping query over `content."Documents"` from the source ids in scope (§4.8); no URL or display name is logged |
+| `POST /api/collections/{id}/topic-rules/preview` `{ sourceId, rule }` | EditPipelines, owning department only | one rule of the processing §7 shape against the source's live documents, through the shared matcher: `{ matched, total, sample: [{ documentId, title, url \| displayName }] }` (≤ 10). `title-regex` matches the stored title; `mediaType` the document's type. Validation as V24 for the one rule (an invalid regex is 400). Nothing is saved |
 | `PUT /api/collections/{id}/retrieval-settings` | Edit | saved directly within the V16 ranges; enqueues an advisory evaluation run (§4.7) whose report is compared with the previous run (none when the collection has no evaluation set) |
 | `POST /api/collections/{id}/test-retrieval` | Edit, EditPipelines | retrieval-only test panel (§4.9), incl. unpublished |
 | `POST /api/collections/{id}/publish` | Manage | sets `PublishedAt`; the latest evaluation report (if any) is shown before confirm; never blocked |
@@ -1138,14 +1140,48 @@ Overview  Sources (1)  Documents (2 323)  Topics (9)  Test questions and quality
 │ │ Customer service     │ Contact centre          │ all                    │ Draft      │          │
 │                                                                                  [Save sharing]   │
 └───────────────────────────────────────────────────────────────────────────────────────────────────┘
-Topics (set by path rules on the sources, Processing › Topics)
-│ Topic                │ Rule                               │ Documents │
-│ building-and-housing │ www.umea.se/byggaboochmiljo/**     │ 412       │
-│ politics             │ www.umea.se/kommunochpolitik/**    │ 655       │
+Topics                                                                                       [Add topic]
+│ Topic                │ Rule                                    │ Source   │ Documents │          │
+│ building-and-housing │ under www.umea.se/bygga-bo-och-miljo/   │ umea.se  │ 412       │ [Edit] [⋯]│
+│ politics             │ under www.umea.se/kommun-och-politik/   │ umea.se  │ 655       │ [Edit] [⋯]│
+│ bygglov              │ under www.umea.se/…/bygglov/            │ umea.se  │ pending   │ [Edit] [⋯]│
+Suggested from umea.se                                                          Documents
+│ [✓] Bygga, bo och miljö        /bygga-bo-och-miljo/          building-and-housing  612 │
+│ [ ] Utbildning och barnomsorg  /utbildning-och-barnomsorg/   [utbildning-och-barnomsorg] 488 │
+│ [ ] Kommun och politik         /kommun-och-politik/  › show the sections under it  401 │
+                                                                 [Add 1 topic]
 ```
 
+**The Topics tab** (Decisions "Topics editor") is where topics are set; the source page's *Topics* field
+(`PipelineCard`, §5.8) is a read-only list of its rules with a link here.
+- **The list** groups the rules by tag, one row per tag, the rule text in words ("under www.umea.se/bygglov/", "title
+  contains …", "PDF files") and its source; a tag set by rules on two sources is one row naming both. Counts are live
+  documents (`GET …/topics`); a published rule whose re-chunk is not done yet shows *pending* (§4.5).
+- **Suggested from {source}** (one block per source, `GET …/topic-suggestions`): the first-level sections with their
+  counts and titles; *show the sections under it* loads that section's next level (`under=`). A section a topic
+  already covers is ticked with its topic and can't be unticked here (remove the topic in the list). Ticking proposes
+  the tag (`suggestedTag`, editable in place, checked against the tag format as typed) and the rule `{ "match":
+  "<section>/", "on": "path", "tags": ["<tag>"] }`. Two picked sections may take the same tag: one topic, two rules.
+- **Add topic / Edit** opens a form: *Topic*; *Documents* as one of "under the address" (a pasted address or a path;
+  for an upload source, a folder), "whose title contains" (written as `title-regex` with the text escaped), "of the
+  file type" (`mediaType`); *Source* (only with more than one); *Advanced*: a regular expression on the path
+  (`path-regex`), a host, `documentType` and a date from the path. Every rule kind of processing §7 can be written and
+  edited here; a rule the form can't show in words is shown as its JSON, editable under Advanced.
+- **What it matches:** under the form's address or pattern, "Matches 212 of 2 323 documents" with up to ten listed
+  (`POST …/topic-rules/preview`, debounced, after the field is valid). A rule that matches 0 says so ("No document of
+  umea.se is under this address") and asks again at **Save**, which still saves (a rule for pages not crawled yet is
+  allowed).
+- **Saving** collects the changed rules per processing and asks for a publication plan for each
+  (`POST /api/pipelines/{id}/publications`, §6.6, with the copy-on-write for a department on a platform processing).
+  The confirm dialog is §6.6's, shown as one save: per processing the plan's own document count ("Saving processes
+  2 323 documents again"; the plan's number, never a second query), the affected sources, then **Confirm** for all.
+  Until each source's re-chunk is done its new topics show *pending*.
+- **Who:** the add, edit, remove and suggestion controls are shown for `EditPipelines` holders of the owning
+  department; `Edit` and `Read` see the list read-only with "Topics are changed by whoever may edit processing".
+  The labels are in `labels.ts` (`TOPICS.*`).
+
 A department the knowledge base is shared with opens it read-only: Overview (owner, contact, level, document count)
-and Topics, nothing else.
+and Topics (the tags with counts only: no rules, no suggestions, no source names), nothing else.
 
 The document count (the list, the Overview and the Sources table's *Documents*) is one number: **live** documents, not
 deleted and with a live chunk set, so a source in its first fetch shows 0 until its documents are indexed. The
@@ -1716,7 +1752,10 @@ form library and no browser-side validator: the server validates.
 
 A template parameter's label is the UI's own text when `labels.ts` has one (`PIPELINE.params`, §5.7), else the
 template's `x-labels` (`en`, then `sv`), else the parameter name; templates set `x-labels` where the name says too
-little (`pathRules` is labelled Topics / Ämnen, tested in `Kalla.Pipelines.Tests`).
+little (`pathRules` is labelled Topics / Ämnen, tested in `Kalla.Pipelines.Tests`). `pathRules` is the one parameter
+the form doesn't edit: it is shown read-only as the rules in words with a link to the knowledge base's Topics tab,
+where it is edited (§5.5.2; Decisions "Topics editor"), and the form keeps its stored value when the other parameters
+are published.
 
 ### 6.4 Preview
 

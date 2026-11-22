@@ -146,6 +146,38 @@ After P2 wave 1, or beside it when a wave item waits. Each adds its table in a m
 - **Read:** Decisions "Content-gap report"; chat §6.2, §12.1, §12.2, §18.9; data-model §2.3, §8; admin §8.6,
   §8.7.
 
+## Topics editor (user, 2026-11-22; Decisions "Topics editor")
+
+Beside P2 wave 1: take B-64 when a wave item waits, or after it. `proposals/topics-editor.md` is the record of why.
+
+### [ ] B-64 Topics picked from the sections found, on the Topics tab
+- **Do:** admin §4.5's `GET /api/collections/{id}/topic-suggestions` (first level, `under=` for one section's next
+  level, sections under 5 documents left out, `coveredBy` through A-42's matcher, owning department only, nothing
+  logged) and the `pending` flag on `GET …/topics`; on the Topics tab (§5.5.2) the list grouped by tag with the rule in
+  words and its source, the *Suggested from {source}* blocks with *show the sections under it*, the editable proposed
+  tag, and **Add N topics** saving through the publication plan of each affected processing as one confirm (the
+  plan's own count; copy-on-write as §6.6). Controls for `EditPipelines` of the owning department only; read-only
+  for `Edit` and `Read`; a shared department sees tags and counts only.
+- **Paths:** `src/Kalla.AdminApi/**`, `src/admin-ui/**` (not `src/platform/**`), `tests/**` (b's).
+- **Done when:** API tests for the suggestions (both levels, the cut-off, an upload source's folders, `coveredBy`,
+  404 for a shared department, the roles) and for `pending`; Vitest for the tab (picking, the tag check, two sections
+  on one tag, the read-only view); shown in a browser on the demo seed: two sections picked, saved, *pending*, then
+  counted after the re-chunk.
+- **Waits on:** A-42.
+- **Read:** Decisions "Topics editor"; admin §4.5, §5.5.2, §6.6, §4.8; processing §7.
+
+### [ ] B-65 The topic form, the match preview, and the read-only Topics field
+- **Do:** admin §4.5's `POST /api/collections/{id}/topic-rules/preview`; on the Topics tab the *Add topic* / *Edit* form
+  (§5.5.2: under the address, title contains, file type, source, Advanced with every rule kind, a rule the form can't
+  word shown as JSON under Advanced) with "Matches N of M documents" and the first ten, the 0-match warning asked
+  again at **Save**, and remove; in `PipelineCard` the `pathRules` parameter shown read-only in words with a link to
+  the tab, its stored value kept when other parameters are published (§5.8).
+- **Paths:** `src/Kalla.AdminApi/**`, `src/admin-ui/**` (not `src/platform/**`), `tests/**` (b's).
+- **Done when:** API tests for the preview (each rule kind, an invalid regex 400, the sample cap, the roles); Vitest
+  for the form's round trip of every rule kind and the 0-match flow, and for the read-only field; shown in a browser.
+- **Waits on:** B-64.
+- **Read:** Decisions "Topics editor"; admin §4.5, §5.5.2, §5.8; processing §7.
+
 ## Live (the live block, see the roadmap)
 
 

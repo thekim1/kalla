@@ -343,6 +343,19 @@ Upload replacements keep the document id (6b), so this survives file revisions t
 
 - `on`: `path` (glob on the URL path, or the upload's display name), `path-regex`, `host`, `title-regex`, `mediaType`.
   Every matching rule adds its tags; the first match sets `documentType` and `date`.
+- **`path` globs:** `**` any characters, `*` within one segment, `?` one character; a glob ending in `/` covers
+  everything under it (`/utbildning/`, `HR/`). A website rule may also be a pasted address
+  (`https://www.umea.se/bygga-bo-och-miljo/bygglov/?utm=x`, query and fragment dropped) or host-first
+  (`www.umea.se/kommun-och-politik/**`): the host must be the page's (case-insensitive, an IDN in its ASCII form, no
+  port or trailing dot), the rest is the glob. A host-first form is recognised only when the first segment looks like a
+  host name (a dot and a letter TLD), so an upload's `HR/**` or `protokoll.2024/**` is never read as a host. An
+  upload's display name is relative, so `/HR/**` matches it as well as `HR/**`; a website rule without a leading
+  slash matches no URL path. Stored rules are read when applied: nothing is migrated (#930).
+- **One matcher.** Reading and matching the rules (`PathRule`, the glob, the date and tag rules) live in
+  `Kalla.Pipelines`, used by the worker's `chunk` stage and by the admin API's topic suggestions and match preview
+  (admin §4.5), so what the Topics tab says a rule matches is what the stage tags.
+- **Edited on the Topics tab** (admin §5.5.2; Decisions "Topics editor"): the tab writes `pathRules` through the
+  publication plan, like any parameter; the source page shows them read-only.
 - Tags: lower case, NFC, `[\p{L}\p{N}-]{1,50}`, ≤ 20 per chunk. Invalid regex is a validation error at save (JSON
   Schema `format: regex`, 6a §4).
 - **Date** (`SourceModifiedAt`), first available: the visible date from the site profile's date pattern (§3.7); a

@@ -37,6 +37,10 @@ With something still to choose from:
 - [`assistant-keys-and-budgets-options.md`](proposals/assistant-keys-and-budgets-options.md): options paper; its
   outbound question is decided (#580: an assigned gateway key per assistant), the inbound one stays open.
 
+Adopted, being built (their rules are in the decisions and designs each names):
+- [`topics-editor.md`](proposals/topics-editor.md): topics picked from the sections found on the Topics tab, a form
+  and a match preview (Decisions "Topics editor", 2026-11-22; A-42, B-64, B-65).
+
 Built, kept as the record of why (their rules are in the decisions and designs each names):
 - [`deploy-configuration.md`](proposals/deploy-configuration.md): the deployment's variables moved into settings,
   automatic setup and the gateway (M-17, `v0.6.0`).

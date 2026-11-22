@@ -1,5 +1,10 @@
 # Topics that are easy to set (2026-11-21)
 
+**Status:** **adopted** (user, 2026-11-22): Decisions "Topics editor", with the main session's answers to the four
+questions below (`EditPipelines` edits; the first segment, the next level on demand; the path segment as the name;
+one topic across sources). The rules are in admin §4.5 and §5.5.2 and processing §7; queued as A-42, B-64 and B-65.
+Kept as the record of why; where it differs from those, they win.
+
 The question (user, 2026-11-21, after finding the Topics field): **topics are bad to use. They expect JSON, sit in a
 place where nobody looks, and say nothing about how to set them up. How do we make them easy?** The user's own
 preference: **an editor should just pick topics from the ones found**, as in step 4 below. This is a proposal for the
