@@ -1,19 +1,18 @@
 # Handover
 
 State of the Källa work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`).
-**Last release `v0.9.1`** (2026-11-21, tag at `e9ec0597`, on Fors `v0.12.2`), the same day as `v0.9.0`, the first
-under the names Källa and Fors: 0.9.1 makes the upgrade need no SQL by hand. Unreleased on `main`: four dependency
-bumps. The user's VM runs 0.5.0. Two machines work on it: `~/research/rag` (the user's, where sessions 49 to 52
-ran) and `thekim1`'s (stream b, often stream a, and the releases' preparation). Branch `main`, remote `origin` =
+**Last release `v0.9.2`** (2026-11-21, tag at `c7d5de47`, on Fors `v0.12.2`): JavaScript rendering works again and topic
+rules take a pasted address. Nothing unreleased on `main` but plan files. The user's VM runs 0.5.0. Two machines work
+on it: `~/research/rag` (the user's, where sessions 49 to 53 ran) and `thekim1`'s (stream b, often stream a, the
+releases, and a coordinating session that writes proposals). Branch `main`, remote `origin` =
 https://github.com/thekim1/kalla (HTTPS through `gh auth git-credential`, handbook *Environment notes*).
 
 ## What this is
 
-**Källa** (`Kalla` in identifiers; Decisions "Product names", which closed N1) is a RAG / crawling / chatbot platform
-for Umeå kommun: small .NET 10 services on top of **Fors**, the team's LLM gateway (https://github.com/thekim1/fors,
-the local clone still `~/git/llmgateway`), as an add-on to it (Decisions
-"Shared sign-in with the gateway"). The user owns the gateway and wants to do better than **Eneo**, a slow "kitchen
-sink" monolith. Design and code live in this repo.
+**Källa** (`Kalla` in identifiers; Decisions "Product names") is a RAG / crawling / chatbot platform for Umeå kommun:
+small .NET 10 services on top of **Fors**, the team's LLM gateway (https://github.com/thekim1/fors, the local clone
+still `~/git/llmgateway`), as an add-on to it (Decisions "Shared sign-in with the gateway"). The user owns the gateway
+and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and code live in this repo.
 
 ## Where to read
 
@@ -27,81 +26,79 @@ sink" monolith. Design and code live in this repo.
    `plans/archive/work/`), results in `results-a.md`, `results-b.md` and `results-main.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here (session 53)
+## Start here (session 54)
 
 **The rules of the repository:**
 - **`main` is protected** ("Protect main": a pull request with one approving review and the required checks; an
   author cannot approve their own, never `gh pr merge --admin` as `ume-nichlas`). Everything, `plans/**` and this
   file included, goes through a `main-session/` branch. `thekim1` merges green pull requests with `--admin` (allowed
-  by the user on 2026-11-19), the main session's too.
-- **Release tags are protected** (`refs/tags/v*`): `ume-nichlas` cannot push one (GH013), no workflow creates one.
-  A tag is `thekim1`'s or the user's to push, on the release preparation's merge commit.
-- **The session's GitHub account is `ume-nichlas`** (user, 2026-11-20). `gh` here also holds `Crotalus` (the user's
-  own), and the active account has switched to `Crotalus` by itself before. **Run `gh auth status` before every push
-  or post**, and `gh auth switch -u ume-nichlas` when it shows `Crotalus`.
-- **Approvals on this machine.** `gh pr review --approve` as `ume-nichlas` is stopped by Claude Code's permission
-  check. Approving as `Crotalus` goes through **only on the user's direct word in the conversation for named pull
-  requests** ("Approve it" for #915, "clear the PRs" for Dependabot's four, 2026-11-21); with a recorded decision
-  and a bare "ok go on" it was stopped twice the same morning. Without that word: review as a comment, say that it
-  is not the approval, and give the user the line to run (handbook, *How we work*). With it: read the pull request's
-  `state`, switch the account in a command of its own, approve, switch back at once. `thekim1`'s approval or its
-  `--admin` also bring a pull request in.
-- **Look at the open pull requests before each step** (`gh pr list`): the other machine works at the same hour.
-  Say on its pull request what you are about to write.
+  by the user on 2026-11-19), its own included.
+- **Release tags are protected** (`refs/tags/v*`): a tag is `thekim1`'s or the user's to push, on the release
+  preparation's merge commit, with the user's go-ahead.
+- **The session's GitHub account is `ume-nichlas`.** `gh` here also holds `Crotalus` (the user's own). **Run
+  `gh auth status` before every push or post.**
+- **Approvals on this machine.** Approving as `Crotalus` goes through on the user's direct word in the conversation
+  for named pull requests ("approve #936, #937, #938"): read each pull request's state and checks, switch the account
+  in a command of its own, approve, switch back at once, then merge the green ones. Without that word: review as a
+  comment, say that it is not the approval, and give the user the line to run (handbook, *How we work*). **Stacked or
+  overlapping pull requests:** after the first is squash-merged the next conflicts; a rebase and push dismisses its
+  approval, so it needs the word again (session 53: the same word for the same named pull requests was accepted).
+- **Look at the open pull requests before each step** (`gh pr list`): the other machine works at the same hour. Say on
+  its pull request what you are about to write; review its pull requests as comments (claims checked against the code).
 - **A decision for the user is asked as four alternatives with one recommendation** (the question tool).
 
-**Open when this was written** (2026-11-21 18:05 UTC): only this file's pull request, #922. Issue **#920** hands
-the VM's upgrade to `thekim1`. In order:
+**Open when this was written** (2026-11-22): `thekim1`'s #935 (a schedule per source in the admin UI) and #932 (the
+topics-editor proposal), and this file's pull request. In order:
 
-1. **The clean-up of the design documents, in a session of its own** (user, 2026-11-21). The status files are done
-   (#915). Not read through yet:
-   - **The design documents** (about 15,000 lines). Four agents were sent over them and stopped by the usage limit
-     before they reported (it resets 2026-11-26 19:00, Europe/Stockholm). Their shares: admin, `decisions.md`,
-     cost-attribution and `architecture.md`; chat, knowledge and tools; the three ingestion designs and the parser;
-     identity, data-model, repo-and-deployment and gateway-changes (with `adr-drafts.md`: does it still have a
-     purpose?). What to look for: statements that the code has overtaken ("P2", "later", an open pull request),
-     names from before the rename that are not about the old name on purpose, history that belongs in
-     `plans/archive/design-history/`, and passages that repeat another document.
-   - **Known already:** admin §5.8 to §5.10 still read as before and after M-16; `plans/tools/design.md` says
-     `rag-tools` once where the rest says `kalla-tools`. Every "not built" in the designs was checked against the
-     source at #915 (one was wrong and is corrected). Dated lines and pull-request numbers are densest in
-     repo-and-deployment, connectors, identity and admin, so history is likeliest there.
-   - **Not read either:** `plans/to-verify.md`, the open items of the two stream queues, the rows of
-     `postponed-decisions.md`, `plans/cases/support-assistant/` (written for 0.5.0), `plans/gold-set/README.md`, and
-     `docs/` (stream a's).
-   - A design is binding: change what is plainly out of date, and bring anything that changes a rule to the user.
-2. **The VM's upgrade is `thekim1`'s** (user, 2026-11-21; issue #920): 0.5.0 to 0.9.1 on Fors 0.12.2 by
-   `docs/portainer.md`, *Upgrade*. Read what is reported there; a step that did not go as the guide says is a guide
-   fix, and the roadmap's T1 row follows the result.
-3. **Dependabot's first four after the release are in** (#911 to #914, 2026-11-21): uv 0.13.9 with the pin moved in
-   `parser.yml` and `audit.yml`, the admin UI's and the parser's minor groups (the parser's with `LICENSES.md`
-   regenerated), AngleSharp. They are unreleased on `main` and have no change notes: whether the next release's
-   notes name them is for its preparation. The next Audit run (around 13:00 UTC) is the first on that `main`.
-4. **P2 wave 1 runs on `thekim1`'s machine** (Decisions "P2 starts before go-live"): B-54 to B-59 are open in
-   stream b's queue. Say on the issue before starting one here.
-5. **This machine's development stack is under the new names** (session 53, the user's call; handbook, *Local
-   stack*). The old `ume-rag-*` volumes and secrets are kept until the user lets them go.
-6. **Repository variables:** since the rename the workflows read `vars.KALLA_TEST_HOST_RUNNER`,
-   `vars.KALLA_TEST_HOST_DEPLOY_ENV`, `vars.KALLA_R1_*` and `secrets.KALLA_R1_API_KEY`, and none exist. On the
-   user's decision (2026-11-21) `thekim1` was asked on #905 to create them from the `UME_RAG_*` values.
-7. **Fors is on `v0.12.2`** (2026-11-21): its stack renames the gateway's database roles itself, and `thekim1`
-   merged #119 to #123 there, which the main session has not read. Whether #112 and #113 are closed by them is not
-   checked.
+1. **#932, the topics editor** (#929 steps 2 to 4; the user's preference: pick topics from the sections found). The
+   main session's view and its answers to the proposal's four questions are on the pull request (keep `EditPipelines`;
+   depth 1 with the next level on demand; the path segment as the name; one topic across sources; levels respected in
+   the suggestions; the re-chunk count from the publication plan). **The user decides** whether to accept those
+   answers and whether to write the Decisions entry and the designs (admin §5.5.2, processing §7) now or after P2 wave 1;
+   the main session recommended now. Ask with four alternatives if they haven't said.
+2. **#935, a source's schedule** (stream b): reviewed as a comment. The rule matches the worker's `SyncScheduler`;
+   asked for a browser check and noted that the rule could live once in `Kalla.Pipelines` (both the admin and the worker
+   reference it). `thekim1` merges it.
+3. **#925's steps 2 to 4** (personal-data verdicts, *reject*, the false-positive summary): the user answered the four
+   questions (decisions log, 2026-11-21); the Decisions entry and the design changes are left to `thekim1`'s session
+   (said on #925). Step 1 is stream b's B-63.
+4. **The design clean-up is done** (#926, #936 to #938). Share 1 was read line by line; shares 2 to 4 were scanned for
+   the kinds of staleness share 1 found and each hit's section read, so a stale passage that matches no such pattern
+   can remain. A full read of those three shares is possible once agents can run again (the usage limit resets
+   2026-11-26 19:00, Europe/Stockholm). Left open: admin §4.5's row on manual model rows ("`SupportsTools` until the
+   gateway sends `features`; not built yet") says unclearly what isn't built (check `GatewayEndpoints.cs`);
+   repo-and-deployment §14 and data-model §14 repeat `plans/to-verify.md`; the FakeGateway's per-level dev keys,
+   "kept until Källa moves to credential keys", are still in the code although it has moved. Not read at all:
+   `plans/to-verify.md`, the open queue items, `postponed-decisions.md`, `plans/cases/support-assistant/`,
+   `plans/gold-set/README.md`, `docs/` (stream a's).
+5. **The VM's upgrade is `thekim1`'s** (#920): it can now go from 0.5.0 straight to 0.9.2 (`docs/portainer.md`,
+   *Upgrade*). Read what is reported; a step that did not go as the guide says is a guide fix, and the roadmap's T1 row
+   follows the result. No report yet.
+6. **Repository variables:** the workflows read `vars.KALLA_TEST_HOST_RUNNER`, `vars.KALLA_TEST_HOST_DEPLOY_ENV`,
+   `vars.KALLA_R1_*` and `secrets.KALLA_R1_API_KEY`, and none exist (`gh variable list` empty on 2026-11-22). On the
+   user's decision `thekim1` was asked on #905 (2026-11-21) with the full list; no answer yet.
+7. **P2 wave 1 runs on `thekim1`'s machine:** B-54 to B-59 and B-63 open in stream b's queue, then B-61 and B-62
+   (support-chatbot F10 and F7). Say on the issue before starting one here.
 
 ### Waiting on the user
 
-- **The umea.se inventory (A-L1):** the first input of the live block; the user was reminded on 2026-11-21.
-- **The live block** (the critical path to go-live, `plans/roadmap.md`): every item waits on an input, A-L1 (the
-  umea.se inventory) first.
-- **The support-chatbot proposal** (`plans/proposals/support-chatbot-features.md`): F3, F4 and F8 are built; F10
-  and F7 are picked (2026-11-21), designed and queued (B-61, B-62). The rest is the user's pick.
+- **The umea.se inventory (A-L1):** the first input of the live block (`plans/roadmap.md`); every live item waits on an
+  input, A-L1 first.
+- **#932's questions** (above, item 1).
+- **The support-chatbot proposal** (`plans/proposals/support-chatbot-features.md`): F3, F4 and F8 built; F10 and F7
+  queued (B-61, B-62); the rest is the user's pick.
 - **P2's later waves** (the roadmap's *P2 Broaden*): the user picks the next theme when wave 1 is nearly done.
 - **To-verify row 96:** the NVDA screen-reader pass of the admin UI, which needs Windows.
 - **To-verify row 79:** whether `NerMinScore` moves for the int8 NER model (left at 0.80: the sample is small).
 - **U1 (pictures in uploads)** waits for DoIT's files at T6 (decided 2026-11-15).
+- **The old development data on this machine:** the `ume-rag-*` volumes and the `ume-rag-apphost-dev` secrets are kept
+  beside their copies until the user lets them go; three older `ume.rag.apphost-*-postgres-data` volumes and the
+  ignored build output under `src/Ume.Rag.*` can go too. Don't remove them unasked.
 
 ### Watch
 
+- **The CI runners' disk filled up once** (2026-11-21, the 0.9.2 dry run's parser image job; `thekim1` re-ran it).
+  If a long job is cancelled with no step result again, look at the runner machine's disk first.
 - **The dated exceptions expire:** the scan's FFmpeg CVEs in the parser's opencv wheel (eleven, until 2026-12-17,
   `scripts/audit/image-scan-exceptions.txt`, #818) and picomatch in the admin UI's build (until 2026-12-18,
   `scripts/audit/npm-production-exceptions.txt`, #853). Before then: a newer wheel or picomatch fix, a new date with
@@ -109,52 +106,39 @@ the VM's upgrade to `thekim1`. In order:
   the parser's uv cutoff lets it in from about 2026-11-25: try it (Docling needs only `cv2.resize`, `cv2.dilate` and
   border constants) and see whether its wheel bundles a fixed FFmpeg. picomatch had no fix on 2026-11-20.
 - **The Postgres image's `zlib1g` line** (`images/postgres/Dockerfile`, #907) goes when `pgvector/pgvector` has a
-  build newer than 2026-11-12: the tag `0.8.7-pg17-trixie` had not been rebuilt on 2026-11-20, so the fix is one
-  pinned package in our own Dockerfile. The AppHost and the TestKit pin the same base, unchanged.
+  build newer than 2026-11-12.
 - **#781, the flaky "search unavailable" answer in `ChatApiTests`:** open until 2026-11-30; if it recurs, the job's log
-  has *The query embedding of profile … is unavailable (…)*, which names the cause.
-- **`IntegrationReadbackTests.A_keys_usage_per_step_…` failed once** on #814 (the fake gateway answered 401,
-  `scope_missing`). Seen once; no issue filed.
+  has *The query embedding of profile … is unavailable (…)*, which names the cause. **#921**, a flaky render-timing
+  test, is `thekim1`'s.
 - **Flaky under load** (session 47): with many pull requests' checks on the two runners, `backend` failed with tests
-  the change didn't touch (`ChatApiTests`, `RenderTests.The_real_renderer_…`); run alone they pass.
-- **`gh pr edit` fails** on this repository with GitHub's *Projects (classic) is being deprecated* error and changes
-  nothing; edit a pull request's body with `gh api -X PATCH repos/thekim1/kalla/pulls/<n> -F body=@file`.
+  the change didn't touch; run alone they pass.
+- **`gh pr edit` fails** on this repository (*Projects (classic) is being deprecated*) and changes nothing; edit a pull
+  request with `gh api -X PATCH repos/thekim1/kalla/pulls/<n> -f title=… -F body=@file`.
 - **Tests that share the job queue:** the nightly purge re-queues `delete-source` for every deleted source with live
   content (#884), so a test that queues a command for a deleted source can lose its lease (#897).
-- **The demo seed's slug in a test:** `openwebui.spec.ts` leaves out the assistant named `demo-assistent` (#882); a
-  change of `DemoSeeder`'s slug brings its old failure back.
+- **The demo seed's slug in a test:** `openwebui.spec.ts` leaves out the assistant named `demo-assistent` (#882).
 
-## What session 52 did (2026-11-21)
+## What session 53 did (2026-11-21 and 22)
 
-On `~/research/rag`, as the main session. Session 51's work (the rename's leftovers #905, the image updates #907,
-the reviews of #906) is in this file's history: `git log -- HANDOVER.md`.
+On `~/research/rag`, as the main session. Session 52's work is in this file's history.
 
-- **#906 checked and `v0.9.0` released.** The head `3ef38e8e` was read against the runs: its own checks green, the
-  release steps (smoke test, Portainer boot, the upgrade from 0.6.0 with the roles renamed first) in dry run
-  [44839739980](https://github.com/thekim1/kalla/actions/runs/44839739980), the browser tests in
-  [44846329548](https://github.com/thekim1/kalla/actions/runs/44846329548). No single dry run was green from end to
-  end, and the comment on #906 says so.
-- **The approval did not go as decided.** The session could not approve as `Crotalus` (the permission check). The
-  user approved twice themselves, and GitHub dismissed both within seconds with *The merge-base changed after
-  approval* (handbook, *Lessons*). **The user then decided** (four alternatives) that `thekim1` merges with
-  `--admin`: merged as `1ed5bdd8`, whose tree is `3ef38e8e`'s, tagged, and published at 10:28 UTC.
-- **The pin (#908)** compared with the release's own stack file, closed and reopened for its checks; `thekim1` merged
-  it. **The handover (#904)** approved by `thekim1` and merged by the session.
-- **thekim1/fors#118:** a line for Fors's upgrade guide, marked ready on the user's word and closed the same day,
-  when Fors 0.12.2 made it wrong.
-- **`v0.9.1` came out while the clean-up was open** (`thekim1`'s: #916 to #919, on Fors 0.12.2): the role renames
-  run in the stack. The main session did not review it; this file and the roadmap were brought up to it.
-- **After the release:** the first Audit run on 0.9.0's images is green (*State*); the worktrees `rag-small` and
-  `rag-902` removed.
-- **Dependabot's #911 to #914** read and answered; on the user's word ("clear the PRs") #912 and #914 approved as
-  `Crotalus` and merged; #911 and #913 fixed on their branches (the pin in two workflows; `LICENSES.md`), approved
-  by `thekim1` and merged.
-- **The user's decisions of the evening:** the VM's upgrade is `thekim1`'s (#920); the design documents are
-  cleaned in a new session.
-- **The plan clean-up** (the user's choice of what to do next): the roadmap without its finished and duplicated
-  parts; M-16 and M-17 closed and archived, with the lines in the admin design and Decisions that still called them
-  open; the handbook sorted by subject and without what no longer holds; the README's CI section and document list;
-  the proposals' status lines; this file. Merged as #915 on the user's approval, given through the session.
+- **Twelve of the user's decisions** (four alternatives each; decisions log): the design clean-up one share at a time;
+  no question to KB (the NER model's MIT licence is taken as covering the weights, to-verify 110 closed); the Eneo PDF
+  stays outside the repository; T0 done with 0.5.0; support-chatbot F10 and F7 next; `thekim1` asked for the
+  repository variables; the development stack copied to the new names; and four answers on #925 (personal-data
+  review: *reject* a state of its own, false positives need the types, deciders as today, step 1 queued as B-63).
+- **Recorded and designed:** #923 (the answers, B-63), #924 (F10 cost per outcome and F7 content gaps: Decisions
+  entries, chat §12, data-model `AssistantDailyOutcomes` and `AssistantDailyGaps`, admin §8.6 and §8.7, B-61 and B-62).
+- **The design clean-up** in four pull requests: #926 (repo-and-deployment, identity, data-model, gateway-changes, read
+  in full; `adr-drafts.md` archived; `ume-mcp-*` and `rag-tools` renamed in every plan; Decisions "CI on the
+  self-hosted runner" states the protected `main`), #936 (chat, knowledge, tools), #937 (ingestion, parser), #938
+  (admin §5.8 to §5.10 as built, Decisions' interim-gateway pointer, architecture's rerank).
+- **This machine:** the dev secrets and volumes copied to the new names (the old ones kept) and a start on the copy
+  checked (migrations up, five knowledge bases); the old images and Fors worktrees removed, `~/git/llmgateway` on
+  `main`.
+- **GitHub:** reviews as comments on #925, #932, #933 and #935; the cancelled 0.9.2 dry run reported on #933.
+  `thekim1` released 0.9.2 (#933, pin #934) and closed #927. All of the main session's pull requests were approved as
+  `Crotalus` on the user's word and merged. Fors #112 and #113 are closed.
 
 ## Known gaps, documented, not fixed
 
@@ -229,46 +213,39 @@ the reviews of #906) is in this file's history: `git log -- HANDOVER.md`.
 
 ## State
 
-- **Release:** `v0.9.1` published 2026-11-21 ([run 44923888580](https://github.com/thekim1/kalla/actions/runs/44923888580)),
-  tag at `e9ec0597`, on Fors `v0.12.2`; `v0.9.0` the same morning (tag at `1ed5bdd8`, on Fors `v0.12.1`). Both are
-  `ghcr.io/thekim1/kalla/*`, public, Apache-2.0. `v0.8.0` and earlier are Ume.Rag (`ghcr.io/thekim1/ume-rag/*`,
-  EUPL-1.2).
-- **Audit:** green on 2026-11-21 ([run 44905272366](https://github.com/thekim1/kalla/actions/runs/44905272366)),
-  the first run on 0.9.0's images and the first green one since the image scan was added (#819). 0.9.1's images
-  are scanned from the next run. The dated exceptions are in *Watch*.
-- **What a deployer types in Portainer:** 1 value since 0.7.0 (`FORS_DOMAIN` since the rename, no secret).
-- **On `main`, unreleased:** Dependabot's four bumps (#911 to #914), with no change notes (`changes/` holds only its
-  README); the compose files default to 0.9.1's images (#919).
-- **Migrations in 0.9.0:** `CollectionSlugUniqueAmongLive`, `AssistantsDeletedAt`,
-  `PurgeDeletedSourcesAndCollections`; *Rolling update: no* (the rename).
+- **Release:** `v0.9.2` published 2026-11-21 23:27 UTC (tag at `c7d5de47`, on Fors `v0.12.2`); `v0.9.1` and `v0.9.0`
+  the same day. All are `ghcr.io/thekim1/kalla/*`, public, Apache-2.0. `v0.8.0` and earlier are Ume.Rag
+  (`ghcr.io/thekim1/ume-rag/*`, EUPL-1.2).
+- **Audit:** last green on 2026-11-21 ([run 44905272366](https://github.com/thekim1/kalla/actions/runs/44905272366));
+  0.9.2's images are scanned from the next run. The dated exceptions are in *Watch*.
+- **What a deployer types in Portainer:** 1 value since 0.7.0 (`FORS_DOMAIN`, no secret).
+- **On `main`, unreleased:** plan files only; `changes/` holds only its README.
 - **Queues:** stream a: the live block (A-L1 to A-L10), A-34 and A-35 with only their live checks open. Stream b:
-  B-54 to B-59 (P2 wave 1), B-42 to B-46 (the gateway phases' live checks) and its live items. Main: M-4.
-- **Open issues that matter:** #781 (watch), #667 (M-16's issue: the work is done, the issue is `thekim1`'s to
-  close), #920 (the VM's upgrade, `thekim1`'s), #333, #511, #580 and #550. In Fors: #112 and #113. Open pull
-  requests: this file's (#922); none in Fors.
+  B-54 to B-59 and B-63 (P2 wave 1), B-61 and B-62 (F10, F7), B-42 to B-46 (the gateway phases' live checks) and its
+  live items. Main: M-4.
+- **Open issues that matter:** #781 and #921 (watch), #920 (the VM's upgrade, `thekim1`'s), #929 (topics; steps 2 to 4
+  are #932), #667 (M-16's issue: the work is done, `thekim1`'s to close), #333, #511, #580 and #550. In Fors: proposals
+  #108 and #109, #99, #91, and a flaky test #124; no open pull requests.
 - **Dependabot works:** grouped pull requests; `.github/dependabot.yml`'s header lists where a pin is repeated.
   Playwright is bumped by hand, in the package list, the renderer image and its lockfile together (#907).
-- **The user's machine (`~/research/rag`):** the main clone on `main`, and a worktree per open
-  `main-session/` pull request. Docker works
-  without sudo; there is no sudo.
+- **The user's machine (`~/research/rag`):** the main clone on `main`, and a worktree per open `main-session/` pull
+  request. Docker works without sudo; there is no sudo.
   - **The development stack is under the new names** (session 53): secrets in `kalla-apphost-dev`, data in
-    `kalla-dev-postgres`, `kalla-openwebui-data` and `kalla-clamav-db`, copied from the `ume-rag-*` volumes, which are
-    kept with the old secrets until the user lets them go. A start against a real gateway needs
-    `Gateway:Services:<service>:Key` first (handbook, *Local stack*). Three older generated volumes
-    `ume.rag.apphost-*-postgres-data` are left too.
+    `kalla-dev-postgres`, `kalla-openwebui-data` and `kalla-clamav-db`. A start against a real gateway needs
+    `Gateway:Services:<service>:Key` first; until then start with `FakeGateway__Enabled=true` (handbook, *Local stack*).
+    Stop it with `aspire stop --apphost src/Kalla.AppHost/Kalla.AppHost.csproj` (the permission check stops `--all`).
   - **Local images:** `kalla.local/renderer:ci` (Playwright 1.65.1; the worker's render tests take it through
-    `KALLA_TEST_RENDERER_IMAGE`). The earlier sessions' `bump09`, `ume-rag*` and gateway `setup-test` images were
-    removed on 2026-11-21.
+    `KALLA_TEST_RENDERER_IMAGE`).
   - **Docker's default address pools are full** (about 25 unused networks of other projects): a new Compose project
     needs explicit subnets, or a `docker network prune` by the user. The machine's name is upper case and does not
-    resolve inside containers. Neither `gh` token has `read:packages`; Källa's images are public since 0.9.0.
+    resolve inside containers. Neither `gh` token has `read:packages`; Källa's images are public.
   - **Tools:** `kubectl` is installed (`kubectl kustomize` renders the overlays); `actionlint` is at
     `/snap/bin/actionlint`; `shellcheck` and `pwsh` are not installed; `grep` is ugrep. Playwright's Chromium and
     Firefox are in `~/.cache/ms-playwright`. The Aspire CLI is at
     `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on PATH).
 - **`thekim1`'s machine:** a fresh clone after the rename; its development data starts empty under `~/.kalla`.
-- **Fors on the user's machine:** `~/git/llmgateway` is a clone of `thekim1/fors` on `main` at `v0.12.2` (its
-  worktrees removed on 2026-11-21, their branches kept); read a release with `git show v0.12.2:<path>`. The remote is
-  still named `thekim1/llmgateway` there (GitHub redirects); push with the `gh` credential helper. Merges and releases
-  in Fors are the user's; its rules: draft pull requests (drafts run no CI), checks run locally first, squash-merge.
-  Ports 5000 and 5173 are taken here (`ASPNETCORE_URLS=http://127.0.0.1:0` for its IntegrationTests).
+- **Fors on the user's machine:** `~/git/llmgateway` is a clone of `thekim1/fors` on `main` at `v0.12.2`; read a
+  release with `git show v0.12.2:<path>`. The remote is still named `thekim1/llmgateway` there (GitHub redirects); push
+  with the `gh` credential helper. Merges and releases in Fors are the user's; its rules: draft pull requests (drafts
+  run no CI), checks run locally first, squash-merge. Ports 5000 and 5173 are taken here
+  (`ASPNETCORE_URLS=http://127.0.0.1:0` for its IntegrationTests).
