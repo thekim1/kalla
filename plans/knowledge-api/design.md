@@ -1,6 +1,6 @@
 # Knowledge API: detailed design
 
-Detail step 7 of the Källa design. Details [`../archive/area-plans/knowledge-api.md`](../archive/area-plans/knowledge-api.md) (archived: history, not binding; this design
+Details [`../archive/area-plans/knowledge-api.md`](../archive/area-plans/knowledge-api.md) (archived: history, not binding; this design
 states every rule, the plan's answered questions in §19) and the decisions in [`../decisions.md`](../decisions.md). Consumes, without
 redesigning: the `content` tables, `SearchText`/`SearchVector`, indexes, outbox and Redis rules of
 [`../platform/data-model.md`](../platform/data-model.md) (§2.2, §3, §5, §11); the chunk rows, `Kalla.Retrieval` and
@@ -14,7 +14,7 @@ parse-output layout and index writer of [`../ingestion-worker/design-engine.md`]
 [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) (§1, §3, §8, §9). Changes needed
 elsewhere: §18; questions: §19; unverified facts: §20; removed or deferred: §21.
 
-Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5). Library facts checked for this step
+Gateway citations are `path:line` in the gateway's repository (Fors) at `e25b491` (v0.8.5), from before Källa's features were built there. Library facts checked for this step
 (downloaded into the scratchpad, read only): **pgvector 0.8.7** source (tag `v0.8.7`, 2026-10-01; `src/hnsw.c:28-31`
 `hnsw.iterative_scan` = `off`/`relaxed_order`/`strict_order`, `:93-95` `hnsw.ef_search` 1..1000 default 40
 (`src/hnsw.h:60-62`), `:102-104` `hnsw.max_scan_tuples` default 20,000, `:107-109` `hnsw.scan_mem_multiplier` default 1;
@@ -103,7 +103,7 @@ public sealed record RetrievedChunk(
 
 public sealed record ChunkScores(
     double? Fused, double? VectorDistance, int? VectorRank, double? KeywordScore, int? KeywordRank,
-    double? RerankScore);                                                      // P2, when the assistant reranks (§6.7)
+    double? RerankScore);                                                      // when the assistant reranks (§6.7)
 public sealed record Coverage(CoverageStatus Status, double? BestDistance, double? Threshold, Guid? CollectionId,
     double? BestKeywordScore);
 public enum CoverageStatus { Ok, Low, Unknown }
@@ -220,7 +220,7 @@ metadata (no index, would break the rule that every filter runs on an index).
 | `document` | object | citation, §10.1 |
 | `sections[]` | | §9; each at most once even when several results point at it |
 | `coverage.status` | `ok` \| `low` \| `unknown` | §7 |
-| `degraded` | null \| `embedding_unavailable` \| `embedding_residency` \| `rerank_unavailable` (P2) | §5.5, §6.7 |
+| `degraded` | null \| `embedding_unavailable` \| `embedding_residency` \| `rerank_unavailable` | §5.5, §6.7 |
 | `config_version` | int | snapshot the decision was made at (R7) |
 
 Headers: `Cache-Control: no-store` (gateway `UseKallaSecurityHeaders` with `NoStorePrefixes` `/v1`,
@@ -991,7 +991,7 @@ are `DocumentType` values (an empty list means every type; the admin refuses one
 rankings; the next evaluation report shows their effect (processing §13). `top_k` is not a
 collection setting: it belongs to the request (assistant `QuerySteps`, default 10). Platform-only values live in
 `Settings.Retrieval`: the defaults above plus `exactScanMaxChunks` 10,000, `minHnswSelectivity` 0.2 % (§6.4),
-`expandTotalMaxTokens` 8,000; P2 adds `rerankCandidates` and `coverageMinRerankScore` (§6.7). The grant lifetime is a
+`expandTotalMaxTokens` 8,000, and `rerankCandidates` (20) and `coverageMinRerankScore` for rerank (§6.7). The grant lifetime is a
 deployment setting (`Knowledge:DownloadGrantLifetime`, §4.6), not a `Settings` value: it is bound to the signing keys
 of the deployment, so one value exists.
 
@@ -1244,7 +1244,7 @@ Moved to [`../archive/design-history/knowledge-api.md`](../archive/design-histor
   `HttpServerTransportOptions.Stateless`) were checked in 2.3.0; recheck the version at P2 start.
 - Minimal APIs: a per-endpoint request body limit for knowledge routes when the role shares the host with chat (else
   rely on the 2,000-character query validation and Kestrel's host limit).
-- P2 rerank: latency of `bge-reranker-v2-m3` over 30 passages on the on-prem hardware (the §6.7 limit is 1.5 s for
+- Rerank on-prem: latency of `bge-reranker-v2-m3` over 30 passages on the on-prem hardware (the §6.7 limit is 1.5 s for
   the EU POC model; whether on-prem fits a shorter one) and the gateway endpoint's contract.
 
 ## 21. Deferred or removed (simplification pass)

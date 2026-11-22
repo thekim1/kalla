@@ -4,8 +4,8 @@
 `GatewayModels` sync (admin design §4.10), and its assistants have instructions and directly linked collections, no
 skills or tools.
 
-Detail step 9 of the Källa design (reasoning for its P2 shape: [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md)
-§10, §15). Details [`../archive/area-plans/tools.md`](../archive/area-plans/tools.md) (archived: history, not binding; this design states
+Its P2 shape is reasoned in [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md)
+§10, §15. Details [`../archive/area-plans/tools.md`](../archive/area-plans/tools.md) (archived: history, not binding; this design states
 every rule, the plan's answered questions and its recommendation for question 1 in §14) and the Decisions table in
 [`../decisions.md`](../decisions.md). All of it is **P2 scope** unless marked (OBO, write tools,
 external servers P3). Consumes, without redesigning: `IAnswerStrategy`, `AnswerEvent.ToolCall`, the request path, token
@@ -26,7 +26,7 @@ documents: §13; questions: §14; unverified facts: §15; deferred or removed: �
 
 | Source | Version | Used for |
 |---|---|---|
-| Gateway `~/git/llmgateway` | `e25b491` (v0.8.5); "Pipeline" = `src/Fors.Gateway/Pipeline/` | rate-limit script, cost formula, catalogue, feature tags, provider-tool policy |
+| Gateway (Fors) | `e25b491` (v0.8.5); "Pipeline" = `src/Fors.Gateway/Pipeline/` | rate-limit script, cost formula, catalogue, feature tags, provider-tool policy |
 | Bifrost `~/git/rag-platforms/bifrost` | `a09cea0` (2026-10-29) | list/call filter symmetry, two lists, skill versions |
 | Agent Skills spec `github.com/agentskills/agentskills` (cloned into the scratchpad) | `69ef37e` (2026-08-09) | `docs/specification.mdx`, `docs/client-implementation/adding-skills-support.mdx`, `docs/skill-creation/evaluating-skills.mdx`, `skills-ref/src/skills_ref/validator.py` |
 | Anthropic skills `github.com/anthropics/skills` | `ca45fc4` (2026-10-28) | `template/SKILL.md`, `spec/` (points to agentskills.io) |
@@ -81,7 +81,7 @@ network hop.
 | `kalla-api` (chat role) → hosted MCP servers | internal network `mcp` | `client-credentials` token of the tool identity (§4.6) | tool calls (MCP over Streamable HTTP) |
 | `kalla-admin` → hosted MCP servers | `mcp` | same | discovery, connection test, drift polling (leader), P2 agent test-panel tool calls (admin design §4.9), skill gate tool calls (read-only, §3.7) |
 | hosted MCP server → wrapped system | one network per server `mcp-<name>-egress`, firewall to its systems only | the server's own credential | – |
-| `kalla-admin` → gateway | `llm` (existing) | its credential key (until the gateway's integration phase 1 its keys of every level), as the assistant's gateway key | skill gate model calls |
+| `kalla-admin` → gateway | `llm` (existing) | its credential key, as the assistant's gateway key | skill gate model calls |
 
 **Bulkheads** (`ServerBulkhead`, per server and process): at most `ToolServers.MaxConcurrentCalls` (proposed 8) calls in
 flight per instance, further calls wait ≤ 1 s then `unavailable`; the call timeout of §4.7; a circuit that opens after
