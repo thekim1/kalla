@@ -95,8 +95,9 @@ public static class AssistantEndpoints
             .RequireAuthorization(AdminPolicies.Edit).WithName("CreateAssistant").WithSummary("Create an assistant with a draft that starts from the default instructions");
 
         // Copy (admin design §4.5, P2; B-55): a new assistant whose only version is a draft equal to the source's published
-        // version (its draft when never published). Audiences, the gateway key, the other versions and the statistics are not
-        // copied. The caller reads the source and edits in the target department; V11/V12 come back as warnings.
+        // version (its draft when never published), with the source's test questions (B-57). Audiences, the gateway key, the
+        // other versions, the test runs and the statistics are not copied. The caller reads the source and edits in the target
+        // department; V11/V12 come back as warnings.
         assistants.MapPost("/{id:guid}/copy", async (Guid id, AssistantCopyRequest request, AdminContext admin, CancellationToken ct) =>
             {
                 var (copy, draft) = await admin.WriteAsync(async attempt =>
@@ -135,6 +136,14 @@ public static class AssistantEndpoints
                         CreatedBy = admin.Actor, CreatedAt = admin.Now, UpdatedAt = admin.Now, UpdatedBy = admin.Actor,
                     };
                     admin.Db.AssistantVersions.Add(draft);
+                    // The test questions come along (admin design §4.5, §7.4: the set belongs to the assistant); their runs do not.
+                    var questions = await admin.Db.AssistantTestQuestions.AsNoTracking().Where(q => q.AssistantId == source.Id).ToListAsync(attempt);
+                    admin.Db.AssistantTestQuestions.AddRange(questions.Select(q => new AssistantTestQuestion
+                    {
+                        AssistantId = copy.Id, Ordinal = q.Ordinal, Question = q.Question, ExpectedBehaviour = q.ExpectedBehaviour,
+                        ExpectedDocumentId = q.ExpectedDocumentId, ExpectedPhrase = q.ExpectedPhrase,
+                        CreatedBy = admin.Actor, CreatedAt = admin.Now, UpdatedAt = admin.Now, UpdatedBy = admin.Actor,
+                    }));
                     await admin.Db.SaveChangesAsync(attempt);
                     copy.DraftVersionId = draft.Id;
                     var origin = from is null ? $"{source.Slug}" : $"{source.Slug} version {from.Number.ToString(System.Globalization.CultureInfo.InvariantCulture)}";

@@ -137,11 +137,138 @@ namespace Kalla.Infrastructure.Persistence.Migrations
                 JOIN config."Assistants" a ON a."PublishedVersionId" = v."Id" AND a."Id" = v."AssistantId"
                 WHERE v."State" = 'published' AND a."DeletedAt" IS NULL;
                 """);
+
+            // Data-model §8 (B-57): the nightly content step also keeps the last 20 assistant-tests runs per assistant and
+            // removes all of them once the assistant's row is gone; their EvaluationResults go with them (FK RunId, Cascade).
+            migrationBuilder.Sql("""
+                CREATE OR REPLACE FUNCTION content.rag_retention_content_step(batch_size integer) RETURNS bigint
+                LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+                DECLARE
+                    deleted bigint := 0;
+                    n bigint;
+                BEGIN
+                    IF batch_size IS NULL OR batch_size < 1 OR batch_size > 10000 THEN
+                        RAISE EXCEPTION 'batch_size must be between 1 and 10000';
+                    END IF;
+                    DELETE FROM content."CollectionDailyUsage" WHERE ("Day", "CollectionId", "Classification", "Step") IN (
+                        SELECT "Day", "CollectionId", "Classification", "Step" FROM content."CollectionDailyUsage"
+                        WHERE "Day" < (now() AT TIME ZONE 'Europe/Stockholm')::date - interval '3 years' ORDER BY "Day" LIMIT batch_size);
+                    GET DIAGNOSTICS n = ROW_COUNT;
+                    deleted := deleted + n;
+                    WITH gone AS (
+                        DELETE FROM content."Runs" WHERE "Id" IN (
+                            SELECT r."Id" FROM content."Runs" r
+                            WHERE r."FinishedAt" < now() - interval '13 months' AND r."State" <> 'awaiting-deletion-confirmation'
+                              AND EXISTS (SELECT 1 FROM content."Runs" a
+                                          WHERE a."SourceId" = r."SourceId" AND a."StartedAt" > r."StartedAt" AND a."Kind" = 'sync'
+                                            AND a."SettingsHashes" IS NOT NULL
+                                            AND a."State" IN ('succeeded', 'degraded', 'awaiting-deletion-confirmation')
+                                            AND coalesce((a."Report" -> 'completeness' ->> 'complete')::boolean, true))
+                              AND (r."Trigger" <> 'schedule'
+                                   OR EXISTS (SELECT 1 FROM content."Runs" s
+                                              WHERE s."SourceId" = r."SourceId" AND s."Trigger" = 'schedule' AND s."ScheduledFor" > r."ScheduledFor"))
+                            ORDER BY r."FinishedAt" LIMIT batch_size)
+                        RETURNING "Id"),
+                    crawl AS (DELETE FROM content."CrawlRuns" c USING gone WHERE c."RunId" = gone."Id"),
+                    proposals AS (DELETE FROM content."DeletionProposals" p USING gone WHERE p."RunId" = gone."Id")
+                    SELECT count(*) INTO n FROM gone;
+                    deleted := deleted + n;
+                    DELETE FROM content."ParseObservations" WHERE "Id" IN (
+                        SELECT "Id" FROM content."ParseObservations" WHERE "ObservedAt" < now() - interval '180 days' ORDER BY "ObservedAt" LIMIT batch_size);
+                    GET DIAGNOSTICS n = ROW_COUNT;
+                    deleted := deleted + n;
+                    DELETE FROM content."RetrievalStats" WHERE ("Day", "DocumentId", "TextHash", "CollectionId") IN (
+                        SELECT "Day", "DocumentId", "TextHash", "CollectionId" FROM content."RetrievalStats"
+                        WHERE "Day" < (now() AT TIME ZONE 'Europe/Stockholm')::date - interval '13 months' ORDER BY "Day" LIMIT batch_size);
+                    GET DIAGNOSTICS n = ROW_COUNT;
+                    deleted := deleted + n;
+                    DELETE FROM content."EmbeddingCache" WHERE ("Classification", "EmbeddingProfileId", "TextHash") IN (
+                        SELECT "Classification", "EmbeddingProfileId", "TextHash" FROM content."EmbeddingCache"
+                        WHERE "LastUsedAt" < now() - interval '30 days' ORDER BY "LastUsedAt" LIMIT batch_size);
+                    GET DIAGNOSTICS n = ROW_COUNT;
+                    deleted := deleted + n;
+                    DELETE FROM content."SiteProfileVersions" WHERE "Id" IN (
+                        SELECT v."Id" FROM content."SiteProfileVersions" v
+                        WHERE v."State" = 'superseded' AND v."CreatedAt" < now() - interval '1 year'
+                          AND (SELECT count(*) FROM content."SiteProfileVersions" m
+                               WHERE m."SiteProfileId" = v."SiteProfileId" AND m."Number" > v."Number") >= 10
+                        ORDER BY v."CreatedAt" LIMIT batch_size);
+                    GET DIAGNOSTICS n = ROW_COUNT;
+                    deleted := deleted + n;
+                    DELETE FROM content."EvaluationRuns" WHERE "Id" IN (
+                        SELECT r."Id" FROM content."EvaluationRuns" r
+                        WHERE r."Kind" = 'assistant-tests'
+                          AND (NOT EXISTS (SELECT 1 FROM config."Assistants" a WHERE a."Id" = r."SubjectId")
+                               OR (SELECT count(*) FROM content."EvaluationRuns" m
+                                   WHERE m."Kind" = 'assistant-tests' AND m."SubjectId" = r."SubjectId" AND m."StartedAt" > r."StartedAt") >= 20)
+                        ORDER BY r."StartedAt" LIMIT batch_size);
+                    GET DIAGNOSTICS n = ROW_COUNT;
+                    RETURN deleted + n;
+                END $$;
+                """);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql("""
+                CREATE OR REPLACE FUNCTION content.rag_retention_content_step(batch_size integer) RETURNS bigint
+                LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+                DECLARE
+                    deleted bigint := 0;
+                    n bigint;
+                BEGIN
+                    IF batch_size IS NULL OR batch_size < 1 OR batch_size > 10000 THEN
+                        RAISE EXCEPTION 'batch_size must be between 1 and 10000';
+                    END IF;
+                    DELETE FROM content."CollectionDailyUsage" WHERE ("Day", "CollectionId", "Classification", "Step") IN (
+                        SELECT "Day", "CollectionId", "Classification", "Step" FROM content."CollectionDailyUsage"
+                        WHERE "Day" < (now() AT TIME ZONE 'Europe/Stockholm')::date - interval '3 years' ORDER BY "Day" LIMIT batch_size);
+                    GET DIAGNOSTICS n = ROW_COUNT;
+                    deleted := deleted + n;
+                    WITH gone AS (
+                        DELETE FROM content."Runs" WHERE "Id" IN (
+                            SELECT r."Id" FROM content."Runs" r
+                            WHERE r."FinishedAt" < now() - interval '13 months' AND r."State" <> 'awaiting-deletion-confirmation'
+                              AND EXISTS (SELECT 1 FROM content."Runs" a
+                                          WHERE a."SourceId" = r."SourceId" AND a."StartedAt" > r."StartedAt" AND a."Kind" = 'sync'
+                                            AND a."SettingsHashes" IS NOT NULL
+                                            AND a."State" IN ('succeeded', 'degraded', 'awaiting-deletion-confirmation')
+                                            AND coalesce((a."Report" -> 'completeness' ->> 'complete')::boolean, true))
+                              AND (r."Trigger" <> 'schedule'
+                                   OR EXISTS (SELECT 1 FROM content."Runs" s
+                                              WHERE s."SourceId" = r."SourceId" AND s."Trigger" = 'schedule' AND s."ScheduledFor" > r."ScheduledFor"))
+                            ORDER BY r."FinishedAt" LIMIT batch_size)
+                        RETURNING "Id"),
+                    crawl AS (DELETE FROM content."CrawlRuns" c USING gone WHERE c."RunId" = gone."Id"),
+                    proposals AS (DELETE FROM content."DeletionProposals" p USING gone WHERE p."RunId" = gone."Id")
+                    SELECT count(*) INTO n FROM gone;
+                    deleted := deleted + n;
+                    DELETE FROM content."ParseObservations" WHERE "Id" IN (
+                        SELECT "Id" FROM content."ParseObservations" WHERE "ObservedAt" < now() - interval '180 days' ORDER BY "ObservedAt" LIMIT batch_size);
+                    GET DIAGNOSTICS n = ROW_COUNT;
+                    deleted := deleted + n;
+                    DELETE FROM content."RetrievalStats" WHERE ("Day", "DocumentId", "TextHash", "CollectionId") IN (
+                        SELECT "Day", "DocumentId", "TextHash", "CollectionId" FROM content."RetrievalStats"
+                        WHERE "Day" < (now() AT TIME ZONE 'Europe/Stockholm')::date - interval '13 months' ORDER BY "Day" LIMIT batch_size);
+                    GET DIAGNOSTICS n = ROW_COUNT;
+                    deleted := deleted + n;
+                    DELETE FROM content."EmbeddingCache" WHERE ("Classification", "EmbeddingProfileId", "TextHash") IN (
+                        SELECT "Classification", "EmbeddingProfileId", "TextHash" FROM content."EmbeddingCache"
+                        WHERE "LastUsedAt" < now() - interval '30 days' ORDER BY "LastUsedAt" LIMIT batch_size);
+                    GET DIAGNOSTICS n = ROW_COUNT;
+                    deleted := deleted + n;
+                    DELETE FROM content."SiteProfileVersions" WHERE "Id" IN (
+                        SELECT v."Id" FROM content."SiteProfileVersions" v
+                        WHERE v."State" = 'superseded' AND v."CreatedAt" < now() - interval '1 year'
+                          AND (SELECT count(*) FROM content."SiteProfileVersions" m
+                               WHERE m."SiteProfileId" = v."SiteProfileId" AND m."Number" > v."Number") >= 10
+                        ORDER BY v."CreatedAt" LIMIT batch_size);
+                    GET DIAGNOSTICS n = ROW_COUNT;
+                    RETURN deleted + n;
+                END $$;
+                """);
+
             // A view cannot lose a column in place; the roles script grants on it again at the next migration.
             migrationBuilder.Sql("""
                 DROP VIEW config."PublishedAssistantVersions";

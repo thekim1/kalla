@@ -154,6 +154,12 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database, Assis
             audience.StatusCode.ShouldBe(HttpStatusCode.OK, await audience.Content.ReadAsStringAsync(Ct));
         }
 
+        // The test questions are the assistant's, so they come along (B-57).
+        using (var question = await admin.PostAsJsonAsync($"/api/assistants/{id}/test-questions", new { question = "Behöver jag bygglov?", expectedBehaviour = "Svarar ja eller nej." }, Ct))
+        {
+            question.StatusCode.ShouldBe(HttpStatusCode.Created, await question.Content.ReadAsStringAsync(Ct));
+        }
+
         // A newer draft is not what is copied: the published version is.
         using (var newer = await admin.PutAsJsonAsync($"/api/assistants/{id}/draft", new { gatewayModel = Model, systemPrompt = "Utkast som inte kopieras.", collectionLinks = links }, Ct))
         {
@@ -181,6 +187,8 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database, Assis
             .ShouldBe(("Publicerad text.", Model, "Hittar inget."));
         copyDraft.GetProperty("collectionLinks")[0].GetProperty("collectionId").GetGuid().ShouldBe(seed.Collection);
         (await admin.GetFromJsonAsync<JsonElement>($"/api/assistants/{copyId}/versions", Ct)).GetArrayLength().ShouldBe(1);
+        (await admin.GetFromJsonAsync<JsonElement>($"/api/assistants/{copyId}/test-questions", Ct)).EnumerateArray().Select(q => q.GetProperty("question").GetString())
+            .ShouldBe(["Behöver jag bygglov?"]);
 
         // The source is unchanged, and the outsider (only the target department) can't read it to copy it.
         (await admin.GetFromJsonAsync<JsonElement>($"/api/assistants/{id}", Ct)).GetRawText().ShouldBe(before);
