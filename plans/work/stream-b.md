@@ -310,8 +310,7 @@ one waits. Neither changes an answer that doesn't ask.
 
 ## Uploads (user, 2026-11-23)
 
-### [ ] B-83 Replace by name: a known file's upload replaces it by default (admin §5.5.7 point 6; support case SA-11)
-- **Taken:** 2026-11-23, the main session on the user's machine (#1011), branch `b/B-83-replace-by-name`.
+### [x] B-83 Replace by name: a known file's upload replaces it by default (admin §5.5.7 point 6; support case SA-11) (#1016)
 - **Do:** in the upload's file list (drop zone and picker), match each added file's relative path against the source's
   live files before sending; when any match, one dialog lists them and asks *Replace the existing files* (default) or
   *Keep both*. *Replace* sends each match as that file's replacement, the way the row's *Replace* does (the same
