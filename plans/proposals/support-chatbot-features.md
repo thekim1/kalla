@@ -3,17 +3,20 @@
 **Status:** **proposal**, for the user to choose from (decided 2026-11-15 to write it up; nothing is built until a
 feature is picked). **Picked and built** (released in `v0.9.0`): **F3** and **F4** (user, 2026-11-19, #857; Decisions
 "Escalation hand-off" and "Source dates on citations", chat §9.9 and knowledge §10.1) and **F8** (user, 2026-11-20;
-Decisions "Topics per request"). **Picked, designed and queued:** **F6** (user, 2026-11-22; Decisions "Downvotes per document", B-66), **F10** and **F7** (user, 2026-11-21; Decisions "Cost per outcome" and
-"Content-gap report", stream b's B-61 and B-62). The others stay proposals. Each picked feature then gets a chat or admin design section and a Decisions line from the main
-session before it is queued (`cases/support-assistant/06-gaps.md` preamble). Written by the main session, 2026-11-15,
-from the comparison in [`../../platforms/eneo-vs-ume-rag.md`](../../platforms/eneo-vs-ume-rag.md) Part 2, which holds
-the Eneo evidence (the greps) for each.
+Decisions "Topics per request"). **Picked, designed and queued:** **F6** (user, 2026-11-22; Decisions "Downvotes per
+document", B-66), **F10** and **F7** (user, 2026-11-21; Decisions "Cost per outcome" and "Content-gap report", stream
+b's B-61 and B-62). The others stay proposals. Each picked feature then gets a chat or admin design section and a
+Decisions line from the main session before it is queued (`cases/support-assistant/06-gaps.md` preamble). Written by the
+main session, 2026-11-15, from the comparison in
+[`../../platforms/eneo-vs-ume-rag.md`](../../platforms/eneo-vs-ume-rag.md) Part 2, which holds the Eneo evidence (the
+greps) for each.
 
-The case is the Support Assistant: an IT support chatbot for municipal staff (`cases/support-assistant/`). None of
-these is built or queued, and none duplicates a planned item: per-assistant test-question sets, the nightly answer
-judge, unused-assistant attention items, the public widget, `/mcp`, picture descriptions (U1, waits on DoIT's files at
-T6) and the Git connector (SA-10) are already planned and left out. Sizes as in `06-gaps.md`: **S** is days, **M** a
-week or two, **L** several weeks.
+The case is the Support Assistant: an IT support chatbot for municipal staff (`cases/support-assistant/`). When this
+was written none of these was built or queued (the status line above says which are now), and none duplicates a
+planned item: per-assistant test-question sets (built since, B-57), the nightly answer judge (B-58), unused-assistant
+attention items, the public widget, `/mcp`, picture descriptions (U1, waits on DoIT's files at T6) and the Git
+connector (SA-10) were already planned and are left out. Sizes as in `06-gaps.md`: **S** is days, **M** a week or two,
+**L** several weeks.
 
 ## At a glance
 
@@ -53,9 +56,9 @@ first, below), and **F5** and **F9** last.
 
 - **User value:** with the answer, the app gets `{category, system, urgency_hint, missing: ["device", "error text"]}`.
   The frontend pre-fills the ticket fields and asks for the missing facts.
-- **Fit:** in `Kalla.Answering`, one call on the condense model, run like `FollowUps.cs` (its own budget, second
-  `kalla` chunk, `[]` on failure, never stored). It uses the same personal-data and no-link filters, with a category list
-  set per assistant version. It runs on the assistant's gateway key, so its cost is attributed per step.
+- **Fit:** in `Kalla.Answering`, one call on the condense model, run like `FollowUps.cs` (its own budget, second `kalla`
+  chunk, `[]` on failure, never stored). It uses the same personal-data and no-link filters, with a category list set
+  per assistant version. It runs on the assistant's gateway key, so its cost is attributed per step.
 - **Eneo:** has no structured answer metadata in the conversation API (grep `triage`: only a help-assistant template;
   `response_format\|json_schema` in `B/conversations`, `B/assistants`: only OpenAPI deprecation flags).
 
@@ -95,8 +98,8 @@ first, below), and **F5** and **F9** last.
 - **User value:** the knowledge-base editor sees "this guide was cited in 7 thumbs-down answers this month" and fixes
   the guide, not the prompt.
 - **Fit:** `chat."Feedback"` (API and Open WebUI import) already references the message. `MessageSource` already holds
-  the cited document ids, even in history mode `none` (`ChatEntities.cs:155-199`). Add a per-document aggregate and an
-  attention item on the knowledge-base page. It works without stored content.
+  the cited document ids, even in history mode `none` (`MessageSource` in `src/Kalla.Domain/Entities/ChatEntities.cs`).
+  Add a per-document aggregate and an attention item on the knowledge-base page. It works without stored content.
 - **Eneo:** partial. It counts feedback per assistant (`B/analysis/analysis_router.py:355`) and lists questions with
   their feedback, but has no per-source aggregation (grep `feedback` in `B/analysis` with `blob\|source\|reference`:
   nothing).
@@ -105,10 +108,10 @@ first, below), and **F5** and **F9** last.
 
 - **User value:** "18 % of questions this week ended `not-found`, mostly near the topic *VPN*". DoIT knows which
   guide to write next.
-- **Fit:** outcomes are stored per message (`MessageOutcomes`, `ChatEntities.cs:27-38`). Add the nearest-hit topic and
-  collection for low-coverage turns. Query text stays unstored, so the report is counts per topic and day. Example
-  questions only come later through the A1 path, or as editor-rewritten questions (Decisions "Evaluation models …").
-  It feeds the gold set.
+- **Fit:** outcomes are stored per message (`MessageOutcomes` in `src/Kalla.Domain/Entities/ChatEntities.cs`). Add the
+  nearest-hit topic and collection for low-coverage turns. Query text stays unstored, so the report is counts per topic
+  and day. Example questions only come later through the A1 path, or as editor-rewritten questions (Decisions
+  "Evaluation models …"). It feeds the gold set.
 - **Eneo:** has no outcome classification (grep `answer_outcome\|unanswered\|no_answer`: prompt text only) and no gap
   report (grep `content.?gap\|knowledge.?gap`). Insights Q&A over stored conversations (`analysis_router.py:667`) is a
   manual, partial substitute.
@@ -117,8 +120,9 @@ first, below), and **F5** and **F9** last.
 
 - **User value:** the support app has a "Printers / Teams / Accounts" selector, and the search stays inside that topic.
   This raises precision on short tickets.
-- **Fit:** topics are already GIN-indexed tags in the retrieval SQL (`SearchScope.cs:26-30`). A request may only
-  narrow the assistant's linked topics, never widen them, the same rule as `kalla.general_knowledge`.
+- **Fit:** topics are already GIN-indexed tags in the retrieval SQL (`SearchScope` in
+  `src/Kalla.Retrieval/SearchScope.cs`). A request may only narrow the assistant's linked topics, never widen them, the
+  same rule as `kalla.general_knowledge`.
 - **Eneo:** has no metadata or tag filter at search time (`B/info_blobs/source_metadata.py:1-7`). The TOOL mode's
   `within=` narrows to one source chosen by the model, not by the client (`B/internal_mcp/knowledge.py:706-709`).
 
@@ -138,6 +142,7 @@ first, below), and **F5** and **F9** last.
 - **User value:** "the support assistant costs $0.004 per answered ticket and $0.001 per not-found". This gives a
   basis for chargeback and for choosing between models on the gold set.
 - **Fit:** `AssistantDailyUsage` already splits cost per step from the gateway's `x-fors-cost-usd`, and outcomes are
-  stored per message. Join them on the run (`x-fors-run-id`) into a per-outcome column on the Costs page.
+  stored per message. Join them on the run (`x-fors-run-id`) into per-outcome rows on the assistant's *Cost* card (admin
+  §8.6; Decisions "Cost per outcome").
 - **Eneo:** has no per-space or per-assistant cost (`B/token_usage` routers: tenant and user only). Cost is estimated
   in the browser (`usage-page.tsx:183`).

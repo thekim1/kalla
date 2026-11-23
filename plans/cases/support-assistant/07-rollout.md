@@ -12,11 +12,12 @@ with the detail. The quality gate is the platform's own: a hand-graded gold set 
 | 0.3 | Gaps built before the pilot: **done**. SA-1 and SA-2 (#433), SA-3 (#434), SA-4 (#431), SA-6 (#430) and SA-7 (#432) are on `main` ([`06-gaps.md`](06-gaps.md)) | main session |
 | 0.4 | Named people: knowledge-base editor (contact), department admin, the frontend team's contact, 3–5 reviewers from support | user, support organisation |
 | 0.5 | An inventory of the sources: intranet sections, file folders, Markdown repositories, file types (legacy Office?) | support organisation |
-| 0.6 | Condense model: **`gpt-6-luna`** (user, 2026-11-06), with `Chat:LongQuestionCondenseTimeout` 4 s and `Chat:FollowUpTimeout` 3 s ([`01-gateway-setup.md`](01-gateway-setup.md) §1) | done |
+| 0.6 | Condense model: **`gpt-6-luna`** (user, 2026-11-06) with the decided budgets, `Chat:LongQuestionCondenseTimeout` 3 s and `Chat:FollowUpTimeout` 2 s; a faster model within `Eu`, not a longer timeout, if it misses them (user, 2026-11-23; [`01-gateway-setup.md`](01-gateway-setup.md) §1) | done |
+| 0.7 | DoIT's assigned gateway key for the knowledge base and the assistant, its models and its PII policy `Allow` (user, 2026-11-23; [`01-gateway-setup.md`](01-gateway-setup.md) §2, §4) | DoIT, gateway operator |
 
 ## 0b. Proof of concept on the local stack (suggestion, main session, 2026-11-08)
 
-The case end to end on the main session's local stack (`v0.2.0` code, the interim gateway), before the test host and
+The case end to end on the main session's local stack (current `main`, against a gateway), before the test host and
 the DPIA exist. It shows whether the documents parse well, whether the answers solve tickets and whether related
 documents and follow-ups help, and it gives the frontend team real answers to build against. **Anonymised or invented
 tickets only**: real ticket text waits for G1 (0.2).
@@ -25,7 +26,7 @@ tickets only**: real ticket text waits for G1 (0.2).
 |---|---|---|
 | P1 | Local stack against the interim gateway (`docs/local-development.md`; `Seed__Enabled=false`) | ready |
 | P2 | The documents: the Word, PDF and Markdown files copied to the machine; intranet pages crawled if the intranet is reachable from it, else saved as PDF or HTML and uploaded | the source inventory (0.5) |
-| P3 | DoIT knowledge base `support` (`internal`): upload source, crawl source if reachable; preview, first sync, run reports, personal-data report ([`02-knowledge-base.md`](02-knowledge-base.md) §5) | main session |
+| P3 | DoIT knowledge base `support` (`internal`, a DoIT gateway key that reaches the models, V39): upload source, crawl source if reachable; preview, first sync, run reports, personal-data report ([`02-knowledge-base.md`](02-knowledge-base.md) §5) | main session |
 | P4 | Assistant `support`: the instructions of [`04-assistant.md`](04-assistant.md) §3, `generalKnowledge` `fallback`, a not-found text with the real escalation links; condense model per [`01-gateway-setup.md`](01-gateway-setup.md) §1 (local stack) | main session |
 | P5 | About twenty anonymised tickets in the test panel, then through `POST /v1/chat/completions` with `"kalla": {"related_documents": 5, "follow_ups": 3}` on an `integration` client and key ([`05-frontend-integration.md`](05-frontend-integration.md) §2, §8) | tickets from support, anonymised |
 | P6 | Generated evaluation set and a first retrieval report (processing §13, §14) | – |
@@ -38,12 +39,12 @@ Not in the proof of concept: real tickets (G1), staff use (the test host, §1), 
 
 | # | Step | Detail |
 |---|---|---|
-| 1.1 | Källa `v0.2.0` (or later) deployed against the gateway, test host first; the release bundle's smoke test passed in the release run | [`../../../docs/compose-quick-start.md`](../../../docs/compose-quick-start.md), [`../../../docs/production-setup.md`](../../../docs/production-setup.md) |
-| 1.2 | Gateway models (optional reranker: `Cohere-rerank-v5-fast` under the Foundry provider, native since gateway v0.9.1), keys, PII policy | [`01-gateway-setup.md`](01-gateway-setup.md) |
-| 1.3 | `--crawl-allow` for the intranet ranges; robots.txt allowance if needed | [`02-knowledge-base.md`](02-knowledge-base.md) §2 |
+| 1.1 | Källa `v0.9.2` (or later) and Fors `v0.12.2` deployed as one Portainer stack, test host first; the release bundle's smoke test passed in the release run | [`../../../docs/portainer.md`](../../../docs/portainer.md); the Compose quick start only for local trials |
+| 1.2 | Gateway models (optional reranker: this deployment's `Cohere-rerank-v5-fast` under the Foundry provider), the credential keys, DoIT's assigned key with PII policy `Allow` | [`01-gateway-setup.md`](01-gateway-setup.md) |
+| 1.3 | `KALLA_CRAWL_ALLOW` for the intranet ranges (the stack variable; `--set KALLA_CRAWL_ALLOW=…` with Compose); robots.txt allowance if needed | [`02-knowledge-base.md`](02-knowledge-base.md) §2 |
 | 1.4 | Department and admins in Keycloak realm `fors`; organisation sync | [`02-knowledge-base.md`](02-knowledge-base.md) §5 |
 | 1.5 | `Settings.Chat.allowedLinkHosts` includes the intranet host | [`04-assistant.md`](04-assistant.md) §6 |
-| 1.6 | `Settings.Chat.condenseModel` set (0.6); `Chat:LongQuestionCondenseTimeout` raised to 4 s only if `gpt-6-luna` stays | [`04-assistant.md`](04-assistant.md) §2 |
+| 1.6 | `Settings.Chat.condenseModel` set (0.6); the `Chat:` budgets left at their defaults | [`04-assistant.md`](04-assistant.md) §2 |
 | 1.7 | `Settings.TrustedProxies` = the reverse proxy's addresses, so key allow-lists and the download limit see the client | [`05-frontend-integration.md`](05-frontend-integration.md) §2 |
 | 1.8 | Politeness profile for the intranet host if the defaults do not fit (rate, connections, crawl window, robots with a reason) | [`02-knowledge-base.md`](02-knowledge-base.md) §2 |
 
@@ -51,7 +52,7 @@ Not in the proof of concept: real tickets (G1), staff use (the test host, §1), 
 
 | # | Step | Detail |
 |---|---|---|
-| 2.1 | Collection, crawl source, preview, first sync | [`02-knowledge-base.md`](02-knowledge-base.md) §2, §5 |
+| 2.1 | Collection with DoIT's gateway key, crawl source, preview, first sync | [`02-knowledge-base.md`](02-knowledge-base.md) §2, §5 |
 | 2.2 | Upload source with the Word, PDF and Markdown files (or the publish-and-crawl route for Markdown) | [`02-knowledge-base.md`](02-knowledge-base.md) §3–§4 |
 | 2.3 | Check the run reports, failures by reason, personal-data report, extracted text of a sample | admin §5.4 steps 5–6 |
 | 2.4 | Daily schedule; noise selectors so unchanged pages stay unchanged | [`03-updates.md`](03-updates.md) §2 |
@@ -62,8 +63,8 @@ Not in the proof of concept: real tickets (G1), staff use (the test host, §1), 
 
 | # | Step | Detail |
 |---|---|---|
-| 3.1 | Draft with the ticket-solving instructions, `generalKnowledge` `fallback`, not-found texts with escalation links | [`04-assistant.md`](04-assistant.md) |
-| 3.2 | Try twenty real (anonymised) tickets in the test panel; adjust instructions | admin §4.9 |
+| 3.1 | Draft with DoIT's gateway key, the ticket-solving instructions, `generalKnowledge` `fallback`, not-found texts with escalation links | [`04-assistant.md`](04-assistant.md) |
+| 3.2 | Try twenty real (anonymised) tickets in the test panel; adjust instructions; save the useful ones as the assistant's test questions | admin §4.9, §7.4 |
 | 3.3 | Publish | admin §5.4 step 11 |
 
 ## 4. Gold set and evaluation
@@ -71,22 +72,23 @@ Not in the proof of concept: real tickets (G1), staff use (the test host, §1), 
 The gold set is written from **real tickets, rewritten without personal data** (the gold set is stored in the
 platform; Decisions "Gold set drafted by the main session, reviewed by DoIT" shows the process used for umea.se):
 
-| Part | Size (Decisions "Weakness review 2") | For this case |
+| Part | Size (Decisions "Gold set drafted by the main session, reviewed by DoIT") | For this case |
 |---|---|---|
-| Answerable | 100–150 | common ticket types with the article that solves them |
+| Answerable | about 120–150 | common ticket types with the article that solves them |
 | Unanswerable and near-miss | 30–50 | tickets the knowledge base does not cover, and look-alikes (wrong system, wrong version) |
 | Temporal | ≥ 10 | questions whose answer changed (a new VPN client, a moved service desk) |
 
 | # | Step | Detail |
 |---|---|---|
-| 4.1 | Enter the questions with their expected documents as the `human` layer of the collection's evaluation set | `POST /api/collections/{id}/evaluation/questions` (`src/Kalla.AdminApi/EvaluationEndpoints.cs:71`); admin §7.1; processing §13.4 |
+| 4.1 | Enter the questions with their expected documents as the `human` layer of the collection's evaluation set | `POST /api/collections/{id}/evaluation/questions` (`src/Kalla.AdminApi/EvaluationEndpoints.cs`); admin §7.1; processing §13.4 |
 | 4.2 | Run retrieval evaluation; compare hybrid with rerank (`hybrid-rerank-gateway` with the Foundry `Cohere-rerank-v5-fast` alias, `hybrid-rerank` with the chat-model reranker) if a rerank model is set | processing §14; `scripts/evaluation/rerank.sh` ([`../../../scripts/evaluation/README.md`](../../../scripts/evaluation/README.md)) |
 | 4.3 | Set the not-found thresholds from answerable and unanswerable questions | Decisions "Weakness review 2"; knowledge §7 |
 | 4.4 | Generate answers for the gold set and have the support reviewers grade them | the go-live gate below |
 | 4.5 | Confirm `generalKnowledge` (`fallback`, or `supplement` if general answers mislead) and decide rerank (on only with a gold-set gain) from 4.2–4.4. **Decide rerank under serving conditions**: two assistant versions (rerank off, rerank on) graded with `scripts/grading/` through the chat API at their real budgets, not from 4.2's recall@10 alone (the retrieval evaluation allows 30 s per rerank call, the chat path does not) | [`04-assistant.md`](04-assistant.md) §4–§5 |
 
-Per-assistant test-question sets and automatic answer evaluation are P2 (admin §7.4; chat §18.8); in P1 the hand
-grading is the gate.
+Test questions per assistant and their graded test runs are built (B-57, #956; admin §7.4): the assistant's *Quality*
+tab runs them on the draft or the published version. The nightly answer run over the knowledge base's evaluation set
+is queued (B-58; chat §18.8). Both are advisory: the hand grading is the go-live gate.
 
 ## 5. Frontend integration
 
@@ -103,7 +105,10 @@ grading is the gate.
   reason; [`05-frontend-integration.md`](05-frontend-integration.md) §3.6).
 - **What the editors do weekly:** read the feedback page (admin §8.1) and the not-found and general-answer counts
   (`AssistantDailyTotals`; `rag.chat.requests{outcome}`), write or fix the articles the misses point to, add the
-  misses as gold-set questions.
+  misses as gold-set questions. Three queued reports make this routine direct: the *Content gaps* card, the documents
+  that not-found and general answers came nearest to (F7, B-62; admin §8.7); the documents most often cited in
+  downvoted answers (F6, B-66; admin §8.8); and the cost per outcome on the assistant's *Cost* card (F10, B-61; admin
+  §8.6).
 - **What the operators watch:** run failures and deletion proposals waiting for a decision (connectors §13.5),
   gateway budget and errors ([`../../../docs/runbook.md`](../../../docs/runbook.md) "Daily checks").
 
@@ -112,14 +117,16 @@ grading is the gate.
 - [ ] Go-live gate met on the support gold set, hand-graded: correct ≥ 80 %, citation precision ≥ 90 %, false
       not-found ≤ 10 %, off-topic not-found ≥ 80 % (Decisions "Weakness review 2").
 - [ ] DPIA (G1) signed for pasted tickets and the app's store; the app shows the same warning against confidential
-      input that Open WebUI shows (Decisions "Weakness review 4": banner).
+      input that Open WebUI shows (Decisions "DPIA and the pilot client": banner).
+- [ ] DoIT's key's PII policy reviewed from the gateway's *PII incidents* after the first weeks (README decision 4).
 - [ ] The app key's `RequestsPerMinute` set and recorded; its `AllowedIpRanges` and `Settings.TrustedProxies` set, and
       a call from another address refused with 403 `address_not_allowed`.
 - [ ] Key expiry and rotation owner named; key stored only in the app's secret store.
 - [ ] Daily crawl runs complete; no deletion proposal left waiting.
 - [ ] Escalation links in the not-found text work from the app.
 - [ ] Runbook entry for the app: who to call when kalla-api answers 5xx, and how to revoke the key.
-- [ ] The platform's own go-live items (backups, restore drill, R1) done for the deployment ([`../../roadmap.md`](../../roadmap.md)).
+- [ ] The platform's own go-live items (backups, restore drill, R1) done for the deployment
+      ([`../../roadmap.md`](../../roadmap.md)).
 
 ## 8. Later
 
