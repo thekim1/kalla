@@ -116,4 +116,41 @@ describe('A flagged document\'s personal-data actions (admin design §5.5.2, §5
     expect(again.emitted('cleared')).toBeUndefined()
     again.unmount()
   })
+
+  it('shows a job that ended failed as failed; Clear says it could not clear, or, when a later read fails, that the outcome is unknown', async () => {
+    vi.spyOn(api.documents, 'piiPreview').mockResolvedValue({ jobId: 'j1' })
+    vi.spyOn(api.documents, 'piiClear').mockResolvedValueOnce({ jobId: 'c1' }).mockResolvedValueOnce({ jobId: 'c2' })
+    const get = vi.spyOn(api.jobs, 'get').mockResolvedValueOnce(job('j1', 'failed')).mockResolvedValueOnce(job('c1', 'dead'))
+    const wrapper = await open()
+    await wrapper.get('[data-test=pii-highlights]').trigger('click')
+    await flushPromises()
+    expect(document.body.querySelector('[data-test=pii-highlights-running]')).toBeNull()
+    expect(document.body.querySelector('[data-test=pii-highlights-failed]')!.textContent).toContain(L.failed)
+
+    await wrapper.get('[data-test=pii-clear]').trigger('click')
+    await flushPromises()
+    const reason = document.body.querySelector<HTMLTextAreaElement>('#pii-clear-reason')!
+    reason.value = 'Kontaktcentrets nummer är publicerat avsiktligt.'
+    reason.dispatchEvent(new Event('input'))
+    const form = document.body.querySelector<HTMLFormElement>('#pii-clear-form')!
+    form.dispatchEvent(new Event('submit'))
+    await flushPromises()
+    expect(document.body.querySelector('[data-test=pii-clear-error]')!.textContent).toContain(L.clearFailed)
+
+    // The second attempt: the job is read once as running, then its state can't be read.
+    get.mockResolvedValueOnce(job('c2', 'running')).mockRejectedValueOnce(new Error('network'))
+    vi.useFakeTimers()
+    form.dispatchEvent(new Event('submit'))
+    await flushPromises()
+    expect(document.body.querySelector('[data-test=pii-clear-error]')).toBeNull()
+    expect(document.body.textContent).toContain(L.clearing)
+    await vi.advanceTimersByTimeAsync(2500)
+    vi.useRealTimers()
+    await flushPromises()
+    expect(document.body.textContent).not.toContain(L.clearing)
+    expect(document.body.querySelector('[data-test=pii-clear-error]')!.textContent).toContain(L.clearUnknown)
+    expect(get).toHaveBeenCalledTimes(4)
+    expect(wrapper.emitted('cleared')).toBeUndefined()
+    wrapper.unmount()
+  })
 })

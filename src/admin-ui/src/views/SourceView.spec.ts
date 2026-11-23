@@ -332,4 +332,37 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
       vi.useRealTimers()
     }
   })
+
+  it('stops polling a running run when a read fails, and when the page is left (#803)', async () => {
+    setActivePinia(createPinia())
+    vi.useFakeTimers()
+    try {
+      const auth = useAuthStore()
+      auth.user = bffUser({ roles: ['rag-editor'] })
+      auth.status = 'authenticated'
+      vi.spyOn(api.sources, 'get').mockResolvedValue(source)
+      vi.spyOn(api.sources, 'piiReport').mockRejectedValue(new Error('x'))
+      const progress = { processed: 10, admitted: 40, maxPages: 2500, waiting: 30, seeds: 1, seedsFailed: 0, limitHit: false }
+      const running = run({ id: 'r2', state: 'running', phase: 'fetch', finishedAt: null, progress })
+      vi.spyOn(api.sources, 'runs').mockResolvedValue({ items: [running, run({})], next: null })
+      const get = vi.spyOn(api.runs, 'get').mockRejectedValue(new Error('network'))
+
+      const wrapper = mount(SourceView, { props: { id: 's1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
+      await flushPromises()
+      await vi.advanceTimersByTimeAsync(60_000)
+      // One failed read ends the poll; the row keeps its last state.
+      expect(get).toHaveBeenCalledTimes(1)
+      expect(wrapper.find('[data-test=run-progress]').exists()).toBe(true)
+      wrapper.unmount()
+
+      get.mockClear()
+      const left = mount(SourceView, { props: { id: 's1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
+      await flushPromises()
+      left.unmount()
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(get).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

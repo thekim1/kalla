@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import type { Collection, PiiReport, RunSummary, Source } from '@/api/types'
@@ -25,8 +25,8 @@ import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatNumber } from '@/utils/format'
 import { DELETE, LEVEL_LABEL, PII_ACTIONS, RUN_STATE_LABEL, SOURCE, SOURCE_EDIT, SOURCE_PAGE, SOURCE_TYPE_LABEL } from '@/utils/labels'
-import { pollDelay } from '@/composables/useJobPoll'
 import { useKeysetList } from '@/composables/useKeysetList'
+import { usePoll } from '@/composables/usePoll'
 import { runProgressText, runStateTone } from '@/utils/runs'
 import { problemMessage } from '@/utils/problem'
 import { isApiError } from '@/api/client'
@@ -91,30 +91,25 @@ const canEdit = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-depar
 const activeRun = computed(() => runs.items.value.find((r) => r.state === 'running' || r.state === 'awaiting-deletion-confirmation'))
 const activeProgress = computed(() => runProgressText(activeRun.value))
 // #803: a running run is polled (admin design §4.7) and its row replaced in place, so paging through older runs is kept;
-// when it stops, the list is loaded again.
-let runTimer: ReturnType<typeof setTimeout> | null = null
-let runPollStarted = 0
-function stopRunPoll(): void {
-  if (runTimer) clearTimeout(runTimer)
-  runTimer = null
-}
-async function pollRun(id: string): Promise<void> {
-  runTimer = null
-  const fresh = await api.runs.get(id).then((r) => r.run).catch(() => null)
-  if (!fresh) return
+// when it stops, the list is loaded again. A failed read ends the poll; the row keeps its last state.
+const runPoll = usePoll(async (current) => {
+  const running = activeRun.value
+  if (running?.state !== 'running') return true
+  const fresh = (await api.runs.get(running.id)).run
+  if (!current()) return true
   runs.items.value = runs.items.value.map((r) => (r.id === fresh.id ? fresh : r))
-  if (fresh.state !== 'running') void loadRuns()
-}
+  if (fresh.state === 'running') return false
+  void loadRuns()
+  return true
+})
+// A poll's own patch replaces the row too, so a poll already running is left to go on.
 watch(
   () => (activeRun.value?.state === 'running' ? activeRun.value : null),
   (running) => {
-    stopRunPoll()
-    if (!running) return
-    if (!runPollStarted) runPollStarted = Date.now()
-    runTimer = setTimeout(() => void pollRun(running.id), pollDelay(Date.now() - runPollStarted))
+    if (!running) runPoll.stop()
+    else if (!runPoll.polling.value) runPoll.start(false)
   },
 )
-onBeforeUnmount(stopRunPoll)
 
 const runColumns: Column[] = [
   { key: 'started', label: SOURCE_PAGE.started },

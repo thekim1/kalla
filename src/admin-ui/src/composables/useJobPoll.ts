@@ -3,8 +3,6 @@ import { api } from '@/api'
 import type { Job } from '@/api/types'
 import { usePoll } from './usePoll'
 
-export { pollDelay } from './usePoll'
-
 /** Job states after which polling stops (admin design §4.7). */
 export const FINISHED_STATES = new Set(['succeeded', 'failed', 'dead', 'cancelled'])
 
