@@ -105,10 +105,10 @@ request. Every one of `thekim1`'s has a main-session review as a comment; none i
    release. When it is settled, the main session writes the copy's rule for links and expected documents into admin
    §4.5 (copy row) and §4.9/§7.4 (the panel and the runs search only what V11 allows); #985 left them out on purpose.
 7. **Read of the never-read documents (handover 56's item 11):** read 1 is done (#988: `to-verify.md`,
-   `postponed-decisions.md`, the gold-set README; issues #986, #987). Read 2, `plans/cases/support-assistant/`, was
-   running when this was written: a consistency check of the case against what is built (F3, F4, F8) and queued (B-61,
-   B-62, B-66), not new work; its findings go into `plans/` like #988. Read 3 is `docs/` (stream a's: findings become
-   `stream-a` issues).
+   `postponed-decisions.md`, the gold-set README; issues #986, #987). Read 2 is #990 (the support-assistant case
+   brought up to date with the code and decisions; the user's four answers: the case's framing stays, condense keeps
+   3 s, the rerank model is a deployment's choice, DoIT's key uses PII policy `Allow`; SA-11 queued as B-83). Read 3 is
+   `docs/` (stream a's: findings become `stream-a` issues).
 8. **The code-quality plan** ([`plans/proposals/code-quality-top7.md`](plans/proposals/code-quality-top7.md), tracked
    in #980): done are #1, #2, #4, #5 (#981), #6 and #7; #3 waits for #963; stream a's parts are #974. #981's follow-ups
    (on #981): B-57's `TestQuestionDrawer.vue:57-60` has a hand-rolled debounce with no unmount clear, `AssistantTestsTab`
@@ -189,6 +189,8 @@ history. Reviews and reads ran as subagents, one at a time; their claims were ch
   go-live gaps, every live-block row named by a queue item), `postponed-decisions.md` (V1, Z1, S1, P2 brought up to
   date), the gold-set README (how the draft becomes `human` questions). Decisions "CI/CD" now says actions are
   SHA-pinned (a stale fact, not a new decision). Issues #986 (stream b) and #987 (stream a).
+- **#990:** the support-assistant case read through and brought up to date (four answers from the user, and SA-11
+  queued as B-83: a known file's upload replaces it by default, admin §5.5.7 point 6).
 - **Approved as `Crotalus` on the user's word and merged:** #981, #982, then #985, #988.
 
 ## Known gaps, documented, not fixed
@@ -279,7 +281,8 @@ history. Reviews and reads ran as subagents, one at a time; their claims were ch
   #974, #987; A-42 and A-43 are done. Stream b: B-58 (#977, with stream a's #984) and B-59 (#978) in review, B-63
   (#963) in review, #983 (release blocker), then B-61, B-62 and B-66 (F10, F7, F6), B-64 and B-65 (the topics editor),
   B-67 to B-69 (P2 wave 2), B-70 and B-71 (a source's pause and next run), B-72 and B-73 (the chat extension), B-74 to
-  B-82 (the UX pass and the Publish dialog; B-74 waits on nothing), B-42 to B-46 (the gateway phases' live checks) and
+  B-82 (the UX pass and the Publish dialog; B-74 waits on nothing), B-83 (replace an upload by name, before T4; waits
+  on nothing), B-42 to B-46 (the gateway phases' live checks) and
   its live items. An item someone has started says **Taken** in the queue. Main: M-4.
 - **Open issues that matter:** #983 (security, release blocker), #986 (a chat metric for to-verify #103), #987 (the
   grading script), #980 (code quality's tracker), #959 (the chat extension; closes with B-72 and B-73), #974 (code
