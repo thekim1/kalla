@@ -583,10 +583,12 @@ context-window check; request policies cannot change `query` or `documents`. Aut
 `RequireMaxResidency`, budgets and usage work as on every endpoint. With no rerank model configured the gateway answers
 404/400 like any unknown or wrong-kind model, and Källa falls back to unreranked retrieval.
 
-**Provider until on-prem hardware exists (M2):** Berget AI (Sweden, EU), `bge-reranker-v2-m3` (the model planned
-on-prem, so the move is a route change), about $0.10 per million input tokens (verify on Berget's price page); its
-processor agreement goes into G1. Källa calls it with the `Eu` ceiling until on-prem. Berget's exact shape is
-verified when the provider is set up. The FakeGateway serves `/v1/rerank` in this shape.
+**Provider until on-prem hardware exists (M2):** any provider that serves a rerank model at `Eu`; which model is the
+deployment's setting (`Settings.Retrieval.gatewayRerankModel`; Decisions "Rerank pulled forward"). Umeå's deployment
+uses `Cohere-rerank-v5-fast` on Azure AI Foundry (EU; Källa #421, `cases/support-assistant/README.md` decision 12).
+Berget AI (Sweden, EU) with `bge-reranker-v2-m3`, the model planned on-prem, is another (about $0.10 per million input
+tokens; verify on Berget's price page). The provider's processor agreement goes into G1. Källa calls it with the `Eu`
+ceiling until on-prem. A provider's exact shape is verified when it is set up. The FakeGateway serves `/v1/rerank` in this shape.
 
 ## 8. Data model, migrations, Redis
 

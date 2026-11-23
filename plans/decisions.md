@@ -778,10 +778,11 @@ Rerank is optional everywhere and no go-live gate: with no rerank model configur
 status. An assistant turns it on (`chat` or `gateway`) when the gold set shows a gain over hybrid; the reranker scores
 the top 20 fused candidates at the turn's ceiling within 3 s (`ChatModelReranker`) or 1.5 s (`GatewayReranker`), and
 an error keeps the fused order. `ChatModelReranker` uses a small chat model chosen in the platform settings,
-without `temperature`; `GatewayReranker` calls the gateway's optional, Cohere-compatible `POST /v1/rerank` (Berget AI
-`bge-reranker-v2-m3` at `Eu` until on-prem), which answers 404 or 400 when no rerank model is configured. Detail: `knowledge-api/design.md` §6.7.
+without `temperature`; `GatewayReranker` calls the gateway's optional, Cohere-compatible `POST /v1/rerank` with a
+rerank model the gateway serves at `Eu` until on-prem, chosen per deployment in the platform settings; the gateway
+answers 404 or 400 when no rerank model is configured. Detail: `knowledge-api/design.md` §6.7.
 
-*From:* log rows 74, 75, 110; decided by user, 2026-11-06.
+*From:* log rows 74, 75, 110; decided by user, 2026-11-06; the model left to the deployment by user, 2026-11-23.
 *Also:* "Gateway rerank time limit 1.5 s"
 
 ## Chat

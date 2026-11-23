@@ -303,6 +303,22 @@ one waits. Neither changes an answer that doesn't ask.
 - **Read:** Decisions "Progress, timings and the nearest subject in the chat extension", "Content-gap report", "Topics
   per request"; chat §3.8, §9.7, §9.11, §12.1, §18.9; processing §7; #959.
 
+## Uploads (user, 2026-11-23)
+
+### [ ] B-83 Replace by name: a known file's upload replaces it by default (admin §5.5.7 point 6; support case SA-11)
+- **Do:** in the upload's file list (drop zone and picker), match each added file's relative path against the source's
+  live files before sending; when any match, one dialog lists them and asks *Replace the existing files* (default) or
+  *Keep both*. *Replace* sends each match as that file's replacement, the way the row's *Replace* does (the same
+  `X-Upload-Id`), so the document keeps its id; the rest upload as new. Byte-identical files stay skipped
+  (`upload.duplicate`). Text in `labels.ts` and `messages.ts`.
+- **Paths:** `src/admin-ui/**` (not `src/platform/**`), `src/Kalla.AdminApi/**` if a lookup by name is needed for a
+  source with more files than the list has loaded, `tests/**`.
+- **Done when:** Vitest for the dialog (a match proposes *Replace* by default, *Keep both* uploads as new, no match
+  shows no dialog, a folder's relative path is part of the match); an AdminApi test if an endpoint is added; shown in a
+  browser at 1,440 and 390 px; the local e2e upload spec passes.
+- **Waits on:** nothing. Before DoIT's editors start uploading for the test chatbot (roadmap T4).
+- **Read:** admin §5.5.7; connectors §9.3; `cases/support-assistant/06-gaps.md` SA-11 and `03-updates.md` §3.
+
 ## Admin UI UX pass (user, 2026-11-23; Decisions "Admin API and UI")
 
 The rules are admin §5.12, the pages §5.2, §5.5.1, §5.5.2, §5.5.4, §5.5.7, §5.7 and §5.10;
