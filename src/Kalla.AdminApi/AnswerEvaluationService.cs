@@ -197,7 +197,16 @@ public sealed partial class AnswerEvaluationService(
             return [];
         }
 
-        var assistants = await db.Assistants.AsNoTracking().Where(a => a.PublishedVersionId != null && a.DeletedAt == null).OrderBy(a => a.Id)
+        // Without a judge the answers would be paid for and never rated: no run until a model is set (Settings, Evaluation).
+        if (string.IsNullOrWhiteSpace(settings?.Judge))
+        {
+            LogNoJudge(logger);
+            return [];
+        }
+
+        // Published and active: an archived assistant keeps its published version but no client reaches it (admin §4.5).
+        var assistants = await db.Assistants.AsNoTracking()
+            .Where(a => a.PublishedVersionId != null && a.DeletedAt == null && a.State == AssistantStates.Active).OrderBy(a => a.Id)
             .Select(a => a.Id).ToListAsync(ct);
         var night = NightOf(time.GetUtcNow());
         var started = new List<EvaluationRun>();
@@ -225,7 +234,7 @@ public sealed partial class AnswerEvaluationService(
     {
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<RagDbContext>();
-        var assistant = await db.Assistants.AsNoTracking().SingleOrDefaultAsync(a => a.Id == assistantId && a.DeletedAt == null, ct);
+        var assistant = await db.Assistants.AsNoTracking().SingleOrDefaultAsync(a => a.Id == assistantId && a.DeletedAt == null && a.State == AssistantStates.Active, ct);
         var version = assistant?.PublishedVersionId is { } published
             ? await db.AssistantVersions.AsNoTracking().SingleOrDefaultAsync(v => v.Id == published && v.State == AssistantVersionStates.Published, ct)
             : null;
@@ -352,7 +361,7 @@ public sealed partial class AnswerEvaluationService(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // A question that could not be answered has no figures; the note says why and the run goes on.
-            result.JudgeNote = AssistantTestJudge.Cut($"Not answered: {ex.Message}");
+            result.JudgeNote = AssistantTestJudge.Cut($"Not answered: {AssistantTestJudge.FailureText(ex)}");
             return result;
         }
 
@@ -392,7 +401,7 @@ public sealed partial class AnswerEvaluationService(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            result.JudgeNote = AssistantTestJudge.Cut($"The judge could not answer: {ex.Message}");
+            result.JudgeNote = AssistantTestJudge.Cut($"The judge could not answer: {AssistantTestJudge.FailureText(ex)}");
         }
 
         return result;
@@ -400,6 +409,9 @@ public sealed partial class AnswerEvaluationService(
 
     [LoggerMessage(LogLevel.Information, "Nightly answer run: switched off (Settings.EvaluationAnswerQuestions = 0)")]
     private static partial void LogSwitchedOff(ILogger logger);
+
+    [LoggerMessage(LogLevel.Warning, "Nightly answer run: no judge model is set (Settings.EvaluationJudgeModel or EvaluationModel), so no assistant gets a run")]
+    private static partial void LogNoJudge(ILogger logger);
 
     [LoggerMessage(LogLevel.Information,
         "Answer run {RunId} of assistant {AssistantId} version {Version}: {Count} questions, faithfulness {Faithfulness}, citation precision {CitationPrecision}")]

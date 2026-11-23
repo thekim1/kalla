@@ -79,6 +79,12 @@ public static class AssistantTestJudge
     }
 
     public static string Cut(string note) => note.Length <= MaxNote ? note : note[..MaxNote];
+
+    /// <summary>
+    /// A failure as a stored note may show it: the admin's own refusal text (<see cref="Kalla.ServiceDefaults.ApiFaultException"/>), else
+    /// only the exception's type and status, never its message, which can name the gateway's host (#232).
+    /// </summary>
+    public static string FailureText(Exception exception) => exception is Kalla.ServiceDefaults.ApiFaultException fault ? fault.Message : GatewayModelSync.ErrorText(exception);
 }
 
 /// <summary>The deterministic checks of a test question (admin design §7.4).</summary>
@@ -294,7 +300,7 @@ public sealed partial class AssistantTestRunner(
         {
             // A question that could not be answered is not as expected; the note says why, the run goes on.
             result.Hit = false;
-            result.JudgeNote = AssistantTestJudge.Cut($"Not answered: {ex.Message}");
+            result.JudgeNote = AssistantTestJudge.Cut($"Not answered: {AssistantTestJudge.FailureText(ex)}");
             return result;
         }
 
@@ -319,7 +325,7 @@ public sealed partial class AssistantTestRunner(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             result.Verdict = TestVerdicts.Unsure;
-            result.JudgeNote = AssistantTestJudge.Cut($"The judge could not answer: {ex.Message}");
+            result.JudgeNote = AssistantTestJudge.Cut($"The judge could not answer: {AssistantTestJudge.FailureText(ex)}");
         }
 
         return result;

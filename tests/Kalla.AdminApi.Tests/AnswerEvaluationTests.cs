@@ -127,7 +127,10 @@ public sealed class AnswerEvaluationTests(AdminDatabaseFixture database)
         var spent = await AssistantAsync(db, department, "Slut", SpentKey, withQuestions, published: true, code);
         var empty = await AssistantAsync(db, department, "Tom", GoodKey, withoutQuestions, published: true, code);
         var draftOnly = await AssistantAsync(db, department, "Utkast", GoodKey, withQuestions, published: false, code);
-        HashSet<Guid> ours = [good.Id, spent.Id, empty.Id, draftOnly.Id];
+        // Archived: it keeps its published version, but no client reaches it (#977 review).
+        var archived = await AssistantAsync(db, department, "Arkiv", GoodKey, withQuestions, published: true, code);
+        await db.Assistants.Where(a => a.Id == archived.Id).ExecuteUpdateAsync(u => u.SetProperty(a => a.State, AssistantStates.Archived), Ct);
+        HashSet<Guid> ours = [good.Id, spent.Id, empty.Id, draftOnly.Id, archived.Id];
 
         // The live uncited rate: 10 messages, 2 not found, so 8 answered, 2 of them uncited.
         db.AssistantDailyTotals.Add(new AssistantDailyTotal
@@ -147,14 +150,14 @@ public sealed class AnswerEvaluationTests(AdminDatabaseFixture database)
             await db.SaveChangesAsync(Ct);
         }
 
-        var before = await db.Settings.AsNoTracking().Select(s => new { s.EvaluationJudgeModel, s.EvaluationAnswerQuestions }).FirstAsync(Ct);
+        var before = await db.Settings.AsNoTracking().Select(s => new { s.EvaluationJudgeModel, s.EvaluationModel, s.EvaluationAnswerQuestions }).FirstAsync(Ct);
         try
         {
             await RunAsync();
         }
         finally
         {
-            await db.Settings.ExecuteUpdateAsync(x => x.SetProperty(v => v.EvaluationJudgeModel, before.EvaluationJudgeModel)
+            await db.Settings.ExecuteUpdateAsync(x => x.SetProperty(v => v.EvaluationJudgeModel, before.EvaluationJudgeModel).SetProperty(v => v.EvaluationModel, before.EvaluationModel)
                 .SetProperty(v => v.EvaluationAnswerQuestions, before.EvaluationAnswerQuestions), Ct);
         }
 
@@ -167,11 +170,16 @@ public sealed class AnswerEvaluationTests(AdminDatabaseFixture database)
             (await service.RunNightAsync(Ct, ours.Contains)).ShouldBeEmpty();
             (await db.EvaluationRuns.AsNoTracking().CountAsync(r => r.Kind == EvaluationRunKinds.Answers && ours.Contains(r.SubjectId!.Value), Ct)).ShouldBe(0);
 
-            // Five a night: the two published assistants with questions get a run; the others none.
-            await db.Settings.ExecuteUpdateAsync(x => x.SetProperty(v => v.EvaluationAnswerQuestions, 5), Ct);
+            // On, but without a judge model: nothing runs, so no answer is paid for and never rated (#977 review).
+            await db.Settings.ExecuteUpdateAsync(x => x.SetProperty(v => v.EvaluationAnswerQuestions, 5).SetProperty(v => v.EvaluationJudgeModel, (string?)null)
+                .SetProperty(v => v.EvaluationModel, (string?)null), Ct);
+            (await service.RunNightAsync(Ct, ours.Contains)).ShouldBeEmpty();
+            await db.Settings.ExecuteUpdateAsync(x => x.SetProperty(v => v.EvaluationJudgeModel, Model), Ct);
+
+            // Five a night: the two published, active assistants with questions get a run; the others none.
             var started = await service.RunNightAsync(Ct, ours.Contains);
             started.Select(r => r.SubjectId!.Value).Order().ShouldBe(new[] { good.Id, spent.Id }.Order());
-            (await Runs(empty.Id).CountAsync(Ct), await Runs(draftOnly.Id).CountAsync(Ct)).ShouldBe((0, 0));
+            (await Runs(empty.Id).CountAsync(Ct), await Runs(draftOnly.Id).CountAsync(Ct), await Runs(archived.Id).CountAsync(Ct)).ShouldBe((0, 0, 0));
 
             var first = await Runs(good.Id).SingleAsync(Ct);
             (first.SetId, first.SubjectVersion, first.QuestionCount, first.Found, first.ComparedRunId, first.PromptVersion)
