@@ -1132,6 +1132,35 @@ export interface Assistant {
 }
 
 /** `GET /api/assistants/{id}/versions`, newest first. */
+/** One line of a line diff (admin design §4.5, B-56). */
+export interface DiffLine {
+  op: 'equal' | 'insert' | 'delete'
+  text: string
+}
+
+/** A text's line diff; `tooLong`: over 20,000 characters, so only whether it changed. */
+export interface TextDiff {
+  changed: boolean
+  tooLong: boolean
+  lines: DiffLine[]
+}
+
+/** `GET /api/assistants/{id}/versions/{n}/diff?against={m|draft}`: what changed from version `from` to `to`. */
+export interface VersionDiff {
+  from: number
+  to: number
+  toDraft: boolean
+  changed: boolean
+  /** Changed settings by name (`model`, `querySteps.retrieval.topK`, `notFound.links`); null when absent on that side. */
+  settings: { name: string; from: unknown; to: unknown }[]
+  collectionsAdded: { collectionId: string; name: string | null; tags: string[] }[]
+  collectionsRemoved: { collectionId: string; name: string | null; tags: string[] }[]
+  topicsChanged: { collectionId: string; name: string | null; from: string[]; to: string[] }[]
+  instructions: TextDiff
+  notFoundSv: TextDiff
+  notFoundEn: TextDiff
+}
+
 export interface AssistantVersionSummary {
   number: number
   state: 'draft' | 'published' | 'superseded' | string

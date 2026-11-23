@@ -3,7 +3,7 @@ import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
 import { ApiError } from '@/api/client'
-import type { Assistant, AssistantDraft, ClientSummary } from '@/api/types'
+import type { Assistant, AssistantDraft, ClientSummary, VersionDiff } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { bffUser, collectionSummary } from '@/test/fixtures'
 import { button } from '@/test/helpers'
@@ -31,6 +31,13 @@ const assistant: Assistant = {
 const draft: AssistantDraft = {
   number: 1, gatewayModel: null, systemPrompt: '', querySteps: {}, notFound: {}, collectionLinks: [], updatedAt: '', version: 'd7',
   warnings: [{ code: 'assistant_contact_missing', params: null, affected: [] }],
+}
+
+const noText = { changed: false, tooLong: false, lines: [] }
+const versionDiff: VersionDiff = {
+  from: 3, to: 4, toDraft: true, changed: true, settings: [{ name: 'model', from: 'fors/chat-eu', to: 'fors/chat' }], collectionsAdded: [], collectionsRemoved: [],
+  topicsChanged: [], notFoundSv: noText, notFoundEn: noText,
+  instructions: { changed: true, tooLong: false, lines: [{ op: 'delete', text: 'Svara kort.' }, { op: 'insert', text: 'Svara kort och vänligt.' }] },
 }
 
 function signIn(roles: string[]) {
@@ -517,6 +524,52 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     await flushPromises()
     expect(restore).toHaveBeenCalledWith('a1', 2, 'a3', false)
     expect(versions).toHaveBeenCalledTimes(2)
+    expect(wrapper.get('[data-test=published]').text()).toBe('Published: version 5')
+    wrapper.unmount()
+  })
+
+  it('compares an earlier version with the draft (B-56)', async () => {
+    signIn(['rag-viewer'])
+    mocks()
+    vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, publishedVersion: 3 })
+    vi.spyOn(api.assistants, 'versions').mockResolvedValue([
+      { number: 4, state: 'draft', createdAt: '2026-11-01T12:00:00Z', createdBy: 'anna', publishedAt: null, publishedBy: null, restoredFrom: null },
+      { number: 3, state: 'published', createdAt: '2026-11-01T11:00:00Z', createdBy: 'anna', publishedAt: '2026-11-01T11:00:00Z', publishedBy: 'anna', restoredFrom: null },
+    ])
+    const diff = vi.spyOn(api.assistants, 'diff').mockResolvedValue(versionDiff)
+    const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
+    await flushPromises()
+    await button(wrapper, 'Versions').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-test=compare-4]').exists()).toBe(false) // the draft is what the others are compared with
+    await wrapper.get('[data-test=compare-3]').trigger('click')
+    await flushPromises()
+    expect(diff).toHaveBeenCalledWith('a1', 3, 'draft')
+    expect(document.body.textContent).toContain(ASSISTANT.compareTitle(3, ASSISTANT.compareDraft))
+    expect(document.body.querySelector('[data-test=version-diff] del')!.textContent).toContain('Svara kort.')
+    wrapper.unmount()
+  })
+
+  it('shows the diff of a draft based on an older version and publishes it only when confirmed (draft_base_changed, B-56)', async () => {
+    signIn(['rag-editor'])
+    mocks()
+    vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, publishedVersion: 3 })
+    const publish = vi.spyOn(api.assistants, 'publish')
+      .mockRejectedValueOnce(new ApiError(409, 'POST', { status: 409, code: 'draft_base_changed', diff: versionDiff }))
+      .mockResolvedValueOnce({ ...assistant, publishedVersion: 5, draft: null, version: 'a9' })
+    const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
+    await flushPromises()
+
+    await wrapper.get('[data-test=publish]').trigger('click')
+    await flushPromises()
+    expect(publish).toHaveBeenCalledTimes(1)
+    expect(document.body.textContent).toContain(ASSISTANT.baseChangedLead)
+    expect(document.body.querySelector('[data-test=version-diff] ins')!.textContent).toContain('Svara kort och vänligt.')
+    const confirm = [...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === ASSISTANT.publishAnyway)!
+    confirm.click()
+    await flushPromises()
+    expect(publish).toHaveBeenLastCalledWith('a1', { version: 'a3', draftVersion: 'd7', confirmBaseChanged: true, confirmGeneralKnowledge: false })
     expect(wrapper.get('[data-test=published]').text()).toBe('Published: version 5')
     wrapper.unmount()
   })

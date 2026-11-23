@@ -7,7 +7,7 @@ import { ApiError } from '@/api/client'
 import type {
   CostQuery,
   Assistant, AssistantCopyResult, AssistantDraft, AssistantTestResult, AssistantVersion, AssistantVersionSummary, ClientSummary, CollectionLink, CollectionSummary, DataProtectionPolicy,
-  GatewayModel, GeneralKnowledge,
+  GatewayModel, GeneralKnowledge, VersionDiff,
 } from '@/api/types'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
@@ -29,6 +29,8 @@ import ExplainAccess from '@/components/assistants/ExplainAccess.vue'
 import KnowledgeLinks from '@/components/assistants/KnowledgeLinks.vue'
 import AssistantCopyDrawer from '@/components/assistants/AssistantCopyDrawer.vue'
 import AssistantEditDrawer from '@/components/assistants/AssistantEditDrawer.vue'
+import VersionDiffView from '@/components/assistants/VersionDiffView.vue'
+import UiDrawer from '@/components/ui/UiDrawer.vue'
 import CostCard from '@/components/costs/CostCard.vue'
 import KeyBudgetStatus from '@/components/gateway/KeyBudgetStatus.vue'
 import KeyUnavailableBadge from '@/components/gateway/KeyUnavailableBadge.vue'
@@ -343,18 +345,41 @@ async function withGeneralKnowledgeConfirmation<T>(send: (confirm: boolean) => P
   }
 }
 
-const publish = () => run('publish', async () => {
+// A draft started before a restore answers 409 draft_base_changed with the diff against the published version (B-56): the
+// dialog shows it, and Publish anyway sends the confirmation.
+const baseDiff = ref<VersionDiff | null>(null)
+
+async function publishDraft(confirmBaseChanged: boolean): Promise<void> {
   const a = assistant.data.value!
-  const baseChanged = a.draft?.baseChanged ?? false
-  if (baseChanged && !window.confirm(ASSISTANT.baseChanged)) return
   const published = await withGeneralKnowledgeConfirmation((confirmGeneralKnowledge) =>
-    api.assistants.publish(props.id, { version: a.version, draftVersion: a.draft!.version, confirmBaseChanged: baseChanged, confirmGeneralKnowledge }))
+    api.assistants.publish(props.id, { version: a.version, draftVersion: a.draft!.version, confirmBaseChanged, confirmGeneralKnowledge }))
   if (!published) return
   assistant.data.value = published
   fill(null, draft.value)
   if (versions.value) await loadVersions()
   ui.notify(ASSISTANT.published(assistant.data.value.publishedVersion ?? 0))
+}
+
+const publish = () => run('publish', async () => {
+  try {
+    await publishDraft(false)
+  } catch (e) {
+    if (!(e instanceof ApiError) || e.problem?.code !== 'draft_base_changed' || !e.problem.diff) throw e
+    baseDiff.value = e.problem.diff as VersionDiff
+  }
 })
+
+// Compare (B-56): a version against the draft, else against the published version.
+const comparing = ref<number | null>(null)
+const comparison = useLoadable<VersionDiff | null>(null)
+const compareTarget = computed<number | 'draft' | null>(() =>
+  assistant.data.value?.draft ? 'draft' : (assistant.data.value?.publishedVersion ?? null))
+const comparable = (v: AssistantVersionSummary) => compareTarget.value !== null && v.state !== 'draft' && v.number !== compareTarget.value
+
+function compare(number: number): void {
+  comparing.value = number
+  void comparison.run(() => api.assistants.diff(props.id, number, compareTarget.value!))
+}
 
 const test = () => run('test', async () => {
   result.value = await api.assistants.test(props.id, {
@@ -604,6 +629,9 @@ watch(() => props.id, () => {
           <template #cell-by="{ row }">{{ row.publishedBy ?? row.createdBy ?? '' }}</template>
           <template #cell-when="{ row }"><span class="tabular text-fg-2">{{ formatDateTime(row.publishedAt ?? row.createdAt) }}</span></template>
           <template #cell-actions="{ row }">
+            <UiButton v-if="comparable(row as AssistantVersionSummary)" size="sm" class="mr-2" :data-test="`compare-${row.number}`" @click="compare(row.number)">
+              {{ ASSISTANT.compare }}
+            </UiButton>
             <UiButton v-if="canEdit && restorable(row as AssistantVersionSummary)" size="sm" :data-test="`restore-${row.number}`" @click="restoring = row.number">
               {{ ASSISTANT.restore }}
             </UiButton>
@@ -662,6 +690,22 @@ watch(() => props.id, () => {
         v-if="canEdit" v-model:open="editing" :assistant="assistant.data.value"
         @saved="edited"
       />
+      <ConfirmDialog
+        :open="baseDiff !== null" :title="ASSISTANT.baseChangedTitle" :confirm-label="ASSISTANT.publishAnyway" :action="() => publishDraft(true)"
+        @update:open="!$event && (baseDiff = null)"
+      >
+        <p class="mb-4">{{ ASSISTANT.baseChangedLead }}</p>
+        <div class="max-h-[60vh] overflow-auto"><VersionDiffView v-if="baseDiff" :diff="baseDiff" /></div>
+      </ConfirmDialog>
+      <UiDrawer
+        :open="comparing !== null" wide
+        :title="ASSISTANT.compareTitle(comparing ?? 0, compareTarget === 'draft' ? ASSISTANT.compareDraft : ASSISTANT.compareVersion(Number(compareTarget)))"
+        @update:open="!$event && (comparing = null)"
+      >
+        <AsyncState :loading="comparison.loading.value" :error="comparison.error.value" @retry="compare(comparing!)">
+          <VersionDiffView v-if="comparison.data.value" :diff="comparison.data.value" />
+        </AsyncState>
+      </UiDrawer>
       <ConfirmDialog
         v-model:open="archiving" :title="ASSISTANT.archiveTitle" :consequence="ASSISTANT.archiveConsequence" :confirm-label="ASSISTANT.archive" danger
         :action="archive"

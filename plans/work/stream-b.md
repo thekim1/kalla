@@ -45,7 +45,7 @@ tables in one migration of its own (no backward compatibility before production)
 - **Waits on:** `v0.9.0`.
 - **Read:** admin §3 (`Edit` row), §4.5, the wireframe under §5.5 (*Copy*), §9 (audit actions).
 
-### [ ] B-56 Version diff
+### [x] B-56 Version diff (#954)
 - **Do:** admin §4.5 `GET /api/assistants/{id}/versions/{n}/diff?against={m|draft}`: changed settings by name,
   collections and skills added or removed, and a line diff of instructions and not-found texts (an in-house Myers
   diff over at most 20,000 characters, no package); **Compare** in Versions; the diff in the 409 `draft_base_changed`

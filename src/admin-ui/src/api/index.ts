@@ -24,6 +24,7 @@ import type {
   AssistantTestResult,
   AssistantVersion,
   AssistantVersionSummary,
+  VersionDiff,
   BffUser,
   OpenWebUiCompleteRequest,
   OpenWebUiSaved,
@@ -230,6 +231,9 @@ export const api = {
       http.post<AssistantTestResult>(`/api/assistants/${id}/test`, body),
     versions: (id: string) => http.get<AssistantVersionSummary[]>(`/api/assistants/${id}/versions`),
     version: (id: string, number: number) => http.get<AssistantVersion>(`/api/assistants/${id}/versions/${number}`),
+    /** What changed from version `number` to `against` (a number or `draft`; B-56). */
+    diff: (id: string, number: number, against: number | 'draft') =>
+      http.get<VersionDiff>(`/api/assistants/${id}/versions/${number}/diff`, { against: String(against) }),
     restore: (id: string, number: number, version: string, confirmGeneralKnowledge = false) =>
       http.post<Assistant>(`/api/assistants/${id}/versions/${number}/restore`, { version, confirmGeneralKnowledge }),
     /** A new assistant with a draft of this one's published version (B-55). */

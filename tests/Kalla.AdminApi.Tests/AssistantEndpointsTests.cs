@@ -826,8 +826,25 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database, Assis
         using (var stale = await admin.PostAsJsonAsync($"{path}/publish", new { version = await Version(), draftVersion = openDraft }, Ct))
         {
             stale.StatusCode.ShouldBe(HttpStatusCode.Conflict);
-            (await Json(stale)).GetProperty("code").GetString().ShouldBe("draft_base_changed");
+            var problem = await Json(stale);
+            problem.GetProperty("code").GetString().ShouldBe("draft_base_changed");
+            // B-56: with what publishing would change against the published version 4 (version 1's text).
+            var diff = problem.GetProperty("diff");
+            (diff.GetProperty("from").GetInt32(), diff.GetProperty("to").GetInt32(), diff.GetProperty("toDraft").GetBoolean()).ShouldBe((4, 3, true));
+            diff.GetProperty("instructions").GetProperty("lines").EnumerateArray().Select(l => (l.GetProperty("op").GetString(), l.GetProperty("text").GetString()))
+                .ShouldBe([("delete", "Första."), ("insert", "Tredje, inte publicerad.")]);
         }
+
+        // The diff endpoint (B-56): a version against another, against the draft, and by default against the draft when there is one.
+        var oneToTwo = await viewer.GetFromJsonAsync<JsonElement>($"{path}/versions/1/diff?against=2", Ct);
+        (oneToTwo.GetProperty("changed").GetBoolean(), oneToTwo.GetProperty("settings").GetArrayLength(), oneToTwo.GetProperty("collectionsAdded").GetArrayLength())
+            .ShouldBe((true, 0, 0));
+        oneToTwo.GetProperty("instructions").GetProperty("lines").EnumerateArray().Select(l => l.GetProperty("op").GetString()).ShouldBe(["delete", "insert"]);
+        (await viewer.GetFromJsonAsync<JsonElement>($"{path}/versions/1/diff?against=4", Ct)).GetProperty("changed").GetBoolean().ShouldBeFalse("4 restores 1");
+        (await viewer.GetFromJsonAsync<JsonElement>($"{path}/versions/2/diff", Ct)).GetProperty("to").GetInt32().ShouldBe(3);
+        (await viewer.GetFromJsonAsync<JsonElement>($"{path}/versions/2/diff?against=draft", Ct)).GetProperty("toDraft").GetBoolean().ShouldBeTrue();
+        (await viewer.GetAsync($"{path}/versions/2/diff?against=9", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await viewer.GetAsync($"{path}/versions/9/diff", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
 
         foreach (var number in new[] { "3", "4" })
         {
