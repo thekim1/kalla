@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Kalla.Domain;
 using Kalla.Domain.Admin;
 using Kalla.Domain.Entities;
@@ -116,10 +117,22 @@ public sealed class PiiReportEndpointsTests(AdminDatabaseFixture database)
         document.GetProperty("typesFired").EnumerateArray().Select(t => t.GetString()).ShouldBe(["emailExternal"]);
         // Numbers and type names only: the stored JSON had no values, and nothing in the answer is one.
         document.EnumerateObject().Select(p => p.Name).ShouldBe(
-            ["documentId", "title", "url", "displayName", "state", "previousVersionLive", "counts", "rulesFired", "typesFired", "liveAt", "lastFlaggedAt", "lastFlaggedRunId"],
+            ["documentId", "title", "url", "displayName", "state", "previousVersionLive", "counts", "rulesFired", "typesFired", "liveAt", "lastFlaggedAt", "lastFlaggedRunId",
+                "piiClearedAt"],
             ignoreOrder: true);
         document.GetProperty("lastFlaggedRunId").GetGuid().ShouldBe(seed.FlagRun);
         document.GetProperty("lastFlaggedAt").GetDateTimeOffset().ShouldBeGreaterThan(DateTimeOffset.UtcNow.AddDays(-1));
+        document.GetProperty("piiClearedAt").ValueKind.ShouldBe(JsonValueKind.Null);
+
+        // B-63: a cleared document says when it was cleared, so the page shows it cleared and offers no Clear.
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            await db.Documents.Where(d => d.Id == seed.Flagged).ExecuteUpdateAsync(u => u.SetProperty(d => d.PiiClearedAt, DateTimeOffset.UtcNow).SetProperty(d => d.PiiClearedBy, "anna"), Ct);
+        }
+
+        var after = await editor.GetFromJsonAsync<JsonElement>($"/api/sources/{seed.ReportSource}/pii-report", Ct);
+        after.GetProperty("documents").EnumerateArray().Single(d => d.GetProperty("documentId").GetGuid() == seed.Flagged)
+            .GetProperty("piiClearedAt").GetDateTimeOffset().ShouldBeGreaterThan(DateTimeOffset.UtcNow.AddMinutes(-5));
 
         // A hold source (the default): the report does not apply.
         var hold = await editor.GetFromJsonAsync<JsonElement>($"/api/sources/{seed.HoldSource}/pii-report", Ct);

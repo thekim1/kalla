@@ -37,6 +37,7 @@ import { formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
 import { COLLECTION, COLLECTIONS, DELETE, EDIT_DRAWER, EVALUATION, LEVEL_LABEL, MOVE_DEPARTMENT, RETRIEVAL, RUN_STATE_LABEL, SOURCE, SOURCE_TYPE_LABEL } from '@/utils/labels'
 import MoveDepartmentDrawer from '@/components/organisation/MoveDepartmentDrawer.vue'
 import { problemMessage } from '@/utils/problem'
+import PiiActions from '@/components/documents/PiiActions.vue'
 
 // Kunskapsbank (admin design §5.5.2): Översikt (state, contact, used by), Filer (§5.5.7: the Files card of an upload
 // source, with a picker when there are several; shown when there is one, and Add files on Källor creates it), Källor,
@@ -103,6 +104,8 @@ const moving = ref(false)
 // assistant links it or it has a source, the dialog names them and has no delete button (the API refuses with
 // collection_in_use).
 const canDelete = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']))
+// B-63: a flagged document's highlights and Clear are Manage's (V26; the API checks the source's department).
+const canManage = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']))
 const deleting = ref(false)
 const inUse = computed(() => users.value.length > 0 || sources.data.value.length > 0)
 async function deleteCollection(): Promise<void> {
@@ -427,6 +430,10 @@ onMounted(load)
                 <UiBadge v-if="row.piiCleared" tone="accent" :label="COLLECTION.piiCleared" />
                 <UiBadge v-if="row.held" tone="warn" :label="COLLECTION.held" />
               </span>
+              <PiiActions
+                v-if="canManage && row.piiFlagged && !row.piiCleared" class="mt-1" :document-id="row.id" :title="row.title ?? row.displayName ?? row.url ?? row.id"
+                @cleared="loadDocuments()"
+              />
             </template>
           </DataTable>
           <UiButton v-if="documents.next.value" class="mt-4" :loading="documents.loading.value" @click="documents.more()">{{ COLLECTION.more }}</UiButton>

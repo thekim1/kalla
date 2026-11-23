@@ -760,6 +760,29 @@ export const PREVIEW = {
   expires: (time: string) => `Kept until ${time}.`,
 } as const
 
+/** A flagged document's personal-data actions (admin design §4.5, §5.5.2, §5.5.3, V26; B-63). */
+export const PII_ACTIONS = {
+  showHighlights: 'Show highlights',
+  highlightsTitle: (title: string) => `Personal data in ${title}`,
+  highlightsLead: 'The document’s text with what the check found marked. Opening this is recorded in the audit log.',
+  running: 'Finding the personal data…',
+  failed: 'The highlights could not be made. Try again.',
+  none: 'Nothing was found in the current text.',
+  passage: (n: number) => `Passage ${n}`,
+  match: (type: string) => `Found: ${type}`,
+  clear: 'Clear',
+  clearTitle: (title: string) => `Clear ${title}?`,
+  clearConsequence:
+    'Clearing says the personal data may be shown. A version held back is released to the search at once, and later versions are covered too as long as no count rises. The reason is recorded in the audit log.',
+  reason: 'Why may it be shown?',
+  reasonHint: 'At least 10 characters, for example: "The phone numbers are the contact centre’s."',
+  reasonTooShort: 'Write at least 10 characters.',
+  clearing: 'Clearing the document…',
+  cleared: 'The document has been cleared.',
+  clearFailed: 'The document could not be cleared. Try again.',
+  clearedBadge: 'Cleared',
+} as const
+
 /** Edit source (admin design §5.5.3, V25). */
 export const SOURCE_EDIT = {
   title: 'Edit source',

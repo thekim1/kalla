@@ -50,14 +50,14 @@ public static class PiiReportEndpoints
                         join d in admin.Db.Documents.AsNoTracking() on cs.DocumentId equals d.Id
                         where d.SourceId == id && d.DeletedAt == null && cs.State == ChunkSetStates.Held && cs.PiiFlagged
                         orderby d.Title, d.Id, cs.CreatedAt descending
-                        select new Row(d.Id, d.Title, d.Url, d.DisplayName, cs.PiiCounts, cs.LiveAt, ChunkSetStates.Held, d.LiveChunkSetId != null))
+                        select new Row(d.Id, d.Title, d.Url, d.DisplayName, cs.PiiCounts, cs.LiveAt, ChunkSetStates.Held, d.LiveChunkSetId != null, d.PiiClearedAt))
                     .Take(MaxDocuments + 1).ToListAsync(ct);
                 var live = await (
                         from d in admin.Db.Documents.AsNoTracking()
                         join cs in admin.Db.ChunkSets.AsNoTracking() on d.LiveChunkSetId equals cs.Id
                         where d.SourceId == id && d.DeletedAt == null && cs.State == ChunkSetStates.Live && cs.PiiFlagged
                         orderby d.Title, d.Id
-                        select new Row(d.Id, d.Title, d.Url, d.DisplayName, cs.PiiCounts, cs.LiveAt, ChunkSetStates.Live, false))
+                        select new Row(d.Id, d.Title, d.Url, d.DisplayName, cs.PiiCounts, cs.LiveAt, ChunkSetStates.Live, false, d.PiiClearedAt))
                     .Take(MaxDocuments + 1).ToListAsync(ct);
                 var rows = held.DistinctBy(r => r.Id).Concat(live).ToList(); // the newest held set per document
                 var shown = rows.Take(MaxDocuments).ToList();
@@ -76,7 +76,7 @@ public static class PiiReportEndpoints
 
                 return new PiiReport(true, modeName, level, [.. shown.Select(r => new PiiReportDocument(
                     r.Id, r.Title, r.Url, r.DisplayName, r.State, r.PreviousVersionLive, Counts(r.PiiCounts, out var rules, out var fired), rules, fired, r.LiveAt,
-                    flagged.TryGetValue(r.Id, out var at) ? at : null, lastRuns.TryGetValue(r.Id, out var run) ? run : null))], rows.Count > MaxDocuments);
+                    flagged.TryGetValue(r.Id, out var at) ? at : null, lastRuns.TryGetValue(r.Id, out var run) ? run : null, r.PiiClearedAt))], rows.Count > MaxDocuments);
             })
             .RequireAuthorization(AdminPolicies.Read).WithTags("Sources").WithName("GetPiiReport")
             .WithSummary("Held and flagged-but-live documents of a piiMode: report source (counts only)");
@@ -85,7 +85,7 @@ public static class PiiReportEndpoints
     }
 
     private sealed record Row(Guid Id, string? Title, string? Url, string? DisplayName, string? PiiCounts, DateTimeOffset? LiveAt, string State,
-        bool PreviousVersionLive);
+        bool PreviousVersionLive, DateTimeOffset? PiiClearedAt);
 
     /// <summary>
     /// The non-zero counts per type (<see cref="PiiTypes"/>), how many flag rules fired and which types fired, as the worker
@@ -115,7 +115,8 @@ public sealed record PiiReport(bool Applies, string PiiMode, string CollectionCl
 /// <summary>
 /// One flagged document: <see cref="State"/> <c>held</c> (the new version is not served until fixed or cleared; with
 /// <see cref="PreviousVersionLive"/> the older version still is) or <c>live</c> (served with its contact details); counts
-/// per type, the number of fired rules and the fired types (never values), and the last <c>pii.flagged</c> run item.
+/// per type, the number of fired rules and the fired types (never values), the last <c>pii.flagged</c> run item, and when an
+/// admin cleared the document (<c>PiiClearedAt</c>; later sets stay covered while no count rises, processing §9.5).
 /// </summary>
 public sealed record PiiReportDocument(
     Guid DocumentId,
@@ -129,4 +130,5 @@ public sealed record PiiReportDocument(
     IReadOnlyList<string> TypesFired,
     DateTimeOffset? LiveAt,
     DateTimeOffset? LastFlaggedAt,
-    Guid? LastFlaggedRunId);
+    Guid? LastFlaggedRunId,
+    DateTimeOffset? PiiClearedAt);
