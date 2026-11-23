@@ -38,6 +38,8 @@ With something still to choose from:
   outbound question is decided (#580: an assigned gateway key per assistant), the inbound one stays open.
 
 Adopted, being built (their rules are in the decisions and designs each names):
+- [`code-quality-top7.md`](proposals/code-quality-top7.md): seven DRY and best-practice fixes in the admin UI,
+  the admin API, the gateway clients and the test kit, one pull request each (user, 2026-11-23).
 - [`topics-editor.md`](proposals/topics-editor.md): topics picked from the sections found on the Topics tab, a form
   and a match preview (Decisions "Topics editor", 2026-11-22; A-42, B-64, B-65).
 
