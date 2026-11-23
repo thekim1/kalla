@@ -117,7 +117,8 @@ public static class AssistantTestQuestionEndpoints
                     throw AdminFaults.Field("gatewayModel", AdminErrorCodes.InvalidValue);
                 }
 
-                var run = await runner.StartAsync(admin.Db, assistant, version, admin.Actor ?? "admin", ct) ?? throw AdminFaults.Of(AdminErrorCodes.NoTestQuestions);
+                var run = await runner.StartAsync(admin.Db, assistant, version, admin.Actor ?? "admin", ct, onDemand: true)
+                    ?? throw AdminFaults.Of(AdminErrorCodes.NoTestQuestions);
                 await admin.AuditAsync(_ => Task.FromResult(new AdminChange<bool>(true, "run", AuditEntityTypes.AssistantTest, run.Id, null,
                     new { assistantId = id, version = version.Number, questions = run.QuestionCount })
                 {

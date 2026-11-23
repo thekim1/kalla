@@ -98,6 +98,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   test_question_invalid: 'The test question is not valid: {rule}.',
   test_question_document_unlinked: 'The expected document is not in a knowledge base the assistant uses.',
   test_run_running: 'The test questions are already running. Wait for that run to finish.',
+  test_runs_waiting: 'You already have test-question runs waiting. Start another when one has finished.',
   no_test_questions: 'The assistant has no test questions to run.',
   test_assistant_unavailable: '{reason}',
   test_budget_exceeded: '{reason}',
