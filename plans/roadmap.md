@@ -130,7 +130,7 @@ nearly done.
 | B-55 | Copy an assistant | admin §4.5 (`POST /api/assistants/{id}/copy`) |
 | B-56 | Version diff: **Compare** in Versions, the diff in `draft_base_changed` | admin §4.5 (`…/diff?against=`) |
 | B-57 | Test questions per assistant: the set, the runner, the report, the run after publish | admin §7.4, V33; data-model `AssistantTestQuestions` |
-| B-58 | The nightly answer run (`answers`): faithfulness and citation precision per assistant | processing §14.8; admin §7.2 |
+| B-58 | The nightly answer run (`answers`): faithfulness and citation precision per assistant; a platform setting turns it down or off (Decisions "Nightly answer run") | processing §14.8; admin §5.10, §7.2 |
 | B-59 | Home's *Needs attention*: the attention items of every design that names one | admin §5.5.1 |
 
 Each later item needs the earlier ones only where its row says so in the queue. The live check of wave 1 is the test

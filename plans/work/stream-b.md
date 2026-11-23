@@ -13,7 +13,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 
 ## P2 wave 1: assistants and answer quality (Decisions "P2 starts before go-live")
 
-Start these once `v0.9.0` is tagged (the roadmap's *P2 Broaden*); B-52 and B-53 above go first. Each adds its
+`v0.9.0` is released, so these can start (the roadmap's *P2 Broaden*). Each adds its
 tables in one migration of its own (no backward compatibility before production). The UI texts go in `labels.ts` and
 `messages.ts`; show each page in a real browser before the PR (FakeGateway stack with the demo seed).
 
@@ -64,7 +64,10 @@ tables in one migration of its own (no backward compatibility before production)
   `EvaluationRuns`/`EvaluationResults` rows of kind `assistant-tests` and `AssistantVersions.TestRunId`, the run after
   every publish and restore and **Run test questions** on demand (one run per assistant at a time), the cost shown
   before, the report card (§7.2) with **Keep** and **Restore the previous version**, **Save as test question** in the
-  test panel, the last 20 runs kept (data-model §8), `rag.admin.assistant_tests{outcome}`. The FakeGateway answers the
+  test panel, the last 20 runs kept (data-model §8: a step added to `content.rag_retention_content_step` in this item's
+  migration; the worker already runs that function nightly, so no worker change), `rag.admin.assistant_tests{outcome}`.
+  The attention item (a run worse than the previous version's, admin §5.5.1) goes into B-59's list when that has
+  landed, else in B-59. The FakeGateway answers the
   judge (its script per step).
 - **Paths:** as B-54, and `src/Kalla.Answering/**`, `src/Kalla.FakeGateway/**` where the judge step needs it.
 - **Done when:** admin §11.2's assistant-test cases: a publish starts a run, a question with each check passes and
@@ -79,22 +82,36 @@ tables in one migration of its own (no backward compatibility before production)
   evaluation sets of its collections answered through `Kalla.Answering` with the published version's settings, the
   judge (`Settings.EvaluationJudgeModel` at the assistant's ceiling, `x-fors-step: eval-answer`) rating faithfulness
   and citation precision; run kind `answers` with results per question; the assistant's Statistics tab shows the
-  latest run's counts beside the live `uncited_answer` rate; `rag.evaluation.llm_tokens{step=answer}`; at most 100
-  questions per assistant and night, and the night's cost in the run (§14.8).
+  latest run's counts beside the live `uncited_answer` rate; `rag.evaluation.llm_tokens{step=answer}`; the night's
+  cost in the run (§14.8). **Whether and how much** (Decisions "Nightly answer run"): the column
+  `Settings.EvaluationAnswerQuestions` (0–100, default 100, with its range check) in `GET/PUT /api/settings/evaluation`,
+  and on the Settings page's *Evaluation* section the switch and the count of admin §5.10; 0 starts no run. **The run
+  row** as processing §14.8: one per assistant and night, no `SetId`, `SubjectId` the assistant, `SubjectVersion` the
+  published version's number, compared with the previous finished run; a refused key or a spent budget leaves the row
+  unfinished and the next night starts a new one. The last 60 runs per assistant kept (data-model §8: a step in
+  `content.rag_retention_content_step`, as B-57's). The attention item (the 28-day median, admin §5.5.1) goes into
+  B-59's list when that has landed, else in B-59.
 - **Paths:** as B-57.
 - **Done when:** a test runs the nightly job on FakeGateway for two assistants and stores per-question verdicts;
-  an assistant with no published version or no questions gets no run; the Statistics tab shown in a browser.
+  an assistant with no published version or no questions gets no run; with the setting at 0 no assistant gets a run,
+  and at 5 a run has at most 5 questions; a FakeGateway key with `BudgetExceeded` leaves that assistant's run
+  unfinished while the other assistant's finishes; the Statistics tab and the Settings switch shown in a browser.
 - **Waits on:** B-57 (the judge call and the run rows).
-- **Read:** processing §14.8, §15; admin §2.2 (`AnswerEvaluationService`), §7.2; chat design (`uncited_answer`).
+- **Read:** Decisions "Nightly answer run"; processing §14.8, §15; admin §2.2 (`AnswerEvaluationService`), §5.5.4
+  (the Statistics tab), §5.10, §7.2; data-model §2.1 (`Settings`), §2.2 (`EvaluationRuns`), §8; chat design
+  (`uncited_answer`).
 
 ### [ ] B-59 Home: *Needs attention*
-- **Do:** admin §5.5.1: `GET /api/overview`'s attention list for the caller's scope with every source listed under
-  *Attention items are P2* (a kind, the object, the reason, a link), the *Needs attention* card at the top of Home and
-  the badge count, V32's Overview warning; one query per kind, each from data the admin already has.
+- **Do:** admin §5.5.1: `GET /api/overview`'s attention list for the caller's scope (a kind, the object, the reason, a
+  link) with the twelve items that §5.5.1's table marks *the list* (V32's Overview warning among them), the *Needs
+  attention* card at the top of Home and the badge count; one query per kind, each from data the admin already has.
+  Three more rows are added by the item that builds their data when this item has landed first, and by this item
+  otherwise: the assistant-test item (B-57), the answer-run item (B-58) and the downvoted document (B-66). The unused
+  assistant is B-68's (it waits on this item); site-profile proposals, tool drift and approvals come with later waves.
 - **Paths:** as B-54.
 - **Done when:** an API test per kind (raised, and gone when its cause is); a department admin sees only the items
   of their departments; the card shown in a browser with the demo seed plus one forced item of each kind.
-- **Waits on:** B-57 and B-58 for their two kinds (the others first, those two added when they land).
+- **Waits on:** nothing (B-57's, B-58's and B-66's items as *Do* says).
 - **Read:** admin §5.3 (Home row), §5.5.1, V32; processing §14.8; cost-attribution §4.2.
 
 

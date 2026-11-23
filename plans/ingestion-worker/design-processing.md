@@ -792,7 +792,7 @@ Removed (simplification pass): parse strategies are not learned automatically (�
 | Publish report, nightly | ≤ 100 queries on the full collection | < 1 min |
 | On-demand settings comparison | 2 × 100 queries | < 1 min |
 | Set generation | ≈ 200k on-prem LLM tokens | model-bound, ≈ 10–20 min |
-| Answer-level run (P2; `kalla-admin`) | ≤ 100 answers + judge calls on-prem | model-bound, minutes |
+| Answer-level run (P2; `kalla-admin`) | per assistant ≤ `Settings.EvaluationAnswerQuestions` (100) answers + as many judge calls, at the assistant's ceiling | model-bound, minutes |
 
 The re-processing itself is forecast by the publish flow (6a §12.2); the `eval` class (concurrency 1, on at most two
 worker instances) runs only generation and measuring. **Recorded cost**: every model call of a retrieval run (query
@@ -809,15 +809,27 @@ exists.
   recall@10 falls 5 points below the median of the last 28 days (attention items are P2, Decisions "M-3 settlements"). Enqueued at 03:30 Europe/Stockholm under advisory lock
   `0x5241_4731_0005`. Onyx found an ingestion bug only through poor evaluation scores
   (`../../platforms/onyx.md:322`); this makes that routine.
-- **Later (P2): answers**: nightly per assistant, the evaluation sets of its collections are answered through
-  `Kalla.Answering` with the assistant's settings, and a judge (`Settings.EvaluationJudgeModel`, at the
-  assistant's ceiling, `x-fors-step: eval-answer`) rates **faithfulness** (every claim supported by the cited chunks) and
-  **citation precision** (cited chunks support the claims); results per assistant with counts. The `uncited_answer`
-  rate from live chat is shown next to them (chat design). At most 100 questions per assistant and night (the
-  `human` layer first, then the newest generated questions), and the run records its cost. Run kind `answers`; it
-  runs in **`kalla-admin`**, which already runs `Kalla.Answering` for the test panel and holds the gateway keys of
-  every level. The worker runs only retrieval evaluation (through `Kalla.Retrieval`) and references neither
-  `Kalla.Answering` nor `Kalla.Tools`.
+- **Later (P2): answers** (Decisions "Nightly answer run"): nightly per published assistant, the evaluation sets of
+  its collections are answered through `Kalla.Answering` with the published version's settings, and a judge
+  (`Settings.EvaluationJudgeModel`, at the assistant's ceiling, `x-fors-step: eval-answer`) rates **faithfulness**
+  (every claim supported by the cited chunks) and **citation precision** (cited chunks support the claims); results
+  per assistant with counts. The `uncited_answer` rate from live chat is shown next to them (chat design).
+  - **How much, and whether:** at most `Settings.EvaluationAnswerQuestions` questions per assistant and night (0–100,
+    default 100; the `human` layer first, then the newest generated questions). **0 switches the run off** for every
+    assistant; the platform admin sets it on the Settings page (admin §5.10). There is no switch per assistant. An
+    assistant without a published version, or whose collections have no questions, gets no run.
+  - **The run:** one per assistant and night, kind `answers`, without a `SetId` (its questions come from several
+    sets), `SubjectId` the assistant, `SubjectVersion` the published version's number and `ComparedRunId` the
+    assistant's previous finished `answers` run (data-model §2.2). It records its cost.
+  - **A refusal:** the calls run as the assistant's gateway key. When the key or its budget is refused (chat §3.6),
+    that assistant's run ends for the night: the row stays unfinished (`FinishedAt` null, no metrics), which the
+    Statistics tab and the attention rule skip, and the next night starts a new run. The key's state is an attention
+    item of its own (admin §5.5.1).
+  - **Attention:** an Overview attention item when faithfulness or citation precision falls 5 points below its median
+    of the assistant's finished runs of the last 28 days, the rule of the retrieval run above (admin §5.5.1).
+  - **Where:** it runs in **`kalla-admin`**, which already runs `Kalla.Answering` for the test panel and holds the
+    gateway keys of every level. The worker runs only retrieval evaluation (through `Kalla.Retrieval`) and references
+    neither `Kalla.Answering` nor `Kalla.Tools`.
 
 ## 15. Observability
 
