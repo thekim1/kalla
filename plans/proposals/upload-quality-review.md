@@ -81,4 +81,4 @@ U3 and U7 wait until real use shows a need.
 ## Related
 
 - Upload knowledge bases in the admin UI: admin design §5.5.7 (#532). The worker records an upload's outcome: #533.
-- Legacy Office and RTF through LibreOffice: Decisions "Legacy Office and RTF uploads", parser §4 (#526).
+- Legacy Office and RTF through LibreOffice: Decisions "Parser", parser §4 (#526).

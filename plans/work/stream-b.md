@@ -593,7 +593,7 @@ design meanwhile.
 
 ### [ ] B-L3 Freshness and index checks on the pilot collection
 - **Done when:** current documents rank above outdated ones on the temporal questions without recall@10 dropping
-  elsewhere (#171); HNSW recall against exact search recorded (#117).
+  elsewhere (#171); HNSW recall against exact search recorded (#180).
 - **Waits on:** B-L2.
 - **Read:** knowledge §6.4, §6.5.
 

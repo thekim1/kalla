@@ -725,7 +725,7 @@ There are no data tiers (§13). Rows of
 `content` and `chat` carry a plain `Classification` column (a chunk's level is its document's, i.e. its source's);
 retrieval filters `"Classification" = ANY ($levels)` as defence in depth; master keys stay per level
 (`rag-chat-<level>`, `rag-blob-internal`). If `sensitive` ever needs isolation it becomes a **separate deployment**
-reached over the existing HTTP seam (`Retrieval:Mode=Http`; postponed T1/K2), not a second database of this one.
+reached over the planned HTTP seam (`Retrieval:Mode=Http`, not read yet; postponed T1/K2), not a second database of this one.
 
 ## 7. Envelope encryption
 

@@ -17,6 +17,7 @@ settles their design deviations. Start each session from [`../../HANDOVER.md`](.
 Finished items move to [`../archive/work/`](../archive/work/) at each release; find one by its ID.
 
 ### [ ] M-4 The live block
-- **Do:** run it in the roadmap's order with the streams and the user; the three-way gold-set run and the hand
-  grading use `scripts/grading/` (README there).
-- **Done when:** the go-live gate is met, G1 is finished and the pilot is live; the roadmap moves P1b to Done.
+- **Do:** run it in the roadmap's order with the streams and the user; the three-way gold-set run is the worker's
+  evaluation run (B-L2), the go-live gate's hand grading uses `scripts/grading/` (README there).
+- **Done when:** the go-live gate is met, G1 is finished and the pilot is live; to-verify #182–#185 recorded, and
+  #103, #105, #136 and #154 from the pilot weeks' questions; the roadmap moves P1b to Done.

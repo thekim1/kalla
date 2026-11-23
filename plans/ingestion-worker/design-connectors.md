@@ -914,7 +914,7 @@ that are live leaves the slot `indexed` (#533).
 
 - Allowed in P1 (simplification pass §1; answered 3 is the earlier subset): PDF, DOCX/PPTX/XLSX,
   `.odt`/`.ods`/`.odp`, JPG/PNG/TIFF, TXT/MD/CSV, HTML, and `.doc`/`.xls`/`.ppt`/`.rtf` (converted by LibreOffice in
-  the parser, parser §4; Decisions "Legacy Office and RTF uploads").
+  the parser, parser §4; Decisions "Parser").
 - **Deferred to P2** (postponed Z1): `.eml`/`.msg` → `unsupported` `upload.format_deferred`. Crawled `.doc`/`.xls`/
   `.ppt`/`.rtf`, `.eml` and `.msg` end `http.format_deferred`, before download. The detect stage refuses them too with `parser.format_deferred`; a format
   that is neither allowed nor deferred ends `parser.unsupported_format` (parser §3).

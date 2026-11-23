@@ -2,7 +2,12 @@
 
 Draft for DoIT review. File: `draft.csv` (UTF-8 with BOM, comma-separated, RFC 4180 quoting, CRLF line endings).
 Columns: `nr,typ,fråga,förväntat_svar,dokument_id,dokument_titel,dokument_url,kommentar`.
-Source: `pages.jsonl` (1,166 pages, first ~1,800 characters of each page). Written 2026-11-01.
+Source: `pages.jsonl` (1,166 pages, first ~1,800 characters of each page), an export of a local crawl of umea.se's
+"Kommun och politik" slice on 2026-11-01; it is not in the repository. Written 2026-11-01. The same questions are in
+`Turkos-guldstandard-utkast.xlsx` in this folder.
+
+**Open question for DoIT:** the draft covers only this 1,166-page slice. Whether the set is extended to the full
+umea.se crawl before it is entered is DoIT's call at review.
 
 ## Counts
 
@@ -16,7 +21,12 @@ Source: `pages.jsonl` (1,166 pages, first ~1,800 characters of each page). Writt
 - 159 distinct pages are targets. No page is the target of more than 3 questions.
 - 14 answerable questions list 2–3 target pages: identical duplicate pages (e.g. *Skattesatser* 1/404,
   *Intäkter och kostnader* 0/403, *Planering över året* 2/383, the ~15 identical *Föredragningslistor, handlingar och
-  protokoll* pages), or two pages that answer the same thing equally well.
+  protokoll* pages), or two pages that answer the same thing equally well. Of these, 11 are besvarbar and 3
+  tidsberoende.
+- Against the decision's range (Decisions "Gold set drafted by the main session, reviewed by DoIT": about 120–150
+  answerable, 30–50 unanswerable, at least 10 temporal): `scripts/grading/grading.py` counts every question with
+  expected documents as answerable, so the 138 besvarbar and 21 tidsberoende rows count as 159 answerable, above the
+  range; the 40 obesvarbar rows count as off-topic.
 - Rows are sorted by type, then by topic. Reviewers may want to shuffle before use.
 
 ## Topic distribution (besvarbar + tidsberoende)
@@ -113,6 +123,9 @@ Several of these go stale within weeks:
 - new committees are appointed 2026-11-30;
 - the 2027 term of office starts 1 January 2027.
 
+Several dates above (2026-11-17, 2026-11-20) have passed. DoIT's review re-dates or replaces these rows when the set is
+entered.
+
 ## Known weaknesses
 
 1. **Bias from writing questions from the pages.** Every answerable question was written after reading its target
@@ -144,7 +157,8 @@ Several of these go stale within weeks:
 
 ## Reproducing the check
 
-The validation script is in the scratchpad `tools/check.py`. It checks:
+The validation script (`tools/check.py`) and its source `pages.jsonl` were in the drafting session's scratchpad and are
+not in the repository, so the check cannot be re-run from here. It checked:
 - the BOM and the header;
 - that every `dokument_id` exists in `pages.jsonl`, and that its title and URL match position by position;
 - that obesvarbar rows have empty answer and document columns;
@@ -152,3 +166,19 @@ The validation script is in the scratchpad `tools/check.py`. It checks:
 - that the counts are within range;
 - that there are no duplicate questions;
 - that `nr` runs in sequence.
+
+## From the draft to `human` questions
+
+The draft does not load as it is:
+
+- `scripts/grading/grading.py` reads `question` (or `text`) and `expected_documents` (or `expectedDocuments`,
+  `expectedDocumentIds`), with several documents split on `|` or a newline. The draft's columns are `fråga`,
+  `förväntat_svar`, `dokument_id` and `dokument_url`, with `;` between several targets.
+- The admin API takes one question per call (`POST /api/collections/{id}/evaluation/questions`, with `question`,
+  `expectedAnswer` and `expectedDocumentIds`, the collection's live document ids).
+
+Entry is stream b's B-L2 ("Gold set in, thresholds out"), after DoIT has approved the set. Targets are mapped by
+`dokument_url`, not `dokument_id`: the ids come from the local crawl of 2026-11-01 and do not exist in the pilot crawl,
+so each URL is looked up among the pilot collection's documents and a URL with no live document is reported, not
+dropped. The main session records DoIT's approval (who approved, the date, the file's version) in
+[`../work/results-main.md`](../work/results-main.md) before B-L2 enters the set.
