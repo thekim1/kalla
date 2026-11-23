@@ -138,7 +138,7 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await expect(page.getByText('The draft has been saved.')).toBeVisible()
 
     // 10 Test the draft: an answer with a cited source.
-    await act.press(page.getByRole('tab', { name: 'Test' }))
+    await act.press(page.getByRole('tab', { name: 'Test', exact: true }))
     await act.fill(page.getByRole('textbox', { name: 'Question' }), 'Vad kostar det att hyra en isyta?')
     await act.press(page.getByRole('button', { name: 'Test', exact: true }))
     const answer = page.getByTestId('answer')
