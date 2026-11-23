@@ -1845,6 +1845,26 @@ export interface ContentGapReport {
   documents: ContentGapRow[]
 }
 
+/**
+ * One document of `GET /api/collections/{id}/feedback` (admin design §4.5, §8.8): its title (null when `deleted`), the downvotes
+ * and upvotes of the rated answers that cited it, and how many assistants' answers those were (never their names).
+ */
+export interface DocumentFeedbackRow {
+  documentId: string
+  title: string | null
+  deleted: boolean
+  thumbsDown: number
+  thumbsUp: number
+  assistants: number
+}
+
+/** `GET /api/collections/{id}/feedback` (admin design §8.8): the period and its documents, most downvotes first (at most 200). */
+export interface DocumentFeedbackReport {
+  from: string
+  to: string
+  documents: DocumentFeedbackRow[]
+}
+
 /** A row of `GET /api/costs`: per period, department, object, step and client; `deleted` when the object is gone. */
 export interface DepartmentCostRow extends CostTotals {
   period: string

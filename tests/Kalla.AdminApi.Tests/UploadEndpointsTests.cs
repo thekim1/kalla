@@ -104,6 +104,42 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database, UploadEn
     }
 
     [Fact]
+    public async Task A_paused_upload_source_takes_no_batch_until_it_is_resumed()
+    {
+        // An upload source paused on 0.10.0 (#1007, #1024 review): its sync job would be dropped, so the batch is refused.
+        var (sourceId, code) = await UploadSourceAsync();
+        using var admin = await AdminDatabaseFixture.UserAsync(host.Factory, RagRoles.DepartmentAdmin, code);
+        using var create = await admin.PostAsync($"/api/sources/{sourceId}/upload-batches", null, Ct);
+        create.StatusCode.ShouldBe(HttpStatusCode.Created);
+        var batch = (await Json(create)).GetProperty("batchId").GetGuid();
+        (await PutFileAsync(admin, batch, 1, "taxa.pdf", "%PDF-1.7 taxa"u8.ToArray())).StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            await db.Sources.Where(s => s.Id == sourceId).ExecuteUpdateAsync(u => u.SetProperty(s => s.State, SourceStates.Paused), Ct);
+        }
+
+        using (var commit = await admin.PostAsJsonAsync($"/api/upload-batches/{batch}/commit", new { files = new[] { 1 } }, Ct))
+        {
+            commit.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+            (await Json(commit)).GetProperty("code").GetString().ShouldBe("source_paused");
+        }
+
+        using (var another = await admin.PostAsync($"/api/sources/{sourceId}/upload-batches", null, Ct))
+        {
+            another.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+            (await Json(another)).GetProperty("code").GetString().ShouldBe("source_paused");
+        }
+
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            await db.Sources.Where(s => s.Id == sourceId).ExecuteUpdateAsync(u => u.SetProperty(s => s.State, SourceStates.Active), Ct);
+        }
+
+        (await admin.PostAsJsonAsync($"/api/upload-batches/{batch}/commit", new { files = new[] { 1 } }, Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
     public async Task A_batch_stages_files_commits_the_manifest_and_the_upload_sync()
     {
         var (sourceId, code) = await UploadSourceAsync();

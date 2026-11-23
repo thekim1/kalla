@@ -8,6 +8,11 @@ import { bffUser } from '@/test/fixtures'
 import { FEEDBACK } from '@/utils/labels'
 import FeedbackView from './FeedbackView.vue'
 
+// `?documentId=` (Show the ratings on Feedback on documents, §8.8) through a route the tests set.
+const route = vi.hoisted(() => ({ query: {} as Record<string, string> }))
+const replace = vi.hoisted(() => vi.fn())
+vi.mock('vue-router', async (original) => ({ ...(await original<typeof import('vue-router')>()), useRoute: () => route, useRouter: () => ({ replace }) }))
+
 function signIn(roles: string[], openWebUi = true) {
   setActivePinia(createPinia())
   const auth = useAuthStore()
@@ -23,7 +28,10 @@ function item(overrides: Partial<FeedbackItem> = {}): FeedbackItem {
   }
 }
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+  route.query = {}
+})
 
 describe('Feedback (admin design §8.1)', () => {
   it('shows ratings without content, the totals and import health, filters, and marks an item handled', async () => {
@@ -114,6 +122,45 @@ describe('Feedback (admin design §8.1)', () => {
     await wrapper.findAll('select')[1]!.setValue('-1')
     await flushPromises()
     expect(wrapper.text()).toContain('Altan och uteplats')
+  })
+
+  it('filters by the cited document from ?documentId=, names it from a row, and shows all documents again', async () => {
+    signIn(['rag-department-admin'])
+    route.query = { documentId: 'd1', tab: 'x' }
+    const list = vi.spyOn(api.feedback, 'list').mockResolvedValue({
+      items: [item({ citedDocuments: [{ id: 'd0', title: 'Bygglov' }, { id: 'd1', title: 'Altan och uteplats' }] })], next: null,
+    })
+    vi.spyOn(api.feedback, 'summary').mockResolvedValue({ totals: { answers: 0, notFound: 0, thumbsUp: 0, thumbsDown: 0 }, imports: [] })
+    vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 } as never)
+    const wrapper = mount(FeedbackView)
+    await flushPromises()
+
+    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ documentId: 'd1' }))
+    expect(wrapper.get('[data-test=cited-filter]').text()).toContain(FEEDBACK.citedFilter('Altan och uteplats'))
+
+    list.mockResolvedValue({ items: [], next: null })
+    await wrapper.get('[data-test=clear-cited]').trigger('click')
+    await flushPromises()
+    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ documentId: undefined }))
+    expect(replace).toHaveBeenCalledWith({ query: { tab: 'x' } })
+    expect(wrapper.find('[data-test=cited-filter]').exists()).toBe(false)
+  })
+
+  it('names no document while no row has loaded, and sends no document filter without ?documentId=', async () => {
+    signIn(['rag-viewer'])
+    route.query = { documentId: 'd9' }
+    const list = vi.spyOn(api.feedback, 'list').mockResolvedValue({ items: [], next: null })
+    vi.spyOn(api.feedback, 'summary').mockResolvedValue({ totals: { answers: 0, notFound: 0, thumbsUp: 0, thumbsDown: 0 }, imports: [] })
+    vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 } as never)
+    const wrapper = mount(FeedbackView)
+    await flushPromises()
+    expect(wrapper.get('[data-test=cited-filter]').text()).toContain(FEEDBACK.citedFilter(null))
+
+    route.query = {}
+    const plain = mount(FeedbackView)
+    await flushPromises()
+    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ documentId: undefined }))
+    expect(plain.find('[data-test=cited-filter]').exists()).toBe(false)
   })
 
   it('labels every filter above its field, the same layout as Costs', async () => {

@@ -15,8 +15,8 @@ namespace Kalla.Api.Tests;
 /// The Open WebUI feedback import (chat design §14.2–§14.3, §13.3) against a recorded <c>/api/v1/evaluations/feedbacks/list</c>
 /// page in Open WebUI v0.12.5's shape (unchanged since v0.12.3) (<c>FeedbackListResponse</c> of <c>FeedbackUserResponse</c>, <c>models/feedbacks.py</c>):
 /// the rating maps to the right message, the comment and the user's details are dropped, a foreign model is skipped, a
-/// young unmapped item holds the watermark back, feedback older than the client's retention is deleted, and failed runs
-/// in a row alert from the fourth.
+/// young unmapped item holds the watermark back, feedback older than the client's retention is deleted, failed runs
+/// in a row alert from the fourth, and a rating counts per cited document as the API's do (B-66).
 /// </summary>
 public sealed class FeedbackImporterTests(KnowledgeFixture db) : IClassFixture<KnowledgeFixture>
 {
@@ -47,6 +47,9 @@ public sealed class FeedbackImporterTests(KnowledgeFixture db) : IClassFixture<K
     {
         public List<string> Deleted { get; } = [];
 
+        /// <summary>The first page the list answers; a test changes it to change a rating in Open WebUI.</summary>
+        public string Page { get; set; } = page;
+
         public string? Authorization { get; private set; }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -58,7 +61,7 @@ public sealed class FeedbackImporterTests(KnowledgeFixture db) : IClassFixture<K
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("true") });
             }
 
-            var body = request.RequestUri!.Query.Contains("page=1", StringComparison.Ordinal) ? page : """{"items": [], "total": 4}""";
+            var body = request.RequestUri!.Query.Contains("page=1", StringComparison.Ordinal) ? Page : """{"items": [], "total": 4}""";
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
         }
     }
@@ -158,6 +161,77 @@ public sealed class FeedbackImporterTests(KnowledgeFixture db) : IClassFixture<K
             (reader.GetInt64(0), reader.GetString(1), reader.GetInt32(2), reader.GetInt32(3))
                 .ShouldBe((now.AddHours(-2).ToUnixTimeSeconds(), "ok", 1, 1));
         }
+    }
+
+    [Fact]
+    public async Task An_imported_rating_counts_once_per_cited_document_like_an_api_one_and_a_change_moves_one_count()
+    {
+        // Chat §14.2: the import adjusts DocumentDailyFeedback by the delta as §14.1 (ChatApiTests' A_rating_counts_once_per_cited_document…).
+        var clientId = Guid.CreateVersion7();
+        var assistantId = Guid.CreateVersion7();
+        var department = Guid.CreateVersion7();
+        var answer = Guid.CreateVersion7();
+        var (collection, twoChunks, oneChunk, uncited) = (Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7());
+        await using var api = NpgsqlDataSource.Create(db.Connection(RagDatabase.Api));
+        await using (var seed = api.CreateCommand($"""
+            INSERT INTO chat."Conversations" ("Id", "Classification", "AssistantId", "ClientId", "SubjectKind", "SubjectId", "ExternalChatId", "HistoryMode",
+                "RetentionDays", "CreatedAt", "LastMessageAt", "ExpiresAt")
+            VALUES ('{Guid.CreateVersion7()}', 'internal', '{assistantId}', '{clientId}', 'owui-user', 'owui:u-7', 'chat-7', 'none', 90, now(), now(), now() + interval '90 days');
+            INSERT INTO chat."Messages" ("Id", "ConversationId", "Classification", "Seq", "Role", "ExpiresAt", "Outcome", "CreatedAt", "CondenseUsed", "ExternalMessageId")
+            SELECT '{answer}', "Id", 'internal', 2, 'assistant', now() + interval '90 days', 'answered', now(), false, 'owui-msg-7'
+            FROM chat."Conversations" WHERE "ClientId" = '{clientId}';
+            INSERT INTO chat."MessageSources" ("MessageId", "Rank", "Classification", "DocumentId", "ChunkId", "CollectionId", "Number", "Used") VALUES
+                ('{answer}', 0, 'internal', '{twoChunks}', gen_random_uuid(), '{collection}', 1, true),
+                ('{answer}', 1, 'internal', '{twoChunks}', gen_random_uuid(), '{collection}', 2, true),
+                ('{answer}', 2, 'internal', '{oneChunk}', gen_random_uuid(), '{collection}', 3, true),
+                ('{answer}', 3, 'internal', '{uncited}', gen_random_uuid(), '{collection}', NULL, false);
+            """))
+        {
+            await seed.ExecuteNonQueryAsync(Ct);
+        }
+
+        static string Item(int rating, DateTimeOffset at) => $$"""
+            {"items": [{"id": "fb-cited", "user_id": "u-7", "version": 0, "type": "rating", "data": {"rating": {{rating}}, "model_id": "sopor"},
+              "meta": {"chat_id": "chat-7", "message_id": "owui-msg-7"}, "created_at": {{at.ToUnixTimeSeconds()}}, "updated_at": {{at.ToUnixTimeSeconds()}}, "user": null}],
+             "total": 1}
+            """;
+
+        var now = DateTimeOffset.UtcNow;
+        using var openWebUi = new FakeOpenWebUi(Item(-1, now));
+        var assistant = new AssistantEntry(assistantId, "sopor", "Sopguiden", "internal", "none", "active", department, null, null, []);
+        var snapshot = PolicySnapshot.Empty with
+        {
+            Version = 1, Assistants = new Dictionary<Guid, AssistantEntry> { [assistantId] = assistant }, Clients = ManagedOpenWebUi(clientId),
+        };
+        var options = new StaticOptionsMonitor<OpenWebUiOptions>(new OpenWebUiOptions { BaseUrl = new Uri("http://owui.test/"), AdminApiKey = "sk-feedback-test" });
+        using var meters = new Meters();
+        var importer = new FeedbackImporter(new Clients(openWebUi), api, new Snapshot(snapshot), options, TimeProvider.System, meters,
+            NullLogger<FeedbackImporter>.Instance);
+
+        async Task<Dictionary<Guid, (int Up, int Down, Guid Department)>> CountsAsync()
+        {
+            await using var read = api.CreateCommand($"""
+                SELECT "DocumentId", "ThumbsUp", "ThumbsDown", "DepartmentId" FROM chat."DocumentDailyFeedback"
+                WHERE "CollectionId" = '{collection}' AND "ClientId" = '{clientId}' AND "AssistantId" = '{assistantId}'
+                """);
+            await using var reader = await read.ExecuteReaderAsync(Ct);
+            var rows = new Dictionary<Guid, (int, int, Guid)>();
+            while (await reader.ReadAsync(Ct))
+            {
+                rows.Add(reader.GetGuid(0), (reader.GetInt32(1), reader.GetInt32(2), reader.GetGuid(3)));
+            }
+
+            return rows;
+        }
+
+        (await importer.RunOnceAsync(Ct)).ShouldBeTrue();
+        (await importer.RunOnceAsync(Ct)).ShouldBeTrue(); // the same item read again (the overlap) changes nothing
+        (await CountsAsync()).ShouldBe(new Dictionary<Guid, (int, int, Guid)> { [twoChunks] = (0, 1, department), [oneChunk] = (0, 1, department) }, ignoreOrder: true);
+
+        // The user changes the thumb in Open WebUI: one count moves from down to up for each cited document.
+        openWebUi.Page = Item(1, now.AddSeconds(5));
+        (await importer.RunOnceAsync(Ct)).ShouldBeTrue();
+        (await CountsAsync()).ShouldBe(new Dictionary<Guid, (int, int, Guid)> { [twoChunks] = (1, 0, department), [oneChunk] = (1, 0, department) }, ignoreOrder: true);
     }
 
     /// <summary>Open WebUI that answers 401 while <see cref="Failing"/>, else an empty feedback list.</summary>

@@ -4,7 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { ROLES } from '@/api/types'
 import { ragRoles, useAuthStore } from '@/stores/auth'
 import { createAppRouter, routes } from '.'
-import { ALL_ROLES, filterEntries, isNavItemActive, mobileTabs, navGroups, searchEntries } from './nav'
+import { ALL_ROLES, FEEDBACK_ROLES, filterEntries, isNavItemActive, mobileTabs, navGroups, searchEntries } from './nav'
 import { NAV_KEYWORDS, PAGE, PLATFORM } from '@/utils/labels'
 
 describe('menu structure (copied checks)', () => {
@@ -76,6 +76,42 @@ describe('search', () => {
       ['Home', 'Map'], ['Knowledge bases', 'Assistants'], ['Feedback', 'Costs'], ['Apps and keys', 'Models', 'Settings', 'Organisation', 'Audit log'],
     ])
     expect(filterEntries(entries, 'responsible').map((e) => e.id)).toEqual(['map'])
+  })
+})
+
+describe('the phone\'s bottom menu (admin design §5.2; B-74)', () => {
+  const signIn = (roles: string[]) => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = { isAuthenticated: true, name: 'A', email: null, roles, departmentCodes: [], departmentSources: [], sessionExpiresAt: null, signIn: { configured: true }, setup: { open: false }, openWebUi: { enabled: true } }
+    auth.status = 'authenticated'
+    return auth
+  }
+  const shown = (roles: string[]) => {
+    const auth = signIn(roles)
+    return mobileTabs.filter((t) => auth.canOpen(t)).map((t) => t.label)
+  }
+
+  it('holds Home, Knowledge bases, Assistants and Feedback, as the side menu has them (Menu comes after)', () => {
+    expect(mobileTabs.map((t) => t.label)).toEqual(['Home', 'Knowledge bases', 'Assistants', 'Feedback'])
+    const items = navGroups.flatMap((g) => g.items)
+    for (const tab of mobileTabs) {
+      const item = items.find((i) => i.name === tab.name)!
+      expect([tab.icon, tab.roles, tab.badge]).toEqual([item.icon, item.roles, item.badge])
+    }
+    expect(mobileTabs.find((t) => t.name === 'feedback')?.roles).toEqual(FEEDBACK_ROLES)
+    expect(mobileTabs.find((t) => t.name === 'overview')?.badge).toBe('attention')
+  })
+
+  it('filters the tabs by role as the side menu: no Feedback tab for an editor role', () => {
+    expect(shown(['rag-editor'])).toEqual(['Home', 'Knowledge bases', 'Assistants'])
+    expect(shown(['rag-viewer'])).toEqual(['Home', 'Knowledge bases', 'Assistants', 'Feedback'])
+    expect(shown(['rag-department-admin'])).toEqual(['Home', 'Knowledge bases', 'Assistants', 'Feedback'])
+  })
+
+  it('leaves every other page to Menu', () => {
+    for (const name of ['map', 'costs', 'organisation', 'audit', 'platform-settings']) expect(mobileTabs.some((t) => isNavItemActive(t, name))).toBe(false)
+    expect(mobileTabs.some((t) => isNavItemActive(t, 'assistants'))).toBe(true)
   })
 })
 

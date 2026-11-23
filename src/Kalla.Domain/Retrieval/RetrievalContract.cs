@@ -73,10 +73,16 @@ public sealed record Citation(
     Guid Id, string Title, string? DisplayName, string? Url, string? DownloadUrl, string SourceType, string? DocumentType, string? MediaType,
     string? Language, DateTimeOffset? Modified, DateTimeOffset? Checked = null);
 
-/// <summary>One result (knowledge design §2.2): the chunk text without its heading prefix, scores and citation.</summary>
+/// <summary>
+/// One result (knowledge design §2.2): the chunk text without its heading prefix, scores and citation, and the chunk's topic
+/// <see cref="Tags"/> as stored (processing design §7; empty for none), which the chat extension shows (chat design §9.7, §9.11).
+/// </summary>
 public sealed record RetrievedChunk(
     int Rank, Guid ChunkId, Guid DocumentId, byte[] TextHash, string Text, string HeadingPath, int? Page, int? PageEnd, double Score,
-    ChunkScores Scores, int? SectionRef, Guid CollectionId, string CollectionSlug, string Level, Citation Citation);
+    ChunkScores Scores, int? SectionRef, Guid CollectionId, string CollectionSlug, string Level, Citation Citation)
+{
+    public IReadOnlyList<string> Tags { get; init; } = [];
+}
 
 /// <summary>An expanded section (knowledge design §9); empty unless <see cref="ExpandMode.Section"/>.</summary>
 public sealed record SectionText(

@@ -5,15 +5,16 @@ namespace Kalla.Answering.Chat;
 
 /// <summary>
 /// One entry of <c>kalla.related_documents</c> (chat design §3.8, §9.7): the document, its title and link by the citation rule,
-/// its collection's slug, its 1-based position in the list, whether the answer cites it with which display number, and the
-/// citation's dates (knowledge §10.1: <c>modified</c> by the source's own date, <c>checked</c> for a crawled page; each
-/// omitted when null). In the progress chunk (§9.10) <c>cited</c> and <c>number</c> are not known yet and are left out.
+/// its collection's slug, the best-ranked chunk's topic tags as stored (<c>[]</c> for none), its 1-based position in the list,
+/// whether the answer cites it with which display number, and the citation's dates (knowledge §10.1: <c>modified</c> by the
+/// source's own date, <c>checked</c> for a crawled page; each omitted when null). In the progress chunk (§9.10) <c>cited</c> and <c>number</c> are not known yet and are left out.
 /// </summary>
 public sealed record RelatedDocument(
     [property: JsonPropertyName("document_id")] Guid DocumentId,
     [property: JsonPropertyName("title")] string Title,
     [property: JsonPropertyName("url")] string Url,
     [property: JsonPropertyName("collection")] string Collection,
+    [property: JsonPropertyName("topics")] IReadOnlyList<string> Topics,
     [property: JsonPropertyName("rank")] int Rank,
     [property: JsonPropertyName("cited"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Cited,
     [property: JsonPropertyName("number"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Number,
@@ -22,7 +23,7 @@ public sealed record RelatedDocument(
 
 /// <summary>
 /// The answer's <c>kalla</c> member (chat design §3.8): the turn's outcome and whether its sources came from keyword search only,
-/// then <c>related_documents</c>, <c>follow_ups</c>, <c>escalation</c>, <c>topics</c> and <c>timings</c> when asked for (absent otherwise). The names are fixed
+/// then <c>related_documents</c>, <c>follow_ups</c>, <c>escalation</c>, <c>topics</c>, <c>timings</c> and <c>nearest</c> when asked for (absent otherwise). The names are fixed
 /// here, so the JSON answer and the stream's chunk write the same member whatever their serializer's naming policy.
 /// </summary>
 public sealed record KallaAnswer(
@@ -32,7 +33,8 @@ public sealed record KallaAnswer(
     [property: JsonPropertyName("follow_ups"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? FollowUps,
     [property: JsonPropertyName("escalation"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] EscalationMember? Escalation = null,
     [property: JsonPropertyName("topics"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Topics = null,
-    [property: JsonPropertyName("timings"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] KallaTimings? Timings = null)
+    [property: JsonPropertyName("timings"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] KallaTimings? Timings = null,
+    [property: JsonPropertyName("nearest"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] NearestMember? Nearest = null)
 {
     /// <summary>
     /// The <c>kalla</c> member of <paramref name="plan"/>'s answer, once it has ended (<paramref name="cited"/> complete), as the
@@ -40,7 +42,8 @@ public sealed record KallaAnswer(
     /// any call; with <paramref name="followUpsPending"/> the call is still to come and <c>follow_ups</c> is left for it.
     /// <paramref name="escalation"/> is the escalation member when it goes in this chunk (null: not asked, or its summary call
     /// is still to come). With <c>kalla.topics</c> asked, <c>topics</c> is <see cref="ChatPlan.SearchedTopics"/>; with <c>kalla.timings</c>,
-    /// <c>timings</c> is the turn's step times up to the end of the text (§9.10).
+    /// <c>timings</c> is the turn's step times up to the end of the text (§9.10); with <c>kalla.nearest</c>, <c>nearest</c> is the subject of
+    /// <see cref="ChatPlan.Nearest"/>, JSON <c>null</c> when the turn has none (§9.11).
     /// </summary>
     public static KallaAnswer For(ChatPlan plan, IReadOnlyList<PromptSource> cited, KallaRequest asked, bool followUpsPending, EscalationMember? escalation = null)
     {
@@ -50,7 +53,8 @@ public sealed record KallaAnswer(
             asked.RelatedDocuments > 0 ? Chat.RelatedDocuments.For(plan.Outcome, plan.Retrieval, cited, asked.RelatedDocuments) : null,
             asked.FollowUps > 0 && !followUpsPending ? [] : null, escalation,
             asked.Topics is { Count: > 0 } ? plan.SearchedTopics ?? [] : null,
-            asked.Timings ? plan.Timings.Member() : null);
+            asked.Timings ? plan.Timings.Member() : null,
+            asked.Nearest ? new NearestMember(plan.Nearest?.Subject) : null);
     }
 }
 
@@ -126,8 +130,8 @@ public static class RelatedDocuments
                 var chunks = document.ToList();
                 var first = chunks[0];
                 int? number = numbers.TryGetValue(document.Key, out var n) ? n : null;
-                return new RelatedDocument(document.Key, first.Citation.Title, Citations.Link(new PromptSource(0, first.Citation, chunks)), first.CollectionSlug, i + 1,
-                    number is not null, number, first.Citation.Modified?.ToUniversalTime(), first.Citation.Checked?.ToUniversalTime());
+                return new RelatedDocument(document.Key, first.Citation.Title, Citations.Link(new PromptSource(0, first.Citation, chunks)), first.CollectionSlug,
+                    first.Tags, i + 1, number is not null, number, first.Citation.Modified?.ToUniversalTime(), first.Citation.Checked?.ToUniversalTime());
             }),
         ];
     }

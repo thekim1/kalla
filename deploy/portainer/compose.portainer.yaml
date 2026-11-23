@@ -2153,6 +2153,10 @@ configs:
       -- conversation writer upserts them, never for the test panel; the admin reads them for the content-gap report (admin design §8.7).
       GRANT SELECT, INSERT, UPDATE, DELETE ON chat."AssistantDailyGaps" TO kalla_api;
       GRANT SELECT ON chat."AssistantDailyGaps" TO kalla_admin;
+      -- Ratings per cited document (data-model §2.3; Decisions "Downvotes per document"): only the api writes them, from
+      -- POST /v1/feedback and the Open WebUI import; the admin reads them for Feedback on documents (admin design §8.8).
+      GRANT SELECT, INSERT, UPDATE, DELETE ON chat."DocumentDailyFeedback" TO kalla_api;
+      GRANT SELECT ON chat."DocumentDailyFeedback" TO kalla_admin;
 
       -- audit: every service appends, only the admin reads; no role deletes (retention runs through step functions).
       GRANT INSERT ON audit."AuditLog" TO kalla_api, kalla_admin, kalla_worker;
