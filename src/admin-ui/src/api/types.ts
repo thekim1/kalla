@@ -508,6 +508,8 @@ export interface DocumentSummary {
   parseOutcome: string | null
   piiFlagged: boolean
   piiCleared: boolean
+  /** A flagged chunk set is held for personal data now, also after an earlier clearance (processing §9.5). */
+  piiHeld: boolean
   held: boolean
   live: boolean
   sourceModifiedAt: IsoDateTime | null

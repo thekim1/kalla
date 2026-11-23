@@ -100,12 +100,15 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
           typesFired: ['personnummer'], piiClearedAt: null },
         { documentId: 'c', title: 'Kontakt', url: null, displayName: null, state: 'live', previousVersionLive: false, counts: { emailExternal: 1 }, rulesFired: 1,
           typesFired: ['emailExternal'], piiClearedAt: '2026-11-23T09:00:00Z' },
+        // Cleared once, then a later version flagged and held again (processing §9.5): it can be cleared again (#963 review).
+        { documentId: 'r', title: 'Nyhet', url: null, displayName: null, state: 'held', previousVersionLive: true, counts: { personnummer: 2 }, rulesFired: 1,
+          typesFired: ['personnummer'], piiClearedAt: '2026-11-20T09:00:00Z' },
       ],
     })
     const wrapper = mount(SourceView, { props: { id: 's1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
-    expect(wrapper.findAll('[data-test=pii-clear]')).toHaveLength(1) // the cleared one has none
-    expect(wrapper.findAll('[data-test=pii-cleared]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-test=pii-clear]')).toHaveLength(2) // the held two; the cleared live one has none
+    expect(wrapper.findAll('[data-test=pii-cleared]')).toHaveLength(1) // not on the one held again
     wrapper.unmount()
   })
 

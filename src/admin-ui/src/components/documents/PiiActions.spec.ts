@@ -89,4 +89,31 @@ describe('A flagged document\'s personal-data actions (admin design §5.5.2, §5
     expect(wrapper.emitted('cleared')).toHaveLength(1)
     wrapper.unmount()
   })
+
+  it('shows a failed status read as failed, for the highlights and for Clear, never as still running (#963 review)', async () => {
+    vi.spyOn(api.documents, 'piiPreview').mockResolvedValue({ jobId: 'j1' })
+    vi.spyOn(api.documents, 'piiClear').mockResolvedValue({ jobId: 'c1' })
+    vi.spyOn(api.jobs, 'get').mockRejectedValue(new Error('network'))
+    const wrapper = await open()
+    await wrapper.get('[data-test=pii-highlights]').trigger('click')
+    await flushPromises()
+    await flushPromises()
+    expect(document.body.querySelector('[data-test=pii-highlights-running]')).toBeNull()
+    expect(document.body.querySelector('[data-test=pii-highlights-failed]')!.textContent).toContain(L.failed)
+    wrapper.unmount()
+    document.body.innerHTML = ''
+
+    const again = await open()
+    await again.get('[data-test=pii-clear]').trigger('click')
+    await flushPromises()
+    const reason = document.body.querySelector<HTMLTextAreaElement>('#pii-clear-reason')!
+    reason.value = 'Kontaktcentrets nummer är publicerat avsiktligt.'
+    reason.dispatchEvent(new Event('input'))
+    document.body.querySelector<HTMLFormElement>('#pii-clear-form')!.dispatchEvent(new Event('submit'))
+    await flushPromises()
+    await flushPromises()
+    expect(document.body.textContent).toContain(L.clearUnknown)
+    expect(again.emitted('cleared')).toBeUndefined()
+    again.unmount()
+  })
 })

@@ -33,11 +33,15 @@ const clearOpen = ref(false)
 const reason = ref('')
 const reasonError = ref<string | null>(null)
 const clearError = ref<unknown>(null)
+/** Our own text about the clearance's outcome (its job failed, or its state could not be read). */
+const clearNotice = ref<string | null>(null)
 const clearing = useJobPoll<unknown>()
 const sending = ref(false)
 
 const highlightsState = computed(() => {
-  if (startError.value || outputError.value || (highlights.job.value && highlights.job.value.state !== 'succeeded' && !highlights.polling.value)) return 'failed'
+  // A failed status read ends the poll with `error` set and no job: failed, never "still finding" (#963 review).
+  if (startError.value || outputError.value || highlights.error.value
+    || (highlights.job.value && highlights.job.value.state !== 'succeeded' && !highlights.polling.value)) return 'failed'
   if (highlights.polling.value || !highlights.job.value) return 'running'
   return 'done'
 })
@@ -94,6 +98,7 @@ function openClear(): void {
   reason.value = ''
   reasonError.value = null
   clearError.value = null
+  clearNotice.value = null
   clearOpen.value = true
 }
 
@@ -104,6 +109,7 @@ async function clear(): Promise<void> {
   }
   reasonError.value = null
   clearError.value = null
+  clearNotice.value = null
   sending.value = true
   try {
     const { jobId } = await api.documents.piiClear(props.documentId, reason.value.trim())
@@ -115,6 +121,11 @@ async function clear(): Promise<void> {
   }
 }
 
+// A failed status read while clearing: say that the outcome is not known, so the admin checks the document (#963 review).
+watch(() => clearing.error.value, (error) => {
+  if (error) clearNotice.value = L.clearUnknown
+})
+
 watch(() => clearing.job.value?.state, (state) => {
   if (!state || clearing.polling.value) return
   if (state === 'succeeded') {
@@ -122,7 +133,7 @@ watch(() => clearing.job.value?.state, (state) => {
     ui.notify(L.cleared)
     emit('cleared')
   } else {
-    clearError.value = new Error(L.clearFailed)
+    clearNotice.value = L.clearFailed
   }
 })
 </script>
@@ -136,7 +147,7 @@ watch(() => clearing.job.value?.state, (state) => {
   <UiDrawer v-model:open="highlightsOpen" :title="L.highlightsTitle(title)" wide>
     <p class="mb-4 text-fg-2">{{ L.highlightsLead }}</p>
     <p v-if="highlightsState === 'running'" role="status" data-test="pii-highlights-running">{{ L.running }}</p>
-    <InlineError v-else-if="highlightsState === 'failed'" :message="startError ? problemMessage(startError) : L.failed" />
+    <InlineError v-else-if="highlightsState === 'failed'" :message="startError ? problemMessage(startError) : L.failed" data-test="pii-highlights-failed" />
     <p v-else-if="!marked.length" data-test="pii-highlights-none">{{ L.none }}</p>
     <ol v-else class="grid gap-4" data-test="pii-highlights-list">
       <li v-for="c in marked" :key="c.ordinal" class="grid gap-1">
@@ -157,7 +168,7 @@ watch(() => clearing.job.value?.state, (state) => {
     <form id="pii-clear-form" class="grid gap-3" novalidate @submit.prevent="clear">
       <TextAreaField id="pii-clear-reason" v-model="reason" :label="L.reason" :hint="L.reasonHint" :rows="3" :error="reasonError" />
       <p v-if="clearing.polling.value" role="status">{{ L.clearing }}</p>
-      <InlineError v-if="clearError" :message="problemMessage(clearError)" />
+      <InlineError v-if="clearNotice || clearError" :message="clearNotice ?? problemMessage(clearError)" data-test="pii-clear-error" />
     </form>
     <template #actions>
       <UiButton @click="clearOpen = false">{{ COMMON.cancel }}</UiButton>

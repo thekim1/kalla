@@ -780,6 +780,7 @@ export const PII_ACTIONS = {
   clearing: 'Clearing the document…',
   cleared: 'The document has been cleared.',
   clearFailed: 'The document could not be cleared. Try again.',
+  clearUnknown: 'Källa could not check whether the document was cleared. Reload the page to see its state.',
   clearedBadge: 'Cleared',
 } as const
 

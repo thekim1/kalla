@@ -130,7 +130,7 @@ describe('Test questions and quality (admin design §7.1, §7.2)', () => {
     vi.spyOn(api.documents, 'list').mockResolvedValue({
       items: [{
         id: 'd2', sourceId: 's1', title: 'Attefallshus', url: 'https://www.umea.se/attefall', displayName: null, mediaType: 'text/html', parseOutcome: 'ok',
-        piiFlagged: false, piiCleared: false, held: false, live: true, sourceModifiedAt: null, fetchedAt: null, lastSeenAt: '2026-11-01T00:00:00Z',
+        piiFlagged: false, piiCleared: false, piiHeld: false, held: false, live: true, sourceModifiedAt: null, fetchedAt: null, lastSeenAt: '2026-11-01T00:00:00Z',
       }],
       next: null,
     })

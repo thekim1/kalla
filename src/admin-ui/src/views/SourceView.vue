@@ -275,12 +275,12 @@ async function reloadPii(): Promise<void> {
           <template #cell-state="{ row }">
             <span class="flex flex-wrap gap-1">
               <UiBadge :tone="row.state === 'held' ? 'warn' : 'neutral'" :label="row.state === 'held' ? SOURCE_PAGE.piiHeld : SOURCE_PAGE.piiLive" />
-              <UiBadge v-if="row.piiClearedAt" tone="accent" :label="PII_ACTIONS.clearedBadge" data-test="pii-cleared" />
+              <UiBadge v-if="row.piiClearedAt && row.state !== 'held'" tone="accent" :label="PII_ACTIONS.clearedBadge" data-test="pii-cleared" />
             </span>
           </template>
           <template #cell-actions="{ row }">
             <PiiActions
-              v-if="canManage && row.typesFired.length && !row.piiClearedAt" :document-id="row.documentId" :title="row.title ?? row.displayName ?? row.url ?? row.documentId"
+              v-if="canManage && (row.state === 'held' || (row.typesFired.length && !row.piiClearedAt))" :document-id="row.documentId" :title="row.title ?? row.displayName ?? row.url ?? row.documentId"
               @cleared="reloadPii"
             />
           </template>

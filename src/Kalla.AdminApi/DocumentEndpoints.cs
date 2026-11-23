@@ -71,7 +71,9 @@ public static class DocumentEndpoints
                     .Select(d => new DocumentSummary(d.Id, d.SourceId, d.Title, d.Url, d.DisplayName, d.MediaType, d.ParseOutcome,
                         admin.Db.ChunkSets.Any(cs => cs.DocumentId == d.Id && cs.PiiFlagged
                             && (cs.State == ChunkSetStates.Held || (cs.State == ChunkSetStates.Live && cs.Id == d.LiveChunkSetId))),
-                        d.PiiClearedAt != null, d.HeldAt != null, d.LiveChunkSetId != null, d.SourceModifiedAt, d.FetchedAt, d.LastSeenAt))
+                        d.PiiClearedAt != null,
+                        admin.Db.ChunkSets.Any(cs => cs.DocumentId == d.Id && cs.PiiFlagged && cs.State == ChunkSetStates.Held),
+                        d.HeldAt != null, d.LiveChunkSetId != null, d.SourceModifiedAt, d.FetchedAt, d.LastSeenAt))
                     .ToListAsync(ct);
                 return KeysetPage.From(rows, take, d => d.Id);
             })
@@ -215,8 +217,12 @@ public static class PiiFilters
     public const string Cleared = "cleared";
 }
 
+/// <summary>
+/// A document in a list. <see cref="PiiHeld"/>: a flagged chunk set is held for personal data now, also after an earlier
+/// clearance (a later version flagged again, processing §9.5), so it can be cleared again.
+/// </summary>
 public sealed record DocumentSummary(
-    Guid Id, Guid SourceId, string? Title, string? Url, string? DisplayName, string? MediaType, string? ParseOutcome, bool PiiFlagged, bool PiiCleared,
+    Guid Id, Guid SourceId, string? Title, string? Url, string? DisplayName, string? MediaType, string? ParseOutcome, bool PiiFlagged, bool PiiCleared, bool PiiHeld,
     bool Held, bool Live, DateTimeOffset? SourceModifiedAt, DateTimeOffset? FetchedAt, DateTimeOffset LastSeenAt);
 
 /// <summary>A chunk set's PII state: flagged, counts per type, fired rules and the fired types (numbers and type names only, never values).</summary>
