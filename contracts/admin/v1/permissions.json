@@ -31,6 +31,12 @@
       "rag-platform-admin",
       "rag-skill-editor"
     ],
+    "feedback": [
+      "rag-department-admin",
+      "rag-platform-admin",
+      "rag-reviewer",
+      "rag-viewer"
+    ],
     "feedback-comments": [
       "rag-department-admin",
       "rag-reviewer"

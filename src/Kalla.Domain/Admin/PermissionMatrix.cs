@@ -35,6 +35,9 @@ public static class AdminPolicies
     /// <summary>Open a conversation for review. No administrative role grants conversation content.</summary>
     public const string Review = "review";
 
+    /// <summary>The Feedback page's list and totals (admin design §3.3): not the editor roles.</summary>
+    public const string Feedback = "feedback";
+
     /// <summary>Reveal one feedback comment.</summary>
     public const string FeedbackComments = "feedback-comments";
 
@@ -57,7 +60,7 @@ public static class AdminPolicies
         [EditOrEditSkills] = [Edit, EditSkills],
     };
 
-    public static IReadOnlyList<string> All { get; } = [Admin, Manage, EditPipelines, EditSkills, Edit, Review, FeedbackComments, Read, EditOrEditPipelines, EditOrEditSkills];
+    public static IReadOnlyList<string> All { get; } = [Admin, Manage, EditPipelines, EditSkills, Edit, Review, Feedback, FeedbackComments, Read, EditOrEditPipelines, EditOrEditSkills];
 }
 
 /// <summary>
@@ -69,13 +72,13 @@ public static class PermissionMatrix
 {
     public static IReadOnlyDictionary<string, IReadOnlyList<string>> PoliciesByRole { get; } = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
     {
-        [RagRoles.PlatformAdmin] = [AdminPolicies.Admin, AdminPolicies.Manage, AdminPolicies.EditPipelines, AdminPolicies.EditSkills, AdminPolicies.Edit, AdminPolicies.Read],
-        [RagRoles.DepartmentAdmin] = [AdminPolicies.Manage, AdminPolicies.EditPipelines, AdminPolicies.EditSkills, AdminPolicies.Edit, AdminPolicies.Read, AdminPolicies.FeedbackComments],
+        [RagRoles.PlatformAdmin] = [AdminPolicies.Admin, AdminPolicies.Manage, AdminPolicies.EditPipelines, AdminPolicies.EditSkills, AdminPolicies.Edit, AdminPolicies.Feedback, AdminPolicies.Read],
+        [RagRoles.DepartmentAdmin] = [AdminPolicies.Manage, AdminPolicies.EditPipelines, AdminPolicies.EditSkills, AdminPolicies.Edit, AdminPolicies.Feedback, AdminPolicies.Read, AdminPolicies.FeedbackComments],
         [RagRoles.PipelineEditor] = [AdminPolicies.EditPipelines, AdminPolicies.Read],
-        [RagRoles.Reviewer] = [AdminPolicies.Review, AdminPolicies.FeedbackComments, AdminPolicies.Read],
+        [RagRoles.Reviewer] = [AdminPolicies.Review, AdminPolicies.Feedback, AdminPolicies.FeedbackComments, AdminPolicies.Read],
         [RagRoles.SkillEditor] = [AdminPolicies.EditSkills, AdminPolicies.Read],
         [RagRoles.Editor] = [AdminPolicies.Edit, AdminPolicies.Read],
-        [RagRoles.Viewer] = [AdminPolicies.Read],
+        [RagRoles.Viewer] = [AdminPolicies.Feedback, AdminPolicies.Read],
     };
 
     /// <summary>The roles that hold <paramref name="policy"/>.</summary>

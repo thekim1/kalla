@@ -20,7 +20,8 @@ import { problemMessage } from '@/utils/problem'
 
 // Feedback (admin design §8.1, chat design §14.4): ratings of the department's assistants without content (no
 // question, answer or comment): rating, reason category, assistant and version, client, outcome, coverage, cited
-// documents; totals for the period and import health per Open WebUI client. FeedbackComments holders mark items handled.
+// documents; totals for the period and import health per Open WebUI client. The page and its reads are the Feedback
+// policy's (§3.3; the route's FEEDBACK_ROLES); FeedbackComments holders mark items handled.
 // Without Open WebUI (`/bff/user` `openWebUi.enabled` false) nothing is imported: no import block, and the empty text
 // names the API's feedback endpoint; feedback already stored still shows.
 const auth = useAuthStore()

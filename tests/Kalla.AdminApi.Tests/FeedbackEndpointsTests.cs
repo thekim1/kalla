@@ -151,6 +151,26 @@ public sealed class FeedbackEndpointsTests(AdminDatabaseFixture database, AdminH
         foreignSummary.GetProperty("imports").EnumerateArray().Select(i => i.GetProperty("clientId").GetGuid()).ShouldNotContain(seed.Client);
     }
 
+    [Theory]
+    [InlineData(RagRoles.Editor, HttpStatusCode.Forbidden)]
+    [InlineData(RagRoles.PipelineEditor, HttpStatusCode.Forbidden)]
+    [InlineData(RagRoles.SkillEditor, HttpStatusCode.Forbidden)]
+    [InlineData(RagRoles.Viewer, HttpStatusCode.OK)]
+    [InlineData(RagRoles.Reviewer, HttpStatusCode.OK)]
+    public async Task The_list_and_totals_are_the_feedback_pages_roles_only(string role, HttpStatusCode expected)
+    {
+        // Admin design §3.3: Feedback is the platform and department admins', the reviewers' and the viewers'.
+        var seed = await SeedAsync();
+        using var user = await AdminDatabaseFixture.UserAsync(host.Factory, role, seed.Code);
+        using (var list = await user.GetAsync($"/api/feedback?assistantId={seed.Assistant}", Ct))
+        {
+            list.StatusCode.ShouldBe(expected);
+        }
+
+        using var summary = await user.GetAsync($"/api/feedback/summary?assistantId={seed.Assistant}", Ct);
+        summary.StatusCode.ShouldBe(expected);
+    }
+
     [Fact]
     public async Task Marking_an_item_handled_is_feedback_comments_and_audited()
     {

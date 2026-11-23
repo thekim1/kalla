@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import raw from '../../../../contracts/admin/v1/permissions.json?raw'
 import { ROLES } from '@/api/types'
-import { MANAGE_ROLES, PLATFORM_ADMIN } from '@/router/nav'
+import { FEEDBACK_ROLES, MANAGE_ROLES, PLATFORM_ADMIN } from '@/router/nav'
 import { useAuthStore } from '@/stores/auth'
 import { POLICIES, rolesFor, type Policy } from './permissions'
 
@@ -44,6 +44,7 @@ describe('permissions (contracts/admin/v1/permissions.json)', () => {
   it('gives the menu its role lists from the matrix', () => {
     expect([...PLATFORM_ADMIN].sort()).toEqual(contract.policies.admin)
     expect([...MANAGE_ROLES].sort()).toEqual(contract.policies.manage)
+    expect([...FEEDBACK_ROLES].sort()).toEqual(contract.policies.feedback)
     expect(rolesFor('read').sort()).toEqual([...ROLES].sort())
   })
 })

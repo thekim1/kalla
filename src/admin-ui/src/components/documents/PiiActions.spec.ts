@@ -140,12 +140,15 @@ describe('A flagged document\'s personal-data actions (admin design §5.5.2, §5
     // The second attempt: the job is read once as running, then its state can't be read.
     get.mockResolvedValueOnce(job('c2', 'running')).mockRejectedValueOnce(new Error('network'))
     vi.useFakeTimers()
-    form.dispatchEvent(new Event('submit'))
-    await flushPromises()
-    expect(document.body.querySelector('[data-test=pii-clear-error]')).toBeNull()
-    expect(document.body.textContent).toContain(L.clearing)
-    await vi.advanceTimersByTimeAsync(2500)
-    vi.useRealTimers()
+    try {
+      form.dispatchEvent(new Event('submit'))
+      await flushPromises()
+      expect(document.body.querySelector('[data-test=pii-clear-error]')).toBeNull()
+      expect(document.body.textContent).toContain(L.clearing)
+      await vi.advanceTimersByTimeAsync(2500)
+    } finally {
+      vi.useRealTimers()
+    }
     await flushPromises()
     expect(document.body.textContent).not.toContain(L.clearing)
     expect(document.body.querySelector('[data-test=pii-clear-error]')!.textContent).toContain(L.clearUnknown)

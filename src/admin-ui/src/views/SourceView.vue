@@ -47,7 +47,7 @@ const editing = ref(false)
 const router = useRouter()
 // Delete (Decisions "Deleting knowledge bases, sources and assistants"; admin §5.5): Manage, at any time, the name typed;
 // the dialog says how many documents leave the search (the collection's source list carries the count).
-const canDelete = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']))
+const canDelete = computed(() => auth.can('manage'))
 const deleting = ref(false)
 const documentCount = ref<number | null>(null)
 async function openDelete(): Promise<void> {
@@ -85,8 +85,8 @@ const piiColumns: Column[] = [
   { key: 'actions', label: PII_ACTIONS.clear, hideLabel: true, align: 'right' },
 ]
 // B-63: a flagged document's highlights and Clear are Manage's (V26; the API checks the source's department).
-const canManage = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']))
-const canEdit = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor']))
+const canManage = computed(() => auth.can('manage'))
+const canEdit = computed(() => auth.can('edit'))
 // The run Cancel run stops (#488 part 3): the newest one still running or waiting for the deletion decision.
 const activeRun = computed(() => runs.items.value.find((r) => r.state === 'running' || r.state === 'awaiting-deletion-confirmation'))
 const activeProgress = computed(() => runProgressText(activeRun.value))
