@@ -48,10 +48,11 @@ public sealed record ParsedChat(string Model, string Question, IReadOnlyList<Cha
 /// questions to suggest (§9.8); 0 is none. <see cref="GeneralKnowledge"/> is a stricter general-knowledge level for the turn
 /// (null: the assistant's own; <see cref="GeneralKnowledgeLevels.Effective"/>). <see cref="Escalation"/> asks for the escalation
 /// hand-off (§9.9). <see cref="Topics"/> narrows the assistant's links for the turn (Decisions "Topics per request"; null: the links
-/// as they are). Any object, <c>{}</c> included, gives the answer's <c>kalla</c> with its outcome.
+/// as they are). <see cref="Progress"/> asks a streamed model answer to start with the progress chunk, <see cref="Timings"/> for the
+/// turn's step times (§9.10). Any object, <c>{}</c> included, gives the answer's <c>kalla</c> with its outcome.
 /// </summary>
 public sealed record KallaRequest(int RelatedDocuments, int FollowUps, GeneralKnowledge? GeneralKnowledge = null, bool Escalation = false,
-    IReadOnlyList<string>? Topics = null)
+    IReadOnlyList<string>? Topics = null, bool Progress = false, bool Timings = false)
 {
     public const int MaxRelatedDocuments = 10;
     public const int MaxFollowUps = 5;
@@ -212,8 +213,8 @@ public static partial class ChatRequestParser
 
     /// <summary>
     /// The <c>kalla</c> object (§3.8): <c>null</c> is none; not an object is 400 <c>invalid_request</c>; <c>related_documents</c>
-    /// 0–10 and <c>follow_ups</c> 0–5 as integers, <c>escalation</c> a boolean, <c>general_knowledge</c> one of the level values or <c>null</c>, and
-    /// <c>topics</c> <c>null</c> or an array of at most 20 strings in the tag format, else 400
+    /// 0–10 and <c>follow_ups</c> 0–5 as integers, <c>escalation</c>, <c>progress</c> and <c>timings</c> booleans, <c>general_knowledge</c> one
+    /// of the level values or <c>null</c>, and <c>topics</c> <c>null</c> or an array of at most 20 strings in the tag format, else 400
     /// <c>invalid_request</c>; any other member is 400 <c>unsupported_parameter</c> (the namespace is ours, so a typo fails
     /// instead of doing nothing).
     /// </summary>
@@ -231,7 +232,7 @@ public static partial class ChatRequestParser
 
         var (related, followUps) = (0, 0);
         GeneralKnowledge? generalKnowledge = null;
-        var escalation = false;
+        var (escalation, progress, timings) = (false, false, false);
         IReadOnlyList<string>? topics = null;
         foreach (var member in kalla.EnumerateObject())
         {
@@ -247,23 +248,32 @@ public static partial class ChatRequestParser
                     generalKnowledge = KallaLevel(member);
                     break;
                 case "escalation":
-                    escalation = member.Value.ValueKind switch
-                    {
-                        JsonValueKind.True => true,
-                        JsonValueKind.False => false,
-                        _ => throw Invalid("kalla.escalation must be true or false.", "kalla.escalation"),
-                    };
+                    escalation = KallaFlag(member);
                     break;
                 case "topics":
                     topics = KallaTopics(member);
+                    break;
+                case "progress":
+                    progress = KallaFlag(member);
+                    break;
+                case "timings":
+                    timings = KallaFlag(member);
                     break;
                 default:
                     throw new ChatException(400, "unsupported_parameter", $"kalla.{member.Name} is not supported.", "kalla." + member.Name);
             }
         }
 
-        return new KallaRequest(related, followUps, generalKnowledge, escalation, topics);
+        return new KallaRequest(related, followUps, generalKnowledge, escalation, topics, progress, timings);
     }
+
+    /// <summary>A boolean member of <c>kalla</c> (<c>escalation</c>, <c>progress</c>, <c>timings</c>): anything but <c>true</c> or <c>false</c> is 400.</summary>
+    private static bool KallaFlag(JsonProperty member) => member.Value.ValueKind switch
+    {
+        JsonValueKind.True => true,
+        JsonValueKind.False => false,
+        _ => throw Invalid($"kalla.{member.Name} must be true or false.", "kalla." + member.Name),
+    };
 
     /// <summary>
     /// <c>kalla.topics</c> (§3.8): <c>null</c> and <c>[]</c> are none; an array of at most 20 strings in the chunk tag format (processing
