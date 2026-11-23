@@ -1598,6 +1598,7 @@ export const ASSISTANT_TESTS = {
   behaviourRequired: 'Say what a good answer does.',
   saved: 'The test question has been saved.',
   deleted: 'The test question has been removed.',
+  remove: 'Remove',
   deleteTitle: 'Remove the test question?',
   deleteConsequence: 'Earlier runs keep it as it was asked.',
   documentDeleted: 'The expected document has been deleted.',

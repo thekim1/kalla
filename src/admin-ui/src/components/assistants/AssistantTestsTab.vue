@@ -189,7 +189,7 @@ defineExpose({ load })
         <span v-if="q.expectedPhrase" class="text-small">“{{ q.expectedPhrase }}”</span>
         <div v-if="canEdit" class="flex gap-2">
           <UiButton size="sm" icon="edit" @click="edit(q)">{{ L.edit }}</UiButton>
-          <UiButton size="sm" variant="quiet" icon="delete" @click="deleting = q">{{ L.deleteTitle }}</UiButton>
+          <UiButton size="sm" variant="quiet" icon="delete" @click="deleting = q">{{ L.remove }}</UiButton>
         </div>
       </li>
     </ul>
@@ -198,7 +198,7 @@ defineExpose({ load })
       v-model:open="drawerOpen" :assistant-id="assistant.id" :question="editing" :initial-question="initial" :collections="collections" @saved="saved"
     />
     <ConfirmDialog
-      :open="deleting !== null" :title="L.deleteTitle" :consequence="L.deleteConsequence" :confirm-label="L.deleteTitle" danger :action="remove"
+      :open="deleting !== null" :title="L.deleteTitle" :consequence="L.deleteConsequence" :confirm-label="L.remove" danger :action="remove"
       @update:open="!$event && (deleting = null)"
     />
     <ConfirmDialog
