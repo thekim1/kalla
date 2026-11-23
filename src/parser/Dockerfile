@@ -38,8 +38,10 @@ FROM python:3.12.16-slim-trixie@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194
 # security update for them too. The snapshot's Release files are past their Valid-Until, which is expected for an
 # archive. tesseract-ocr depends on tesseract-ocr-eng and -osd; they are installed but the parser only asks for `swe`.
 # LibreOffice (no GUI: Writer, Calc, Impress) converts legacy Word, Excel, PowerPoint and RTF to OOXML before Docling
-# reads them (ume_parser/legacy.py).
-ARG DEBIAN_SNAPSHOT=20261119T000000Z
+# reads them (ume_parser/legacy.py). 20261123T000000Z: the first snapshot with krb5 1.21.3-5+deb13u2 (trixie-security,
+# 2026-11-22) and glibc 2.41-12+deb13u5 (trixie), the High fixes from the image scan of 0.9.2; newer than 7 days, which
+# the 7-day rule allows during development (Decisions table "7-day rule in development").
+ARG DEBIAN_SNAPSHOT=20261123T000000Z
 RUN rm -f /etc/apt/sources.list.d/debian.sources \
     && printf '%s\n' \
         "Types: deb" \
