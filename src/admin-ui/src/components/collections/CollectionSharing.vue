@@ -69,15 +69,15 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="grid max-w-[680px] gap-5">
-    <fieldset class="grid gap-2">
+  <div class="grid gap-5">
+    <fieldset class="grid max-w-[680px] gap-2">
       <legend class="mb-1 font-medium">{{ SHARING.question }}</legend>
       <label v-for="l in LEVELS" :key="l" class="flex gap-3 rounded-card border border-border p-3 has-checked:bg-accent-soft has-checked:shadow-inset-selected" :class="canManage ? 'cursor-pointer' : 'cursor-not-allowed'">
         <input :id="`sharing-${l}`" v-model="level" type="radio" name="sharing" :value="l" class="mt-1" :disabled="!canManage" />
         <span class="font-medium">{{ levelLabel(l) }}</span>
       </label>
     </fieldset>
-    <fieldset v-if="level === 'selected'" class="grid gap-1" data-test="sharing-departments" :aria-describedby="selectedError ? 'sharing-departments-error' : undefined">
+    <fieldset v-if="level === 'selected'" class="grid max-w-[680px] gap-1" data-test="sharing-departments" :aria-describedby="selectedError ? 'sharing-departments-error' : undefined">
       <legend class="mb-1 font-medium">{{ SHARING.departments }}</legend>
       <CheckField
         v-for="d in others" :key="d.id" :label="d.name" :model-value="selected.includes(d.id)" :disabled="!canManage"

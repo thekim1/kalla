@@ -36,6 +36,8 @@ describe('the Statistics tab\'s answer evaluation (admin design §5.5.4, B-58)',
     expect(wrapper.text()).toMatch(/80.*%.*on/)
     expect(wrapper.get('[data-test=answer-evaluation-questions]').text()).toBe('40')
     expect(wrapper.get('[data-test=answer-evaluation-found]').text()).toBe('31')
+    // Found is never greyed: 0 of N there is the worst result and needs attention (rule 8).
+    expect(wrapper.get('[data-test=answer-evaluation-found]').classes()).not.toContain('text-fg-3')
     expect(wrapper.get('[data-test=answer-evaluation-changes]').text()).toBe(L.changes(2, 1))
     expect(wrapper.get('[data-test=answer-evaluation-uncited]').text()).toMatch(/25.*2 of 8 answers, last 30 days/)
     expect(wrapper.find('[data-test=answer-evaluation-off]').exists()).toBe(false)

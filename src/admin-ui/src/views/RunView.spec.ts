@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
 import type { Run } from '@/api/types'
@@ -24,6 +24,27 @@ const run: Run = {
 }
 
 describe('Run (admin design §5.5.3; #278 slice 2)', () => {
+  it('leads back through the breadcrumb to the knowledge bases and the run\'s source, named once it has loaded (admin design §5.12)', async () => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = bffUser({ roles: ['rag-viewer'] })
+    auth.status = 'authenticated'
+    vi.spyOn(api.runs, 'get').mockResolvedValue(run)
+    vi.spyOn(api.runs, 'items').mockResolvedValue({ items: [], next: null })
+    let named: (value: never) => void = () => undefined
+    vi.spyOn(api.sources, 'get').mockReturnValue(new Promise((resolve) => (named = resolve)))
+    const wrapper = mount(RunView, { props: { id: 'r1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
+    await flushPromises()
+    const crumbs = () => wrapper.findAllComponents(RouterLinkStub)
+      .filter((l) => wrapper.get('[data-test=breadcrumb]').element.contains(l.element)).map((l) => [l.text(), l.props('to')])
+    // Until the source has loaded its crumb says Source; then its name.
+    expect(crumbs()).toEqual([['Knowledge bases', { name: 'collections' }], ['Source', { name: 'source', params: { id: 's1' } }]])
+    named({ name: 'umea.se/bygga' } as never)
+    await flushPromises()
+    expect(crumbs()).toEqual([['Knowledge bases', { name: 'collections' }], ['umea.se/bygga', { name: 'source', params: { id: 's1' } }]])
+    wrapper.unmount()
+  })
+
   it('offers Continue on a run that can be continued and opens the source when it started (#804)', async () => {
     setActivePinia(createPinia())
     const auth = useAuthStore()

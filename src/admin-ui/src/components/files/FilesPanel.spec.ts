@@ -275,7 +275,7 @@ describe('Files (admin design §4.5, §5.5.7, connectors §9)', () => {
     ]))
     const wrapper = mount(FilesPanel, { props: { source, canEdit: false }, attachTo: document.body })
     await flushPromises()
-    expect(wrapper.get('[data-test=files-not-scanned]').text()).toBe('2 files not scanned for malware: the scan is off in this deployment')
+    expect(wrapper.get('[data-test=files-not-scanned]').text()).toBe('2 files were not scanned for malware: the scan was off when they were stored')
     expect(wrapper.get('[data-test=file-list]').text()).not.toContain(FILES.notScanned)
     expect(wrapper.get('[data-test=file-list]').text()).toContain(FILES.states.unscanned)
     await wrapper.get('[data-test=open-u2]').trigger('click')

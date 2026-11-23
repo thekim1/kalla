@@ -64,7 +64,7 @@ const precision = computed(() => figure((r) => r.citationPrecision))
             </div>
             <div>
               <dt class="text-small text-fg-2">{{ L.found }}</dt>
-              <dd class="tabular" :class="quietZero(latest.found)" data-test="answer-evaluation-found">{{ formatNumber(latest.found) }}</dd>
+              <dd class="tabular" data-test="answer-evaluation-found">{{ formatNumber(latest.found) }}</dd>
             </div>
           </dl>
           <p v-if="latest.wins !== null && latest.losses !== null" class="mb-4 text-small text-fg-2" data-test="answer-evaluation-changes">

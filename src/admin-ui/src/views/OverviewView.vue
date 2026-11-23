@@ -127,7 +127,7 @@ function showHidden(): void {
               </div>
               <div class="col-span-2">
                 <dt class="text-fg-3">{{ OVERVIEW.cost }}</dt>
-                <dd class="tabular font-medium" data-test="live-cost">{{ formatUsdCost(a.costUsd) }}</dd>
+                <dd class="tabular font-medium" :class="quietZero(a.costUsd)" data-test="live-cost">{{ formatUsdCost(a.costUsd) }}</dd>
               </div>
             </dl>
           </RouterLink>

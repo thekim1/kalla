@@ -174,7 +174,13 @@ async function loadContinuable(): Promise<void> {
 async function load(): Promise<void> {
   await source.run(() => api.sources.get(props.id))
   const collectionId = source.data.value?.collectionId
-  if (collectionId) void api.collections.get(collectionId).then((c) => (collectionName.value = c.name)).catch(() => undefined)
+  // One read of the knowledge base: its name for the breadcrumb, and (when it is the caller's own) the edit drawer's copy.
+  if (collectionId) {
+    void api.collections.get(collectionId).then((c) => {
+      collectionName.value = c.name
+      if (!c.shared) collection.value ??= c
+    }).catch(() => undefined)
+  }
   await loadRuns()
   pii.value = await api.sources.piiReport(props.id).catch(() => null)
 }

@@ -78,6 +78,9 @@ describe('Assistants (admin design §5.3, §5.5.4)', () => {
     expect(first!.get('[data-test=published-a1]').text()).toContain('Version 3')
     expect(first!.get('[data-test=published-a1]').text()).toContain('10 Nov 2026')
     expect(first!.text()).toMatch(/1\s234/)
+    // Rule 8 (admin design §5.12): a zero is grey text, any other count is not.
+    expect(first!.findAll('td').at(-1)!.get('.tabular').classes()).not.toContain('text-fg-3')
+    expect(second!.findAll('td').at(-1)!.get('.tabular').classes()).toContain('text-fg-3')
     expect(second!.text()).toContain('Draft only')
     expect(second!.text()).toContain('None')
     expect(second!.text()).toContain('Not chosen')

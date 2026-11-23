@@ -16,7 +16,7 @@ const done = computed(() => (props.summary.total === 0 ? 0 : Math.round(((props.
       {{ FILES.summary(summary.total, summary.processing, summary.indexed, summary.failed) }}
     </p>
     <!-- Said once for the list, not on each row (admin design §5.5.7 point 4, §5.12 rule 5). -->
-    <p v-if="summary.notScanned > 0" class="text-small text-warning" data-test="files-not-scanned">{{ FILES.notScannedSummary(summary.notScanned) }}</p>
+    <p v-if="summary.notScanned > 0" class="text-small text-warn" data-test="files-not-scanned">{{ FILES.notScannedSummary(summary.notScanned) }}</p>
     <div
       v-if="summary.total > 0"
       role="progressbar"
