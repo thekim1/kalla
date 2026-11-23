@@ -403,7 +403,7 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 | `POST /api/collections/{id}/sources`, `GET/PUT/DELETE /api/sources/{id}` | Edit / Manage (delete) | settings per `contracts/sources/v1/{type}.schema.json`; template + parameters (§6.1); schedule default per type; `ContainsThirdPartyText` (default true) writable by `Admin` only (tools §5.4, V13); delete: a soft delete at any time, a running run is cancelled, and the worker soft-deletes the source's documents at once (data-model §8), so nothing of it is found from then on |
 | `POST /api/sources/preflight` | Edit | unsaved settings → `preview` `preflight` job (§4.7) |
 | `POST /api/sources/{id}/impact` | Edit | effect tags of a changed settings object, the source's live document count (a `scope` change removes those that fall outside at the next fetch; the exact number would need the worker to check the new scope against the frontier) and the collection's `usedBy[]` ("Affects the assistants: …"); returns `impactToken` that the `PUT` must echo when the tag is `scope`/`identity` (V25). The token is a hash that proves the impact was asked for this exact change from this exact version; it is not an authorization |
-| `POST /api/sources/{id}/sync`, `/retry-failed`, `/pause`, `/resume` | Edit | sync now answers 200 with the existing run when one is queued/running (dedup); sync now and retry failed are audited as actions on the source (`sync`, `retry-failed`) and move no config version |
+| `POST /api/sources/{id}/sync`, `/retry-failed`, `/pause`, `/resume` | Edit | sync now, retry failed and continue on a paused source answer 409 `source_paused` (no implicit resume); pause on an upload source answers 409 `source_not_pausable`; pausing stops scheduled runs, a run already going finishes; sync now answers 200 with the existing run when one is queued/running (dedup); sync now and retry failed are audited as actions on the source (`sync`, `retry-failed`) and move no config version |
 | `GET /api/sources/{id}/runs` (keyset), `GET /api/runs/{id}`, `GET /api/runs/{id}/items` (keyset; `outcome`, `reason`, `q`) | Read | crawl report from `Runs.Report` (incl. the site-profile version used, extraction quality, the "no complete traversal for N runs" alert, and `malwareScan: "off"` for a run whose files were not scanned, connectors §11) |
 | `POST /api/runs/{id}/cancel` | Edit | `command` `cancel-run` |
 | `POST /api/runs/{id}/continue` | Edit | a `sync` job of kind `continue` (`continuesRunId` = the run, trigger `manual`, priority 10, dedup `sync:{sourceId}`, as sync now; a sync already queued or running is answered instead); only for the source's latest crawl run, ended and not awaiting a deletion decision, that left an open frontier row or a failed page (`canContinue` on `GET /api/runs/{id}`), else 409 `run_not_continuable`; audited as `continue` on the run (connectors §5.4) |
@@ -1356,8 +1356,12 @@ Removal waiting for a decision · run 30 Oct 01:12
 ```
 
 **Header and order** (UX pass UX4 C; rule 1 of §5.12): the primary action follows the source's type, **Fetch now**
-for a crawl or address-list source and **Upload files** for an upload source, which has no *Fetch now*. **Pause** or
-**Resume** is a secondary button beside it; the rest, *Delete* last, is in the ⋯ menu. The page reads top-down: what
+for a crawl or address-list source and **Upload files** for an upload source, which has no *Fetch now*. **Pause** is a
+secondary button beside *Fetch now* on a crawl or address-list source; an upload source has no schedule and no
+*Pause* (the API refuses to pause one, `source_not_pausable`). While a source is paused, **Resume** is the primary
+action and *Fetch now* and *Continue* are not shown (the API refuses both with `source_paused`); a banner says the
+source is not fetched on schedule and that a fetch already running finishes. The rest, *Delete* last, is in the ⋯
+menu. The page reads top-down: what
 the source fetches (addresses, schedule, processing), its runs, its files (an upload source; the same card as the
 knowledge base's *Content*, without repeating the upload help), then **Held and quarantined** (the kept documents,
 the quarantine and the personal-data holds). Each section's title is inside its card. In the personal-data report
