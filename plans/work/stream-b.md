@@ -305,6 +305,138 @@ one waits. Neither changes an answer that doesn't ask.
 - **Read:** Decisions "Progress, timings and the nearest subject in the chat extension", "Content-gap report", "Topics
   per request"; chat §3.8, §9.7, §9.11, §12.1, §18.9; processing §7; #959.
 
+## Admin UI UX pass (user, 2026-11-23; Decisions "Admin API and UI")
+
+The rules are admin §5.12, the pages §5.2, §5.5.1, §5.5.2, §5.5.4, §5.5.7, §5.7 and §5.10;
+[`proposals/admin-ui-ux-pass.md`](../proposals/admin-ui-ux-pass.md) is the record of why, with the mockups. One pull
+request per step, in this order, smallest first; each step adapts to what has landed before it (B-55's *Copy*, B-56's
+*Compare*, B-64/B-65's *Topics*, B-67's Map switch, B-68's *Archive* and *Keep*). New UI text in `labels.ts` and
+`messages.ts`; the four shared components (`MenuButton`, `FilterChip` with `PeriodPicker`, `SaveBar`, `SummaryTile`) go
+in `components/ui/` and are offered to Fors (an issue on thekim1/fors) when built.
+
+**Every step's checks** (admin §5.12, *How a change is checked*): shown in a browser at 1,440, 390 and 320 px in the
+light, dark and Lumen themes, with a keyboard-only pass and a screen-reader pass (NVDA or VoiceOver) of each changed
+page; the accessibility spec and `router/*.spec.ts` updated where the step changes them; the `tests/e2e` specs that
+drive a renamed tab, button or filter (`pilot.spec.ts` mostly) run locally (main handbook, *Browser tests locally*)
+and fixed in the same pull request, named in its body. **Every step's hand-offs**, listed in the pull request: a
+`stream-a` issue when the step renames a tab, button or menu group that `docs/` names (grep `docs/` for the old
+names), and a `stream-a` issue for any change in `src/admin-ui/src/platform/**` (stream a's), built against the
+design meanwhile.
+
+### [ ] B-74 The phone's bottom menu as admin §5.2 says (UX pass step 0)
+- **Do:** `mobileTabs` in `router/nav.ts` gets Assistants and Feedback beside Home and Knowledge bases (Home, Knowledge
+  bases, Assistants, Feedback, Menu), each filtered by role like the side menu (Feedback: `FEEDBACK_ROLES`); *Menu*
+  stays highlighted for every other page.
+- **Paths:** `src/admin-ui/**` (not `src/platform/**`), `tests/**`.
+- **Done when:** `router/nav.spec.ts` covers the four tabs and the role filter (no Feedback tab for an editor role);
+  shown at 390 and 320 px in the three themes, with 44 px targets.
+- **Waits on:** nothing.
+- **Read:** admin §5.2, §5.12 rule 10.
+
+### [ ] B-75 Field widths, grey zeros, repeated texts and the renames (UX pass step 1)
+- **Do:** admin §5.12 rules 3, 5 and 8 on every page: fields sized to their answer (numbers 8–12 characters, names and
+  selects 320–400 px, form columns at most 680 px) in every form and drawer; zeros, "none", "never" and "not yet" as
+  grey text; texts that repeat on each row said once (the file list's *Not scanned for malware* in the summary,
+  §5.5.7); radio cards selected with the accent border and soft background; section titles inside their cards; the
+  breadcrumb on detail pages; and the names of admin §5.7 *Names on the pages* that need no new component (search
+  placeholder, greeting, *Demo data*, the list columns, *Held and quarantined*, Organisation and Apps and keys, the
+  Settings groups of §5.10 and *Advanced: edit as JSON*, the Models page's *Models* and *Embedding* tabs with *Show
+  test models*).
+- **Paths:** `src/admin-ui/**` (not `src/platform/**`), `tests/**`. The Settings groups (`platform/settingsPage.ts`),
+  the Models tabs and the Apps and keys view are in `src/admin-ui/src/platform/**`: a `stream-a` issue with the change.
+- **Done when:** Vitest for the changed views' texts and the grey zeros; every page of the menu shown at the three
+  widths and themes; the local e2e specs touched pass.
+- **Waits on:** the code-quality fixes #3 and #5 of `proposals/code-quality-top7.md` (#5 is #981), which change the same
+  views.
+- **Read:** admin §5.7, §5.10, §5.12 (rules 3, 5, 8, *Every page*); `proposals/admin-ui-ux-pass.md` *Page by page*.
+
+### [ ] B-76 One primary action and ⋯ menus in headers and rows (UX pass step 2, UX4 C)
+- **Do:** `MenuButton` (APG menu button; a bottom sheet on a phone, admin §5.12's accessibility table); the headers of
+  the knowledge base (§5.5.2: *Publish* or *Add content*; *Edit name and contact*, *Change department*, *Delete* in ⋯),
+  the assistant (§5.5.4: *Publish draft* and *Compare with published*; *Edit name and contact*, *Copy*, *Change
+  department*, *Archive*, *Delete* in ⋯) and the source (§5.5.3: *Fetch now* for a crawl or address list, *Upload
+  files* for an upload source, which loses *Fetch now*; its section order); the row ⋯ menus (file rows: *Replace*,
+  *Download*, *Delete*; Versions: *Restore*); the bulk bar only while rows are selected.
+- **Paths:** `src/admin-ui/**` (not `src/platform/**`), `tests/**`.
+- **Done when:** Vitest for `MenuButton` (keyboard, Esc returns focus, the accessible name) and for each header's
+  primary action by state and role; the accessibility spec covers the open menu and the sheet; shown at the three
+  widths and themes; the local e2e specs touched pass.
+- **Waits on:** B-75; the code-quality fixes #3 and #5.
+- **Read:** admin §5.5.2, §5.5.3, §5.5.4, §5.5.7, §5.12 (rule 1, the accessibility table).
+
+### [ ] B-77 The save bar on every form (UX pass step 3, UX6 A)
+- **Do:** `SaveBar` (admin §5.12 *Saving*: *n unsaved changes · Discard · Save changes*, the consequence when there
+  is one, sticky, fixed above the bottom menu on a phone, `scroll-padding-bottom`) and a dirty check per form, on the
+  assistant's draft, search settings, sharing, audience, storage and each Settings section; the guard that asks
+  before leaving a page or tab with unsaved changes; the per-form save names leave `labels.ts`.
+- **Paths:** `src/admin-ui/**` (not `src/platform/**`), `tests/**`. The Settings sections' forms
+  (`SettingsSectionForm.vue` and the dedicated ones) are in `src/admin-ui/src/platform/**`: a `stream-a` issue to put
+  the bar on them.
+- **Done when:** Vitest for `SaveBar` (count, *Discard* asks once, the announcement) and the leave guard (route and
+  tab change); the accessibility spec covers the bar; shown at the three widths and themes, a focused field never
+  under the bar; the local e2e specs touched pass.
+- **Waits on:** B-76; the code-quality fixes #3 and #5.
+- **Read:** admin §5.5.4 (*Wording*), §5.7, §5.12 (rule 7, *Saving*).
+
+### [ ] B-78 The assistant page: five tabs, the test beside the draft (UX pass step 4, UX3 C)
+- **Do:** admin §5.5.4: the tabs *Build*, *Quality*, *Versions*, *Access*, *Usage* (`?tab=` values renamed, every
+  link to the old ones changed); the test panel beside the draft, sticky, folded under the form below 1,280 px and a
+  full-height sheet from the save bar on a phone, keeping all of §4.9; *General knowledge* as one radio scale with the
+  chosen level's help; knowledge bases as rows with *Limit to topics* and a row ⋯; *Access* as one story (audience,
+  apps, storage, model name with copy, *Check access* folded); B-57's test questions, B-58's answer evaluation and
+  B-62's content gaps on *Quality*; the cost card (with B-61's outcomes), questions, not found and ratings on *Usage*;
+  the *Create assistant* drawer's *Start from* cards (§5.12 *Drawers*).
+- **Paths:** `src/admin-ui/**` (not `src/platform/**`), `tests/**`; `src/Kalla.AdminApi/**` only if *Usage* needs a
+  field the API lacks.
+- **Done when:** Vitest for the tabs, the scale (V36's extra confirmation kept) and the test panel's placement; the
+  accessibility spec over each tab and the sheet; shown at the three widths and themes; the local e2e specs touched
+  pass. Hand-offs: `docs/runbook.md` names *Assistant → Statistics → Cost* (a `stream-a` issue); the NVDA checklist
+  (`plans/work/nvda-pass.md`, the main session's) is rewritten once this and B-79 have landed (an issue labelled
+  `main`).
+- **Waits on:** B-77; B-58, B-61, B-62 (their cards move here); the code-quality fixes #3 and #5.
+- **Read:** admin §4.9, §5.4, §5.5.4, §7.4, §8.6, §8.7, §5.12; V36.
+
+### [ ] B-79 The knowledge base page: six tabs and the Overview's tiles (UX pass step 5, UX2 C)
+- **Do:** admin §5.5.2: the tabs *Overview*, *Content*, *Documents*, *Topics*, *Quality*, *Sharing* (`?tab=` values
+  renamed and the setup checklist's links with them); `SummaryTile` and the Overview's four tiles, then *Get started*,
+  the sources, the *Gateway key*, *Cost* and *Feedback on documents* cards; *Content* with the sources and the file
+  list (§5.5.7), opening on the file list when an upload is the only source, and *Create knowledge base* with *Files*
+  opening there; *Quality* with test questions, the evaluation and *Tune the search*; the dot on a tab that needs
+  action; the *Create knowledge base* and *Add source* drawers as §5.12 *Drawers*.
+- **Paths:** `src/admin-ui/**` (not `src/platform/**`), `tests/**`.
+- **Done when:** Vitest for the tabs (a shared knowledge base still sees Overview and Topics only), the upload-only
+  case opening on the file list, the tiles and the tab dot's text; the accessibility spec over each tab; shown at the
+  three widths and themes on the demo seed (one upload-only knowledge base, one with a crawl source); the local e2e
+  specs touched pass. Hand-offs: the NVDA checklist as B-78.
+- **Waits on:** B-78; B-66 (its Overview card); the code-quality fixes #3 and #5.
+- **Read:** admin §5.4, §5.5.2, §5.5.7, §7.1, §8.6, §8.8, §5.12.
+
+### [ ] B-80 Filters as chips, kept in the address (UX pass step 6, UX5 C)
+- **Do:** admin §5.12 *Filters*: `FilterChip` and `PeriodPicker`, and one composable that reads and writes the
+  filters in the address, on Feedback, Costs (*Export* with *By day* and *By month* in the header), the Audit log
+  (*Who* and *Type of object* as chips, the rest under *More filters*), the Map (with B-67's switch on the row if it
+  has landed) and the lists' search; *Clear filters*; the counts in a polite live region.
+- **Paths:** `src/admin-ui/**` (not `src/platform/**`), `tests/**`.
+- **Done when:** Vitest for the chips' names, the period presets and custom range, and the address round trip (a
+  reload and back keep the filter, a change moves no focus); the accessibility spec covers the open picker; shown at
+  the three widths and themes; the local e2e specs touched pass.
+- **Waits on:** B-79; the code-quality fixes #3 and #5.
+- **Read:** admin §5.5.5, §5.5.6, §8.1, §8.6, §9.1, §5.12.
+
+### [ ] B-81 The side menu and Home (UX pass step 7, UX1 A and UX6 C)
+- **Do:** admin §5.2: Home alone at the top with its badge, the groups *Build*, *Follow-up* (Map moved in) and
+  *Administration* (`NAV_GROUP`), Models with the icon `memory`; admin §5.5.1: Home's order (greeting with *Your
+  access*, the notices, *Needs attention*, *Get started*, *Assistants in use* as a table, *Health* as one line), the
+  *Your access* card gone. The theme switch stays where it is (the user menu is proposed to Fors: an issue on
+  thekim1/fors, listed in the pull request).
+- **Paths:** `src/admin-ui/**` (not `src/platform/**`), `tests/**`. Models' icon is in `platform/nav.ts`: a `stream-a`
+  issue.
+- **Done when:** `router/nav.spec.ts` for the groups and their order by role; Vitest for Home's sections (a new
+  installation shows the notices, *Get started* and *Health*; zeros grey); shown at the three widths and themes; the
+  local e2e specs touched pass.
+- **Waits on:** B-59 (*Needs attention*); B-80; the code-quality fixes #3 and #5.
+- **Read:** admin §5.2, §5.5.1, §5.10, §5.12.
+
 ## Live (the live block, see the roadmap)
 
 

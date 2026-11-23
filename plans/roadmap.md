@@ -100,9 +100,11 @@ P2 wave 1 (*P2 Broaden* below) is the code work. Beside it, what is open without
   topics on related documents and the nearest subject of a turn without an answer; adopted by the user on 2026-11-23
   (Decisions "Progress, timings and the nearest subject in the chat extension"), designed in chat §9.10 and §9.11 and
   queued as B-72 and B-73.
-- **The admin UI's UX pass** ([`proposals/admin-ui-ux-pass.md`](proposals/admin-ui-ux-pass.md), asked for by the user on
-  2026-11-23): eleven layout rules and six decisions (UX1 to UX6) that wait for the user's picks; nothing is built but
-  its step 0.
+- **The admin UI's UX pass** ([`proposals/admin-ui-ux-pass.md`](proposals/admin-ui-ux-pass.md)): decided by the user
+  on 2026-11-23 (UX1 A, UX2 to UX6 C; Decisions "Admin API and UI"), the eleven layout rules in admin §5.12 and the
+  pages in §5; queued as B-74 to B-81, one pull request per step, smallest first. UX3 and UX2 wait on B-58, B-61, B-62,
+  B-66 and the code-quality fixes #3 and #5; the last step (the menu and Home) on B-59. The NVDA checklist is
+  rewritten once UX2 and UX3 have landed.
 - **Code quality** ([`proposals/code-quality-top7.md`](proposals/code-quality-top7.md), asked for by the user on
   2026-11-23): seven DRY fixes, one pull request each; five are merged, #5 and #3 follow B-63.
 - **CI:** what the test collections of one `Kalla.AdminApi.Tests` process wait for (not CPU, thread pool, disk or

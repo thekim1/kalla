@@ -233,11 +233,11 @@ schema-driven form (§5.8).
 |---|---|---|---|---|---|---|---|---|
 | Home | P1 | R (all + platform health) | R | R | R | R | R | R |
 | Map (department map) | P1b, table first (§5.5.6) | R | R | R | R | R | R | R |
-| Knowledge bases (incl. Documents, Test questions and quality, Search settings, Topics, Sharing (`Manage`)) | P1 | W | W | R | R | R | W (no sharing) | R |
+| Knowledge bases (incl. Content, Documents, Topics, Quality, Sharing (`Manage`)) | P1 | W | W | R | R | R | W (no sharing) | R |
 | Sources, runs, files, deletions (incl. template parameters) | P1 | W | W | W (template parameters only) | R | R | W (no deletion decisions) | R |
 | Publication (plan, report, keep/restore) | P1 | W | W | W | R | – | W | R |
-| Assistants (incl. Test, Versions; Test questions P2, weakness review §1) | P1 | W | W | R | R | R (+ test) | W | R |
-| Audience (assistant audiences) | P1 | W | W | – | R | – | R | R |
+| Assistants (incl. Build with its test, Versions, Usage; Quality P2, weakness review §1) | P1 | W | W | R | R | R (+ test) | W | R |
+| Access (assistant audiences) | P1 | W | W | – | R | – | R | R |
 | Feedback | P1 (comments when A1 allows stored content, weakness review §4) | R | R + comments | – | R + comments | – | – | R (no comments) |
 | Conversation review, Access log | when A1 allows stored content (weakness review §4; limited first, then full) | access log R | access log R (own depts) | – | W | – | – | – |
 | Keys (generic) | P1 | W | W (own teams) | – | – | – | – | – |
@@ -949,18 +949,24 @@ Overview page (P1).
 
 ### 5.2 Navigation per role
 
-Grouped by the job people come to do, as the gateway's side menu (`docs/admin-ui.md:5-13`); items filtered by role.
-Ctrl K search copied (`AppShell.vue:62`), extended with `GET /api/search`. Phone bottom bar: Home, Knowledge bases,
-Assistants, Feedback, Menu.
+Grouped by what people do there (UX pass UX1 A, user 2026-11-23; rule 4 of §5.12), as the gateway's side menu
+(`docs/admin-ui.md:5-13`); items filtered by role. **Home** stands alone at the top with its badge; then **Build**
+(Knowledge bases, Assistants; Skills and Tool servers in P2), **Follow-up** (Feedback, Costs, Map; Conversation review
+when it comes) and **Administration** (the platform pages of §5.10). Every page has an icon of its own: Map keeps
+`hub`, Models has `memory`. Ctrl K search copied (`AppShell.vue:62`), extended with `GET /api/search`; its placeholder
+says what it finds: *Search pages, knowledge bases and assistants*. Phone bottom bar: Home, Knowledge bases,
+Assistants, Feedback, Menu (role-filtered like the side menu); *Menu* opens the rest of the side menu as a sheet.
+
+The Light / Dark / Lumen switch stays above the user card. A user menu opened from that card (the theme switch, *Your
+access* and *Sign out* in it) is proposed to Fors first, since `AppShell.vue` is adapted from Fors's shell and both
+shells stay alike; Källa follows when Fors has it.
 
 ```
 ┌──────────────────────────┬──────────────────────────────────────────────────────────────────────────────────────┐
 │ ◧ Knowledge platform     │  Search (Ctrl K)                                  Department: All ▾   ☾   Anna A. ⎋  │
 │   Umeå kommun            ├──────────────────────────────────────────────────────────────────────────────────────┤
-│ OVERVIEW                 │                                                                                      │
-│   Home              (3)  │   <main id="main">                                                                   │
-│   Map                    │                                                                                      │
-│ CONTENT                  │                                                                                      │
+│   Home              (3)  │                                                                                      │
+│ BUILD                    │   <main id="main">                                                                   │
 │   Knowledge bases        │                                                                                      │
 │   Assistants             │                                                                                      │
 │   Skills             P2  │                                                                                      │
@@ -968,8 +974,9 @@ Assistants, Feedback, Menu.
 │ FOLLOW-UP                │                                                                                      │
 │   Feedback               │                                                                                      │
 │   Costs                  │                                                                                      │
+│   Map                    │                                                                                      │
 │   Conversation review    │                                                                                      │
-│ PLATFORM                 │                                                                                      │
+│ ADMINISTRATION           │                                                                                      │
 │   Apps and keys          │                                                                                      │
 │   Models                 │                                                                                      │
 │   Settings               │                                                                                      │
@@ -979,26 +986,27 @@ Assistants, Feedback, Menu.
 └──────────────────────────┴──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-The Platform group is §5.10's.
+The Administration group is §5.10's.
 
-**Home** shows the selected department's setup checklists, attention items and a one-line summary with its contacts;
+**Home** shows the selected department's attention items, setup checklists, assistants in use and health (§5.5.1);
 **Knowledge bases** has the tabs *Ours*, *Shared with us* and *All* (`view=`, §4.5). The department picker in the
 header filters every list; a user with one department never sees it.
 
-Start page: Home (a reviewer-only user starts on Feedback). Badges: Home counts attention items (gateway
-`badge` pattern, `nav.ts:25`). No e-mail: awaiting deletions, worse evaluation reports, site-profile proposals, P2
-drift and pending approvals appear as attention cards and badges, plus SIEM events for the security-relevant ones.
+Start page: Home (a reviewer-only user starts on Feedback). Badges: Home counts attention items (gateway `badge`
+pattern, `nav.ts:25`). No e-mail: awaiting deletions, worse evaluation reports, site-profile proposals, P2 drift and
+pending approvals appear as rows of Home's *Needs attention* and as badges, plus SIEM events for the security-relevant
+ones.
 
 ### 5.3 Pages by phase
 
 | Page | P1 | P2 | P3 |
 |---|---|---|---|
-| Home | setup checklists (folded once published), sync health per department, queue age, org/model sync, a Live card per published assistant (§5.5.1); attention items P2 | drift, approvals, parse-profile proposals | trends |
+| Home | setup checklists (folded once published), *Assistants in use* (a row per published assistant), *Health* (runs, queue age, org/model sync) as one line (§5.5.1); attention items P2 | drift, approvals, parse-profile proposals | trends |
 | Map | P1b: the Map as a table (§5.5.6) | the drawing, skills and workspaces in the map | – |
-| Knowledge bases | list; detail tabs Overview (checklist, sources, counts, state, contact), Sources, Documents (incl. personal data), Topics, Test questions and quality, Search settings, Sharing; the list's *Shared with us* and *All* tabs | History tab, coverage-threshold histogram and proposal | analytics |
+| Knowledge bases | list; detail tabs Overview (summary tiles, checklist, sources, cost), Content (sources and files), Documents (incl. personal data), Topics, Quality (test questions, evaluation, search settings), Sharing (§5.5.2); the list's *Shared with us* and *All* tabs | History tab, coverage-threshold histogram and proposal | analytics |
 | Source | URL list, crawl, upload forms with template parameters; preflight; preview with site-profile before/after; impact; runs; crawl report; files; quarantine; deletions; held | SharePoint with preflight, crawl hierarchy tree, parameter diff | more connectors |
 | Publication | plan, re-process progress, evaluation report, keep/roll back | – | – |
-| Assistants | create, draft form with description and contact, test panel on the draft, Publish, Versions (restore), audiences (clients), retention, stats, archive | create from a template, copy, version diff, Test questions with the test report, latest answer evaluation (weakness review §1); skills (with **Uses tools** when one carries tools), limits, widget audiences | risk acceptance |
+| Assistants | create, draft form with description and contact, test panel beside the draft, Publish, Versions (restore), audiences (clients), retention, usage, archive (tabs §5.5.4) | create from a template, copy, version diff, test questions with the test report, latest answer evaluation (weakness review §1); skills (with **Uses tools** when one carries tools), limits, widget audiences | risk acceptance |
 | Skills, Tool servers | – | tools §3, §4 pages | import/export |
 | Feedback | ratings, import health; comment reveal when A1 allows stored content (weakness review §4) | rewrite into test question | trends |
 | Costs | per department, assistant, knowledge base and step, by day or month, CSV; cost cards on the assistant and knowledge base pages (§8.6) | the gateway's figures and budget status beside them (cost-attribution §6 B7) | – |
@@ -1016,29 +1024,29 @@ page's **Create knowledge base** opens the Knowledge bases page, where the drawe
 
 **Without Open WebUI** (the deployment has no `OpenWebUi:Enabled`; `/bff/user` says `openWebUi.enabled: false`, for
 every role) the admin UI names nothing that only holds with it: the checklist's last step reads *Connect an app with a
-key under Apps and keys* and opens the assistant's Audience tab (the same done rule, a client audience); the feedback
-page has no import card and its empty text names `POST /v1/feedback`; Add app offers no Open WebUI card; Check access
-offers no Open WebUI user. Texts that describe apps in general name no product. A managed Open WebUI client that
-exists from before stays listed as it is.
+key under Apps and keys* and opens the assistant's Access tab (the same done rule, a client audience); the feedback page
+has no import card and its empty text names `POST /v1/feedback` (behind *Details*, §5.7); Add app offers no Open WebUI
+card; Check access offers no Open WebUI user. Texts that describe apps in general name no product. A managed Open WebUI
+client that exists from before stays listed as it is.
 
 | # | Step (UI) | Page | Defaults and guidance | Guard |
 |---|---|---|---|---|
 | 1 | Sign in | Home | empty state "Here you build knowledge bases and assistants for your department." + **Create knowledge base** | role and department from sign-in |
 | 2 | Create knowledge base | drawer | name → slug; contact (name, e-mail; the creator by default); no team field (the owner team is the creator's first team in the department, changeable under ⋯); **information class** as three explained options, none preselected ("Who may read the content?") | V1–V2 later |
-| 3 | Add source | source drawer, type cards *Address list*, *Website*, *Files* | crawl: start URL; include `host/**`, default excludes, 10,000 pages, depth 10, incremental by sitemap `lastmod` once the host's site profile marks it reliable (umea.se: weekly full traversals until the 500-URL `lastmod` sample passes, weakness review §3), weekly; optional **Demote** patterns for archive sections (factor 0.5); the first `website` source of a collection turns on age decay for PDFs (730 days, weight 0.15) unless the collection already has `recency` set, shown in the drawer and editable in Search settings (weakness review §3); URL list nightly; template chosen by type, its parameters under "More settings" | V25 |
+| 3 | Add source | source drawer, type cards *Address list*, *Website*, *Files* | crawl: start URL; include `host/**`, default excludes, 10,000 pages, depth 10, incremental by sitemap `lastmod` once the host's site profile marks it reliable (umea.se: weekly full traversals until the 500-URL `lastmod` sample passes, weakness review §3), weekly; optional **Demote** patterns for archive sections (factor 0.5); the first `website` source of a collection turns on age decay for PDFs (730 days, weight 0.15) unless the collection already has `recency` set, shown in the drawer and editable in the search settings (weakness review §3); URL list nightly; template chosen by type, its parameters under "More settings" | V25 |
 | 4 | Check | same drawer | preflight: reachability, robots status, sitemap found, estimated pages, egress, "the same website is already fetched by X" (shared crawl frontier, P2; weakness review §1), CMS recognised ("Sitevision") | fail blocks save; warn explains |
 | 5 | Preview | preview panel | up to 5 URLs or uploaded files; for a crawl source the site profile the worker would apply (P1: the manual Sitevision preset; learned from P2), shown as **Before / After** text per sample page (boilerplate removed, breadcrumb, date); each stage's output (text, sections, chunks with token counts) | preview isolated |
 | 6 | Save and fetch | source page → run page | saves, enqueues the first sync; live counters, the run's documents with their outcome and reason in plain English (filter: failed only) | – |
-| 7 | Test questions | Test questions and quality | generated after the first runs, cost shown before (at the collection's ceiling, processing §13.1); own questions with expected documents | – |
+| 7 | Test questions | the knowledge base's Quality tab | generated after the first runs, cost shown before (at the collection's ceiling, processing §13.1); own questions with expected documents | – |
 | 8 | Publish the knowledge base | collection page | latest evaluation report shown ("Accuracy 0,78 · 86 questions"); **Publish** | – |
 | 9 | Create assistant | assistant drawer → assistant page | pick an **assistant template** ("Allmän rådgivning" (general advice) preselected; P2, weakness review §1: in P1 the draft starts from `Settings.Chat` defaults: its instructions are `Settings.Chat.defaultSystemPrompt`, a
 citizen-service text seeded with the first `Settings` row and edited on the Settings platform page; a missing key gives
-the code's text, an emptied one an empty draft; on the Draft tab the model and the query settings sit in a collapsed
+the code's text, an emptied one an empty draft; on the Build tab the model and the query settings sit in a collapsed
 *Advanced* section, collapsed even before a model is chosen, since the missing model shows as a `version_link_missing`
 warning above the form); name, description, contact person; collections (the new one preselected; unpublished ones work in Test only), model picker showing only `chat` models (`GatewayModels.ModelKind`; never embedding models) servable for the level, not-found texts and contact link from the template; saved as a **draft** | warnings only (V3, V8, V15 at publish) |
-| 10 | Test | Test tab | runs the draft; sample questions from the evaluation set as one-click prompts; sources, coverage, raw vs delivered answer; **Save as test question** (P2) turns a tried question into a test question with the expected behaviour typed in | V33 |
-| 11 | Publish | assistant page | **Publish**; the model is checked against the gateway (V8); from P2 the test-question report follows on the Test questions tab (advisory, §7.4) | V3–V17, V34 |
-| 12 | Make available | Audience | pick client "Open WebUI (pilot)"; residency check explained if refused ("The model runs outside the EU; choose a model in the EU or on own servers") | V7–V9 |
+| 10 | Test | the test panel beside the draft (Build tab) | runs the draft; sample questions from the evaluation set as one-click prompts; sources, coverage, raw vs delivered answer; **Save as test question** (P2) turns a tried question into a test question with the expected behaviour typed in | V33 |
+| 11 | Publish | assistant page | **Publish**; the model is checked against the gateway (V8); from P2 the test-question report follows on the Quality tab (advisory, §7.4) | V3–V17, V34 |
+| 12 | Make available | Access tab | pick client "Open WebUI (pilot)"; residency check explained if refused ("The model runs outside the EU; choose a model in the EU or on own servers") | V7–V9 |
 | 13 | Open in Open WebUI | assistant page | link from the client's `PortalUrl`; the model appears under its slug | API lists it by audience |
 
 ### 5.5 Key pages (wireframe level)
@@ -1046,33 +1054,48 @@ warning above the form); name, description, contact person; collections (the new
 #### 5.5.1 Home
 
 ```
-Home                                                                         Department: Stadsbyggnad ▾
+Good morning, Anna                                                           Department: Stadsbyggnad ▾
+Stadsbyggnad · Department admin · Your access
 ┌ Needs attention (3) ──────────────────────────────────────────────────────────────────────────────────────┐
 │ ⚠ Removal waiting for a decision: Website umea.se/bygga – 212 of 840 documents (25 %)       [Review]     │
 │ ⚠ The evaluation got worse after publishing: Website umea.se/bygga (−6 points)              [Show]       │
 │ ● 4 documents with personal data cannot be shown in public knowledge bases                   [Show]       │
 └───────────────────────────────────────────────────────────────────────────────────────────────────────────┘
-┌ Fetches, last 24 hours ────────────────┐ ┌ Queue ────────────────────┐ ┌ Assistants, 7 days ───────────────┐
-│ 12 done · 1 with remarks · 0 failed    │ │ 0 waiting, oldest –       │ │ 1 240 questions · 6 % not found   │
-│ [Show runs]                             │ │ Processing: 3, 2 min     │ │ 👍 41  👎 9   [Feedback]           │
-└────────────────────────────────────────┘ └───────────────────────────┘ └───────────────────────────────────┘
+┌ Assistants in use, last 7 days ───────────────────────────────────────────────────────────────────────────┐
+│ Assistant             │ Questions │ Not found │ 👍 │ 👎 │ Cost      │                                       │
+│ Bygglovsassistenten   │ 1 240     │ 74        │ 41 │ 9  │ 3,12 USD  │                                       │
+│ Kundtjänst bygg       │ 0         │ 0         │ 0  │ 0  │ 0,00 USD  │  (zeros grey)                         │
+└───────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+Health  ● Fetches, 24 h: 12 done  ● Queue: 0 waiting  ● Organisation sync 02:00  ● Model sync 02:05
 ```
 
-**P1's Home** (user, 2026-11-15, admin UI review UI1 B; `proposals/admin-ui-review.md`), top to bottom:
+**Home** (user, 2026-11-23, UX pass UX6 C; the layout rules of §5.12), top to bottom; what needs the person comes
+before what runs:
 
-1. **Live**: one card per published, active assistant in the caller's departments (platform admins: all), over the
-   last 7 days (Europe/Stockholm, today included): questions, not found, thumbs up and down, cost (the gateway's cost
-   plus the estimate, as §8.6), each linking to the assistant's Statistics tab; "No questions in the last 7 days" when
-   all are zero. Ordered by questions, most first. Absent when no assistant is published.
-2. **Health**: per department, the runs started in the last 24 hours by outcome (done, with remarks, failed, running;
-   linked to the knowledge base list); the queue (waiting jobs and the oldest one's age); organisation sync and model
-   sync (last success, and consecutive failures when any, linked to Organisation and Models).
-3. **Get started**: the setup checklists, as now. A checklist whose knowledge base is published is folded to one line
-   ("Personalhandbok: 5 of 8 steps done"), and each checklist has **Hide**, remembered per browser (local storage; a
-   reset brings them back). The embedding-profile first-run step stays first while it applies.
-4. **Your access**, as now.
+1. **The greeting** with the person's first name ("Good morning, Anna") and, under it, their departments and role
+   with a **Your access** link that opens the roles and departments the sign-in gave (an entry in the user menu too,
+   once the shell has one, §5.2).
+2. **The secret reminders** (§5.11) and the **deployment notices** (below), for a platform admin.
+3. **Needs attention**: one row per attention item with its action button (*Review*, *Show*, *Archive*); the items
+   and their order are the table below. Absent when there is nothing.
+4. **Get started**: the setup checklists, while any knowledge base in the caller's scope is unpublished (on a new
+   installation most of the page), with the embedding-profile first-run step first while it applies. A checklist
+   whose knowledge base is published is folded to one line ("Personalhandbok: 5 of 8 steps done"), and each
+   checklist has **Hide**, remembered per browser (local storage; a reset brings them back).
+5. **Assistants in use**: a table with one row per published, active assistant in the caller's departments (platform
+   admins: all), over the last 7 days (Europe/Stockholm, today included): questions, not found, thumbs up and down,
+   cost (the gateway's cost plus the estimate, as §8.6); the name links to the assistant's Usage tab. Ordered by
+   questions, most first; zeros are grey (rule 8). The rows stay when every count is zero, since cost may come from
+   the test panel. Absent when no assistant is published. On a phone the rows are cards.
+6. **Health**: one line of four states: the runs started in the last 24 hours (done, with remarks, failed, running;
+   linked to the knowledge base list, with the per-department counts behind it), the queue (waiting jobs and the
+   oldest one's age), organisation sync and model sync (last success, and consecutive failures when any, linked to
+   Organisation and Models). A state is green while it is fine; one that fails turns amber or red and its item is in
+   *Needs attention*.
 
-`GET /api/overview` adds, beside `hasCollections`, `setup` and `needsEmbeddingProfile`:
+On a new installation with no assistant the page is the notices, *Get started* and *Health*.
+
+`GET /api/overview` adds, beside `hasCollections`, `setup` and `needsEmbeddingProfile` (`live` is *Assistants in use*):
 `live: [{ assistantId, name, departmentId, publishedVersion, questions, notFound, thumbsUp, thumbsDown, costUsd }]`
 (`questions` = `AssistantDailyTotals.Messages`, `notFound` = `NotFound`, thumbs from the same rows, `costUsd` =
 `AssistantDailyUsage` cost plus estimate, all summed over the 7 days and every client) and `health: { departments:
@@ -1081,8 +1104,7 @@ oldestQueuedAt }, organisationSync: { lastSuccessAt, consecutiveFailures }, mode
 consecutiveFailures } }`. `setup` items gain `published` already; the UI folds on it. As built (#724): Health lists
 only departments with runs in the window; a run awaiting the deletion decision counts as *with remarks* and cancelled
 runs are not counted; the queue counts `queued` jobs within the caller's scope (platform admins: all); the sync
-status (a time and a count, held per instance) shows to every role; Live keeps its cards when every count is zero,
-since cost may come from the test panel.
+status (a time and a count, held per instance) shows to every role.
 
 **Deployment notices** (Decisions "Deployment values across releases"; user, 2026-11-16): for a platform admin,
 `GET /api/overview` returns `deploymentNotices`, a list of `{ code, names }`, shown at the top of Home after the secret
@@ -1129,24 +1151,55 @@ and the run's reason (`gateway.budget_exhausted`, `gateway.key_unavailable`, eng
 #### 5.5.2 Knowledge base
 
 ```
-Knowledge bases › Bygglov                                      [Internal] [Not published]   [Publish] [⋯]
-Overview  Sources (3)  Documents (1 204)  Topics (4)  Test questions and quality  Search settings  Sharing
-┌ Get started ────────────────────────────────────────┐ ┌ State ────────────────────────────────────────────┐
-│ ✓ Source added            ✓ First fetch done        │ │ Not published: only visible in Test.              │
-│ ✓ Test questions created (86) ◐ Evaluation running  │ │ Last fetched 30 Oct 02:14 · 1 204 documents        │
-│ ○ Publish   ○ Create assistant   ○ Make available    │ │ Used by: Bygglovsassistenten (draft)               │
-└─────────────────────────────────────────────────────┘ └───────────────────────────────────────────────────┘
+Knowledge bases /
+Bygglov                                                        [Internal] [Not published]   [Publish] [⋯]
+Overview  Content (3)  Documents (1 204)  Topics (4)  Quality •  Sharing
+┌ Documents ───────────┐ ┌ Last fetch ──────────┐ ┌ Quality (recall@10) ─┐ ┌ Used by ─────────────────────┐
+│ 1 204                │ │ Today, 01:12  Done   │ │ Not measured         │ │ Bygglovsassistenten (draft)  │
+│ all searchable       │ │                      │ │ Create test questions│ │ 1 assistant · 1 department   │
+└──────────────────────┘ └──────────────────────┘ └──────────────────────┘ └──────────────────────────────┘
+┌ Get started ────────────────────────────────────────┐
+│ ✓ Source added            ✓ First fetch done        │
+│ ✓ Test questions created (86) ◐ Evaluation running  │
+│ ○ Publish   ○ Create assistant   ○ Make available    │
+└─────────────────────────────────────────────────────┘
 Sources                                                                                           [Add source]
 │ Name                  │ Type       │ Last run               │ Documents│ Next        │                      │
 │ umea.se/bygga         │ Website    │ ✓ 30 Oct 01:12         │ 840      │ Sat 01:00   │ [Fetch now] [⋯]      │
-│ Blanketter            │ Files      │ ⚠ 2 failed             │ 41       │ –           │ [Upload] [⋯]         │
+│ Blanketter            │ Files      │ ⚠ 2 failed             │ 41       │ –           │ [Upload files] [⋯]   │
 ```
+
+**Header** (rule 1 of §5.12; UX pass UX4 C): the one primary action is **Publish** while the knowledge base is not
+published, else **Add content** (the source drawer with its type cards: a website, a list of addresses or files);
+**Edit name and contact**, **Change department** and **Delete** are in the ⋯ menu, *Delete* last.
+
+**Tabs** (UX pass UX2 C, user 2026-11-23; rule 6 of §5.12): six, in this order, each named in `?tab=`:
+
+- **Overview**: a row of four summary tiles: *Documents* (the count of live documents, and whether all are
+  searchable), *Last fetch* (the latest run of any source, its time and outcome), *Quality* (the latest evaluation's
+  recall@10, or *Not measured* with a link to create test questions), *Used by* (the assistants and their
+  departments). Only a tile that needs action has a coloured border, and it says so in text. Then *Get started* while
+  the knowledge base is unpublished, the sources as a compact table, and the *Gateway key*, *Cost* (§8.6) and
+  *Feedback on documents* (§8.8) cards.
+- **Content**: the sources, with **Add source**, then the file list of an upload source (§5.5.7); with several upload
+  sources a picker above the list names the source. On a knowledge base whose only source is an upload, *Content*
+  opens straight onto the file list, with the source folded to one line above it.
+- **Documents**: every document that is not deleted, with its personal-data state.
+- **Topics**: below.
+- **Quality**: the test questions and the latest evaluation (§7.1), then the search settings (§7.1's retrieval
+  settings form) under *Tune the search*, as two short rows of number fields, with **Try without saving** beside the
+  save bar.
+- **Sharing**: below.
+
+A dot on a tab marks something to do there (a failed fetch on *Content*, a worse or missing evaluation on *Quality*),
+with text for assistive technology ("Quality, needs attention").
 
 Sharing and Topics tabs (English UI):
 
 ```
-Knowledge bases › umea.se (Communications)                 [Public] [Published] [Edit] [Publish] [⋯]
-Overview  Sources (1)  Documents (2 323)  Topics (9)  Test questions and quality  Search settings  Sharing
+Knowledge bases /
+umea.se (Communications)                                       [Public] [Published]   [Add content] [⋯]
+Overview  Content (1)  Documents (2 323)  Topics (9)  Quality  Sharing
 ┌ Sharing ──────────────────────────────────────────────────────────────────────────────────────────┐
 │ Who may use this knowledge base in their assistants?                                              │
 │ ( ) Only Communications   ( ) Selected departments [ … ]   (•) Whole municipality                 │
@@ -1155,8 +1208,8 @@ Overview  Sources (1)  Documents (2 323)  Topics (9)  Test questions and quality
 │ │ Assistant            │ Department              │ Topics                 │ Status     │          │
 │ │ Permits assistant    │ Building & Environment  │ Building and housing   │ Published  │          │
 │ │ Customer service     │ Contact centre          │ all                    │ Draft      │          │
-│                                                                                  [Save sharing]   │
 └───────────────────────────────────────────────────────────────────────────────────────────────────┘
+  1 unsaved change                                                             [Discard] [Save changes]
 Topics                                                                                       [Add topic]
 │ Topic                │ Rule                                    │ Source   │ Documents │          │
 │ building-and-housing │ under www.umea.se/bygga-bo-och-miljo/   │ umea.se  │ 412       │ [Edit] [⋯]│
@@ -1200,7 +1253,7 @@ Suggested from umea.se                                                          
 A department the knowledge base is shared with opens it read-only: Overview (owner, contact, level, document count)
 and Topics (the tags with counts only: no rules, no suggestions, no source names), nothing else.
 
-The document count (the list, the Overview and the Sources table's *Documents*) is one number: **live** documents, not
+The document count (the list, the Overview and the sources table's *Documents*) is one number: **live** documents, not
 deleted and with a live chunk set, so a source in its first fetch shows 0 until its documents are indexed. The
 *Documents* tab lists every document that is not deleted, marked *Searchable* or *Not searchable*. *Used by* lists
 archived assistants too, marked *Archived* (they still block deletion and can be unarchived, #374); a deleted
@@ -1226,18 +1279,18 @@ grouped queries for the page (no per-row round trips). On a phone the card shows
 **Lists open as links** (every list page): the first cell of a clickable row is a real link (`<a href>` through the
 router) to the row's page, so a row opens in a new tab, its address can be copied, and keyboard users get a link;
 clicking elsewhere on the row still opens it. The *Overview* knowledge base's **Used by** names link to the
-assistants, and an empty **Contact** offers **Add contact** (it opens the Edit drawer).
+assistants, and an empty contact offers **Add contact** (it opens the edit drawer).
 
-**Edit** (a header button next to **Publish**, as on the assistant page, until the admin UI has a menu component for
-`⋯`) opens a drawer with the collection's own fields: name, contact, **level** (`edit` on the
-collection; Decisions "Level change in the edit drawer", #446) and the **gateway key** (the key picker of §5.5.4: the
-assigned keys of the knowledge base's department; indexing, re-embedding and evaluation run as it). The Overview's
-*State* card shows the key's name, its read-only settings, its status (an unusable key: "Fetching is paused: the
-gateway key is disabled", with the reason) and from gateway phase 3 its budget status, with a link to the key in the
-gateway; without a key it says "Charged to the platform: choose a gateway key". Below it the Overview has the *Cost*
-card of §8.6 (indexing and evaluation, last 30 days) and the *Feedback on documents* card of §8.8, both for the owning department only. A level change is saved with the rest; a refusal
-(`collection_level_conflict`: sources above the new level; `assistant_below_collection`: published assistants below
-it) is shown in the drawer after **Save** with the affected objects by name.
+**Edit name and contact** (in the header's ⋯ menu) opens a drawer with the collection's own fields: name, contact,
+**level** (`edit` on the collection; Decisions "Level change in the edit drawer", #446) and the **gateway key** (the key
+picker of §5.5.4: the assigned keys of the knowledge base's department; indexing, re-embedding and evaluation run as
+it). The Overview's *Gateway key* card shows the key's name, its read-only settings, its status (an unusable key:
+"Fetching is paused: the gateway key is disabled", with the reason) and from gateway phase 3 its budget status, with a
+link to the key in the gateway; without a key it says "Charged to the platform: choose a gateway key". Beside it the
+Overview has the *Cost* card of §8.6 (indexing and evaluation, last 30 days) and the *Feedback on documents* card of
+§8.8, both for the owning department only. A level change is saved with the rest; a refusal
+(`collection_level_conflict`: sources above the new level; `assistant_below_collection`: published assistants below it)
+is shown in the drawer after **Save** with the affected objects by name.
 
 #### 5.5.3 Source (website) and the deletion decision
 
@@ -1261,6 +1314,13 @@ Removal waiting for a decision · run 30 Oct 01:12
   [Keep the documents]  [Remove 212 documents]
 ```
 
+**Header and order** (UX pass UX4 C; rule 1 of §5.12): the primary action follows the source's type, **Fetch now**
+for a crawl or address-list source and **Upload files** for an upload source, which has no *Fetch now*. **Pause** or
+**Resume** is a secondary button beside it; the rest, *Delete* last, is in the ⋯ menu. The page reads top-down: what
+the source fetches (addresses, schedule, processing), its runs, its files (an upload source; the same card as the
+knowledge base's *Content*, without repeating the upload help), then **Held and quarantined** (the kept documents,
+the quarantine and the personal-data holds). Each section's title is inside its card.
+
 **JavaScript pages** (connectors design §8; Decisions "JavaScript rendering"): the URL-list and crawl forms have *Fetch
 pages with* *HTTP* (default) / *A browser (JavaScript)* (`fetchMode`) and, for the browser, an optional *Content is
 ready when this element has text* (`readySelector`, CSS). The preflight shows the raw and rendered word counts per start
@@ -1271,50 +1331,73 @@ content.
 
 #### 5.5.4 Assistant with test panel
 
-The wireframe shows the P2 page. In P1 ([weakness review §1](../archive/passes/weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)) the tab Test questions, **Compare** in Versions, **Copy**,
-**Save as test question**, the test summaries and the answer evaluation on Statistics are absent; **Publish** shows
-the warnings only.
+The wireframe shows the P2 page. In P1 ([weakness review §1](../archive/passes/weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)) the tab Quality, **Compare** in Versions, **Copy**,
+**Save as test question**, the test summaries and the answer evaluation are absent; **Publish draft** shows the
+warnings only.
 
 ```
-Assistants › Bygglovsassistenten  (model name: bygglov)   [Internal] [Published: version 3] [Draft changed 30 Oct]
-Svarar på frågor om bygglov, anmälan och avgifter. Contact: Anna Andersson, bygglov@umea.se  [Edit]
-Uses tools (P2)                                                               [Publish]  [⋯ Copy, Archive]
-Draft  Test  Test questions (8)  Versions (3)  Audience  Storage  Statistics
+Assistants /
+Bygglovsassistenten                          [Internal] [Published: version 3] [Draft changed 30 Oct]
+Svarar på frågor om bygglov, anmälan och avgifter. Contact: Anna Andersson, bygglov@umea.se
+Uses tools (P2)                                       [Compare with published]  [Publish draft]  [⋯]
+Build  Quality (8)  Versions (3)  Access  Usage
 ┌ Draft (changed since version 3) ─────────────────┐ ┌ Test (runs the draft ▾) ───────────────────────────┐
-│ Instructions  [textarea, template filled in]     │ │ Question [Behöver jag bygglov för en altan?] [Test]│
-│ Knowledge bases [Bygglov ×] [Detaljplaner ×] [+] │ │ Suggestions: · Vad kostar ett bygglov? · …         │
-│ Skills (P2) [Bygglov ×] [+]                      │ │ Sources in the search (coverage: ok, 0,31 ≤ 0,50)  │
-│ Model  [fors/chat-eu ▾] EU · 128k                 │ │ 1 Altaner och uteplatser – umea.se/…  0,31  cited  │
-│ Not found text (sv) [Jag hittar inget …]         │ │ Answer the user sees                  | Raw text   │
-│ Not found text (en) [I cannot find …]            │ │ Nej, om altanen är lägre än 1,8 m … [1]            │
-│ Contact links [Kontaktcenter 090-16 10 00]       │ │ Model fors/chat-eu · EU · 2,1 s · 0,0012 USD        │
-│ ▸ Advanced: follow-up questions, history, length │ │ [Save as test question]                            │
+│ Instructions  [textarea, template filled in]     │ │ Question [Behöver jag bygglov för en altan?] [Ask] │
+│ Knowledge bases                                  │ │ Suggestions: · Vad kostar ett bygglov? · …         │
+│  Bygglov        all topics  [Limit to topics] [⋯]│ │ Sources in the search (coverage: ok, 0,31 ≤ 0,50)  │
+│  Detaljplaner   2 topics    [Limit to topics] [⋯]│ │ 1 Altaner och uteplatser – umea.se/…  0,31  cited  │
+│  [Add knowledge base]                            │ │ Answer the user sees                  | Raw text   │
+│ General knowledge                                │ │ Nej, om altanen är lägre än 1,8 m … [1]            │
+│  (•) Off ( ) Supplement ( ) Fallback ( ) Open    │ │ Model fors/chat-eu · EU · 2,1 s · 0,0012 USD        │
+│  Answers only from the knowledge bases; …        │ │ [Why this answer?]  [Save as test question]        │
+│ Skills (P2) [Bygglov ×] [+]                      │ │                                                    │
+│ Model  [fors/chat-eu ▾] EU · 128k                 │ │                                                    │
+│ Not found texts, contact links                   │ │                                                    │
+│ ▸ Advanced: follow-up questions, history, length │ │                                                    │
 │ ⚠ 1 warning (shown at Publish)                   │ │                                                    │
-│ [Save draft]  [Discard draft]                    │ │                                                    │
 └──────────────────────────────────────────────────┘ └────────────────────────────────────────────────────┘
+  2 unsaved changes · Version 3 stays published until you publish the draft          [Discard] [Save changes]
 ```
 
-- **Knowledge** (Knowledge bases in the draft): each link shows the knowledge base, its owning department when it is
-  shared ("umea.se (Communications, shared)"), and its topics ("all topics", or chips with **+ topic**); **Add
-  knowledge base** opens a picker with *Ours*, *Shared with us* and *All* (relative to the assistant's department, not
-  the user's), showing level, document count and topics. The topic field, labelled "Limit to topics (empty: all
-  topics)", is free text with the knowledge base's current
-  topics as suggestions, so a topic a path rule is about to set can be linked; V11 `topic_invalid` checks the format.
-- **General knowledge** (`answer.generalKnowledge`, in the Draft tab, not under Advanced, since it changes what
-  users get): a radio group *Off: only the knowledge bases* (`off`, default), *Supplement: knowledge bases first,
-  general knowledge for explanations* (`supplement`), *Fallback: as Supplement, and answer from general knowledge when
-  nothing is found* (`fallback`), *Open: knowledge bases and general knowledge* (`open`), each with one line of help
-  that says what sets it apart (UI4 B, 2026-11-15): *Off* "Answers only from the knowledge bases; when they have
-  nothing, it says so and shows the contact links"; *Supplement* "May use general knowledge to explain terms in an
-  answer from the knowledge bases; when they have nothing, it says so and shows the contact links"; *Fallback* "As
-  Supplement, and when the knowledge bases have nothing it answers from general knowledge, marked as such, with the
-  contact links"; *Open* "Uses the knowledge bases and general knowledge freely; answers from general knowledge are
-  marked, with the contact links". For a `public` assistant all four stay enabled; any choice but `off` shows the
-  warning "Not recommended for a public assistant: citizens may get general answers that are wrong for Umeå kommun"
-  under the group, and **Publish** then asks for one extra confirmation (V36, #445). A
-  published version with a level other than `off`
-  version shows the badge `[General knowledge]` on the assistant page and in the assistant list. The test panel runs
-  the chosen mode, so a weak question shows the caveat line.
+**Header** (UX pass UX4 C; rule 1 of §5.12): **Publish draft** is the one primary action, beside **Compare with
+published** (the version diff, P2). **Edit name and contact** (the drawer of the assistant's own fields), **Copy**
+(P2), **Change department**, **Archive** and **Delete** (last) are in the ⋯ menu.
+
+**Tabs** (UX pass UX3 C, user 2026-11-23; rule 6 of §5.12): five, each named in `?tab=`:
+
+- **Build**: the draft form and, beside it, the test panel (§4.9), sticky, as a short chat with the cited documents.
+  The panel keeps everything §4.9 gives it: the choice between the draft and the published version, the topic
+  narrowing, the trace behind *Why this answer?*, and **Save as test question** (P2). You edit, ask and read the
+  answer on one tab. Below 1,280 px the panel folds under the form as a *Try the draft* card; on a phone *Try the
+  draft* in the save bar opens it as a full-height sheet, with the unsaved draft kept in memory.
+- **Quality** (P2): the test questions with **Run test questions** and the latest report (§7.4, the §7.2 card), the
+  latest answer evaluation (below), and the *Content gaps* card (§8.7): the same name and job as the knowledge base's
+  *Quality*.
+- **Versions**: below; **Compare** on each row (P2) and **Restore** in the row's ⋯ menu.
+- **Access**: one story top-down: who can use it (the audience summary), the apps that offer it (checkboxes), the
+  storage of its conversations (retention and history mode), the model name apps call it by (with a copy button),
+  and **Check access** folded at the end as a tool for when something is wrong.
+- **Usage**: the date of last use; questions, not found and ratings for a period; and the *Cost* card (§8.6).
+
+- **Knowledge** (Knowledge bases in the draft): one row per link with the knowledge base, its owning department when it
+  is shared ("umea.se (Communications, shared)"), and its topics ("all topics", or the count), **Limit to topics**
+  (opens the topic field) and a row ⋯ menu (*Remove*); **Add knowledge base** opens a picker with *Ours*, *Shared with
+  us* and *All* (relative to the assistant's department, not the user's), showing level, document count and topics. The
+  topic field, labelled "Limit to topics (empty: all topics)", is free text with the knowledge base's current topics as
+  suggestions, so a topic a path rule is about to set can be linked; V11 `topic_invalid` checks the format.
+- **General knowledge** (`answer.generalKnowledge`, on the Build tab, not under Advanced, since it changes what users
+  get): one scale of four radio buttons in a radio group named "General knowledge", *Off* (`off`, default), *Supplement*
+  (`supplement`), *Fallback* (`fallback`) and *Open* (`open`), with the chosen level's one line of help under it (tied
+  with `aria-describedby`; UX pass UX3 C), which says what sets it apart: *Off* "Answers only from the knowledge bases;
+  when they have nothing, it says so and shows the contact links"; *Supplement* "May use general knowledge to explain
+  terms in an answer from the knowledge bases; when they have nothing, it says so and shows the contact links";
+  *Fallback* "As Supplement, and when the knowledge bases have nothing it answers from general knowledge, marked as
+  such, with the contact links"; *Open* "Uses the knowledge bases and general knowledge freely; answers from general
+  knowledge are marked, with the contact links". For a `public` assistant all four stay enabled; any choice but `off`
+  shows the warning "Not recommended for a public assistant: citizens may get general answers that are wrong for Umeå
+  kommun" under the group, and **Publish draft** then asks for one extra confirmation (V36, #445). A published version
+  with a level other than `off` shows the badge `[General knowledge]` on the assistant page and in the assistant list.
+  The test panel runs the chosen mode, so a weak question shows the caveat line.
 - **Answer length** (under Advanced, Decisions "Answer length from the model"): *Longest answer* and *Context size* each
   have a checkbox **Use the model's limit** (checked by default; checked stores no value, `answer.maxOutputTokens` and
   `answer.contextTokens` absent). Next to it the model's limit is shown ("Model limit: 128,000 tokens", or "Model limit
@@ -1322,52 +1405,52 @@ Draft  Test  Test questions (8)  Versions (3)  Audience  Storage  Statistics
   `Settings.Chat.MaxAnswerTokens` is set and lower, "Platform ceiling: 8,000 tokens" next to it. Unchecked, a number
   field opens with the model's limit as its upper bound (V17). Changing the model keeps the checkboxes, so a version
   that uses the model's limit follows the new model.
-- **Gateway key** (in the *Edit* drawer, an assistant's own field, saved directly under V39): a picker of the assigned
-  keys of the assistant's department (`GET /api/gateway/keys`), each with its name, team, status and models; an
-  unusable key is shown but cannot be chosen. The page header shows the chosen key's name with its settings
+- **Gateway key** (in the *Edit name and contact* drawer, an assistant's own field, saved directly under V39): a picker
+  of the assigned keys of the assistant's department (`GET /api/gateway/keys`), each with its name, team, status and
+  models; an unusable key is shown but cannot be chosen. The page header shows the chosen key's name with its settings
   read-only (models, residencies, PII policy, content guard, rate limits, output cap), its expiry, from gateway phase 3
-  its budget status (`GET /api/gateway/keys/{id}/budget`: per budget its scope, spent of limit with the percentage,
-  the period's end, and *Used up* when exhausted), and a link to the key in the gateway (`admin_url`); nothing about the key
-  is edited here. A key with a system prompt shows V39's warning. The model pickers mark models the key may not use
-  as unavailable ("Not available to this key"), and the answer-length limits show the key's output cap when it is
-  lower than the model's. An assistant whose key is unusable, or whose budget is spent, shows the badge
-  `[Unavailable]` with the reason ("The gateway key is disabled", "The department's budget is used up") and raises
-  the attention item (§5.5.1); chat answers it as unavailable (chat §3.6). Without a key the header says "Charged to
-  the platform: choose a gateway key", and once the gateway acts as keys, **Publish** asks for one first (V39).
-- **Who can use it** (Audience) says in plain words what an audience means: "Open WebUI (pilot): everyone who can sign
-  in to it"; department and group audiences follow the W3 spike and E1. The tab's **Check access** runs explain access
-  (§4.5, identity §4.9) for a client and a subject; a key subject is entered by its key id (no key picker), and the
-  residency ceiling shows as the API returns it (the header form, e.g. `eu`).
-- **Wording** (UI4 B, 2026-11-15): the header's button that opens the drawer of the assistant's own fields is **Edit
-  details**; the Draft tab's lead says what saving does: before the first publish "Saving keeps a draft; publish it to
-  make the assistant available", afterwards "Saving starts a draft from version n; version n stays live until you
-  publish", and with a draft "Draft changed since version n".
+  its budget status (`GET /api/gateway/keys/{id}/budget`: per budget its scope, spent of limit with the percentage, the
+  period's end, and *Used up* when exhausted), and a link to the key in the gateway (`admin_url`); nothing about the key
+  is edited here. A key with a system prompt shows V39's warning. The model pickers mark models the key may not use as
+  unavailable ("Not available to this key"), and the answer-length limits show the key's output cap when it is lower
+  than the model's. An assistant whose key is unusable, or whose budget is spent, shows the badge `[Unavailable]` with
+  the reason ("The gateway key is disabled", "The department's budget is used up") and raises the attention item
+  (§5.5.1); chat answers it as unavailable (chat §3.6). Without a key the header says "Charged to the platform: choose a
+  gateway key", and once the gateway acts as keys, **Publish** asks for one first (V39).
+- **Who can use it** (the *Access* tab's audience summary) says in plain words what an audience means: "Open WebUI
+  (pilot): everyone who can sign in to it"; department and group audiences follow the W3 spike and E1. The tab's **Check
+  access** runs explain access (§4.5, identity §4.9) for a client and a subject; a key subject is entered by its key id
+  (no key picker), and the residency ceiling shows as the API returns it (the header form, e.g. `eu`).
+- **Wording** (UI4 B, 2026-11-15; rule 7 of §5.12): the draft form stays open, and its save bar says what saving
+  does: before the first publish "Saving keeps a draft; publish it to make the assistant available", afterwards
+  "Version n stays published until you publish the draft"; the form's title reads "Draft changed since version n"
+  while a draft exists.
 - **The assistant list** (UI2 B) has Name (with the model name), Information class, **Knowledge bases** (names, from the
   published version, else the draft), **Model** (the same version's), **Published** (version and date; "Draft only"
   before the first; *Archived*) and **Questions, 7 days**. `GET /api/assistants` items add `collections: [{ id, name }]`,
   `model: string | null`, `publishedVersion: number | null`, `publishedAt` and `questions7d` (`AssistantDailyTotals.
   Messages`), in grouped queries. "Model name" here is the slug.
 - **Badges**: `[Draft]` alone before the first publish; `[Published: version n]` afterwards, plus `[Draft changed …]`
-  while a draft exists; `[Archived]` when archived. **Uses tools** is a derived label (P2), never a
-  setting: it appears when a linked skill's served version carries tools, and the Skills field explains that such
-  a skill switches the assistant to the agent loop. Description, contact (name and e-mail) and **level** (in the
-  *Edit* drawer, #446; the published version is re-checked, V3/V7/V8/V9/V36, refusals shown in the drawer, and a
-  change to `public` with general knowledge on asks the V36 confirmation) are the assistant's own
-  fields, saved directly, like Audience and Storage; everything in the Draft tab is versioned.
-- **Publish** opens a dialog with the diff against the published version (P2), the remaining warnings (refusals
-  block) and the cost of the test run (P2); after publish (P2) the Test questions tab shows the
-  report as it arrives.
-- **Versions**: a list (number, published by, when, "restored from version n", test summary "7 of 8 as
-  expected", P2); **Compare** (P2) shows the structured diff (settings by name, collections and skills added or removed, a line
-  diff of the instructions with additions and removals as text marked `<ins>`/`<del>`, not by colour alone);
-  **Restore** on any earlier version publishes it again as a new version after one confirmation ("Version 2
-  is published again as a new version. Your draft is kept.").
-- **Test questions** (P2): the set (question, expected behaviour, expected document or phrase), **Add**, **Run test
-  questions** (on the draft or the published version), and the latest report as the §7.2 card (§7.4).
+  while a draft exists; `[Archived]` when archived. **Uses tools** is a derived label (P2), never a setting: it appears
+  when a linked skill's served version carries tools, and the Skills field explains that such a skill switches the
+  assistant to the agent loop. Description, contact (name and e-mail) and **level** (in the *Edit name and contact*
+  drawer, #446; the published version is re-checked, V3/V7/V8/V9/V36, refusals shown in the drawer, and a change to
+  `public` with general knowledge on asks the V36 confirmation) are the assistant's own fields, saved directly, like the
+  audience and storage on *Access*; everything in the draft form is versioned.
+- **Publish draft** opens a dialog with the diff against the published version (P2), the remaining warnings (refusals
+  block) and the cost of the test run (P2); after publish (P2) the Quality tab shows the report as it arrives.
+- **Versions**: a list (number, published by, when, "restored from version n", test summary "7 of 8 as expected", P2);
+  **Compare** (P2) shows the structured diff (settings by name, collections and skills added or removed, a line diff of
+  the instructions with additions and removals as text marked `<ins>`/`<del>`, not by colour alone); **Restore** (in the
+  row's ⋯ menu) on any earlier version publishes it again as a new version after one confirmation ("Version 2 is
+  published again as a new version. Your draft is kept.").
+- **Test questions** (P2, on *Quality*): the set (question, expected behaviour, expected document or phrase), **Add**,
+  **Run test questions** (on the draft or the published version), and the latest report as the §7.2 card (§7.4).
 - **Copy** (in ⋯, P2) asks for name, slug, department and owner team and opens the copy's draft.
 
-The *Statistics* tab shows the date of last use, the *Cost* card of §8.6 (by step, client and outcome, gateway and
-estimated cost apart), the *Content gaps* card of §8.7 and, from P2 (weakness review §1), the **latest answer evaluation**: faithfulness and citation precision of the last
+The *Usage* tab shows the date of last use and the *Cost* card of §8.6 (by step, client and outcome, gateway and
+estimated cost apart). The *Quality* tab shows, beside the test questions, the *Content gaps* card of §8.7 and, from P2
+(weakness review §1), the **latest answer evaluation**: faithfulness and citation precision of the last
 `answers` run with question counts, compared with the previous run, next to the live `uncited_answer` rate
 (processing §14.8, `AnswerEvaluationService` §2.2). While the run is switched off (`Settings.EvaluationAnswerQuestions`
 = 0, §5.10) the card says so and keeps the last run's figures with their date.
@@ -1375,7 +1458,8 @@ estimated cost apart), the *Content gaps* card of §8.7 and, from P2 (weakness r
 #### 5.5.5 Feedback
 
 ```
-Feedback                                      Period: 7 days ▾  Assistant: All ▾  Rating: 👎 ▾  [Only with comment]
+Feedback                                                                                              [Export]
+[Last 7 days ▾] [Assistant ▾] [Rating: Thumbs down ×] [With comment]  Clear filters          61 answers · 9 👎
 │ Time           │ Assistant           │ Rating│ Reason                │ Answer       │ Cited documents    │          │
 │ 30 Oct 10:42   │ Bygglovsassistenten │ 👎    │ Incorrect             │ Answered     │ Altaner och …      │ [Read comment]  │
 │ 30 Oct 09:15   │ Bygglovsassistenten │ 👎    │ Other                 │ Found nothing│ –                  │ [Read comment]  │
@@ -1424,25 +1508,29 @@ pages treat that as a first-class case, not as a crawl source without a crawl:
 
 1. **One step to start.** The *Create knowledge base* drawer asks what goes in: *Files I upload* or *A website or a
    list of addresses*. *Files* creates the knowledge base and one upload source (named *Files*, the collection's
-   classification, default template) in the same submit, then opens the knowledge base on its **Files** tab. The other
-   choice keeps today's flow (the source drawer opens next).
-2. **A Files tab on the knowledge base.** Shown when the knowledge base has an upload source; with several, a picker
-   above it names the source. It holds the drop zone (files and folders), the list and the details below, so nobody
-   has to find the source page. The source page keeps the same card. A knowledge base without an upload source gets
-   *Add files* on its Sources tab, which creates the source and opens the tab.
+   classification, default template) in the same submit, then opens the knowledge base on its **Content** tab, which
+   shows the file list. The other choice keeps today's flow (the source drawer opens next).
+2. **The files on the knowledge base's Content tab** (UX pass UX2 C, user 2026-11-23; §5.5.2). Below the sources, for
+   a knowledge base with an upload source; with several, a picker above the list names the source. It holds the drop
+   zone (files and folders), the list and the details below, so nobody has to find the source page. When an upload is
+   the knowledge base's only source, *Content* opens straight onto the file list, with no extra click. The source page
+   keeps the same card. A knowledge base without an upload source gets *Add files* on *Content*, which creates the
+   source and shows its list.
 3. **Live progress.** A summary bar from `files/summary`: *120 files · 34 processing · 84 indexed · 2 failed*, with a
    progress bar. While anything is processing, the summary and the visible rows refresh every 3 s; polling stops when
    nothing is processing or the tab is hidden, and starts again after an upload commit.
-4. **A list for hundreds of files.** Search by name or path; state filter chips with their counts (*All*,
-   *Processing*, *Indexed*, *Failed*); sort by name (folders shown as group headers) or newest; select all loaded
-   rows; delete the selection; **Retry failed** (the source's `retry-failed`) when anything failed; *Load more*.
-   States: *processing* is `received`, `clean` and `unscanned`; *indexed*; *failed* is `refused` and `malware`, each
-   with its reason in plain language (`messages.ts`). A file that is `unscanned`, or `indexed` with no `scannedAt`,
-   carries the note *Not scanned for malware* in its row and in its details (the deployment runs with the scan off,
-   connectors §11). A run whose report says `malwareScan: "off"` shows *Files in this run were not scanned for
-   malware* in its summary, on a crawl source's page as well.
+4. **A list for hundreds of files.** Search by name or path; state filter chips with their counts (*All*, *Processing*,
+   *Indexed*, *Failed*); sort by name (folders shown as group headers) or newest; select all loaded rows; delete the
+   selection (the bulk bar shows only while rows are selected); **Retry failed** (the source's `retry-failed`) when
+   anything failed; *Load more*. States: *processing* is `received`, `clean` and `unscanned`; *indexed*; *failed* is
+   `refused` and `malware`, each with its reason in plain language (`messages.ts`). A file that is `unscanned`, or
+   `indexed` with no `scannedAt`, carries the note *Not scanned for malware* in its details, and the summary says it
+   once for the list ("13 files not scanned for malware: the scan is off in this deployment"; rule 5 of §5.12), not each
+   row (the deployment runs with the scan off, connectors §11). A row is name, folder, size, state, uploaded, and a ⋯
+   menu with *Replace*, *Download* and *Delete*. A run whose report says `malwareScan: "off"` shows *Files in this run
+   were not scanned for malware* in its summary, on a crawl source's page as well.
 5. **Folders are kept.** A dropped or picked folder sends each file's relative path (`HR/Policys/semester.pdf`) in
-   `X-File-Name` (§4.5). The list groups by folder, and the tab says that a topic rule on the path
+   `X-File-Name` (§4.5). The list groups by folder, and the list says that a topic rule on the path
    (`HR/**`, Topics tab) tags a folder's documents. Files picked one by one have no folder.
 6. **File details.** A row opens a panel: name and path, size, type, uploaded by and when, replaced when, state and
    reason, a download link, and for an indexed file the document's chunks (`/api/documents/{id}`, `/chunks`) and the
@@ -1500,6 +1588,32 @@ The main session owns this feature's code (user, 2026-11-09), on `main-session/`
 | topic | ämne | sharing level: only our department / selected departments / whole municipality | delning: bara vår förvaltning / valda förvaltningar / hela kommunen |
 | responsible (contact) | ansvarig | shared with us | delade med oss |
 | `demote` pattern (weakness review §3) | nedprioritera | age decay `recency` (weakness review §3) | åldersavtagning |
+
+**Names on the pages** (UX pass, user 2026-11-23; all in `labels.ts`):
+
+- **Saving:** every form's buttons are **Save changes** and **Discard** (the save bar, §5.12 rule 7); no per-tab
+  save names (*Save draft*, *Save sharing*, *Save audience*) and no *Cancel* on a form.
+- **Headers:** the assistant's primary action is **Publish draft**; the drawer of an object's own fields opens from
+  **Edit name and contact** in the ⋯ menu.
+- **Shell:** the search placeholder *Search pages, knowledge bases and assistants*; the greeting "Good morning,
+  {first name}" with the department and role under it; `system:seed` as an actor reads *Demo data*.
+- **Knowledge bases (list):** the search field has the placeholder *Search by name* and an `aria-label`, no label
+  above, and sits right-aligned on the tabs' row; the column *Information class* is *Class*; *Last fetch* reads
+  "Today, 01:17" for today.
+- **Assistants (list):** the model in plain text, not monospaced; a draft with changes reads "Version 1 · draft has
+  changes" in *Published*. The assistant's model name (its slug) is on *Access* with a copy button, not in the
+  page's subtitle.
+- **Source:** the section of kept and quarantined documents is **Held and quarantined**.
+- **Costs:** **Export** in the header, with *By day* and *By month* in its menu; the department card's total in the
+  card title's row.
+- **Organisation:** the column **Knowledge bases** reads "1 own · 0 shared"; no member groups is a grey dash;
+  *Fetched* drops the date when it is today.
+- **Apps and keys:** *Enabled* shows only as an *Off* badge; *Last used* "Never used" is grey.
+- **Models:** the tabs **Models** and **Embedding** (§5.10).
+- **Settings:** the groups **Answers**, **Content**, **Data protection** and **Platform** (§5.10); **Advanced: edit
+  as JSON**.
+- **Technical text** goes behind *Details* or where it belongs: the empty Feedback state's `POST /v1/feedback` is behind
+  *Details*; the *Add source* drawer's subtitle names the knowledge base, not its slug.
 
 ### 5.8 Generic forms for platform objects (P1)
 
@@ -1649,15 +1763,15 @@ no form asks for a typed GUID.
 
 ### 5.10 Platform menu and the Settings page (user, 2026-11-13; M-16, built in 0.6.0)
 
-The side menu's Platform group lists the platform pages directly, and Settings is one page (built in 0.6.0; it replaced
-a single *Platform* item that opened an index of cards).
+The side menu's Administration group (§5.2) lists the platform pages directly, and Settings is one page (built in 0.6.0;
+it replaced a single *Platform* item that opened an index of cards).
 
-**Menu.** The Platform group lists its pages directly, filtered by role as before:
+**Menu.** The Administration group lists its pages directly, filtered by role as before:
 
 | Item | Route | Holds | Roles |
 |---|---|---|---|
 | Apps and keys | `/plattform/clients` | §5.9, §5.9.1 | platform admin |
-| Models | `/plattform/gateway-models` | gateway models with their limits, the gateway's context, embedding profiles and the canary | platform admin |
+| Models | `/plattform/gateway-models` | two tabs: *Models* (the gateway's models with their limits, first) and *Embedding* (embedding profiles and the canary); a small *AI gateway* card with the gateway's version and features on top | platform admin |
 | Settings | `/plattform/settings/:section?` | below | platform admin |
 | Organisation | `/organisation` | the organisation page, with the member groups, the sharing summary and the gateway link | every role |
 | Audit log | `/audit` | unchanged | as today |
@@ -1665,17 +1779,23 @@ a single *Platform* item that opened an index of cards).
 `/plattform` redirects to Settings; search (Ctrl K) lists each page and each settings section. On
 phones the items are under Menu as today.
 
-**Settings** is one page: the sections in a list on the left (a select above the form on phones), the chosen
+**Settings** is one page: the sections in a list on the left (a *Section* picker above the form on phones), the chosen
 section's form on the page, not in a drawer. The address names the section (`/plattform/settings/chat`); without one
 the first section opens. Sections, grouped by what they affect:
 
 | Group | Sections |
 |---|---|
-| Chat and answers | Chat (with the answer ceiling and the condense model), Prompt texts (the panel of chat design §7.3), Search (`retrieval`) |
-| Content | Website fetching (`crawl`, with the host politeness table), Site profiles, Processing (`worker`), Personal data (`pii`) |
-| Data protection | Data protection (the three levels), Retention, Deletion guard |
-| Quality | Evaluation |
+| Answers | Chat (with the answer ceiling and the condense model), Prompt texts (the panel of chat design §7.3), Search (`retrieval`), Assistant templates |
+| Content | Website fetching (`crawl`, with the host politeness table), Site profiles, Processing (`worker`), Evaluation |
+| Data protection | Data protection (the three levels), Personal data (`pii`), Retention, Deletion guard |
 | Platform | Network, Role groups (`identity`) |
+
+Each section's form follows §5.12: its fields grouped under a heading and one sentence that says what the group is
+for, numbers as short fields with their unit after them and the value in force as the placeholder, a list of hosts or
+ports as a chip input, and the save bar. *Website fetching* shows its settings as fields (the allowed ports as a chip
+input, the rest typed). The JSON editor is under *Advanced: edit as JSON* (step 2 below).
+
+On *Models* the FakeGateway's test models (`fake-*`) are behind *Show test models* when the gateway is the fake.
 
 Site profiles and Data protection are lists (a row opens its form in a drawer). **Role groups** (`GET/PUT /api/settings/identity`, M-17 C10) has one list field per role (one group per line):
 platform admin, department admin, pipeline editor, reviewer, editor, viewer. A group must be a `rag-` name or an Entra
@@ -1694,9 +1814,9 @@ A section's form is built in two steps:
 
 1. **The shell:** the forms as they are today (generated from the OpenAPI schema, with the dedicated ones for crawl
    and prompt texts), on the page. Each save is one section, with its `version`, as today.
-2. **Typed members:** a member that is JSON today gets controls of its own (number, switch, select, a small table),
-   with a label, a hint and the default the code uses when it is unset, in `labels.ts`. Order: Chat, Search,
-   Processing, Personal data. JSON stays only under **Advanced (JSON)** for members with no control yet. The server's
+2. **Typed members:** a member that is JSON today gets controls of its own (number, switch, select, a small table), with
+   a label, a hint and the default the code uses when it is unset, in `labels.ts`. Order: Chat, Search, Processing,
+   Personal data. JSON stays only under **Advanced: edit as JSON** for members with no control yet. The server's
    validation is unchanged.
 
 ### 5.11 The setup wizard (user, 2026-11-15; Decisions "Setup wizard"; `work/main.md` M-20)
@@ -1735,6 +1855,105 @@ says to restart kalla-admin when setup has ended without a sign-in. The setup wi
 in M-20 S4 (#769); the Open WebUI step follows S5.
 
 Home shows platform admins a notice 30 days before a client secret's expiry date, with the re-open steps; each notice can be hidden per browser (#773).
+
+### 5.12 Layout rules (user, 2026-11-23; Decisions "Admin API and UI")
+
+Every page is built, and every new page reviewed, against these rules. They change no token, font, radius, colour or
+icon set (the design system stays Fors's, `design-system.lock`); they decide how much asks for attention at once.
+The mockups in [`proposals/admin-ui-ux-pass/mockups/`](../proposals/admin-ui-ux-pass/mockups/) show them.
+
+1. **One primary action per view.** A filled button only for the one thing the page is for (*Create knowledge base*,
+   *Publish draft*, *Save changes*). Other frequent actions are secondary (outlined). Rare and destructive actions go
+   in a **⋯ menu** on the right of the header, *Delete* last and in red, behind its confirmation.
+2. **Data first, controls second.** A list page shows its list on the first screen. Filters are one compact row of
+   chips above the list; a filter that is set is coloured, one that is not is quiet.
+3. **A field is as wide as its answer.** Numbers 8–12 characters, names and selects about 320–400 px, free text up to
+   the form's width. A form column is at most 680 px.
+4. **Group by the question people ask, not by the data model.** "Is it working?", "What does it search?", "Who can
+   use it?", "What does it cost?" each get one place.
+5. **Say it once.** Text that repeats on every row ("Not scanned for malware", *Replace*) goes into the summary or
+   onto the row's menu.
+6. **At most six tabs, each a noun people recognise**; a tab that holds one or two fields joins another.
+7. **One way to save.** A form shows a save bar at its bottom, sticky while the form is longer than the window:
+   *n unsaved changes · Discard · Save changes*. The bar names the consequence when there is one ("Version 1 stays
+   published until you publish the draft").
+8. **Colour only for what needs attention.** Zeros, "none" and "not yet" are grey text, not accent links or badges.
+   Green is for a state someone waits for (*Published*, *Done*); amber and red for something to do.
+9. **One rhythm.** Lists use the full content width; forms one column of at most 680 px, with help or a preview in a
+   second column when there is room; detail pages start with a row of up to four summary tiles.
+10. **As good on a phone.** Below 760 px every page is one column with no sideways scrolling down to 320 px; the
+    primary action spans the width beside the ⋯; tabs stay one row that scrolls; rows become cards; menus become
+    bottom sheets; touch targets are at least 44 × 44 px.
+11. **Accessible by construction.** WCAG 2.2 level AA (EN 301 549) for every component and page, checked by the
+    accessibility spec in the three themes and at phone width (§10.1).
+
+**Shared components**, built from the existing tokens, `UiButton` and the drawer's focus handling: `MenuButton` (the ⋯
+menu, in headers, `DataTable` rows and the file rows), `FilterChip` with `PeriodPicker`, `SaveBar` and `SummaryTile`.
+They are proposed to Fors first; when Fors has not taken one by the time a page needs it, Källa builds it in
+`components/ui/` and offers it upstream.
+
+**Every page:**
+
+- A detail page has a breadcrumb above its title (*Knowledge bases /*); the menu item stays lit.
+- A section's title is inside the card it titles.
+- A radio card shows that it is chosen with a 2 px accent border and the soft accent background
+  (`shadow-inset-selected`, `bg-accent-soft`), not only by its dot.
+- A row's rare actions are on a row ⋯ menu; a bulk bar shows only while rows are selected.
+
+**Filters** (UX pass UX5 C): Feedback, Costs, the Audit log, the Map and the lists' search use one row of chips: a
+period chip with presets (*Last 7 days*, *Last 30 days*, *This month*, *Custom…*, the custom range as two labelled
+date fields in the UI's date format), a chip per filter whose name says the filter and its value ("Rating: Thumbs
+down"), set chips coloured with an × of their own ("Remove the rating filter"), and *Clear filters* while any is set.
+The counts are one line at the end of the row, in a polite live region. *Export* is in the page header. The filters are
+kept in the address (`?period=30d&rating=down`), so a filtered view can be linked, survives a reload and works with
+back and forward; a change never moves focus or reloads the page. On the Audit log *Who* and *Type of object* are
+chips and *Service* and the object filter are under *More filters*; on the Map the department and object filters are
+chips, with *Table* / *Drawing* on the same row, right-aligned.
+
+**Saving** (UX pass UX6 A): every form saves through `SaveBar`: the assistant's draft, search settings, sharing, the
+audience and storage on *Access*, and each Settings section. The bar is a labelled region ("Unsaved changes") that
+appears with a polite announcement; the page has `scroll-padding-bottom` equal to its height, so a focused field is
+never hidden behind it. Leaving a page, or a tab, with unsaved changes asks first in a dialog; *Discard* asks once.
+
+**Drawers:** *Create knowledge base* asks in the order of the decision: name → what goes in (*Files I upload* / *A
+website or addresses*) → who may read it → department and contact, the contact pre-filled and folded into one line
+("Contact: Anna Andersson, anna@… · Change"). *Create assistant* shows *Start from* as template cards with one line
+each, and its department select has the placeholder *Choose a department*. *Add source* shows the type cards on top,
+then only that type's fields, with *Sitemaps* and the advanced crawl fields under *More options*. Every drawer's
+primary button names the result (*Create knowledge base*, *Save and fetch*).
+
+**On a phone** (rule 10): the header is the title and badges, then one row with the primary action across the width
+and the ⋯ button (44 px), which opens a bottom sheet with the desktop menu's items (secondary actions such as *Compare
+with published* move into it). Tabs are one row that scrolls sideways, the active tab scrolled into view and a fade at
+the edge. Tiles go two by two; every table's rows become cards with the column name as each value's label. Filter
+chips wrap to as many rows as needed and the counts take a line of their own. The save bar is fixed above the bottom
+menu, its buttons 44 px high and sharing the width, with padding under the last field equal to its height.
+
+**Accessibility of the components** (rule 11): each follows the WAI-ARIA Authoring Practices pattern named here, and
+each page that changes is tried with the keyboard alone and with a screen reader (NVDA or VoiceOver).
+
+| Component | Pattern and criteria | What it must do |
+|---|---|---|
+| ⋯ menu (`MenuButton`) | APG *Menu button*; 2.1.1, 4.1.2 | A real `button` with `aria-haspopup="menu"`, `aria-expanded` and a name with the object ("More actions for *Demo-assistent*"); arrow keys move, Enter acts, Esc closes and returns focus to the button. On a phone the sheet is a modal dialog with a focus trap and a *Close* button. *Delete…* keeps its confirmation dialog. |
+| Tabs (one scrolling row) | APG *Tabs*; 1.4.10, 2.4.7 | `role="tablist"` with `tab`s, arrow keys between tabs, the selected tab scrolled into view on focus. A tab's dot has text for assistive technology ("Quality, needs attention") and is never the only sign (1.4.1). |
+| Filter chips and period picker | APG *Listbox* in a popover, *Radio group* for presets; 1.3.1, 3.3.2, 4.1.3 | Names as above; a custom range has two labelled date fields with the format shown; the result count in a polite live region. The search keeps an `aria-label`. |
+| Filters in the address | 2.4.2, 3.2.2 | No focus move or reload on a change; the page title can carry the filtered state. |
+| Save bar (`SaveBar`) | 2.4.11, 4.1.3, 3.3.4 | As *Saving* above. |
+| General-knowledge scale | APG *Radio group*; 1.3.1, 3.3.2 | Four real radio buttons in a `radiogroup` named "General knowledge", the chosen level's description tied with `aria-describedby`. |
+| Test panel (chat) | 4.1.3, 1.3.2 | Answers in a `role="log"` with polite announcements; the question field labelled; reading order form → test panel on desktop; on a phone the sheet is a modal dialog. |
+| Summary tiles (`SummaryTile`) | 1.3.1, 1.4.1 | A small heading and a value (or a `dl`); the tile that needs action says so in text besides its coloured border. |
+| Rows as cards | 1.3.1 | The table keeps its semantics (`role="table"`, `row`, `cell`, `columnheader`) when CSS turns rows into cards, or the phone renders a list of cards with the same labels. |
+| Selected radio card | 1.4.11 | The 2 px accent border has a contrast of at least 3:1 against the card and the canvas. |
+| Touch targets | 2.5.8 | At least 24 × 24 px everywhere; 44 × 44 px on a phone; small ghost buttons in rows get padding to reach it. |
+| Reflow, zoom, text spacing | 1.4.4, 1.4.10, 1.4.12 | No sideways scrolling at 320 px or at 400 % zoom; text-spacing overrides do not clip labels (chips and tabs size to their text). |
+| Focus | 2.4.3, 2.4.7, 2.4.13 (AAA, aimed for) | The design system's 2 px focus ring on every control, chips, linked tiles and the bottom menu included; focus order follows the visual order. |
+| Motion | 2.3.3 (AAA, aimed for) | Sheets and the save bar slide only when `prefers-reduced-motion` is not set. |
+| Language and names | 3.1.2, 2.5.3 | Swedish names keep `lang="sv"`; a button's visible text starts its accessible name. |
+
+**How a change is checked:** shown in a browser at 1,440, 390 and 320 px in the three themes, with a keyboard-only
+and a screen-reader pass of each changed page; the accessibility spec (`tests/e2e`) and the menu-structure test
+(`router/*.spec.ts`) updated with the change that alters them; and the browser specs it touches (`tests/e2e`,
+`pilot.spec.ts` drives most tabs, buttons and filters by name) run locally and fixed in the same pull request.
 
 ## 6. Pipelines
 
@@ -1864,14 +2083,14 @@ demonstrably need custom flows (§16).
   the generated layer follows as a regression signal only.
 - **Coverage-threshold proposal** (P1, weakness review §2): the run proposes `coverageMaxDistance` and
   `coverageMinKeywordScore` as the values that best separate the `human` answerable and unanswerable questions
-  (processing §13.6, knowledge design §7), shown as numbers on the card; the editor saves them in Search settings. The
-  histogram stays P2 (§16). Until `coverageMinKeywordScore` is set, not-found is decided by the vector side alone.
-- Retrieval settings form (Search settings tab): all values within V16 ranges saved directly; the following
-  evaluation report shows the effect. A run does not record the values it replaced; the audit log keeps them
-  (`retrieval-settings` before/after, §9.1). The field hints show the code defaults (`RetrievalSettings.Default`),
-  since department admins can't read `Settings.Retrieval`. It includes **Age decay**
-  (`recency`: on/off, half-life in days, weight, document types; weakness review §3), whose effect the gold set's
-  temporal questions show.
+  (processing §13.6, knowledge design §7), shown as numbers on the card; the editor saves them in the search settings
+  (*Tune the search*, §5.5.2). The histogram stays P2 (§16). Until `coverageMinKeywordScore` is set, not-found is
+  decided by the vector side alone.
+- Retrieval settings form (*Tune the search* on the Quality tab, §5.5.2): all values within V16 ranges saved directly;
+  the following evaluation report shows the effect. A run does not record the values it replaced; the audit log keeps
+  them (`retrieval-settings` before/after, §9.1). The field hints show the code defaults (`RetrievalSettings.Default`),
+  since department admins can't read `Settings.Retrieval`. It includes **Age decay** (`recency`: on/off, half-life in
+  days, weight, document types; weakness review §3), whose effect the gold set's temporal questions show.
 
 ### 7.2 Evaluation report card (publish, collection, assistant; P2 skill)
 
@@ -1899,11 +2118,11 @@ Removed (simplification pass): no gate, so no overrides (§16).
 
 **Later (P2):** per-assistant test questions (weakness review §1).
 
-- **Set**: `AssistantTestQuestions` per assistant (V33, ordered by `Ordinal`): question, expected behaviour as free text ("Ska hänvisa till
-  kontaktcenter och inte ange någon avgift"), optional expected document (picked by title in the linked collections)
-  and optional expected phrase. Added on the Test questions tab, from **Save as test question** in Test, or from a feedback
-  row (P2, "rewrite into test question"). The set belongs to the assistant, not to a version, so every version is
-  measured against the same questions; copying an assistant copies its set.
+- **Set**: `AssistantTestQuestions` per assistant (V33, ordered by `Ordinal`): question, expected behaviour as free text
+  ("Ska hänvisa till kontaktcenter och inte ange någon avgift"), optional expected document (picked by title in the
+  linked collections) and optional expected phrase. Added on the assistant's Quality tab, from **Save as test question**
+  in the test panel, or from a feedback row (P2, "rewrite into test question"). The set belongs to the assistant, not to
+  a version, so every version is measured against the same questions; copying an assistant copies its set.
 - **When**: after every publish and restore (on the new published version), and on demand with **Run test questions** on
   the draft or the published version. One run per assistant at a time; an assistant without questions gets no run.
 - **How**: `AssistantTestRunner` in `kalla-admin` (§2.2) runs each question once through `Kalla.Answering` exactly as
@@ -2025,7 +2244,7 @@ gateway's cost and the estimated cost (calls without a gateway cost, priced from
 
 **UI** (C5; every label in `labels.ts`, every sentence in `messages.ts`, Decisions "Admin UI in English"):
 
-- **Assistant page, Statistics tab** (§5.5.4): a *Cost* card with a period picker (last 30 days, by day or month), the
+- **Assistant page, Usage tab** (§5.5.4): a *Cost* card with a period picker (last 30 days, by day or month), the
   total with its gateway and estimated parts, and a table by step (*Answer*, *Condense*, *Long-question condense*,
   *Follow-up suggestions*, *Rerank*, *Query embedding*; P2 agent steps and test runs as their own rows) and by client
   (*Test panel* for `admin-console`), and a table by outcome (*Answered*, *Answered from general knowledge*, *Not
@@ -2036,9 +2255,9 @@ gateway's cost and the estimated cost (calls without a gateway cost, priced from
   filtered to the knowledge base's department for those who see that page.
 - **Costs** (FOLLOW-UP in the navigation, §5.2; department and platform admins): department picker (the header's
   department filter), period and granularity, one row per assistant and knowledge base with its cost, sorted by cost,
-  expandable by step, department totals, and **Download CSV**. A note under the table: "Estimated: {n} calls had no
-  cost from the gateway and are priced from the model list." and "The gateway's figures are the record for internal
-  charging; they also count retries and fallbacks."
+  expandable by step, department totals, and **Export** in the header (*By day*, *By month*; §5.7). A note under the
+  table: "Estimated: {n} calls had no cost from the gateway and are priced from the model list." and "The gateway's
+  figures are the record for internal charging; they also count retries and fallbacks."
 
 ### 8.7 Content gaps (Decisions "Content-gap report")
 
@@ -2055,7 +2274,7 @@ each `not-found` and `answered-general` turn.
   department that the assistant links shows its name and the document's title, as the citations do.
 - **CSV**: `;`, English headers `knowledge_base;document;not_found;answered_general`. Reads and exports are not
   audited: they hold no content.
-- **UI**: on the assistant's Statistics tab (§5.5.4), a *Content gaps* card under *Cost*: the period picker, the line
+- **UI**: on the assistant's Quality tab (§5.5.4), a *Content gaps* card: the period picker, the line
   "{share} of the questions in this period were not answered from the knowledge ({notFound} not found, {general}
   answered from general knowledge).", a table of the 20 nearest documents (title linked to the document in its
   knowledge base for those who may open it, knowledge base, the two counts) with *Show all* and **Download CSV**,
@@ -2145,7 +2364,8 @@ Security events themselves are not stored (ADR 015 pattern): the SIEM is where t
   once; status never by colour alone; long tables with captions and sortable headers (`aria-sort`); generic forms use
   the same field components, so they inherit labels and error focus.
 - **Verification**: copied axe spec (`tests/e2e/specs/accessibility.spec.ts:6-19`) over every routed page and every
-  drawer/dialog in three themes; target size (`helpers.ts:160-172`); reflow at 320 px and 200 % text; **keyboard-only
+  drawer/dialog in three themes, with a phone project at 390 px and the open states of §5.12's components (menu, sheet,
+  period picker, save bar); target size (`helpers.ts:160-172`); reflow at 320 px and 200 % text; **keyboard-only
   run of the pilot journey** (§11.4); Vitest component axe checks; one NVDA + Firefox pass of the pilot journey before
   the pilot (answered 4).
 

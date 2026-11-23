@@ -823,8 +823,8 @@ exists.
     assistant's previous finished `answers` run (data-model §2.2). It records its cost.
   - **A refusal:** the calls run as the assistant's gateway key. When the key or its budget is refused (chat §3.6),
     that assistant's run ends for the night: the row stays unfinished (`FinishedAt` null, no metrics), which the
-    Statistics tab and the attention rule skip, and the next night starts a new run. The key's state is an attention
-    item of its own (admin §5.5.1).
+    assistant's Quality tab and the attention rule skip, and the next night starts a new run. The key's state is an
+    attention item of its own (admin §5.5.1).
   - **Attention:** an Overview attention item when faithfulness or citation precision falls 5 points below its median
     of the assistant's finished runs of the last 28 days, the rule of the retrieval run above (admin §5.5.1).
   - **Where:** it runs in **`kalla-admin`**, which already runs `Kalla.Answering` for the test panel and holds the
