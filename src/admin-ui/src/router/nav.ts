@@ -142,11 +142,18 @@ export const navGroups: NavGroup[] = [
   },
 ]
 
-/** Bottom bar on phones (admin design §5.2); the rest is under Menu. */
-export const mobileTabs: NavItem[] = [
-  { name: 'overview', label: PAGE.overview.title, icon: 'space_dashboard', roles: ALL_ROLES, badge: 'attention' },
-  { name: 'collections', label: PAGE.collections.title, icon: 'library_books', roles: ALL_ROLES },
-]
+/** The side menu's item of that name, so a bottom tab has the same label, icon, roles and badge. */
+function menuItem(name: string): NavItem {
+  const item = navGroups.flatMap((g) => g.items).find((i) => i.name === name)
+  if (!item) throw new Error(`No menu item ${name}`)
+  return { name: item.name, label: item.label, icon: item.icon, roles: item.roles, badge: item.badge, children: item.children }
+}
+
+/**
+ * Bottom bar on phones (admin design §5.2): Home, Knowledge bases, Assistants and Feedback, each filtered by role as in
+ * the side menu (Feedback: FEEDBACK_ROLES), then Menu, which holds the rest and is highlighted on every other page.
+ */
+export const mobileTabs: NavItem[] = ['overview', 'collections', 'assistants', 'feedback'].map(menuItem)
 
 /** True when the current route is the item's page or one of its sub-pages. */
 export function isNavItemActive(item: NavItem, routeName: unknown): boolean {

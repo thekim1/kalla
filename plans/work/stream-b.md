@@ -211,7 +211,7 @@ and fixed in the same pull request, named in its body. **Every step's hand-offs*
 names), and a `stream-a` issue for any change in `src/admin-ui/src/platform/**` (stream a's), built against the
 design meanwhile.
 
-### [ ] B-74 The phone's bottom menu as admin §5.2 says (UX pass step 0)
+### [x] B-74 The phone's bottom menu as admin §5.2 says (UX pass step 0) (#1025)
 - **Do:** `mobileTabs` in `router/nav.ts` gets Assistants and Feedback beside Home and Knowledge bases (Home, Knowledge
   bases, Assistants, Feedback, Menu), each filtered by role like the side menu (Feedback: `FEEDBACK_ROLES`); *Menu*
   stays highlighted for every other page.
