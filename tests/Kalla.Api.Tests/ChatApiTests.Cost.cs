@@ -457,12 +457,12 @@ public sealed partial class ChatApiTests
     [InlineData(true)]
     public async Task Each_answer_records_the_prompt_estimate_over_the_reported_prompt_tokens_once(bool stream)
     {
-        // Chat design §6.3, §17 (#986): rag.chat.prompt.estimate_ratio, one value per answer that reports prompt_tokens.
+        // Chat design §6.3, §17: rag.chat.prompt.estimate_ratio, one value per answer that reports prompt_tokens, by the answer's model.
         var calls = new ConcurrentQueue<CostCall>();
         await using var gateway = CostFake();
         await using var api = CostHost(calls, gateway, rerank: false);
         var meters = api.Services.GetRequiredService<IMeterFactory>();
-        var ratios = new ConcurrentQueue<double>();
+        var ratios = new ConcurrentQueue<(double Value, string? Model)>();
         using var listener = new MeterListener
         {
             InstrumentPublished = (instrument, l) =>
@@ -473,7 +473,16 @@ public sealed partial class ChatApiTests
                 }
             },
         };
-        listener.SetMeasurementEventCallback<double>((_, value, _, _) => ratios.Enqueue(value));
+        listener.SetMeasurementEventCallback<double>((_, value, tags, _) =>
+        {
+            string? model = null;
+            foreach (var tag in tags)
+            {
+                model = tag.Key == "model" ? tag.Value as string : model;
+            }
+
+            ratios.Enqueue((value, model));
+        });
         listener.Start();
         using var client = Client(api, db.IntegrationKey);
 
@@ -483,10 +492,12 @@ public sealed partial class ChatApiTests
 
         var answer = calls.Single(c => c.Step == GatewayChatClient.AnswerStep);
         answer.Tokens.InputTokens.ShouldBeGreaterThan(0);
-        var ratio = ratios.ShouldHaveSingleItem();
-        ratio.ShouldBeGreaterThan(0);
-        // The estimate is characters / 3 + 4 per message; the fake's prompt_tokens are its own count, so only the order of size.
-        ratio.ShouldBeLessThan(100);
+        var (ratio, model) = ratios.ShouldHaveSingleItem();
+        // Estimate over actual: characters / 3 + 4 per message against the fake's characters / 4, so a little above 4/3 and
+        // never below 1 (the division the other way round would be below 1).
+        ratio.ShouldBeGreaterThan(1);
+        ratio.ShouldBeLessThan(2);
+        model.ShouldBe("fors/chat-eu");
     }
 }
 
