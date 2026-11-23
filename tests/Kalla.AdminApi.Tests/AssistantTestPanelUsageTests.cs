@@ -24,7 +24,8 @@ namespace Kalla.AdminApi.Tests;
 /// <c>AssistantDailyUsage</c> under the assistant and the <c>admin-console</c> client row with the FakeGateway's tokens and
 /// cost, never into <c>AssistantDailyTotals</c>; the response's <c>costUsd</c> is the sum of the turn's calls and
 /// <c>costEstimated</c> is true on <c>fake-no-cost</c>; the turn and its cost under its outcome in <c>AssistantDailyOutcomes</c>
-/// (Decisions "Cost per outcome"); a failed write leaves the answer intact.
+/// (Decisions "Cost per outcome"), and a not-found test turn is no content gap (Decisions "Content-gap report"); a failed write
+/// leaves the answer intact.
 /// </summary>
 [Collection(AdminDatabaseGroup4.Name)]
 public sealed class AssistantTestPanelUsageTests(AdminDatabaseFixture database)
@@ -112,6 +113,15 @@ public sealed class AssistantTestPanelUsageTests(AdminDatabaseFixture database)
             outcomes.Sum(o => o.EstimatedCostUsd).ShouldBe(answer.EstimatedCostUsd);
         }
 
+        // Decisions "Content-gap report": a not-found test turn counts under its outcome's cost, never as a content gap.
+        using (var response = await editor.PostAsJsonAsync(path, new { question = "Hur långt är det till månen i kilometer?" }, Ct))
+        {
+            response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
+            (await response.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("answer").GetProperty("outcome").GetString().ShouldBe("not-found");
+            (await db.AssistantDailyOutcomes.AsNoTracking().SingleAsync(o => o.AssistantId == assistant.Id && o.Outcome == "not-found", Ct)).Turns.ShouldBe(1);
+        }
+
+        (await db.AssistantDailyGaps.AsNoTracking().CountAsync(g => g.AssistantId == assistant.Id, Ct)).ShouldBe(0);
         (await db.AssistantDailyTotals.AsNoTracking().CountAsync(t => t.AssistantId == assistant.Id, Ct)).ShouldBe(0);
     }
 

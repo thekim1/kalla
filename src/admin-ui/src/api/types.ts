@@ -1814,6 +1814,35 @@ export interface AssistantCosts extends ObjectCosts {
   outcomes: OutcomeCostRow[]
 }
 
+/**
+ * One nearest document of the content-gap report (admin design §8.7): the knowledge base's name and the document's title, each
+ * null when it is gone or deleted (`deleted`: the document is), or `noHit` (the zero ids) when the search found nothing, or
+ * `notShared` (both null) when the knowledge base is another department's that is no longer shared with the assistant's; `canOpen`
+ * when the caller's departments own the knowledge base; the turns that ended not found and answered from general knowledge.
+ */
+export interface ContentGapRow {
+  collectionId: string
+  documentId: string
+  noHit: boolean
+  collectionName: string | null
+  documentTitle: string | null
+  deleted: boolean
+  notShared: boolean
+  canOpen: boolean
+  notFound: number
+  answeredGeneral: number
+}
+
+/** `GET /api/assistants/{id}/gaps` (admin design §8.7): the period's turns, the two counts and the nearest documents, most first (at most 200). */
+export interface ContentGapReport {
+  from: string
+  to: string
+  turns: number
+  notFound: number
+  answeredGeneral: number
+  documents: ContentGapRow[]
+}
+
 /** A row of `GET /api/costs`: per period, department, object, step and client; `deleted` when the object is gone. */
 export interface DepartmentCostRow extends CostTotals {
   period: string

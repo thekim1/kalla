@@ -28,6 +28,12 @@ public static class ChatOutcomes
     };
 }
 
+/// <summary>
+/// A turn's nearest hit (chat design §12.1; Decisions "Content-gap report"): the knowledge base and document of the search's first
+/// result. Ids only: no title, address or text.
+/// </summary>
+public sealed record NearestHit(Guid CollectionId, Guid DocumentId);
+
 /// <summary>A completed turn as the JSON endpoint writes it.</summary>
 public sealed record ChatCompletion(Guid MessageId, string Model, string Content, IReadOnlyList<UrlCitation> Annotations, IReadOnlyList<PromptSource> Cited,
     int PromptTokens, int CompletionTokens, string FinishReason, ChatOutcome Outcome, DateTimeOffset Created)
@@ -62,6 +68,15 @@ public sealed record ChatPlan(Guid MessageId, string Model, DateTimeOffset Creat
     /// follow-ups add theirs when they answer.
     /// </summary>
     public required TurnUsage Usage { get; init; }
+
+    /// <summary>
+    /// The nearest hit of a turn that ended <c>not-found</c> or <c>answered-general</c> (§12.1; Decisions "Content-gap report"): the
+    /// best-ranked retrieval result's knowledge base and document; null for any other outcome, and when the search found nothing or
+    /// did not run (a request narrowed to no link, §3.8).
+    /// </summary>
+    public NearestHit? Nearest => Outcome is ChatOutcome.NotFound or ChatOutcome.AnsweredGeneral && Retrieval?.Results.MinBy(r => r.Rank) is { } first
+        ? new NearestHit(first.CollectionId, first.DocumentId)
+        : null;
 
     /// <summary>The turn's step times (§9.10): condense and retrieval have added theirs; the answer adds its first event and the end of its text.</summary>
     public required TurnTimings Timings { get; init; }

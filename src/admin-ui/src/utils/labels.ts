@@ -2734,6 +2734,24 @@ export const COSTS = {
   filters: 'Cost filters',
 } as const
 
+/** Content gaps (admin design §8.7; Decisions "Content-gap report"): the card on the assistant's Statistics tab. */
+export const CONTENT_GAPS = {
+  card: 'Content gaps',
+  caption: 'The documents the unanswered questions came nearest to, most first',
+  document: 'Nearest document',
+  knowledgeBase: 'Knowledge base',
+  notFound: 'Not found',
+  /** Short, so the two count columns share the width: the card's sentence says it in full. */
+  answeredGeneral: 'General knowledge',
+  /** The row of the turns whose search found nothing. */
+  noHit: 'No hit',
+  deleted: '(deleted)',
+  /** A knowledge base of another department that the assistant's department may no longer link: no name, no title. */
+  notShared: 'A knowledge base that is no longer shared with this department',
+  showAll: (count: number) => `Show all ${count}`,
+  showFewer: 'Show fewer',
+} as const
+
 /** Continue on a crawl run (#804): goes on from the pages the run left open or failed, instead of starting again. */
 export const CONTINUE_RUN = {
   action: 'Continue',

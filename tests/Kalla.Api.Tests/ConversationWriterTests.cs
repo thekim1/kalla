@@ -13,6 +13,8 @@ namespace Kalla.Api.Tests;
 /// the writer refuses to append to a conversation of another owner or assistant on its own, whatever the MAC said; Open
 /// WebUI chats are one conversation per (user, chat id, assistant), and a resent user message id (a regeneration) is kept once.
 /// Every turn adds one turn and its full cost to its outcome's row of <c>AssistantDailyOutcomes</c> (Decisions "Cost per outcome").
+/// A written not-found or general-knowledge turn adds one to its nearest hit's row of <c>AssistantDailyGaps</c> (Decisions
+/// "Content-gap report"), where the day's totals count it.
 /// </summary>
 public sealed class ConversationWriterTests(KnowledgeFixture db) : IClassFixture<KnowledgeFixture>
 {
@@ -212,6 +214,77 @@ public sealed class ConversationWriterTests(KnowledgeFixture db) : IClassFixture
         {
             ["answered-general"] = (1, 0.0024m, 0m), ["error"] = (1, 0.0003m, 0m), ["unavailable"] = (1, 0m, 0m),
         }, ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task Gaps_count_each_written_low_coverage_turn_under_its_nearest_hit_where_the_totals_count_it()
+    {
+        // §12.2: not-found and answered-general turns per (day, assistant, client, level, outcome, nearest collection, nearest
+        // document), no hit as the zero ids. Answered, cancelled, usage-only, after-turn and duplicate turns add nothing, so the
+        // gap rows add up to the day's NotFound and GeneralAnswers.
+        await using var api = NpgsqlDataSource.Create(db.Connection(RagDatabase.Api));
+        using var meters = new Meters();
+        var writer = new ConversationWriter(api, meters, NullLogger<ConversationWriter>.Instance);
+        var (client, assistant, department) = (Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7());
+        var (collection, document, other) = (Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7());
+        var at = DateTimeOffset.UtcNow;
+        var chat = "chat-" + Guid.CreateVersion7().ToString("N");
+        ChatTurn Asked(string outcome, NearestHit? nearest) =>
+            Turn(Guid.CreateVersion7(), null, assistant, client, "user-N", "internal") with { Outcome = outcome, DepartmentId = department, At = at, Nearest = nearest };
+        var answer = Guid.NewGuid().ToString();
+        var first = Turn(null, chat, assistant, client, "owui:u-1", "internal") with
+        {
+            Outcome = "not-found", DepartmentId = department, At = at, Nearest = new NearestHit(collection, other), UserExternalId = Guid.NewGuid().ToString(), AnswerExternalId = answer,
+        };
+
+        await writer.WriteAsync(
+        [
+            Asked("not-found", new NearestHit(collection, document)),
+            Asked("not-found", new NearestHit(collection, document)),
+            Asked("answered-general", new NearestHit(collection, document)),
+            Asked("not-found", null),
+            Asked("answered", new NearestHit(collection, document)),
+            Asked("cancelled", new NearestHit(collection, document)), // an aborted general-knowledge stream is a cancelled turn
+            first,
+            ChatTurn.UsageOnlyOf(assistant, department, client, "internal", at, [Charged("follow-ups", 0.0004m)]) with { AfterTurn = true, Outcome = "not-found" },
+            ChatTurn.UsageOnlyOf(assistant, department, client, "internal", at, [Charged("condense", 0.0003m)]) with { Error = true },
+        ], Ct);
+        // #698: the same Open WebUI answer id again writes no row, so the totals and the gaps leave it out.
+        await writer.WriteAsync([first with { MessageId = Guid.CreateVersion7(), UserExternalId = Guid.NewGuid().ToString() }], Ct);
+
+        var gaps = await GapsAsync(api, assistant);
+        gaps.ShouldBe(new Dictionary<(string, Guid, Guid), int>
+        {
+            [("not-found", collection, document)] = 2, [("answered-general", collection, document)] = 1, [("not-found", Guid.Empty, Guid.Empty)] = 1,
+            [("not-found", collection, other)] = 1,
+        }, ignoreOrder: true);
+        (await CountAsync(api, $"""
+            SELECT count(*) FROM chat."AssistantDailyGaps"
+            WHERE "AssistantId" = '{assistant}' AND "ClientId" = '{client}' AND "DepartmentId" = '{department}' AND "Classification" = 'internal' AND "Day" = '{StockholmTime.DayOf(at):yyyy-MM-dd}'
+            """)).ShouldBe(4);
+        (await CountAsync(api, $"""SELECT sum("NotFound") FROM chat."AssistantDailyTotals" WHERE "AssistantId" = '{assistant}'""")).ShouldBe(4);
+        (await CountAsync(api, $"""SELECT sum("GeneralAnswers") FROM chat."AssistantDailyTotals" WHERE "AssistantId" = '{assistant}'""")).ShouldBe(1);
+
+        // A later batch adds to the same rows.
+        await writer.WriteAsync([Asked("not-found", new NearestHit(collection, document))], Ct);
+        (await GapsAsync(api, assistant))[("not-found", collection, document)].ShouldBe(3);
+    }
+
+    /// <summary>The assistant's <c>AssistantDailyGaps</c> rows by (outcome, collection, document).</summary>
+    private static async Task<Dictionary<(string, Guid, Guid), int>> GapsAsync(NpgsqlDataSource data, Guid assistant)
+    {
+        await using var command = data.CreateCommand("""
+            SELECT "Outcome", "CollectionId", "DocumentId", "Turns" FROM chat."AssistantDailyGaps" WHERE "AssistantId" = $1
+            """);
+        command.Parameters.Add(new NpgsqlParameter { Value = assistant });
+        await using var reader = await command.ExecuteReaderAsync(Ct);
+        var rows = new Dictionary<(string, Guid, Guid), int>();
+        while (await reader.ReadAsync(Ct))
+        {
+            rows[(reader.GetString(0), reader.GetGuid(1), reader.GetGuid(2))] = reader.GetInt32(3);
+        }
+
+        return rows;
     }
 
     /// <summary>The assistant's <c>AssistantDailyOutcomes</c> rows by outcome: turns, the gateway's cost and the estimate.</summary>

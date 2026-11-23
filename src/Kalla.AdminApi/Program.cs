@@ -207,6 +207,7 @@ app.MapOpenApi().RequireAuthorization(AdminPolicies.Admin);
 app.MapScalarApiReference(o => o.WithTitle("Källa Admin API").WithNonce().DisableDefaultFonts()).RequireAuthorization(AdminPolicies.Admin);
 api.MapGateway();
 api.MapCosts();
+api.MapGaps();
 api.MapEmbeddingProfiles();
 
 app.UseDefaultFiles();

@@ -37,8 +37,7 @@ After P2 wave 1, or beside it when a wave item waits. Each adds its table in a m
 - **Waits on:** nothing.
 - **Read:** Decisions "Cost per outcome"; chat §12.1, §12.2, §18.9; data-model §2.3, §8; admin §4.9, §8.6.
 
-### [ ] B-62 Content-gap report (F7)
-- **Taken:** 2026-11-23, the main session on the user's machine (#1011), branch `b/B-62-content-gaps`.
+### [x] B-62 Content-gap report (F7) (#1022)
 - **Do:** the table `chat."AssistantDailyGaps"` (data-model §2.3, §8's retention); the nearest hit on `ChatTurn`
   (the first retrieval result's collection and document for a `not-found` or `answered-general` turn, *no hit*
   otherwise) and the writer's upsert (chat §12.1, §12.2), never for the test panel; `GET /api/assistants/{id}/gaps`

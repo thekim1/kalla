@@ -168,6 +168,22 @@ internal static class ChatModel
             e.HasIndex(x => new { x.DepartmentId, x.Day });
         });
 
+        // Decisions "Content-gap report": the not-found and general-knowledge turns per nearest hit; no question, subject or conversation.
+        modelBuilder.Entity<AssistantDailyGap>(e =>
+        {
+            e.ToTable("AssistantDailyGaps", ChatSchema, t =>
+            {
+                ClassificationCheck(t, "AssistantDailyGaps");
+                ValuesCheck(t, "AssistantDailyGaps", "Outcome", AssistantDailyGap.Outcomes);
+                t.HasCheckConstraint("CK_AssistantDailyGaps_Turns", "\"Turns\" >= 0");
+            });
+            e.HasKey(x => new { x.Day, x.AssistantId, x.ClientId, x.Classification, x.Outcome, x.CollectionId, x.DocumentId });
+            e.Property(x => x.Classification).HasMaxLength(20);
+            e.Property(x => x.Outcome).HasMaxLength(20);
+            e.Property(x => x.Turns).HasDefaultValue(0);
+            e.HasIndex(x => new { x.DepartmentId, x.Day });
+        });
+
         modelBuilder.Entity<FeedbackImportState>(e =>
         {
             e.ToTable("FeedbackImportState", ChatSchema);

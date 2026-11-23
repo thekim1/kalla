@@ -317,6 +317,37 @@ public sealed class AssistantDailyOutcome
     public decimal EstimatedCostUsd { get; set; }
 }
 
+/// <summary>
+/// Turns that ended <c>not-found</c> or <c>answered-general</c> per Europe/Stockholm day, client, level and nearest hit
+/// (<c>chat."AssistantDailyGaps"</c>, data-model §2.3; Decisions "Content-gap report"; chat design §12.2): the knowledge base and
+/// document of the search's first result, both <see cref="Guid.Empty"/> for <i>no hit</i>. No question, subject or conversation.
+/// Written only by the api's conversation writer, never for the test panel.
+/// </summary>
+public sealed class AssistantDailyGap
+{
+    /// <summary><see cref="Outcome"/>'s values: the two outcomes that count as a gap.</summary>
+    public static IReadOnlyList<string> Outcomes { get; } = [MessageOutcomes.NotFound, MessageOutcomes.AnsweredGeneral];
+
+    public DateOnly Day { get; set; }
+    public Guid AssistantId { get; set; }
+    public Guid ClientId { get; set; }
+    public required string Classification { get; set; }
+
+    /// <summary>One of <see cref="Outcomes"/>.</summary>
+    public required string Outcome { get; set; }
+
+    /// <summary>The first retrieval result's knowledge base (no FK); <see cref="Guid.Empty"/> for <i>no hit</i>.</summary>
+    public Guid CollectionId { get; set; }
+
+    /// <summary>The first retrieval result's document (no FK); <see cref="Guid.Empty"/> for <i>no hit</i>.</summary>
+    public Guid DocumentId { get; set; }
+
+    /// <summary>The assistant's department at the time of the turns.</summary>
+    public Guid DepartmentId { get; set; }
+
+    public int Turns { get; set; }
+}
+
 /// <summary>The watermark of the Open WebUI feedback import per client (<c>chat."FeedbackImportState"</c>, chat design §14.2).</summary>
 public sealed class FeedbackImportState
 {
