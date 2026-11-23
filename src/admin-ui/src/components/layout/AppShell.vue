@@ -67,8 +67,8 @@ function onKey(event: KeyboardEvent): void {
 }
 onMounted(() => {
   window.addEventListener('keydown', onKey)
-  // Home reads the overview itself; elsewhere the badge is read once. A failure leaves no badge.
-  if (ui.attention === null && route.name !== 'overview') {
+  // Home reads the overview itself; elsewhere the badge is read once, for a user with a Källa role. A failure leaves no badge.
+  if (ui.attention === null && route.name !== 'overview' && auth.hasAccess) {
     api.overview().then((o) => (ui.attention = o.attention.length)).catch(() => undefined)
   }
 })

@@ -90,6 +90,9 @@ public static class AttentionList
     /// <summary>The earlier runs a median needs before it is compared with.</summary>
     public const int MedianMinRuns = 3;
 
+    /// <summary><c>Settings.Crawl.IncompleteRunsAlert</c>'s default (the worker's <c>TraversalCompleteness.DefaultAlertThreshold</c>).</summary>
+    public const int DefaultIncompleteRunsAlert = 3;
+
     /// <summary>Failed runs in a row that raise <see cref="AttentionKinds.SourceFailing"/>.</summary>
     public const int FailedRuns = 3;
 
@@ -251,11 +254,8 @@ public static class AttentionList
     private static async Task<List<AttentionItem>> SourceIncompleteAsync(AdminContext admin, CancellationToken ct)
     {
         var crawl = await admin.Db.Settings.AsNoTracking().Select(s => s.Crawl).FirstOrDefaultAsync(ct);
-        var threshold = IntOf(crawl, "IncompleteRunsAlert") ?? 3;
-        if (threshold < 1)
-        {
-            return [];
-        }
+        // As the worker reads it (PlatformCrawlSettings): the member in any case, a value of 0 or less meaning the default.
+        var threshold = IntOf(crawl, "incompleteRunsAlert") is int alert and > 0 ? alert : DefaultIncompleteRunsAlert;
 
         var recent = await (from s in Sources(admin)
                             from c in (from c in admin.Db.CrawlRuns.AsNoTracking()
@@ -277,25 +277,33 @@ public static class AttentionList
     }
 
     /// <summary>
-    /// The gateway key item (§5.5.1): each active assistant and knowledge base in scope with a key the mirror says cannot be
-    /// used (not known, disabled, revoked, expired, its owner inactive, not usable by Källa), whose model list no longer holds
-    /// the model the object answers or embeds with, or whose residencies are all above the object's ceiling.
+    /// The gateway key item (§5.5.1), as V39 checks a key on save: each active assistant and knowledge base in scope whose
+    /// key is not in the mirror, belongs to another department, is not active, has an inactive owner or is not usable by
+    /// Källa; whose model list no longer holds the model the object answers or embeds with; or whose residencies are all
+    /// above the object's ceiling (an assistant's: the strictest of its level and its history-storing clients', as V39).
     /// </summary>
     private static async Task<List<AttentionItem>> GatewayKeysAsync(AdminContext admin, CancellationToken ct)
     {
         var db = admin.Db;
         var departments = DepartmentIds(admin);
-        var assistants = await (from a in db.Assistants.AsNoTracking()
-                                join v in db.AssistantVersions.AsNoTracking() on a.PublishedVersionId ?? a.DraftVersionId equals (Guid?)v.Id into versions
-                                from v in versions.DefaultIfEmpty()
-                                where a.State == AssistantStates.Active && a.DeletedAt == null && a.GatewayKeyId != null && departments.Contains(a.DepartmentId)
-                                select new KeyUser(AttentionObjects.Assistant, a.Id, a.Name, a.DepartmentId, a.Classification, a.GatewayKeyId!.Value, v == null ? null : v.GatewayModel))
-            .ToListAsync(ct);
-        var collections = await (from c in CollectionEndpoints.Scoped(admin).AsNoTracking()
-                                 join p in db.EmbeddingProfiles.AsNoTracking() on c.EmbeddingProfileId equals p.Id
-                                 where c.GatewayKeyId != null
-                                 select new KeyUser(AttentionObjects.Collection, c.Id, c.Name, c.DepartmentId, c.Classification, c.GatewayKeyId!.Value, p.GatewayModel))
-            .ToListAsync(ct);
+        var assistantRows = await (from a in db.Assistants.AsNoTracking()
+                                   join v in db.AssistantVersions.AsNoTracking() on a.PublishedVersionId ?? a.DraftVersionId equals (Guid?)v.Id into versions
+                                   from v in versions.DefaultIfEmpty()
+                                   where a.State == AssistantStates.Active && a.DeletedAt == null && a.GatewayKeyId != null && departments.Contains(a.DepartmentId)
+                                   select new { Assistant = a, Model = v == null ? null : v.GatewayModel }).ToListAsync(ct);
+        var assistantIds = assistantRows.Select(r => r.Assistant.Id).ToList();
+        var audiences = (await (from x in db.AssistantAudiences.AsNoTracking()
+                                join c in db.Clients.AsNoTracking() on x.SubjectId equals c.Id
+                                where assistantIds.Contains(x.AssistantId) && x.Kind == AssistantAudienceKinds.Client
+                                select new { x.AssistantId, Client = c }).ToListAsync(ct))
+            .ToLookup(x => x.AssistantId, x => x.Client);
+        var assistants = assistantRows.Select(r => new KeyUser(AttentionObjects.Assistant, r.Assistant.Id, r.Assistant.Name, r.Assistant.DepartmentId,
+            AssistantRules.Ceiling(r.Assistant, [.. audiences[r.Assistant.Id]]), r.Assistant.GatewayKeyId!.Value, r.Model));
+        var collections = (await (from c in CollectionEndpoints.Scoped(admin).AsNoTracking()
+                                  join p in db.EmbeddingProfiles.AsNoTracking() on c.EmbeddingProfileId equals p.Id
+                                  where c.GatewayKeyId != null
+                                  select new { c.Id, c.Name, c.DepartmentId, c.Classification, KeyId = c.GatewayKeyId!.Value, p.GatewayModel }).ToListAsync(ct))
+            .Select(c => new KeyUser(AttentionObjects.Collection, c.Id, c.Name, c.DepartmentId, ResidencyCeiling.ForLevel(c.Classification), c.KeyId, c.GatewayModel));
         var users = assistants.Concat(collections).ToList();
         var keyIds = users.Select(u => u.KeyId).Distinct().ToList();
         var keys = await db.GatewayKeys.AsNoTracking().Where(k => keyIds.Contains(k.Id)).ToDictionaryAsync(k => k.Id, ct);
@@ -303,12 +311,7 @@ public static class AttentionList
         foreach (var user in users)
         {
             var key = keys.GetValueOrDefault(user.KeyId);
-            var (reason, model) = key is null ? ("unknown", null)
-                : GatewayKeyRules.UnusableReason(key) is { } unusable ? (KeyReasonCode(unusable), null)
-                : user.Model is { Length: > 0 } m && key.AllowedModels.Length > 0 && !key.AllowedModels.Contains(m, StringComparer.Ordinal) ? ("model_lost", m)
-                : key.AllowedResidencies.Length > 0 && !key.AllowedResidencies.Any(r => ResidencyCeiling.TryParse(r, out var residency)
-                    && residency <= ResidencyCeiling.ForLevel(user.Classification)) ? ("residency_lost", null)
-                : ((string?)null, (string?)null);
+            var (reason, model) = KeyProblem(user, key);
             if (reason is not null)
             {
                 items.Add(new AttentionItem(AttentionKinds.GatewayKey, user.ObjectType, user.Id, user.Name, user.DepartmentId, null,
@@ -317,6 +320,34 @@ public static class AttentionList
         }
 
         return items;
+    }
+
+    /// <summary>Why <paramref name="key"/> cannot serve <paramref name="user"/> (V39), with the lost model; (null, null) when it can.</summary>
+    private static (string? Reason, string? Model) KeyProblem(KeyUser user, GatewayKey? key)
+    {
+        if (key is null)
+        {
+            return ("unknown", null);
+        }
+
+        if (key.DepartmentId != user.DepartmentId)
+        {
+            return ("other_department", null);
+        }
+
+        if (GatewayKeyRules.UnusableReason(key) is { } unusable)
+        {
+            return (KeyReasonCode(unusable), null);
+        }
+
+        if (user.Model is { Length: > 0 } model && key.AllowedModels.Length > 0 && !key.AllowedModels.Contains(model, StringComparer.Ordinal))
+        {
+            return ("model_lost", model);
+        }
+
+        return key.AllowedResidencies.Length > 0 && !key.AllowedResidencies.Any(r => ResidencyCeiling.TryParse(r, out var residency) && residency <= user.Ceiling)
+            ? ("residency_lost", null)
+            : (null, null);
     }
 
     /// <summary>V39's status reason as the item's code: <c>unknown</c>, <c>not_active</c>, <c>owner_inactive</c>, <c>not_usable</c>.</summary>
@@ -328,7 +359,7 @@ public static class AttentionList
         _ => "unknown",
     };
 
-    private sealed record KeyUser(string ObjectType, Guid Id, string Name, Guid DepartmentId, string Classification, Guid KeyId, string? Model);
+    private sealed record KeyUser(string ObjectType, Guid Id, string Name, Guid DepartmentId, Residency Ceiling, Guid KeyId, string? Model);
 
     /// <summary>
     /// Each pipeline in scope (a department's own; a platform pipeline for platform admins) whose published version a source
@@ -349,6 +380,12 @@ public static class AttentionList
         }
 
         var workers = await PipelineEndpoints.LiveWorkersAsync(admin, ct);
+        if (workers.Count == 0)
+        {
+            // No worker at all (restarting, or not started yet): Health shows that; every pipeline would read as unsupported.
+            return [];
+        }
+
         var validator = new PipelineValidator(TemplateCatalog.BuiltIn);
         List<AttentionItem> items = [];
         foreach (var p in pipelines)
@@ -512,11 +549,14 @@ public static class AttentionList
         }
     }
 
+    /// <summary>A member of a JSON object read in any case, as the worker's <c>JsonSerializerOptions.Web</c> reads it.</summary>
     private static int? IntOf(string? json, string member)
     {
         try
         {
-            return (string.IsNullOrWhiteSpace(json) ? null : JsonNode.Parse(json) as JsonObject)?[member] is JsonValue v && v.TryGetValue<int>(out var n) ? n : null;
+            var value = (string.IsNullOrWhiteSpace(json) ? null : JsonNode.Parse(json) as JsonObject)?
+                .FirstOrDefault(p => string.Equals(p.Key, member, StringComparison.OrdinalIgnoreCase)).Value;
+            return value is JsonValue v && v.TryGetValue<int>(out var n) ? n : null;
         }
         catch (JsonException)
         {

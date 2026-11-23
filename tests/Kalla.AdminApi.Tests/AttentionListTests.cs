@@ -133,6 +133,27 @@ public sealed class AttentionListTests(AdminDatabaseFixture database)
         (await ItemsAsync(admin, AttentionKinds.SourceIncomplete, seed.Source.Id)).ShouldBeEmpty(); // two are not yet three
         await CrawlAsync(2, false);
         (await ItemsAsync(admin, AttentionKinds.SourceIncomplete, seed.Source.Id)).ShouldHaveSingleItem().GetProperty("details").GetProperty("runs").GetString().ShouldBe("3");
+
+        // Settings.Crawl.incompleteRunsAlert, read as the worker reads it (#978 review): 4 needs a fourth; 0 means the default.
+        if (!await db.Settings.AnyAsync(Ct))
+        {
+            db.Settings.Add(new PlatformSettings());
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var crawl = await db.Settings.AsNoTracking().Select(x => x.Crawl).FirstAsync(Ct);
+        try
+        {
+            await db.Settings.ExecuteUpdateAsync(u => u.SetProperty(x => x.Crawl, "{\"incompleteRunsAlert\": 4}"), Ct);
+            (await ItemsAsync(admin, AttentionKinds.SourceIncomplete, seed.Source.Id)).ShouldBeEmpty();
+            await db.Settings.ExecuteUpdateAsync(u => u.SetProperty(x => x.Crawl, "{\"incompleteRunsAlert\": 0}"), Ct);
+            (await ItemsAsync(admin, AttentionKinds.SourceIncomplete, seed.Source.Id)).ShouldHaveSingleItem();
+        }
+        finally
+        {
+            await db.Settings.ExecuteUpdateAsync(u => u.SetProperty(x => x.Crawl, crawl), Ct);
+        }
+
         await CrawlAsync(3, true);
         (await ItemsAsync(admin, AttentionKinds.SourceIncomplete, seed.Source.Id)).ShouldBeEmpty();
     }
@@ -240,44 +261,96 @@ public sealed class AttentionListTests(AdminDatabaseFixture database)
         (await ReasonAsync()).ShouldBe("residency_lost");
         await db.GatewayKeys.Where(k => k.Id == keyId).ExecuteUpdateAsync(u => u.SetProperty(k => k.AllowedResidencies, Array.Empty<string>()), Ct);
         (await ReasonAsync()).ShouldBeNull();
+
+        // V39's other reasons (#978 review): the owner inactive, not usable by Källa, another department's key.
+        await db.GatewayKeys.Where(k => k.Id == keyId).ExecuteUpdateAsync(u => u.SetProperty(k => k.OwnerActive, false), Ct);
+        (await ReasonAsync()).ShouldBe("owner_inactive");
+        await db.GatewayKeys.Where(k => k.Id == keyId).ExecuteUpdateAsync(u => u.SetProperty(k => k.OwnerActive, true).SetProperty(k => k.Usable, false), Ct);
+        (await ReasonAsync()).ShouldBe("not_usable");
+        await db.GatewayKeys.Where(k => k.Id == keyId).ExecuteUpdateAsync(u => u.SetProperty(k => k.Usable, true).SetProperty(k => k.DepartmentId, Guid.CreateVersion7()), Ct);
+        (await ReasonAsync()).ShouldBe("other_department");
+        await db.GatewayKeys.Where(k => k.Id == keyId).ExecuteUpdateAsync(u => u.SetProperty(k => k.DepartmentId, seed.Department.Id), Ct);
+
+        // The audience's ceiling, as V39: an External-only key is fine for a public assistant until a client that stores
+        // history at the internal level is in its audience (the ceiling is then Eu).
+        await db.Assistants.Where(a => a.Id == assistant.Id).ExecuteUpdateAsync(u => u.SetProperty(a => a.Classification, Classification.Public), Ct);
+        await db.GatewayKeys.Where(k => k.Id == keyId).ExecuteUpdateAsync(u => u.SetProperty(k => k.AllowedResidencies, new[] { "External" }), Ct);
+        (await ReasonAsync()).ShouldBeNull();
+        var client = new Client
+        {
+            Name = "Handläggning " + seed.Code, Kind = ClientKinds.Integration, ClassificationCeiling = Classification.Internal, StoresHistory = true, UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        db.Add(client);
+        await db.SaveChangesAsync(Ct);
+        db.Add(new AssistantAudience { AssistantId = assistant.Id, Kind = AssistantAudienceKinds.Client, SubjectId = client.Id });
+        await db.SaveChangesAsync(Ct);
+        (await ReasonAsync()).ShouldBe("residency_lost");
+
+        // A knowledge base's key: the same item on the knowledge base.
+        var collectionKey = Guid.CreateVersion7();
+        await db.Collections.Where(c => c.Id == seed.Collection.Id).ExecuteUpdateAsync(u => u.SetProperty(c => c.GatewayKeyId, collectionKey), Ct);
+        var onCollection = (await ItemsAsync(admin, AttentionKinds.GatewayKey, seed.Collection.Id)).ShouldHaveSingleItem();
+        (onCollection.GetProperty("objectType").GetString(), onCollection.GetProperty("details").GetProperty("reason").GetString())
+            .ShouldBe((AttentionObjects.Collection, "unknown"));
+        await db.Collections.Where(c => c.Id == seed.Collection.Id).ExecuteUpdateAsync(u => u.SetProperty(c => c.GatewayKeyId, (Guid?)null), Ct);
+        (await ItemsAsync(admin, AttentionKinds.GatewayKey, seed.Collection.Id)).ShouldBeEmpty();
     }
 
     [Fact]
-    public async Task A_published_template_version_no_live_worker_runs_is_raised_and_gone_once_a_worker_supports_it()
+    public async Task A_published_template_version_no_live_worker_runs_is_raised_for_its_scope_and_gone_once_a_worker_supports_it()
     {
         await using var db = TestPostgres.Context(database.Connection(null));
         var seed = await SeedAsync(db);
         var template = TemplateCatalog.BuiltIn.All.Where(t => t.Template.SourceType == SourceTypes.UrlList).MaxBy(t => t.Template.Version)!.Template;
-        var version = new PipelineVersion
+        var definition = JsonSerializer.Serialize(new { schema = PipelineDefinition.CurrentSchema, template = template.Name, templateVersion = template.Version, @params = new { } });
+        async Task PublishAsync(Pipeline pipeline)
         {
-            PipelineId = seed.Pipeline.Id, Number = 1, State = PipelineVersionStates.Published, PublishedAt = DateTimeOffset.UtcNow,
-            Definition = JsonSerializer.Serialize(new { schema = PipelineDefinition.CurrentSchema, template = template.Name, templateVersion = template.Version, @params = new { } }),
-        };
-        db.Add(version);
-        await db.SaveChangesAsync(Ct);
-        await db.Pipelines.Where(p => p.Id == seed.Pipeline.Id).ExecuteUpdateAsync(u => u.SetProperty(p => p.PublishedVersionId, version.Id), Ct);
-        // No live worker of this test supports it (other tests' workers are removed when they end).
-        await db.WorkerInstances.Where(w => w.BuildVersion == "attention").ExecuteDeleteAsync(Ct);
-        await using var factory = Factory();
-        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
-        var supported = await db.WorkerInstances.AnyAsync(w => w.LastHeartbeatAt > DateTimeOffset.UtcNow - PipelineValidator.SupportHeartbeatWindow, Ct);
-        if (!supported)
-        {
-            (await ItemsAsync(admin, AttentionKinds.TemplateUnsupported, seed.Pipeline.Id)).ShouldHaveSingleItem().GetProperty("details").GetProperty("templateVersion")
-                .GetString().ShouldBe(template.Version.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            var version = new PipelineVersion
+            {
+                PipelineId = pipeline.Id, Number = 1, State = PipelineVersionStates.Published, PublishedAt = DateTimeOffset.UtcNow, Definition = definition,
+            };
+            db.Add(version);
+            await db.SaveChangesAsync(Ct);
+            await db.Pipelines.Where(p => p.Id == pipeline.Id).ExecuteUpdateAsync(u => u.SetProperty(p => p.PublishedVersionId, version.Id), Ct);
         }
 
+        await PublishAsync(seed.Pipeline);
+        // A platform pipeline (no department) used by a second source of the same knowledge base: platform admins only.
+        var platformPipeline = new Pipeline { Name = "att-platform-" + seed.Code, TemplateId = "url-list", UpdatedAt = DateTimeOffset.UtcNow };
+        db.Add(platformPipeline);
+        await db.SaveChangesAsync(Ct);
+        db.Add(new Source
+        {
+            CollectionId = seed.Collection.Id, Type = SourceTypes.UrlList, Name = "Plattform " + seed.Code, Classification = seed.Collection.Classification,
+            PipelineId = platformPipeline.Id, UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync(Ct);
+        await PublishAsync(platformPipeline);
+
+        // A live worker that runs none of the template's stage versions (without any live worker the kind is not raised at all).
+        var classes = template.Stages.Keys.SelectMany(s => Stages.Find(s)!.HostClasses).Distinct().ToArray();
+        await db.WorkerInstances.Where(w => w.BuildVersion == "attention").ExecuteDeleteAsync(Ct);
         var instance = new WorkerInstance
         {
-            InstanceId = Guid.CreateVersion7(), BuildVersion = "attention", StartedAt = DateTimeOffset.UtcNow.AddMinutes(-10), LastHeartbeatAt = DateTimeOffset.UtcNow,
-            Classes = template.Stages.Keys.SelectMany(s => Stages.Find(s)!.HostClasses).Distinct().ToArray(),
+            InstanceId = Guid.CreateVersion7(), BuildVersion = "attention", StartedAt = DateTimeOffset.UtcNow.AddMinutes(-10), LastHeartbeatAt = DateTimeOffset.UtcNow, Classes = classes,
         };
         db.WorkerInstances.Add(instance);
-        db.WorkerNodeSupport.AddRange(template.Stages.Select(s => new WorkerNodeSupport { InstanceId = instance.InstanceId, NodeType = s.Key, TypeVersion = s.Value }));
         await db.SaveChangesAsync(Ct);
         try
         {
+            await using var factory = Factory();
+            using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
+            using var platform = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+
+            (await ItemsAsync(admin, AttentionKinds.TemplateUnsupported, seed.Pipeline.Id)).ShouldHaveSingleItem().GetProperty("details").GetProperty("templateVersion")
+                .GetString().ShouldBe(template.Version.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            (await ItemsAsync(admin, AttentionKinds.TemplateUnsupported, platformPipeline.Id)).ShouldBeEmpty();
+            (await ItemsAsync(platform, AttentionKinds.TemplateUnsupported, platformPipeline.Id)).ShouldHaveSingleItem();
+
+            db.WorkerNodeSupport.AddRange(template.Stages.Select(s => new WorkerNodeSupport { InstanceId = instance.InstanceId, NodeType = s.Key, TypeVersion = s.Value }));
+            await db.SaveChangesAsync(Ct);
             (await ItemsAsync(admin, AttentionKinds.TemplateUnsupported, seed.Pipeline.Id)).ShouldBeEmpty();
+            (await ItemsAsync(platform, AttentionKinds.TemplateUnsupported, platformPipeline.Id)).ShouldBeEmpty();
         }
         finally
         {

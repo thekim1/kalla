@@ -55,7 +55,8 @@ const collection = { data: computed<Collection | null>(() => (read.data.value &&
 const shared = computed(() => (read.data.value?.shared ? read.data.value : null))
 const sources = useLoadable<SourceListItem[]>([])
 const evaluation = ref<EvaluationOverview | null>(null)
-const onlyPii = ref(false)
+// `?pii=flagged` (Home's personal-data item, B-59) opens the Documents tab with the flagged filter on.
+const onlyPii = ref(router.currentRoute?.value?.query.pii === 'flagged')
 // The Documents tab; toggling the filter while a page loads keeps only the newest answer (#279 review).
 const documents = useKeysetList((after?: string) =>
   api.documents.list({ collectionId: props.id, pii: onlyPii.value ? 'flagged' : undefined, after, limit: 50 }))

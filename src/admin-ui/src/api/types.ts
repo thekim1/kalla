@@ -1621,7 +1621,6 @@ export interface OverviewHealth {
   modelSync: SyncHealth
 }
 
-/** `GET /api/overview`: Home (admin design §5.5.1): Live, Health, whether any collection is in scope, and the checklists not done yet. */
 /** One Needs-attention item (admin design §5.5.1): its kind, the object it is about and the figures its text names. */
 export interface AttentionItem {
   kind: string
@@ -1633,6 +1632,7 @@ export interface AttentionItem {
   details: Record<string, string>
 }
 
+/** `GET /api/overview`: Home (admin design §5.5.1): Live, Health, whether any collection is in scope, and the checklists not done yet. */
 export interface Overview {
   hasCollections: boolean
   setup: CollectionSetup[]

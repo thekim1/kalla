@@ -385,7 +385,6 @@ export const NOT_FOUND = {
 /** Home's Needs attention (admin design §5.5.1, B-59): one line per item, by kind, with the figures it names. */
 export const ATTENTION = {
   title: (count: number) => `Needs attention (${count})`,
-  none: 'Nothing needs attention.',
   open: 'Show',
   review: 'Review',
   kinds: {
@@ -430,6 +429,7 @@ export const ATTENTION_KEY_REASONS: Record<string, string> = {
   not_active: 'its gateway key is disabled, revoked or expired',
   owner_inactive: 'the team or department of its gateway key is inactive',
   not_usable: 'its gateway key has no residency in common with Källa’s',
+  other_department: 'its gateway key belongs to another department',
   model_lost: 'its gateway key no longer allows the model it uses',
   residency_lost: 'its gateway key no longer allows a residency at its information class',
 }
