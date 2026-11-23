@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings form (proposed)</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block">
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-active="settings">
+<div class="app">
+<main class="main">
+<div class="page">
+  <div class="head"><div><h1>Settings</h1><div class="sub">How the platform answers, fetches and keeps content.</div></div></div>
+  <div style="display:grid;grid-template-columns:220px minmax(0,1fr);gap:40px">
+    <div class="small">
+      <div class="grp" style="padding-left:12px">Answers</div>
+      <div class="nav on">Chat</div><div class="nav">Prompt texts</div><div class="nav">Search</div><div class="nav">Assistant templates</div>
+      <div class="grp" style="padding-left:12px">Content</div>
+      <div class="nav">Website fetching</div><div class="nav">Site profiles</div><div class="nav">Processing</div><div class="nav">Evaluation</div>
+      <div class="grp" style="padding-left:12px">Data protection</div>
+      <div class="nav">Personal data</div><div class="nav">Retention</div><div class="nav">Deletion guard</div>
+      <div class="grp" style="padding-left:12px">Platform</div>
+      <div class="nav">Network</div><div class="nav">Role groups</div>
+    </div>
+    <div class="w-form" style="max-width:680px">
+      <h2 style="font-size:20px;margin:0 0 4px;font-weight:600">Chat</h2>
+      <div class="fg2" style="margin-bottom:22px">Limits and models every assistant shares.</div>
+
+      <div class="card">
+        <div class="section-title" style="margin-top:0">Follow-up questions <i class="pin-i">1</i></div>
+        <div class="section-lead">A follow-up such as “and in summer?” is rewritten into a full question before the search.</div>
+        <div class="field"><label>Model that rewrites follow-up questions</label><div class="input w-md">None (search as asked)<span class="ms caret">expand_more</span></div></div>
+        <div class="field" style="margin-bottom:0"><label>Reasoning effort</label><div class="seg"><div class="on">Not sent</div><div>None</div><div>Low</div><div>Medium</div></div><div class="hint">Only for reasoning models.</div></div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="section-title" style="margin-top:0">Limits <i class="pin-i">2</i></div>
+        <div class="section-lead">Empty: the value shown in grey applies.</div>
+        <div style="display:flex;gap:24px">
+          <div class="field"><label>Longest answer</label><div style="display:flex;align-items:center;gap:8px"><div class="input w-num ph">Model’s limit</div><span class="muted">tokens</span></div></div>
+          <div class="field"><label>Messages per person</label><div style="display:flex;align-items:center;gap:8px"><div class="input w-num ph">20</div><span class="muted">per minute</span></div></div>
+        </div>
+        <div class="field" style="margin-bottom:0"><label>Hosts answers may link to <i class="pin-i">3</i></label>
+          <div class="input" style="height:auto;min-height:38px;padding:6px 8px;flex-wrap:wrap;gap:6px"><span class="chip" style="height:26px">umea.se<span class="ms">close</span></span><span class="chip" style="height:26px">*.umea.se<span class="ms">close</span></span><span class="muted" style="padding-left:4px">Add a host…</span></div>
+          <div class="hint">Other links are removed from answers.</div></div>
+      </div>
+
+      <details style="margin-top:16px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--border);padding:12px 14px"><summary style="list-style:none;display:flex;gap:8px;align-items:center;font-weight:500"><span class="ms">chevron_right</span>Advanced: edit as JSON</summary></details>
+
+      <div class="bar static"><i class="pin-i">4</i><div class="state"><i></i>2 unsaved changes</div><div class="r"><span class="btn ghost">Discard</span><span class="btn primary">Save changes</span></div></div>
+    </div>
+  </div>
+</div>
+</main>
+</div>
+<script src="shell.js"></script>
+</body>
+</html>

@@ -28,6 +28,8 @@ nobody needs to read them end to end.
 
 **Proposals** (not binding until adopted in `decisions.md`), in [`proposals/`](proposals/), each with a status line.
 With something still to choose from:
+- [`admin-ui-ux-pass.md`](proposals/admin-ui-ux-pass.md): a UX pass over every admin page (layout, grouping,
+  placement, names) with mockups; six decisions UX1–UX6 for the user (2026-11-23).
 - [`support-chatbot-features.md`](proposals/support-chatbot-features.md): ten candidates for a support chatbot; F3,
   F4 and F8 are built, F10 and F7 (2026-11-21) and F6 (2026-11-22) are picked and queued, the rest is the user's pick.
 - [`architecture-plans.md`](proposals/architecture-plans.md): knowledge, assistants and models (2026-11-02); the roadmap
