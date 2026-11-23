@@ -414,6 +414,12 @@ export const CONTENT_GAP_MESSAGES = {
   empty: 'No question in this period ended not found or was answered from general knowledge.',
 } as const
 
+/** The sentences of the Feedback on documents card (admin design §8.8, B-66). */
+export const DOCUMENT_FEEDBACK_MESSAGES = {
+  explanation: 'A document counts each time an answer that cited it was rated. A downvote may be about the answer, not the document.',
+  empty: 'No rated answer cited this knowledge base in this period.',
+} as const
+
 /** When the problem has no code we know: by status. */
 export const STATUS_MESSAGES = {
   offline: 'The server cannot be reached. Check your connection and try again.',

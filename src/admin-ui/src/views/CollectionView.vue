@@ -6,6 +6,7 @@ import { useKeysetList } from '@/composables/useKeysetList'
 import { useTabQuery } from '@/composables/useTabQuery'
 import type { Collection, CostQuery, CollectionRead, CollectionSetup, DocumentSummary, EvaluationOverview, Source, SourceListItem, SourceSummary } from '@/api/types'
 import CollectionSharing from '@/components/collections/CollectionSharing.vue'
+import DocumentFeedbackCard from '@/components/collections/DocumentFeedbackCard.vue'
 import CollectionTopics from '@/components/collections/CollectionTopics.vue'
 import SetupChecklist from '@/components/collections/SetupChecklist.vue'
 import EvaluationTab from '@/components/evaluation/EvaluationTab.vue'
@@ -350,6 +351,8 @@ onMounted(load)
           kind="collection" :source="collectionCosts" :gateway-key-id="collection.data.value.gatewayKeyId" :department-id="collection.data.value.departmentId"
           :costs-link="canPublish ? { name: 'costs', query: { departmentId: collection.data.value.departmentId } } : null"
         />
+        <!-- Admin §8.8: the ratings of the answers that cited its documents, over every assistant; the owning department's only. -->
+        <DocumentFeedbackCard :collection-id="collection.data.value.id" />
       </div>
 
       <div v-else-if="tab === 'files'" id="collection-panel-files" role="tabpanel" aria-labelledby="collection-tab-files" class="grid gap-4">

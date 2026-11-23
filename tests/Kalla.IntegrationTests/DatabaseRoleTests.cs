@@ -49,8 +49,9 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
         string[] servingContent = ["content.EvaluationSets", "content.EvaluationQuestions", .. evaluationWrites, "content.RetrievalStats"];
 
         // Chat (P1b item 1, data-model §2.3): the api owns it, the admin reads it (and marks feedback reviewed, a column
-        // grant), the worker has no access. The content-gap counts (Decisions "Content-gap report") are the api's alone: no test-panel write.
-        string[] chat = [.. new[] { "Conversations", "DataKeys", "Messages", "MessageSources", "Feedback", "ToolCalls", "AssistantDailyTotals", "FeedbackImportState", "AssistantDailyUsage", "AssistantDailyOutcomes", "AssistantDailyGaps" }
+        // grant), the worker has no access. The content-gap counts (Decisions "Content-gap report") and the ratings per cited document
+        // (Decisions "Downvotes per document") are the api's alone: no test-panel write.
+        string[] chat = [.. new[] { "Conversations", "DataKeys", "Messages", "MessageSources", "Feedback", "ToolCalls", "AssistantDailyTotals", "FeedbackImportState", "AssistantDailyUsage", "AssistantDailyOutcomes", "AssistantDailyGaps", "DocumentDailyFeedback" }
             .Select(t => "chat." + t)];
 
         // Cost per step (data-model §1.2, §2.2, §2.3; cost-attribution §5): the worker writes its knowledge bases' usage, the

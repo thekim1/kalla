@@ -421,6 +421,57 @@ public sealed class AttentionListTests(AdminDatabaseFixture database)
     }
 
     [Fact]
+    public async Task A_document_cited_in_three_downvoted_answers_in_seven_days_is_raised_for_the_owning_department_only_and_gone_when_fewer()
+    {
+        // §5.5.1, §8.8 (Decisions "Downvotes per document"): summed over every assistant that cited it, the owning department's
+        // item; a department the knowledge base is shared with does not get it. Days well inside and outside the window.
+        await using var db = TestPostgres.Context(database.Connection(null));
+        var seed = await SeedAsync(db);
+        var shared = new Department { Id = Guid.CreateVersion7(), Name = "Delad " + seed.Code, CostCenterCode = "S" + seed.Code, SyncedAt = DateTimeOffset.UtcNow };
+        Document Page(string slug, DateTimeOffset? deleted = null)
+        {
+            var url = $"https://www.umea.se/{seed.Code}/{slug}";
+            return new Document
+            {
+                SourceId = seed.Source.Id, Classification = Classification.Internal, IdentityKind = "url", CanonicalIdentity = url, Url = url, Title = "Sida " + slug,
+                IdentityHash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(url)), DeletedAt = deleted,
+            };
+        }
+
+        var (cited, fewer, deleted) = (Page("altan"), Page("plank"), Page("garage", DateTimeOffset.UtcNow));
+        db.AddRange(shared, cited, fewer, deleted);
+        await db.Collections.Where(c => c.Id == seed.Collection.Id).ExecuteUpdateAsync(u => u.SetProperty(c => c.SharedWith, CollectionSharingLevels.Municipality), Ct);
+        var today = StockholmTime.DayOf(DateTimeOffset.UtcNow);
+        var (own, foreign) = (Guid.CreateVersion7(), Guid.CreateVersion7());
+        DocumentDailyFeedback Row(Document document, int daysAgo, Guid assistant, Guid department, int down) => new()
+        {
+            Day = today.AddDays(-daysAgo), AssistantId = assistant, ClientId = Guid.CreateVersion7(), Classification = Classification.Internal,
+            CollectionId = seed.Collection.Id, DocumentId = document.Id, DepartmentId = department, ThumbsDown = down, ThumbsUp = 1,
+        };
+        db.DocumentDailyFeedback.AddRange(
+            Row(cited, 1, own, seed.Department.Id, 2),
+            Row(cited, 3, foreign, shared.Id, 1), // the shared department's assistant counts too
+            Row(fewer, 1, own, seed.Department.Id, 2),
+            Row(fewer, 10, own, seed.Department.Id, 5), // outside the 7 days
+            Row(deleted, 1, own, seed.Department.Id, 5)); // a deleted document needs no attention
+        await db.SaveChangesAsync(Ct);
+        await using var factory = Factory();
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, seed.Code);
+        using var sharedAdmin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, shared.CostCenterCode);
+
+        var item = (await ItemsAsync(admin, AttentionKinds.DocumentDownvoted, seed.Collection.Id)).ShouldHaveSingleItem();
+        (item.GetProperty("objectType").GetString(), item.GetProperty("objectName").GetString(), item.GetProperty("departmentId").GetGuid())
+            .ShouldBe((AttentionObjects.Collection, seed.Collection.Name, seed.Department.Id));
+        var details = item.GetProperty("details");
+        (details.GetProperty("documentId").GetString(), details.GetProperty("documentTitle").GetString(), details.GetProperty("downvotes").GetString(),
+            details.GetProperty("days").GetString()).ShouldBe((cited.Id.ToString(), "Sida altan", "3", "7"));
+        (await ItemsAsync(sharedAdmin, AttentionKinds.DocumentDownvoted, seed.Collection.Id)).ShouldBeEmpty();
+
+        await db.DocumentDailyFeedback.Where(f => f.DocumentId == cited.Id && f.AssistantId == foreign).ExecuteUpdateAsync(u => u.SetProperty(f => f.ThumbsDown, 0), Ct);
+        (await ItemsAsync(admin, AttentionKinds.DocumentDownvoted, seed.Collection.Id)).ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task A_failing_feedback_import_and_a_platform_model_out_of_the_ceiling_are_platform_admin_items()
     {
         await using var db = TestPostgres.Context(database.Connection(null));

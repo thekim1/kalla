@@ -103,6 +103,7 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
     public DbSet<AssistantDailyUsage> AssistantDailyUsage => Set<AssistantDailyUsage>();
     public DbSet<AssistantDailyOutcome> AssistantDailyOutcomes => Set<AssistantDailyOutcome>();
     public DbSet<AssistantDailyGap> AssistantDailyGaps => Set<AssistantDailyGap>();
+    public DbSet<DocumentDailyFeedback> DocumentDailyFeedback => Set<DocumentDailyFeedback>();
     public DbSet<FeedbackImportState> FeedbackImportState => Set<FeedbackImportState>();
 
     /// <summary>Npgsql options every registration of the context uses (service, design time, tests).</summary>

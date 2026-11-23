@@ -16,9 +16,10 @@ public sealed record OwuiFeedback(string Id, string UserId, long UpdatedAt, shor
 /// instances (<c>pg_try_advisory_xact_lock</c> held for the run). It pages <c>/api/v1/evaluations/feedbacks/list</c> newest first until an item is
 /// older than the watermark − 1 h (≤ 50 pages), maps each item by (client, <c>owui:</c> user, chat id, assistant of
 /// <c>model_id</c>) and <c>ExternalMessageId</c>, and upserts <c>chat."Feedback"</c> (<c>owui-import</c>, by its id) with
-/// the rating, score and reason category; comments and reasons' text are dropped (history mode <c>none</c>). Unmapped items
-/// are retried for 24 h (the turn may still be queued), then counted. The same run deletes Open WebUI feedback older than
-/// the client's <c>ClientRetentionDays</c> through its API.
+/// the rating, score and reason category, moving the daily totals and the cited documents' counts by the delta as §14.1;
+/// comments and reasons' text are dropped (history mode <c>none</c>). Unmapped items are retried for 24 h (the turn may
+/// still be queued), then counted. The same run deletes Open WebUI feedback older than the client's
+/// <c>ClientRetentionDays</c> through its API.
 /// </summary>
 public sealed partial class FeedbackImporter(
     IHttpClientFactory clients, NpgsqlDataSource data, IPolicySnapshotSource snapshots, IOptionsMonitor<OpenWebUiOptions> options, TimeProvider time,
@@ -226,8 +227,8 @@ public sealed partial class FeedbackImporter(
             await upsert.ExecuteNonQueryAsync(ct);
         }
 
-        await FeedbackEndpoints.AddRatingToTotalsAsync(connection, transaction, at, assistant.Id, clientId, level, assistant.DepartmentId, previous, item.Rating.Value,
-            ct);
+        await FeedbackEndpoints.AddRatingToCountsAsync(connection, transaction, messageId, at, assistant.Id, clientId, level, assistant.DepartmentId, previous,
+            item.Rating.Value, ct);
         await transaction.CommitAsync(ct);
         return "imported";
     }
