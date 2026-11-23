@@ -56,7 +56,7 @@ tables in one migration of its own (no backward compatibility before production)
 - **Waits on:** `v0.9.0`.
 - **Read:** admin §4.5 (versions, publish), §11.1.
 
-### [x] B-57 Test questions per assistant
+### [x] B-57 Test questions per assistant (#956)
 - **Do:** admin §7.4: `config."AssistantTestQuestions"` (data-model), `GET/POST/PUT/DELETE
   /api/assistants/{id}/test-questions[/{qid}]` with V33, `AssistantTestRunner` in kalla-admin (each question through
   `Kalla.Answering` as the test panel runs it, the expected document, phrase and behaviour checks, the answer
