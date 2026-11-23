@@ -102,7 +102,7 @@ tables in one migration of its own (no backward compatibility before production)
   (the Statistics tab), §5.10, §7.2; data-model §2.1 (`Settings`), §2.2 (`EvaluationRuns`), §8; chat design
   (`uncited_answer`).
 
-### [x] B-59 Home: *Needs attention* (#PR)
+### [x] B-59 Home: *Needs attention* (#978)
 - **Do:** admin §5.5.1: `GET /api/overview`'s attention list for the caller's scope (a kind, the object, the reason, a
   link) with the twelve items that §5.5.1's table marks *the list* (V32's Overview warning among them), the *Needs
   attention* card at the top of Home and the badge count; one query per kind, each from data the admin already has.
