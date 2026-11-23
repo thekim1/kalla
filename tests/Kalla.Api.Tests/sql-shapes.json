@@ -50,7 +50,7 @@
   "Infrastructure.Jobs.PostgresJobQueue.ReadyDepartmentsSql": ["DepartmentId uuid", "max smallint", "min timestamp with time zone", "?column? interval"],
   "Infrastructure.Jobs.PostgresJobQueue.ReleaseSql": ["State character varying", "Class character varying"],
   "Infrastructure.Persistence.RagDatabaseMigrator.MigrateAsync#1": ["created integer", "dropped integer", "default_rows bigint"],
-  "Infrastructure.Persistence.RagDbContext.AssistantVersionsLinking#1": ["Id uuid", "AssistantId uuid", "Number integer", "State character varying", "GatewayModel character varying", "SystemPrompt text", "QuerySteps jsonb", "NotFound jsonb", "RestoredFromVersionId uuid", "CreatedBy character varying", "CreatedAt timestamp with time zone", "UpdatedAt timestamp with time zone", "UpdatedBy character varying", "PublishedBy character varying", "PublishedAt timestamp with time zone", "CollectionLinks jsonb", "xmin xid"],
+  "Infrastructure.Persistence.RagDbContext.AssistantVersionsLinking#1": ["Id uuid", "AssistantId uuid", "Number integer", "State character varying", "GatewayModel character varying", "SystemPrompt text", "QuerySteps jsonb", "NotFound jsonb", "RestoredFromVersionId uuid", "CreatedBy character varying", "CreatedAt timestamp with time zone", "UpdatedAt timestamp with time zone", "UpdatedBy character varying", "PublishedBy character varying", "PublishedAt timestamp with time zone", "CollectionLinks jsonb", "TestRunId uuid", "xmin xid"],
   "Infrastructure.Persistence.SchemaAdmissionService.StartAsync#1": ["?column? boolean"],
   "Infrastructure.Persistence.SchemaAdmissionService.StartAsync#2": ["kalla_admit void"],
   "Retrieval.Postgres.RetrievalStatements.CountChunks": ["EmbeddingProfileId uuid", "CollectionId uuid", "Tags text[]", "count bigint"],

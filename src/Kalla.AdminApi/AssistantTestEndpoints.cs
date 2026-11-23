@@ -12,6 +12,7 @@ using Kalla.Domain.Admin;
 using Kalla.Domain.Retrieval;
 using Kalla.Infrastructure.Access;
 using Kalla.Infrastructure.Gateway;
+using Kalla.Infrastructure.Persistence;
 
 namespace Kalla.AdminApi;
 
@@ -74,12 +75,34 @@ public sealed partial class AdminTestPanel(
             throw AdminFaults.Field("gatewayModel", AdminErrorCodes.InvalidValue);
         }
 
-        var configVersion = await admin.Db.ConfigVersion.AsNoTracking().Select(x => x.Version).SingleAsync(ct);
+        return await AnswerAsync(admin.Db, admin.Actor ?? "admin", assistant, version, request, "chat-answer", ct);
+    }
+
+    /// <summary>
+    /// One question answered by <paramref name="version"/> as the panel does (§4.9): the snapshot view with the version as the
+    /// assistant's published one, the <c>admin-console</c> client, the assistant's gateway key, the usage written under
+    /// <c>admin-console</c>. <paramref name="answerStep"/> is the answer call's <c>x-fors-step</c> (<c>chat-answer</c> in the panel,
+    /// <c>assistant-test</c> for a test-question run, §7.4). Used outside a request by <see cref="AssistantTestRunner"/>.
+    /// </summary>
+    public async Task<AssistantTestResult> AnswerAsync(RagDbContext db, string actor, Domain.Entities.Assistant assistant, Domain.Entities.AssistantVersion version,
+        AssistantTestRequest request, string answerStep, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(assistant);
+        ArgumentNullException.ThrowIfNull(version);
+        ArgumentNullException.ThrowIfNull(request);
+        var id = assistant.Id;
+        if (string.IsNullOrWhiteSpace(version.GatewayModel))
+        {
+            throw AdminFaults.Field("gatewayModel", AdminErrorCodes.InvalidValue);
+        }
+
+        var configVersion = await db.ConfigVersion.AsNoTracking().Select(x => x.Version).SingleAsync(ct);
         var current = await snapshots.LoadAsync(configVersion, ct);
-        var audience = await admin.Db.AssistantAudiences.AsNoTracking().Where(a => a.AssistantId == id && a.Kind == Domain.Entities.AssistantAudienceKinds.Client)
+        var audience = await db.AssistantAudiences.AsNoTracking().Where(a => a.AssistantId == id && a.Kind == Domain.Entities.AssistantAudienceKinds.Client)
             .Select(a => a.SubjectId).ToListAsync(ct);
         var (view, client, notPublished) = View(current, assistant, version, audience, request.History.Count > 0);
-        var who = new RagPrincipal(SubjectKind.EntraUser, admin.Actor ?? "admin", null, null, client, CredentialKind.AccessToken, null,
+        var who = new RagPrincipal(SubjectKind.EntraUser, actor, null, null, client, CredentialKind.AccessToken, null,
             new HashSet<string>(StringComparer.Ordinal), new MembershipFacts(new HashSet<Guid>(), new HashSet<string>(StringComparer.Ordinal), true), view.Version);
 
         var source = new FixedSnapshot(view);
@@ -115,7 +138,7 @@ public sealed partial class AdminTestPanel(
             {
                 var call = Stopwatch.GetTimestamp();
                 answer = await gateway.CompleteAsync(version.GatewayModel, plan.Ceiling, plan.Prompt!.Messages, plan.MaxTokens, plan.Settings.Temperature, plan.MessageId,
-                    "chat-answer", ct, usage: usage.Add);
+                    answerStep, ct, usage: usage.Add);
                 latencyMs = Stopwatch.GetElapsedTime(call).TotalMilliseconds;
                 var transducer = new AnswerTransducer(plan.Prompt.Sources, plan.Platform.AllowedLinkHosts, plan.Language);
                 var pieces = transducer.Feed(answer.Text).Concat(transducer.Flush()).OfType<AnswerPiece.Text>();
@@ -168,6 +191,30 @@ public sealed partial class AdminTestPanel(
         {
             // A turn that failed after a model call still paid for it (chat §12.1); after an answer nothing is left to take.
             await WriteUsageAsync(row, assistant, client.Ceiling, usage.Started, usage.Take());
+        }
+    }
+
+    /// <summary>
+    /// One call of the answer judge (§7.4) for <paramref name="assistant"/>: <paramref name="model"/> at the assistant's level, as
+    /// its gateway key, <c>x-fors-step: assistant-test-judge</c>; its usage written under <c>admin-console</c> like the panel's.
+    /// Returns the model's text.
+    /// </summary>
+    public async Task<string> JudgeAsync(Domain.Entities.Assistant assistant, string model, IReadOnlyList<ChatMessageIn> messages, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(assistant);
+        ArgumentNullException.ThrowIfNull(messages);
+        var current = snapshots.Current;
+        var usage = new TurnUsage(current.ModelPrices, time.GetUtcNow());
+        using var acting = GatewayCallScope.Begin(new GatewayCall(assistant.GatewayKeyId, AssistantId: assistant.Id));
+        try
+        {
+            var answer = await gateway.CompleteAsync(model, ResidencyCeiling.ForLevel(assistant.Classification), messages, AssistantTestJudge.MaxTokens, 0, Guid.CreateVersion7(),
+                AssistantTestJudge.Step, ct, usage: usage.Add);
+            return answer.Text;
+        }
+        finally
+        {
+            await WriteUsageAsync(AdminConsoleRow(current), assistant, assistant.Classification, usage.Started, usage.Take());
         }
     }
 

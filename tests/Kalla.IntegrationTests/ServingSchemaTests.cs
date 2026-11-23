@@ -23,8 +23,8 @@ public sealed class ServingSchemaTests(RagDatabaseFixture database)
     public async Task P2_tables_columns_and_values_are_absent()
     {
         var superuser = database.Connection(null);
-        // data-model §15 (weakness review §1): built in P2. AssistantTemplates came with B-54.
-        foreach (var table in new[] { "AssistantTestQuestions", "AssistantCollections", "AssistantSkills" })
+        // data-model §15 (weakness review §1): built in P2. AssistantTemplates came with B-54, AssistantTestQuestions with B-57.
+        foreach (var table in new[] { "AssistantCollections", "AssistantSkills" })
         {
             (await Sql.ScalarAsync<string>(superuser, $"SELECT to_regclass('config.\"{table}\"')::text")).ShouldBeNull(table);
         }
@@ -34,10 +34,9 @@ public sealed class ServingSchemaTests(RagDatabaseFixture database)
             """)];
         foreach (var column in new[]
                  {
-                     "Assistants.Mode", "AssistantVersions.Skills", "AssistantVersions.TestRunId", "EvaluationQuestions.SkillVersionId",
+                     "Assistants.Mode", "AssistantVersions.Skills", "EvaluationQuestions.SkillVersionId",
                      "EvaluationRuns.Faithfulness", "EvaluationRuns.CitationPrecision", "EvaluationResults.Faithfulness",
-                     "EvaluationResults.CitationPrecision", "EvaluationResults.Verdict", "EvaluationResults.Question",
-                     "EvaluationResults.Answer", "EvaluationResults.JudgeNote",
+                     "EvaluationResults.CitationPrecision",
                  })
         {
             columns.ShouldNotContain(column);
@@ -45,16 +44,16 @@ public sealed class ServingSchemaTests(RagDatabaseFixture database)
 
         // P2 values are refused until P2 adds them; P1 assistants keep history mode none (weakness review §4).
         (await ConstraintAsync("CK_EvaluationRuns_Kind")).ShouldNotContain("answers");
-        (await ConstraintAsync("CK_EvaluationRuns_Kind")).ShouldNotContain("assistant-tests");
+        (await ConstraintAsync("CK_EvaluationRuns_Kind")).ShouldContain("assistant-tests"); // B-57
         (await ConstraintAsync("CK_EvaluationRuns_Kind")).ShouldNotContain("skill-gate");
         (await ConstraintAsync("CK_EvaluationQuestions_Layer")).ShouldNotContain("feedback");
         (await ConstraintAsync("CK_EvaluationQuestions_Layer")).ShouldNotContain("skill");
         (await ConstraintAsync("CK_AssistantAudiences_Kind")).ShouldNotContain("department");
         (await ConstraintAsync("CK_Assistants_HistoryMode")).ShouldNotContain("stored");
-        // The partial index of assistant-tests runs comes with that kind.
+        // The partial index of assistant-tests runs came with that kind (B-57).
         (await Sql.ScalarAsync<long>(superuser, """
             SELECT count(*) FROM pg_indexes WHERE schemaname = 'content' AND tablename = 'EvaluationRuns' AND indexdef LIKE '%SubjectId%'
-            """)).ShouldBe(0);
+            """)).ShouldBe(1);
     }
 
     [Fact]

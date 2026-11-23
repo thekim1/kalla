@@ -357,6 +357,26 @@
       "message": "The model could not answer the test question ({reason}). Try again."
     },
     {
+      "code": "test_question_invalid",
+      "status": 409,
+      "message": "The test question is not valid: {rule}."
+    },
+    {
+      "code": "test_question_document_unlinked",
+      "status": 409,
+      "message": "The expected document is not in a knowledge base the assistant uses."
+    },
+    {
+      "code": "test_run_running",
+      "status": 409,
+      "message": "The test questions are already running. Wait for that run to finish."
+    },
+    {
+      "code": "no_test_questions",
+      "status": 409,
+      "message": "The assistant has no test questions to run."
+    },
+    {
       "code": "pipeline_params_invalid",
       "status": 400,
       "message": "The setting {param} is not valid for this processing: {message}"

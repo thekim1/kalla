@@ -16,6 +16,7 @@ public static class AuditEntityTypes
     public const string SiteProfile = "siteprofile";
     public const string Assistant = "assistant";
     public const string AssistantTemplate = "assistanttemplate";
+    public const string AssistantTest = "assistanttest";
     public const string Source = "source";
     public const string Run = "run";
     public const string Document = "document";

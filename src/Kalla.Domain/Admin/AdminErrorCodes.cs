@@ -242,6 +242,19 @@ public static class AdminErrorCodes
     /// <summary>The test panel's answer failed at the model (chat design §3.6: <c>{reason}</c>).</summary>
     public static AdminErrorCode TestAnswerFailed { get; } = new("test_answer_failed", 502, "The model could not answer the test question ({reason}). Try again.");
 
+    /// <summary>V33 (admin design §7.4): too many test questions, or a text out of range.</summary>
+    public static AdminErrorCode TestQuestionInvalid { get; } = new("test_question_invalid", 409, "The test question is not valid: {rule}.");
+
+    /// <summary>V33: the expected document is not in a knowledge base the draft or the published version links.</summary>
+    public static AdminErrorCode TestQuestionDocumentUnlinked { get; } = new("test_question_document_unlinked", 409,
+        "The expected document is not in a knowledge base the assistant uses.");
+
+    /// <summary>§7.4: one test-question run per assistant at a time.</summary>
+    public static AdminErrorCode TestRunRunning { get; } = new("test_run_running", 409, "The test questions are already running. Wait for that run to finish.");
+
+    /// <summary>§7.4: an assistant without test questions gets no run.</summary>
+    public static AdminErrorCode NoTestQuestions { get; } = new("no_test_questions", 409, "The assistant has no test questions to run.");
+
     /// <summary>V24: the pipeline's parameters are not valid for its template version.</summary>
     public static AdminErrorCode PipelineParamsInvalid { get; } = new("pipeline_params_invalid", 400, "The setting {param} is not valid for this processing: {message}");
 
@@ -357,7 +370,7 @@ public static class AdminErrorCodes
             SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, ClientManagedByDeployment, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
             KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment,
             NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared, TopicInvalid, CollectionSharedInUse,
-            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgePublicUnconfirmed, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency, CrawlPolitenessInvalid, FileNotRestorable, ProfileInUse, ProfileTestFailed, PromptTextInvalid,
+            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgePublicUnconfirmed, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, TestQuestionInvalid, TestQuestionDocumentUnlinked, TestRunRunning, NoTestQuestions, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency, CrawlPolitenessInvalid, FileNotRestorable, ProfileInUse, ProfileTestFailed, PromptTextInvalid,
             GatewayKeyInvalid, GatewayKeyResidency, GatewayKeyModel, GatewayKeyModelResidency, GatewayKeyEmbeddingResidency, GatewayKeyRequired, GatewayKeySystemPrompt, PeriodTooLong, TestAssistantUnavailable, TestBudgetExceeded, SignInNotConfigured,
             SetupCodeInvalid, SetupAttemptsExhausted, SetupSessionRequired, SetupTestRefused, SetupTestRequired, MoveNotConfirmed, MovePipelineDepartment, RunNotContinuable];
 }

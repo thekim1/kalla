@@ -467,6 +467,64 @@ namespace Kalla.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Kalla.Domain.Entities.AssistantTestQuestion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssistantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ExpectedBehaviour")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("ExpectedDocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ExpectedPhrase")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<short>("Ordinal")
+                        .HasColumnType("smallint");
+
+                    b.Property<string>("Question")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssistantId");
+
+                    b.ToTable("AssistantTestQuestions", "config", t =>
+                        {
+                            t.HasCheckConstraint("CK_AssistantTestQuestions_Ordinal", "\"Ordinal\" >= 0");
+
+                            t.HasCheckConstraint("CK_AssistantTestQuestions_Texts", "char_length(\"Question\") BETWEEN 1 AND 2000 AND char_length(\"ExpectedBehaviour\") BETWEEN 1 AND 2000");
+                        });
+                });
+
             modelBuilder.Entity("Kalla.Domain.Entities.AssistantVersion", b =>
                 {
                     b.Property<Guid>("Id")
@@ -521,6 +579,9 @@ namespace Kalla.Infrastructure.Persistence.Migrations
                     b.Property<string>("SystemPrompt")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<Guid?>("TestRunId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -2072,6 +2133,9 @@ namespace Kalla.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("QuestionId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Answer")
+                        .HasColumnType("text");
+
                     b.Property<float?>("BestDistance")
                         .HasColumnType("real");
 
@@ -2093,6 +2157,17 @@ namespace Kalla.Infrastructure.Persistence.Migrations
                     b.Property<bool?>("Hit")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("JudgeNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Question")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Verdict")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
                     b.HasKey("RunId", "QuestionId");
 
                     b.ToTable("EvaluationResults", "content", t =>
@@ -2102,6 +2177,8 @@ namespace Kalla.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_EvaluationResults_Coverage", "\"Coverage\" IS NULL OR \"Coverage\" IN ('ok', 'low')");
 
                             t.HasCheckConstraint("CK_EvaluationResults_ExpectedRank", "\"ExpectedRank\" >= 1");
+
+                            t.HasCheckConstraint("CK_EvaluationResults_Verdict", "\"Verdict\" IN ('pass', 'fail', 'unsure')");
                         });
                 });
 
@@ -2159,7 +2236,7 @@ namespace Kalla.Infrastructure.Persistence.Migrations
                     b.Property<byte[]>("Seed")
                         .HasColumnType("bytea");
 
-                    b.Property<Guid>("SetId")
+                    b.Property<Guid?>("SetId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("StartedAt")
@@ -2189,6 +2266,10 @@ namespace Kalla.Infrastructure.Persistence.Migrations
                     b.HasIndex("SetId", "StartedAt")
                         .IsDescending(false, true);
 
+                    b.HasIndex(new[] { "SubjectId", "StartedAt" }, "IX_EvaluationRuns_AssistantTests")
+                        .IsDescending(false, true)
+                        .HasFilter("\"Kind\" = 'assistant-tests'");
+
                     b.ToTable("EvaluationRuns", "content", t =>
                         {
                             t.HasCheckConstraint("CK_EvaluationRuns_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
@@ -2197,9 +2278,11 @@ namespace Kalla.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_EvaluationRuns_K", "\"K\" BETWEEN 1 AND 100");
 
-                            t.HasCheckConstraint("CK_EvaluationRuns_Kind", "\"Kind\" IN ('publish-report', 'nightly', 'on-demand')");
+                            t.HasCheckConstraint("CK_EvaluationRuns_Kind", "\"Kind\" IN ('publish-report', 'nightly', 'on-demand', 'assistant-tests')");
 
                             t.HasCheckConstraint("CK_EvaluationRuns_Metrics", "\"RecallAtK\" BETWEEN 0 AND 1 AND \"Mrr\" BETWEEN 0 AND 1");
+
+                            t.HasCheckConstraint("CK_EvaluationRuns_Set", "(\"Kind\" = 'assistant-tests') = (\"SetId\" IS NULL) AND (\"Kind\" <> 'assistant-tests' OR \"SubjectId\" IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_EvaluationRuns_Variant", "\"Variant\" IN ('hybrid', 'vector', 'hybrid-no-decompounder')");
                         });
@@ -4104,6 +4187,15 @@ namespace Kalla.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Kalla.Domain.Entities.AssistantTestQuestion", b =>
+                {
+                    b.HasOne("Kalla.Domain.Entities.Assistant", null)
+                        .WithMany()
+                        .HasForeignKey("AssistantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Kalla.Domain.Entities.AssistantVersion", b =>
                 {
                     b.HasOne("Kalla.Domain.Entities.Assistant", null)
@@ -4192,8 +4284,7 @@ namespace Kalla.Infrastructure.Persistence.Migrations
                     b.HasOne("Kalla.Domain.Entities.EvaluationSet", null)
                         .WithMany()
                         .HasForeignKey("SetId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("Kalla.Domain.Entities.Feedback", b =>

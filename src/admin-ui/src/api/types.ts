@@ -1161,6 +1161,70 @@ export interface VersionDiff {
   notFoundEn: TextDiff
 }
 
+/** A test question's expected document (admin design §7.4): `deleted` when it is gone, `unlinked` when no linked knowledge base holds it now. */
+export interface ExpectedDocument {
+  id: string
+  title: string | null
+  deleted: boolean
+  unlinked: boolean
+}
+
+/** `GET /api/assistants/{id}/test-questions` (admin design §7.4, V33). */
+export interface TestQuestion {
+  id: string
+  ordinal: number
+  question: string
+  expectedBehaviour: string
+  expectedDocument: ExpectedDocument | null
+  expectedPhrase: string | null
+  updatedAt: IsoDateTime
+  updatedBy: string | null
+  version: string
+}
+
+export interface TestQuestionRequest {
+  question: string
+  expectedBehaviour: string
+  expectedDocumentId: string | null
+  expectedPhrase: string | null
+  version?: string
+}
+
+/** A test-question run: how many as expected, and against the compared run (the previous version's). */
+export interface TestRunSummary {
+  id: string
+  version: number
+  startedAt: IsoDateTime
+  finishedAt: IsoDateTime | null
+  questions: number
+  asExpected: number | null
+  better: number | null
+  worse: number | null
+  comparedRunId: string | null
+  comparedVersion: number | null
+  comparedAsExpected: number | null
+}
+
+/** One question in a run: `checks` is the expected document and phrase together (null when the question has neither). */
+export interface TestResult {
+  questionId: string
+  question: string
+  answer: string | null
+  checks: boolean | null
+  verdict: 'pass' | 'fail' | 'unsure' | null
+  judgeNote: string | null
+  asExpected: boolean
+  change: 'better' | 'worse' | null
+  expectedDocument: ExpectedDocument | null
+  expectedPhrase: string | null
+  expectedBehaviour: string | null
+}
+
+export interface TestRunReport {
+  run: TestRunSummary
+  results: TestResult[]
+}
+
 export interface AssistantVersionSummary {
   number: number
   state: 'draft' | 'published' | 'superseded' | string

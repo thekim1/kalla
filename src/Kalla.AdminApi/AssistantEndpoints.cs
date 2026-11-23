@@ -280,7 +280,8 @@ public static class AssistantEndpoints
             })
             .RequireAuthorization(AdminPolicies.Edit).WithName("DiscardAssistantDraft").WithSummary("Drop the draft (not when it is the only version)");
 
-        assistants.MapPost("/{id:guid}/publish", async (Guid id, PublishRequest request, AdminContext admin, GatewayModelCheck models, CancellationToken ct) =>
+        assistants.MapPost("/{id:guid}/publish", async (Guid id, PublishRequest request, AdminContext admin, GatewayModelCheck models, AssistantTestRunner tests,
+                CancellationToken ct) =>
             {
                 await WarmAsync(admin, models, await LoadAsync(admin, id, ct, tracked: false), null, ct);
                 var saved = await admin.WriteAsync(async attempt =>
@@ -327,6 +328,7 @@ public static class AssistantEndpoints
                         DepartmentId = assistant.DepartmentId, Classification = assistant.Classification,
                     };
                 }, ct);
+                await StartTestsAsync(admin, tests, saved, ct);
                 return await DetailAsync(admin, saved, ct);
             })
             .RequireAuthorization(AdminPolicies.Edit).WithName("PublishAssistant").WithSummary("Publish the draft (V34, assistant rules, V8 at the gateway)");
@@ -407,7 +409,7 @@ public static class AssistantEndpoints
             .RequireAuthorization(AdminPolicies.Read).WithName("DiffAssistantVersions").WithSummary("What changed between two versions, or a version and the draft");
 
         assistants.MapPost("/{id:guid}/versions/{number}/restore", async (Guid id, string number, RestoreRequest request, AdminContext admin, GatewayModelCheck models,
-                CancellationToken ct) =>
+                AssistantTestRunner tests, CancellationToken ct) =>
             {
                 await WarmAsync(admin, models, await LoadAsync(admin, id, ct, tracked: false), null, ct);
                 var saved = await admin.WriteAsync(async attempt =>
@@ -457,6 +459,7 @@ public static class AssistantEndpoints
                         DepartmentId = assistant.DepartmentId, Classification = assistant.Classification,
                     };
                 }, ct);
+                await StartTestsAsync(admin, tests, saved, ct);
                 return await DetailAsync(admin, saved, ct);
             })
             .RequireAuthorization(AdminPolicies.Edit).WithName("RestoreAssistantVersion").WithSummary("Publish a new version with an earlier version's settings (as publish)");
@@ -542,6 +545,28 @@ public static class AssistantEndpoints
         var ids = from.LinkedCollectionIds().Concat(to.LinkedCollectionIds()).Distinct().ToList();
         var names = await admin.Db.Collections.IgnoreQueryFilters().AsNoTracking().Where(c => ids.Contains(c.Id)).ToDictionaryAsync(c => c.Id, c => c.Name, ct);
         return AssistantVersionDiff.Of(from, to, toDraft, names);
+    }
+
+    /// <summary>
+    /// The test-question run on the newly published version (admin design §7.4), started after publish and restore: none
+    /// without questions, and none while a run is still going (the report then shows that run; Run test questions starts one).
+    /// </summary>
+    private static async Task StartTestsAsync(AdminContext admin, AssistantTestRunner tests, Assistant assistant, CancellationToken ct)
+    {
+        if (assistant.PublishedVersionId is not { } published)
+        {
+            return;
+        }
+
+        var version = await admin.Db.AssistantVersions.AsNoTracking().SingleAsync(v => v.Id == published, ct);
+        try
+        {
+            _ = await tests.StartAsync(admin.Db, assistant, version, admin.Actor ?? "admin", ct);
+        }
+        catch (Kalla.ServiceDefaults.ApiFaultException fault) when (fault.Extensions?.TryGetValue("code", out var code) == true && Equals(code, AdminErrorCodes.TestRunRunning.Code))
+        {
+            // One run per assistant at a time: the running one finishes, and the owner can run the questions again.
+        }
     }
 
     /// <summary>Version <paramref name="number"/> of the assistant, or 404 (the number is parsed here, so any route value reaches the policy first).</summary>
