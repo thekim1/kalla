@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home (proposed)</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block">
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-active="home">
+<div class="app">
+<main class="main">
+<div class="page">
+  <div class="head">
+    <div>
+      <h1>Good morning, Anna</h1>
+      <div class="sub">Kommunledningskontoret · Department administrator <a style="margin-left:4px">Your access</a></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="ch"><h2>Needs attention</h2><span class="badge warn plain">3</span><i class="pin-i">1</i></div>
+    <table>
+      <tr><td style="width:28px;padding-left:0"><span class="ms" style="color:var(--warn)">delete_sweep</span></td><td><b style="font-weight:500">Removal waiting for a decision: 212 of 840 documents (25 %)</b><div class="muted small" lang="sv">Website umea.se/bygga · Turkos</div></td><td style="text-align:right"><span class="btn secondary sm">Review</span></td></tr>
+      <tr><td style="padding-left:0"><span class="ms" style="color:var(--warn)">shield_person</span></td><td><b style="font-weight:500">4 documents with personal data cannot be shown in a public knowledge base</b><div class="muted small" lang="sv">Personalhandbok</div></td><td style="text-align:right"><span class="btn secondary sm">Review</span></td></tr>
+      <tr><td style="padding-left:0"><span class="ms" style="color:var(--warn)">trending_down</span></td><td><b style="font-weight:500">The evaluation got worse after publishing (−6 points)</b><div class="muted small" lang="sv">Website umea.se/bygga · Turkos</div></td><td style="text-align:right"><span class="btn ghost sm">Show</span></td></tr>
+    </table>
+  </div>
+
+  <div class="tcard" style="margin-bottom:16px">
+    <div style="padding:18px 20px 4px;display:flex;align-items:center;gap:10px"><h2 style="font-size:15px;margin:0">Assistants in use</h2><i class="pin-i">2</i><span class="muted" style="margin-left:auto;font-size:13px">Last 7 days</span></div>
+    <table>
+      <tr><th>Assistant</th><th>Published</th><th class="num">Questions</th><th class="num">Not found</th><th class="num">Thumbs up / down</th><th class="num">Cost</th></tr>
+      <tr><td><a lang="sv" style="font-weight:500">Turkos</a></td><td>Version 4 · 12 Nov</td><td class="num">1 284</td><td class="num">61 <span class="muted small">(4,8 %)</span></td><td class="num">38 / <span style="color:var(--danger)">9</span></td><td class="num">3,12 US$</td></tr>
+      <tr><td><a lang="sv" style="font-weight:500">Demo-assistent</a></td><td>Version 1 · 23 Nov</td><td class="num muted">0</td><td class="num muted">0</td><td class="num muted">0 / 0</td><td class="num muted">0,00 US$</td></tr>
+    </table>
+  </div>
+
+  <div class="card health" style="display:flex;align-items:center;gap:28px;padding:14px 20px">
+    <b style="font-weight:600">Health</b><i class="pin-i">3</i>
+    <span><span class="badge ok">Runs</span> 12 in 24 h, none failed</span>
+    <span><span class="badge ok">Queue</span> 0 waiting</span>
+    <span><span class="badge ok">Organisation</span> synced 1 min ago</span>
+    <span><span class="badge ok">Models</span> synced 1 min ago</span>
+  </div>
+  <p class="muted small" style="margin-top:10px">Example data; the attention items are three of admin §5.5.1’s. On an installation with an unpublished knowledge base, <i>Get started</i> (the setup checklists) comes right after <i>Needs attention</i>; deployment notices and secret reminders stay at the very top. A health item turns amber or red, and moves into <i>Needs attention</i>, only when something is wrong.</p>
+</div>
+</main>
+</div>
+<script src="shell.js"></script>
+</body>
+</html>
