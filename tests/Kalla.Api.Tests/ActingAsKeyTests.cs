@@ -73,7 +73,7 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
     [Fact]
     public async Task Each_service_reads_the_features_from_its_own_context_and_an_unchanged_one_is_a_304()
     {
-        var recording = new Recording(fake.Server.CreateHandler());
+        var recording = new RecordingHandler(fake.Server.CreateHandler());
         using var host = Build(recording);
         var reader = host.Services.GetRequiredService<GatewayContextReader>();
 
@@ -81,13 +81,13 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
         host.Services.GetRequiredService<GatewayFeatures>().ActAsKey.ShouldBeTrue();
         (await reader.ReadAsync(Ct)).ShouldBeTrue();
         recording.Requests.Select(r => r.Status).ShouldBe([HttpStatusCode.OK, HttpStatusCode.NotModified]);
-        recording.Requests.ShouldAllBe(r => r.OnBehalfOf == null && r.Path == "/v1/fors/context");
+        recording.Requests.ShouldAllBe(r => r.Header(GatewayHeaders.OnBehalfOf) == null && r.Path == "/v1/fors/context");
     }
 
     [Fact]
     public async Task A_call_for_an_objects_key_runs_as_it_and_the_fake_records_it_under_that_key()
     {
-        var recording = new Recording(fake.Server.CreateHandler());
+        var recording = new RecordingHandler(fake.Server.CreateHandler());
         using var host = Build(recording, Acting);
         var runId = Guid.NewGuid().ToString();
         var request = Post(Chat("fors/chat-eu"), new GatewayCall(Chatbot, "chat-answer", AssistantId: Guid.NewGuid()));
@@ -97,7 +97,7 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
         using var response = await SendAsync(host, request);
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        recording.Requests.Single().OnBehalfOf.ShouldBe(Chatbot.ToString("D"));
+        recording.Requests.Single().Header(GatewayHeaders.OnBehalfOf).ShouldBe(Chatbot.ToString("D"));
         var record = fake.Services.GetRequiredService<FakeUsage>().Records.Single(r => r.RunId == runId);
         (record.KeyId, record.Step, record.Model).ShouldBe((Chatbot, "chat-answer", "fors/chat-eu"));
         record.ViaKeyId.ShouldNotBeNull().ShouldNotBe(Chatbot);
@@ -106,7 +106,7 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
     [Fact]
     public async Task No_header_without_act_as_key_or_without_a_key_and_never_on_the_context()
     {
-        var recording = new Recording(fake.Server.CreateHandler());
+        var recording = new RecordingHandler(fake.Server.CreateHandler());
         using (var host = Build(recording, features: []))
         using (var response = await SendAsync(host, Post(Chat("fors/chat-eu"), new GatewayCall(Chatbot))))
         {
@@ -121,7 +121,7 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
             context.StatusCode.ShouldBe(HttpStatusCode.OK);
         }
 
-        recording.Requests.ShouldAllBe(r => r.OnBehalfOf == null);
+        recording.Requests.ShouldAllBe(r => r.Header(GatewayHeaders.OnBehalfOf) == null);
         recording.Requests.Count.ShouldBe(4);
     }
 
@@ -175,7 +175,7 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
             web.UseSetting("FakeGateway:AssignedKeys:0:BudgetExceeded", "Team");
             web.UseSetting("FakeGateway:AssignedKeys:1:Status", "Expired");
         });
-        var recording = new Recording(gateway.Server.CreateHandler());
+        var recording = new RecordingHandler(gateway.Server.CreateHandler());
         using var host = Build(recording, Acting);
 
         async Task<GatewayKeyRefusedException> RefusedAsync(Guid key, string model = "fors/chat-eu", Residency ceiling = Residency.Eu) =>
@@ -248,19 +248,6 @@ public sealed class ActingAsKeyTests(FakeGatewayFactory fake) : IClassFixture<Fa
         ordinary.Headers.Add("x-fors-max-residency", "Eu");
         ordinary.Headers.Add(GatewayHeaders.OnBehalfOf, Chatbot.ToString());
         (await client.SendAsync(ordinary, Ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
-    }
-
-    /// <summary>Passes each request on and records its path, <c>x-fors-on-behalf-of</c> and the answer's status.</summary>
-    private sealed class Recording(HttpMessageHandler inner) : DelegatingHandler(inner)
-    {
-        public List<(string Path, string? OnBehalfOf, HttpStatusCode Status)> Requests { get; } = [];
-
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            var response = await base.SendAsync(request, cancellationToken);
-            Requests.Add((request.RequestUri!.AbsolutePath, request.Headers.TryGetValues(GatewayHeaders.OnBehalfOf, out var v) ? string.Join(",", v) : null, response.StatusCode));
-            return response;
-        }
     }
 
     /// <summary>Answers every request itself with <paramref name="status"/>, the body, an <c>x-fors-residency</c> of Eu and the echo given.</summary>

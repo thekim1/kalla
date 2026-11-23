@@ -6,6 +6,7 @@ using Microsoft.Extensions.Time.Testing;
 using Kalla.Domain;
 using Kalla.Domain.Retrieval;
 using Kalla.Infrastructure.Gateway;
+using Kalla.TestKit;
 using static Kalla.Retrieval.Tests.Make;
 
 namespace Kalla.Retrieval.Tests;
@@ -42,7 +43,7 @@ public sealed class GatewayRerankerTests : IDisposable
         new("altan bygglov", Scope(RetrievalPlatformSettings.Default with { GatewayRerankModel = Model }, (CollectionA, RetrievalSettings.Default)), Embed: Embed,
             Rerank: new RerankCall(Residency.Eu, Guid.Parse("01929b6e-0000-7000-8000-0000000000bb"), RerankerKind.Gateway));
 
-    private RetrievalEngine Engine(Gateway gateway, ListLogger? logger = null, TimeSpan? timeout = null) =>
+    private RetrievalEngine Engine(StubHandler gateway, ListLogger<GatewayReranker>? logger = null, TimeSpan? timeout = null) =>
         new(_index, _sizes, new RetrievalEngineOptions { GatewayRerankTimeout = timeout ?? TimeSpan.FromSeconds(5) },
             new GatewayReranker(gateway, logger: logger), new FakeTexts());
 
@@ -50,7 +51,7 @@ public sealed class GatewayRerankerTests : IDisposable
     public async Task One_rerank_call_at_the_ceiling_scores_the_passages_and_reorders_before_the_cap()
     {
         // The reranker favours chunk 4 (cut by the cap without reranking) and chunk 6; results come sorted, as Cohere's do.
-        var gateway = new Gateway(body => Results(body, new Dictionary<Guid, double> { [Id(4)] = 0.98, [Id(6)] = 0.91 }));
+        var gateway = Gateway(body => Results(body, new Dictionary<Guid, double> { [Id(4)] = 0.98, [Id(6)] = 0.91 }));
         using var engine = Engine(gateway);
         var result = await engine.SearchAsync(Request(), Ct);
 
@@ -60,7 +61,7 @@ public sealed class GatewayRerankerTests : IDisposable
         result.Degraded.ShouldBeNull();
         result.RerankUsage.ShouldBe(new GatewayCallUsage(GatewayReranker.Step, Model, 321, 0, 0, null));
 
-        var call = gateway.Calls.ShouldHaveSingleItem();
+        var call = gateway.Requests.ShouldHaveSingleItem();
         call.Path.ShouldBe("/v1/rerank");
         call.Headers["x-fors-max-residency"].ShouldBe("Eu");
         call.Headers["x-fors-step"].ShouldBe(GatewayReranker.Step);
@@ -82,8 +83,8 @@ public sealed class GatewayRerankerTests : IDisposable
     public async Task A_refusal_keeps_the_fused_order_and_is_logged_once_until_a_call_succeeds(HttpStatusCode status)
     {
         var refuse = true;
-        var gateway = new Gateway(body => refuse ? Error(status) : Results(body, new Dictionary<Guid, double> { [Id(6)] = 0.9 }));
-        var logger = new ListLogger();
+        var gateway = Gateway(body => refuse ? Error(status) : Results(body, new Dictionary<Guid, double> { [Id(6)] = 0.9 }));
+        var logger = new ListLogger<GatewayReranker>(LogLevel.Warning);
         using var engine = Engine(gateway, logger);
 
         for (var i = 0; i < 3; i++)
@@ -94,7 +95,7 @@ public sealed class GatewayRerankerTests : IDisposable
             result.Degraded.ShouldBe(RetrievalDegradation.RerankUnavailable);
         }
 
-        gateway.Calls.Count.ShouldBe(3);
+        gateway.Requests.Count.ShouldBe(3);
         var line = logger.Messages.ShouldHaveSingleItem();
         line.ShouldContain(Model);
         line.ShouldContain(((int)status).ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -111,12 +112,12 @@ public sealed class GatewayRerankerTests : IDisposable
     [Fact]
     public async Task A_timeout_keeps_the_fused_order_and_is_logged_once()
     {
-        var gateway = new Gateway(async (_, ct) =>
+        var gateway = Gateway(async (_, ct) =>
         {
             await Task.Delay(Timeout.InfiniteTimeSpan, ct);
             return Error(HttpStatusCode.OK);
         });
-        var logger = new ListLogger();
+        var logger = new ListLogger<GatewayReranker>(LogLevel.Warning);
         using var engine = Engine(gateway, logger, TimeSpan.FromMilliseconds(100));
         var started = System.Diagnostics.Stopwatch.StartNew();
 
@@ -154,7 +155,7 @@ public sealed class GatewayRerankerTests : IDisposable
     public async Task An_unreadable_2xx_answer_keeps_the_fused_order_and_its_usage(string body, int tokens)
     {
         // B-38: the gateway charged the call, so its usage (the cost header, the tokens when the body has them) stays with the result.
-        using var engine = Engine(new Gateway(_ =>
+        using var engine = Engine(Gateway(_ =>
         {
             var answer = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
             answer.Headers.Add(GatewayHeaders.CostUsd, "0.00003210");
@@ -197,53 +198,9 @@ public sealed class GatewayRerankerTests : IDisposable
         Content = new StringContent("""{"error":{"code":"model_not_found","message":"The model does not exist."}}""", Encoding.UTF8, "application/json"),
     };
 
-    public sealed record Call(string Path, IReadOnlyDictionary<string, string> Headers, string Body);
-
-    /// <summary>Collects the formatted log messages of warning level and above.</summary>
-    internal sealed class ListLogger : ILogger<GatewayReranker>
-    {
-        public List<string> Messages { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state)
-            where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-        {
-            if (logLevel >= LogLevel.Warning)
-            {
-                Messages.Add(formatter(state, exception));
-            }
-        }
-    }
-
     /// <summary>A gateway stub behind <see cref="IHttpClientFactory"/>: records each call and answers from the body.</summary>
-    private sealed class Gateway : HttpMessageHandler, IHttpClientFactory
-    {
-        private readonly Func<string, CancellationToken, Task<HttpResponseMessage>> _answer;
+    private static StubHandler Gateway(Func<string, HttpResponseMessage> answer) => Gateway((body, _) => Task.FromResult(answer(body)));
 
-        public Gateway(Func<string, HttpResponseMessage> answer) => _answer = (body, _) => Task.FromResult(answer(body));
-
-        public Gateway(Func<string, CancellationToken, Task<HttpResponseMessage>> answer) => _answer = answer;
-
-        public List<Call> Calls { get; } = [];
-
-        public HttpClient CreateClient(string name)
-        {
-            name.ShouldBe(ChatModelReranker.HttpClientName);
-            return new HttpClient(this, disposeHandler: false) { BaseAddress = new Uri("http://gateway.invalid/") };
-        }
-
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            var body = await request.Content!.ReadAsStringAsync(cancellationToken);
-            lock (Calls)
-            {
-                Calls.Add(new Call(request.RequestUri!.AbsolutePath, request.Headers.ToDictionary(h => h.Key, h => string.Join(",", h.Value)), body));
-            }
-
-            return await _answer(body, cancellationToken);
-        }
-    }
+    private static StubHandler Gateway(Func<string, CancellationToken, Task<HttpResponseMessage>> answer) =>
+        new(async (request, ct) => await answer(await request.Content!.ReadAsStringAsync(ct), ct), ChatModelReranker.HttpClientName);
 }

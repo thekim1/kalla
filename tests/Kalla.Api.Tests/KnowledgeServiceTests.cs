@@ -418,7 +418,7 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
     }
 
     /// <summary>The engine's reranker as the knowledge role builds it, on the services' gateway client to <paramref name="gateway"/>.</summary>
-    private static (RerankRouter Reranker, IHost Host, ListLogger Log) GatewayRerankers(WebApplicationFactory<fakegateway::Program> gateway)
+    private static (RerankRouter Reranker, IHost Host, ListLogger<GatewayReranker> Log) GatewayRerankers(WebApplicationFactory<fakegateway::Program> gateway)
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
         builder.Configuration.AddInMemoryCollection([
@@ -428,7 +428,7 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
         builder.Services.UseGatewayCredentialCeiling();
         var host = builder.Build();
         var clients = host.Services.GetRequiredService<IHttpClientFactory>();
-        var log = new ListLogger();
+        var log = new ListLogger<GatewayReranker>(LogLevel.Warning);
         return (new RerankRouter(new ChatModelReranker(clients), new GatewayReranker(clients, logger: log)), host, log);
     }
 
@@ -469,28 +469,6 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
         }
 
         log.Messages.ShouldHaveSingleItem().ShouldContain("HTTP 404");
-    }
-
-    /// <summary>Collects the formatted log messages of warning level and above.</summary>
-    private sealed class ListLogger : ILogger<GatewayReranker>
-    {
-        public List<string> Messages { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state)
-            where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-        {
-            if (logLevel >= LogLevel.Warning)
-            {
-                lock (Messages)
-                {
-                    Messages.Add(formatter(state, exception));
-                }
-            }
-        }
     }
 
     [Fact]
@@ -985,16 +963,16 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
     {
         // #390: all_providers_failed is retried with the same ceiling, never a wider one; the client's own retry handler
         // is left out (production registers gateway-query with retryFailed: false), so exactly two calls.
-        var ceilings = new List<string>();
         var failing = new Counting(fake.Server.CreateHandler(), status);
-        var (embedder, host) = Build(new Recording(failing, ceilings));
+        var recording = new RecordingHandler(failing);
+        var (embedder, host) = Build(recording);
         using var _ = host;
         using var __ = embedder;
 
         await Should.ThrowAsync<QueryEmbeddingUnavailableException>(() => embedder.EmbedAsync(Profile, "bygglov " + status, null, Ct));
 
         failing.Calls.ShouldBe(2);
-        ceilings.ShouldBe(["Eu", "Eu"]);
+        recording.Requests.Select(r => r.Header("x-fors-max-residency")).ShouldBe(["Eu", "Eu"]);
     }
 
     [Theory]
@@ -1063,15 +1041,6 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             Task.FromResult(answer(Interlocked.Increment(ref Calls)));
-    }
-
-    private sealed class Recording(HttpMessageHandler inner, List<string> ceilings) : DelegatingHandler(inner)
-    {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            ceilings.Add(string.Join(",", request.Headers.GetValues("x-fors-max-residency")));
-            return base.SendAsync(request, cancellationToken);
-        }
     }
 
     [Fact]

@@ -475,7 +475,7 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
             await SyncedAsync(recording);
         }
 
-        var counter = new CountingHandler { InnerHandler = gateway.Server.CreateHandler() };
+        var counter = new CountingHandler(gateway.Server.CreateHandler());
         await using var admin = database.AdminApi(gateway, Residency.Eu).WithWebHostBuilder(web => web.ConfigureTestServices(services =>
             services.UseGatewayCredentialCeiling().AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => counter)));
         using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
@@ -581,20 +581,6 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
         levels["Eu"].GetProperty("outcome").GetString().ShouldBe("ok");
         levels["OnPrem"].GetProperty("outcome").GetString().ShouldBe("error");
         levels["OnPrem"].GetProperty("code").GetString().ShouldBe(nameof(JsonException));
-    }
-
-    /// <summary>Counts the requests that reach the gateway.</summary>
-    private sealed class CountingHandler : DelegatingHandler
-    {
-        private int _count;
-
-        public int Count => Volatile.Read(ref _count);
-
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            Interlocked.Increment(ref _count);
-            return base.SendAsync(request, cancellationToken);
-        }
     }
 
     /// <summary>Answers embeddings at ceiling OnPrem with a body that is not JSON; everything else goes to the FakeGateway.</summary>

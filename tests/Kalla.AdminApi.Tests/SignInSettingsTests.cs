@@ -31,8 +31,8 @@ public sealed class SignInSettingsTests(AdminDatabaseFixture database)
     private static EffectiveSignIn Resolve(IConfiguration configuration, OidcWizardValues wizard, Func<StoredSecretValue>? secret = null) =>
         SignInSettings.Resolve(configuration, wizard, secret ?? (() => StoredSecretValue.NotSet), null, 7, null);
 
-    private static SettingsSecretProtector Protector(IDataProtectionProvider provider, ListLogger? logger = null) =>
-        new(provider, logger ?? new ListLogger());
+    private static SettingsSecretProtector Protector(IDataProtectionProvider provider, ListLogger<SettingsSecretProtector>? logger = null) =>
+        new(provider, logger ?? new ListLogger<SettingsSecretProtector>());
 
     [Fact]
     public void A_deployment_value_wins_over_the_wizard_and_a_blank_one_counts_as_unset()
@@ -103,7 +103,7 @@ public sealed class SignInSettingsTests(AdminDatabaseFixture database)
     public void A_secret_round_trips_as_ciphertext_and_one_the_key_ring_cannot_read_is_unreadable_without_an_exception()
     {
         var provider = new EphemeralDataProtectionProvider();
-        var logger = new ListLogger();
+        var logger = new ListLogger<SettingsSecretProtector>();
         var protector = Protector(provider, logger);
 
         var ciphertext = protector.Protect(StoredSecret.IdentityOidcClientSecret, WizardSecret);
@@ -122,8 +122,8 @@ public sealed class SignInSettingsTests(AdminDatabaseFixture database)
             (result.State, result.Value).ShouldBe((StoredSecretState.Unreadable, null));
         }
 
-        logger.Messages.Count.ShouldBe(3);
-        logger.Messages.ShouldAllBe(m => m.Level == LogLevel.Warning && !m.Text.Contains(WizardSecret) && m.Text.Contains(StoredSecret.IdentityOidcClientSecret.Purpose));
+        logger.Entries.Count.ShouldBe(3);
+        logger.Entries.ShouldAllBe(m => m.Level == LogLevel.Warning && !m.Message.Contains(WizardSecret) && m.Message.Contains(StoredSecret.IdentityOidcClientSecret.Purpose));
     }
 
     [Fact]
@@ -270,15 +270,4 @@ public sealed class SignInSettingsTests(AdminDatabaseFixture database)
         }
     }
 
-    private sealed class ListLogger : ILogger<SettingsSecretProtector>
-    {
-        public List<(LogLevel Level, string Text)> Messages { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
-            Messages.Add((logLevel, formatter(state, exception)));
-    }
 }
