@@ -67,6 +67,21 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
   its pull request what you are about to write; review its pull requests as comments (claims checked against the code).
 - **A decision for the user is asked as four alternatives with one recommendation** (the question tool).
 
+**Since this was written** (updated 2026-11-23, about 18:00 UTC, before the user moves to another machine):
+- **Merged:** #990 and #991 (the main session's), #1000 (#986's metric `rag.chat.prompt.estimate_ratio`), #1002
+  (#999's follow-ups: at most 3 waiting on-demand test-question runs per person, the copy tested end to end), #1005
+  (B-70, Pause and Resume on the source page), #996 (CQ-5b), #1001 (CQ-3, admin UI permissions by policy) and #1006
+  (#1003: the cap reserves its slot first and gives it back on any refusal). Issues #986 and #1003 are closed.
+- **Open:** #1004 (`ume-nichlas`, the main session's: admin §7.4, §4.5, §4.9 and §2.2 for the test-run cap and what a
+  restart does to an unfinished test run; green, needs the user's word) and #958 (Dependabot, item 5).
+- **The Audit is red again** (2026-11-22 and 2026-11-23,
+  [run 45197573594](https://github.com/thekim1/kalla/actions/runs/45197573594)): Debian's security fixes for glibc (`libc6`, `libc-bin` → `2.41-12+deb13u5`, CVE-2026-5435, CVE-2026-19499) and
+  Kerberos (`libkrb5-3` and friends → `1.21.3-5+deb13u2`, CVE-2026-112314 and five more) are not in 0.9.2's
+  **postgres** (32 failing), **clamav** (34) and **parser** (28) images; api, admin, worker, migrations and renderer
+  are clean. A rebuild of those three images (a newer base, or the packages upgraded in the image) and a release
+  turn it green; no issue filed yet (stream a's images). The scan also warns that three parser exceptions match no
+  finding any more and can go: CVE-2026-52296, CVE-2026-52297, CVE-2026-96611.
+
 **Open when this was written** (2026-11-23, about 14:50 UTC): `thekim1`'s #996 (CQ-5b, reviewed: ready), Dependabot's
 #958 and the main session's #989 (this file), #990 (the support case, B-83) and #991 (B-58, B-59 and B-63's design
 deviations, and #999's rules). `thekim1` merged #977 (B-58), #963 (B-63), #978 (B-59), #984 (B-58's Settings switch)
@@ -266,13 +281,15 @@ history. Reviews and reads ran as subagents, one at a time; their claims were ch
   the same day. All are `ghcr.io/thekim1/kalla/*`, public, Apache-2.0. `v0.8.0` and earlier are Ume.Rag
   (`ghcr.io/thekim1/ume-rag/*`, EUPL-1.2).
 - **Audit:** last green on 2026-11-21 ([run 44905272366](https://github.com/thekim1/kalla/actions/runs/44905272366));
-  0.9.2's images are scanned from the next run. The dated exceptions are in *Watch*.
+  red since 2026-11-22 on 0.9.2's postgres, clamav and parser images (*Start here*, *Since this was written*). The
+  dated exceptions are in *Watch*.
 - **What a deployer types in Portainer:** 1 value since 0.7.0 (`FORS_DOMAIN`, no secret).
 - **On `main`, unreleased** (eleven notes in `changes/`, one upgrade note: restart `kalla-proxy`): assistant
   templates, copy an assistant, the version diff and test questions per assistant (B-54 to B-57); a source's own
   schedule and its next run (#935); the TLS proxy's header buffers (#944); the organisation's logo from Fors and the
   favicon (#953); one path-rule matcher and one schedule rule in `Kalla.Pipelines` (A-42, A-43); the code-quality
-  refactors (#964 to #973, #981). Plan files: #961, #975, #976, #982, #985, #988, the two proposals.
+  refactors (#964 to #973, #981, #996, #1001); the prompt-estimate metric (#1000); the test-run cap (#1002, #1006);
+  Pause and Resume on a source (#1005). Plan files: #961, #975, #976, #982, #985, #988, the two proposals.
 - **Queues:** stream a: the live block (A-L1 to A-L10), A-34 and A-35 with only their live checks open, and issue
   #974, #987; A-42 and A-43 are done. Stream b: B-58, B-59 and B-63 merged (#977, #984, #978, #963); #983 closed by
   #999; then B-61, B-62 and B-66 (F10, F7, F6), B-64 and B-65 (the topics editor),
@@ -281,7 +298,7 @@ history. Reviews and reads ran as subagents, one at a time; their claims were ch
   on nothing), B-42 to B-46 (the gateway phases' live checks) and
   its live items. An item someone has started says **Taken** in the queue. Main: M-4.
 - **Open issues that matter:** #992 to #995 (the docs), #998 (stage outputs'
-  read), #986 (a chat metric for to-verify #103), #987 (the
+  read), #987 (the
   grading script), #980 (code quality's tracker), #959 (the chat extension; closes with B-72 and B-73), #974 (code
   quality, stream a's part), #781 and #921 (watch), #920 (the VM's upgrade, `thekim1`'s), #929 (topics; closes with
   B-65), #667 (M-16's issue: the work is done, `thekim1`'s to close), #333, #511, #580 and #550. In Fors: no open pull
