@@ -30,9 +30,15 @@ public static class ChatOutcomes
 
 /// <summary>
 /// A turn's nearest hit (chat design §12.1; Decisions "Content-gap report"): the knowledge base and document of the search's first
-/// result. Ids only: no title, address or text.
+/// result, with that knowledge base's slug and the result chunk's topic tags as stored. No title, address or text. The writer
+/// counts the turn by the two ids only; <see cref="Subject"/> is what <c>kalla.nearest</c> shows the caller (§9.11), without the
+/// document.
 /// </summary>
-public sealed record NearestHit(Guid CollectionId, Guid DocumentId);
+public sealed record NearestHit(Guid CollectionId, Guid DocumentId, string Collection, IReadOnlyList<string> Topics)
+{
+    /// <summary>The subject only (§9.11): the collection's slug and the topic tags, never the document.</summary>
+    public NearestSubject Subject => new(Collection, Topics);
+}
 
 /// <summary>A completed turn as the JSON endpoint writes it.</summary>
 public sealed record ChatCompletion(Guid MessageId, string Model, string Content, IReadOnlyList<UrlCitation> Annotations, IReadOnlyList<PromptSource> Cited,
@@ -71,11 +77,12 @@ public sealed record ChatPlan(Guid MessageId, string Model, DateTimeOffset Creat
 
     /// <summary>
     /// The nearest hit of a turn that ended <c>not-found</c> or <c>answered-general</c> (§12.1; Decisions "Content-gap report"): the
-    /// best-ranked retrieval result's knowledge base and document; null for any other outcome, and when the search found nothing or
-    /// did not run (a request narrowed to no link, §3.8).
+    /// best-ranked retrieval result's knowledge base and document, with the slug and the chunk's tags for <c>kalla.nearest</c> (§9.11);
+    /// null for any other outcome, and when the search found nothing or did not run (a request narrowed to no link, §3.8). The
+    /// retrieval searched the links as <c>kalla.topics</c> narrowed them, so the hit is one of what this turn searched.
     /// </summary>
     public NearestHit? Nearest => Outcome is ChatOutcome.NotFound or ChatOutcome.AnsweredGeneral && Retrieval?.Results.MinBy(r => r.Rank) is { } first
-        ? new NearestHit(first.CollectionId, first.DocumentId)
+        ? new NearestHit(first.CollectionId, first.DocumentId, first.CollectionSlug, first.Tags)
         : null;
 
     /// <summary>The turn's step times (§9.10): condense and retrieval have added theirs; the answer adds its first event and the end of its text.</summary>

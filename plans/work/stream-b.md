@@ -164,8 +164,7 @@ one waits. Neither changes an answer that doesn't ask.
 - **Read:** Decisions "Progress, timings and the nearest subject in the chat extension"; chat §3.8, §4.1 (step 13),
   §9.1, §9.6, §9.10, §17, §18.9; #959.
 
-### [ ] B-73 Topics on related documents and the nearest subject (`kalla.nearest`)
-- **Taken:** 2026-11-23, the main session on the user's machine (#1011), branch `b/B-73-nearest-subject`.
+### [x] B-73 Topics on related documents and the nearest subject (`kalla.nearest`) (#1026)
 - **Do:** chat §9.7's `topics` on every related-document entry (the best-ranked chunk's tags as stored; carried on the
   retrieval result if it isn't there yet) and §9.11: the request member `kalla.nearest` and the answer's `nearest`
   (`{ collection, topics }` of the turn's nearest hit for `not-found` and `answered-general`, `null` otherwise), from

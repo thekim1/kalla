@@ -49,10 +49,11 @@ public sealed record ParsedChat(string Model, string Question, IReadOnlyList<Cha
 /// (null: the assistant's own; <see cref="GeneralKnowledgeLevels.Effective"/>). <see cref="Escalation"/> asks for the escalation
 /// hand-off (§9.9). <see cref="Topics"/> narrows the assistant's links for the turn (Decisions "Topics per request"; null: the links
 /// as they are). <see cref="Progress"/> asks a streamed model answer to start with the progress chunk, <see cref="Timings"/> for the
-/// turn's step times (§9.10). Any object, <c>{}</c> included, gives the answer's <c>kalla</c> with its outcome.
+/// turn's step times (§9.10). <see cref="Nearest"/> asks for the nearest subject of a turn that found no answer (§9.11). Any object,
+/// <c>{}</c> included, gives the answer's <c>kalla</c> with its outcome.
 /// </summary>
 public sealed record KallaRequest(int RelatedDocuments, int FollowUps, GeneralKnowledge? GeneralKnowledge = null, bool Escalation = false,
-    IReadOnlyList<string>? Topics = null, bool Progress = false, bool Timings = false)
+    IReadOnlyList<string>? Topics = null, bool Progress = false, bool Timings = false, bool Nearest = false)
 {
     public const int MaxRelatedDocuments = 10;
     public const int MaxFollowUps = 5;
@@ -213,7 +214,7 @@ public static partial class ChatRequestParser
 
     /// <summary>
     /// The <c>kalla</c> object (§3.8): <c>null</c> is none; not an object is 400 <c>invalid_request</c>; <c>related_documents</c>
-    /// 0–10 and <c>follow_ups</c> 0–5 as integers, <c>escalation</c>, <c>progress</c> and <c>timings</c> booleans, <c>general_knowledge</c> one
+    /// 0–10 and <c>follow_ups</c> 0–5 as integers, <c>escalation</c>, <c>progress</c>, <c>timings</c> and <c>nearest</c> booleans, <c>general_knowledge</c> one
     /// of the level values or <c>null</c>, and <c>topics</c> <c>null</c> or an array of at most 20 strings in the tag format, else 400
     /// <c>invalid_request</c>; any other member is 400 <c>unsupported_parameter</c> (the namespace is ours, so a typo fails
     /// instead of doing nothing).
@@ -232,7 +233,7 @@ public static partial class ChatRequestParser
 
         var (related, followUps) = (0, 0);
         GeneralKnowledge? generalKnowledge = null;
-        var (escalation, progress, timings) = (false, false, false);
+        var (escalation, progress, timings, nearest) = (false, false, false, false);
         IReadOnlyList<string>? topics = null;
         foreach (var member in kalla.EnumerateObject())
         {
@@ -259,15 +260,18 @@ public static partial class ChatRequestParser
                 case "timings":
                     timings = KallaFlag(member);
                     break;
+                case "nearest":
+                    nearest = KallaFlag(member);
+                    break;
                 default:
                     throw new ChatException(400, "unsupported_parameter", $"kalla.{member.Name} is not supported.", "kalla." + member.Name);
             }
         }
 
-        return new KallaRequest(related, followUps, generalKnowledge, escalation, topics, progress, timings);
+        return new KallaRequest(related, followUps, generalKnowledge, escalation, topics, progress, timings, nearest);
     }
 
-    /// <summary>A boolean member of <c>kalla</c> (<c>escalation</c>, <c>progress</c>, <c>timings</c>): anything but <c>true</c> or <c>false</c> is 400.</summary>
+    /// <summary>A boolean member of <c>kalla</c> (<c>escalation</c>, <c>progress</c>, <c>timings</c>, <c>nearest</c>): anything but <c>true</c> or <c>false</c> is 400.</summary>
     private static bool KallaFlag(JsonProperty member) => member.Value.ValueKind switch
     {
         JsonValueKind.True => true,

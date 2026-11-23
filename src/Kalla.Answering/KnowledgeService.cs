@@ -547,7 +547,10 @@ public sealed partial class KnowledgeService(
 
             results.Add(new RetrievedChunk(results.Count + 1, chunk.ChunkId, document.Id, hit.Candidate.TextHash, chunk.Text, chunk.HeadingPath ?? "",
                 chunk.Page, chunk.PageEnd, hit.Score, hit.Scores, null, collection.Id, collection.Slug, hit.Candidate.Level,
-                Cite(who, document, chunk.DocumentType, chunk.SourceModifiedAt, collection, request.AssistantId, hit.Candidate.Level)));
+                Cite(who, document, chunk.DocumentType, chunk.SourceModifiedAt, collection, request.AssistantId, hit.Candidate.Level))
+            {
+                Tags = chunk.Tags,
+            });
         }
 
         if (!expand || results.Count == 0)

@@ -158,7 +158,8 @@ public static class RetrievalStatements
     /// scope, levels and <c>DeletedAt</c>, and that the hit's set is still its document's live set (a candidate whose set
     /// was swapped out between V and H drops out). Neighbours come only from that live set and with <c>DeletedAt</c> null,
     /// so a section never brings back a held, superseded or soft-deleted chunk; their level is not re-checked because every
-    /// chunk of a set carries its document's level (the chunk writer, <c>ContentJobHandlers</c>).
+    /// chunk of a set carries its document's level (the chunk writer, <c>ContentJobHandlers</c>). <c>Tags</c> is the chunk's topic
+    /// tags as stored (processing §7; null for none): the hit's go on its result (chat design §9.7, §9.11).
     /// </summary>
     public const string Hits = """
         WITH hit AS (
@@ -170,7 +171,7 @@ public static class RetrievalStatements
               AND h."DeletedAt" IS NULL AND h."CollectionId" = ANY ($4)
         )
         SELECT hit."Id" AS "HitId", n."Id", n."Ordinal", n."HeadingPath", n."Text", n."OverlapChars", n."TokenCount",
-               n."Page", n."PageEnd", n."SourceModifiedAt", n."DocumentType", n."ChunkSetId"
+               n."Page", n."PageEnd", n."SourceModifiedAt", n."DocumentType", n."ChunkSetId", n."Tags"
         FROM hit
         JOIN LATERAL (
             SELECT n.* FROM content."Chunks" n
