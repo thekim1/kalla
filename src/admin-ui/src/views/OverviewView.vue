@@ -14,7 +14,7 @@ import UiCard from '@/components/ui/UiCard.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useLoadable } from '@/stores/loadable'
 import { useUiStore } from '@/stores/ui'
-import { formatNumber, formatRelative, formatUsdCost } from '@/utils/format'
+import { formatNumber, quietZero, formatRelative, formatUsdCost } from '@/utils/format'
 import { DEPARTMENT_SOURCE_LABEL, OVERVIEW, PAGE, ROLE_LABEL, SETUP, type Tone } from '@/utils/labels'
 import { readStoredIds, writeStoredIds } from '@/utils/storedIds'
 
@@ -111,23 +111,23 @@ function showHidden(): void {
             <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-small">
               <div>
                 <dt class="text-fg-3">{{ OVERVIEW.questions }}</dt>
-                <dd class="tabular font-medium" data-test="live-questions">{{ formatNumber(a.questions) }}</dd>
+                <dd class="tabular font-medium" :class="quietZero(a.questions)" data-test="live-questions">{{ formatNumber(a.questions) }}</dd>
               </div>
               <div>
                 <dt class="text-fg-3">{{ OVERVIEW.notFound }}</dt>
-                <dd class="tabular font-medium">{{ formatNumber(a.notFound) }}</dd>
+                <dd class="tabular font-medium" :class="quietZero(a.notFound)">{{ formatNumber(a.notFound) }}</dd>
               </div>
               <div>
                 <dt class="text-fg-3">{{ OVERVIEW.thumbsUp }}</dt>
-                <dd class="tabular font-medium">{{ formatNumber(a.thumbsUp) }}</dd>
+                <dd class="tabular font-medium" :class="quietZero(a.thumbsUp)">{{ formatNumber(a.thumbsUp) }}</dd>
               </div>
               <div>
                 <dt class="text-fg-3">{{ OVERVIEW.thumbsDown }}</dt>
-                <dd class="tabular font-medium">{{ formatNumber(a.thumbsDown) }}</dd>
+                <dd class="tabular font-medium" :class="quietZero(a.thumbsDown)">{{ formatNumber(a.thumbsDown) }}</dd>
               </div>
               <div class="col-span-2">
                 <dt class="text-fg-3">{{ OVERVIEW.cost }}</dt>
-                <dd class="tabular font-medium" data-test="live-cost">{{ formatUsdCost(a.costUsd) }}</dd>
+                <dd class="tabular font-medium" :class="quietZero(a.costUsd)" data-test="live-cost">{{ formatUsdCost(a.costUsd) }}</dd>
               </div>
             </dl>
           </RouterLink>

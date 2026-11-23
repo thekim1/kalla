@@ -16,6 +16,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import DetailRow from '@/components/ui/DetailRow.vue'
 import InlineError from '@/components/ui/InlineError.vue'
+import PageBreadcrumb from '@/components/layout/PageBreadcrumb.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
@@ -24,7 +25,7 @@ import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatNumber } from '@/utils/format'
-import { DELETE, LEVEL_LABEL, PII_ACTIONS, RUN_STATE_LABEL, SOURCE, SOURCE_EDIT, SOURCE_PAGE, SOURCE_TYPE_LABEL } from '@/utils/labels'
+import { DELETE, LEVEL_LABEL, PAGE, PII_ACTIONS, RUN_STATE_LABEL, SOURCE, SOURCE_EDIT, SOURCE_PAGE, SOURCE_TYPE_LABEL } from '@/utils/labels'
 import { useKeysetList } from '@/composables/useKeysetList'
 import { usePoll } from '@/composables/usePoll'
 import { runProgressText, runStateTone } from '@/utils/runs'
@@ -64,6 +65,12 @@ async function deleteSource(): Promise<void> {
   void router.push({ name: 'collection', params: { id: deleted.collectionId } })
 }
 const collection = ref<Collection | null>(null)
+// The breadcrumb (admin design §5.12): the knowledge bases, then the source's knowledge base by name once it has loaded.
+const collectionName = ref<string | null>(null)
+const crumbs = computed(() => [
+  { label: PAGE.collections.title, to: { name: 'collections' } },
+  ...(source.data.value && collectionName.value ? [{ label: collectionName.value, to: { name: 'collection', params: { id: source.data.value.collectionId } } }] : []),
+])
 // The report's numbers and type names (#217): the types whose rule fired and the non-zero counts; never values.
 const piiType = (type: string) => SOURCE_PAGE.piiTypes[type] ?? type
 const piiTypeList = (types: string[]) => types.map(piiType).join(', ')
@@ -166,6 +173,14 @@ async function loadContinuable(): Promise<void> {
 
 async function load(): Promise<void> {
   await source.run(() => api.sources.get(props.id))
+  const collectionId = source.data.value?.collectionId
+  // One read of the knowledge base: its name for the breadcrumb, and (when it is the caller's own) the edit drawer's copy.
+  if (collectionId) {
+    void api.collections.get(collectionId).then((c) => {
+      collectionName.value = c.name
+      if (!c.shared) collection.value ??= c
+    }).catch(() => undefined)
+  }
   await loadRuns()
   pii.value = await api.sources.piiReport(props.id).catch(() => null)
 }
@@ -222,6 +237,7 @@ async function reloadPii(): Promise<void> {
 <template>
   <AsyncState :loading="source.loading.value && !source.data.value" :error="source.error.value" @retry="load">
     <template v-if="source.data.value">
+      <PageBreadcrumb :items="crumbs" />
       <PageHeader :title="source.data.value.name">
         <UiBadge :label="SOURCE_TYPE_LABEL[source.data.value.type]" />
         <UiBadge :label="LEVEL_LABEL[source.data.value.classification]" />
@@ -275,7 +291,8 @@ async function reloadPii(): Promise<void> {
       <FilesPanel v-if="source.data.value.type === 'upload'" :source="source.data.value" :can-edit="canEdit" class="mb-6" @committed="loadRuns()" />
       <PipelineCard :source="source.data.value" class="mb-6" />
 
-      <h2 class="mb-3 text-title-3">{{ SOURCE_PAGE.runs }}</h2>
+      <!-- Section titles inside their cards (admin design §5.12, Every page). -->
+      <UiCard :title="SOURCE_PAGE.runs" class="mb-6" data-test="runs">
       <AsyncState :loading="runs.loading.value && runs.items.value.length === 0" :error="runs.error.value" :empty="runs.items.value.length === 0" :empty-text="SOURCE_PAGE.noRuns" @retry="loadRuns()">
         <DataTable :columns="runColumns" :rows="runs.items.value" :row-key="(r) => r.id" :caption="SOURCE_PAGE.runs" :row-to="runTo">
           <template #cell-started="{ row }"><span class="tabular">{{ formatDateTime(row.startedAt) }}</span></template>
@@ -289,11 +306,12 @@ async function reloadPii(): Promise<void> {
         </DataTable>
         <UiButton v-if="runs.next.value" class="mt-4" :loading="runs.loading.value" @click="runs.more()">{{ SOURCE_PAGE.more }}</UiButton>
       </AsyncState>
+      </UiCard>
 
       <!-- Folded by default, with the counts in the summary; flagged documents first (admin design §5.5.3). There is no
            document page to link to, so the names are plain text. -->
-      <details v-if="pii && pii.applies && pii.documents.length" class="mt-8" data-test="pii">
-        <summary class="cursor-pointer"><h2 class="inline text-title-3" data-test="pii-summary">{{ SOURCE_PAGE.piiSummary(piiRows.length, piiFlaggedCount) }}</h2></summary>
+      <UiCard v-if="pii && pii.applies && pii.documents.length" as="details" class="mb-6" data-test="pii">
+        <summary class="cursor-pointer"><h2 class="inline text-heading" data-test="pii-summary">{{ SOURCE_PAGE.piiSummary(piiRows.length, piiFlaggedCount) }}</h2></summary>
         <DataTable :columns="piiColumns" :rows="piiRows" :row-key="(d) => d.documentId" :caption="SOURCE_PAGE.pii" class="mt-3">
           <template #cell-document="{ row }"><span data-test="pii-document">{{ row.title ?? row.displayName ?? row.url }}</span></template>
           <template #cell-fired="{ row }">
@@ -315,12 +333,11 @@ async function reloadPii(): Promise<void> {
             />
           </template>
         </DataTable>
-      </details>
-      <template v-else>
-        <h2 class="mb-3 mt-8 text-title-3">{{ SOURCE_PAGE.pii }}</h2>
+      </UiCard>
+      <UiCard v-else :title="SOURCE_PAGE.pii" class="mb-6">
         <p v-if="pii && !pii.applies" class="text-fg-2">{{ SOURCE_PAGE.piiNotApplies }}</p>
         <p v-else-if="pii" class="text-fg-2">{{ SOURCE_PAGE.piiNone }}</p>
-      </template>
+      </UiCard>
 
       <HeldDocuments :source-id="source.data.value.id" class="mt-8" />
       <SourceQuarantine :source-id="source.data.value.id" class="mt-8" />

@@ -58,9 +58,9 @@ async function explain(): Promise<void> {
   <UiCard :title="EXPLAIN.title" data-test="explain">
     <p class="mb-4 text-small text-fg-2">{{ EXPLAIN.lead }}</p>
     <form class="grid gap-4" novalidate @submit.prevent="explain">
-      <SelectField id="explain-client" v-model="form.clientId" :label="EXPLAIN.client" :options="clientOptions" :placeholder="EXPLAIN.chooseClient" />
-      <SelectField id="explain-kind" v-model="form.kind" :label="EXPLAIN.kind" :options="kindOptions" />
-      <TextField id="explain-id" v-model="form.id" :label="EXPLAIN.idLabels[form.kind] ?? EXPLAIN.id" :error="idError" mono />
+      <SelectField id="explain-client" v-model="form.clientId" class="max-w-sm" :label="EXPLAIN.client" :options="clientOptions" :placeholder="EXPLAIN.chooseClient" />
+      <SelectField id="explain-kind" v-model="form.kind" class="max-w-sm" :label="EXPLAIN.kind" :options="kindOptions" />
+      <TextField id="explain-id" v-model="form.id" class="max-w-sm" :label="EXPLAIN.idLabels[form.kind] ?? EXPLAIN.id" :error="idError" mono />
       <template v-if="form.kind === 'entra-user'">
         <TextAreaField id="explain-departments" v-model="form.departments" :label="EXPLAIN.departments" :hint="EXPLAIN.listHint" :rows="2" mono />
         <TextAreaField id="explain-groups" v-model="form.groups" :label="EXPLAIN.groups" :hint="EXPLAIN.listHint" :rows="2" mono />

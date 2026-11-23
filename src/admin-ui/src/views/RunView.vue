@@ -11,6 +11,7 @@ import CheckField from '@/components/ui/CheckField.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import DetailRow from '@/components/ui/DetailRow.vue'
 import MetricTile from '@/components/ui/MetricTile.vue'
+import PageBreadcrumb from '@/components/layout/PageBreadcrumb.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
@@ -19,8 +20,8 @@ import { useKeysetList } from '@/composables/useKeysetList'
 import { usePoll } from '@/composables/usePoll'
 import { reportDifferences } from '@/platform/politeness'
 import { useLoadable } from '@/stores/loadable'
-import { formatDateTime, formatNumber } from '@/utils/format'
-import { CONTINUE_RUN, PLATFORM, RUN_OUTCOME_LABEL, RUN_PAGE, RUN_PROGRESS, RUN_STATE_LABEL } from '@/utils/labels'
+import { formatDateTime, formatNumber, quietZero } from '@/utils/format'
+import { CONTINUE_RUN, PAGE, PLATFORM, RUN_OUTCOME_LABEL, RUN_PAGE, RUN_PROGRESS, RUN_STATE_LABEL } from '@/utils/labels'
 import { jobMessage } from '@/utils/messages'
 import { runProgressText } from '@/utils/runs'
 
@@ -46,6 +47,12 @@ const columns: Column[] = [
   { key: 'reason', label: RUN_PAGE.reason },
 ]
 const summary = computed(() => run.data.value?.run)
+// The breadcrumb (admin design §5.12): the knowledge bases, then the run's source by name once it has loaded.
+const sourceName = ref<string | null>(null)
+const crumbs = computed(() => [
+  { label: PAGE.collections.title, to: { name: 'collections' } },
+  ...(run.data.value ? [{ label: sourceName.value ?? PAGE.source.title, to: { name: 'source', params: { id: run.data.value.sourceId } } }] : []),
+])
 const progress = computed(() => runProgressText(summary.value))
 const completeness = computed(() => run.data.value?.report?.completeness)
 // "www.umea.se: Fast · 20 requests a second · robots.txt ignored: own site, web team consent"
@@ -85,6 +92,13 @@ function load(): void {
   poll.start()
 }
 
+watch(
+  () => run.data.value?.sourceId,
+  (id) => {
+    if (id) void api.sources.get(id).then((source) => (sourceName.value = source.name)).catch(() => undefined)
+  },
+)
+
 watch(onlyFailed, () => {
   paged.value = false
   void runItems.reload()
@@ -95,9 +109,9 @@ onMounted(load)
 <template>
   <AsyncState :loading="run.loading.value && !run.data.value" :error="run.error.value" @retry="load">
     <template v-if="summary && run.data.value">
+      <PageBreadcrumb :items="crumbs" />
       <PageHeader :title="`${RUN_PAGE.title} ${formatDateTime(summary.startedAt)}`">
         <UiBadge :label="RUN_STATE_LABEL[summary.state] ?? summary.state" data-test="state" />
-        <RouterLink :to="{ name: 'source', params: { id: run.data.value.sourceId } }" class="text-accent-ink underline">{{ RUN_PAGE.back }}</RouterLink>
         <CancelRunButton :run-id="summary.id" :state="summary.state" @cancelled="load" />
         <ContinueRunButton
           :run-id="summary.id" :can-continue="run.data.value.canContinue"
@@ -133,7 +147,7 @@ onMounted(load)
         v-if="summary.state === 'awaiting-deletion-confirmation'" :run-id="summary.id" :proposed-count="summary.proposedDeletions" class="mb-6"
         @decided="load"
       />
-      <p v-if="run.data.value?.report?.malwareScan === 'off'" class="mb-6 text-warning" role="note" data-test="not-scanned">{{ RUN_PAGE.notScanned }}</p>
+      <p v-if="run.data.value?.report?.malwareScan === 'off'" class="mb-6 text-warn" role="note" data-test="not-scanned">{{ RUN_PAGE.notScanned }}</p>
       <UiCard v-if="completeness || verdictReasons.length" class="mb-6" data-test="report">
         <p v-if="completeness?.complete">{{ RUN_PAGE.complete }}</p>
         <template v-else-if="completeness">
@@ -148,10 +162,10 @@ onMounted(load)
       <UiCard v-if="render" class="mb-6" data-test="render">
         <h2 class="mb-2 font-medium">{{ RUN_PAGE.render }}</h2>
         <dl class="m-0">
-          <DetailRow :label="RUN_PAGE.rendered"><span class="tabular">{{ formatNumber(render.rendered) }}</span></DetailRow>
-          <DetailRow :label="RUN_PAGE.renderedEmpty"><span class="tabular">{{ formatNumber(render.empty) }}</span></DetailRow>
-          <DetailRow :label="RUN_PAGE.renderFailures"><span class="tabular">{{ formatNumber(render.failures) }}</span></DetailRow>
-          <DetailRow :label="RUN_PAGE.keptFromLastGood"><span class="tabular">{{ formatNumber(render.keptFromLastGood) }}</span></DetailRow>
+          <DetailRow :label="RUN_PAGE.rendered"><span class="tabular" :class="quietZero(render.rendered)">{{ formatNumber(render.rendered) }}</span></DetailRow>
+          <DetailRow :label="RUN_PAGE.renderedEmpty"><span class="tabular" :class="quietZero(render.empty)">{{ formatNumber(render.empty) }}</span></DetailRow>
+          <DetailRow :label="RUN_PAGE.renderFailures"><span class="tabular" :class="quietZero(render.failures)">{{ formatNumber(render.failures) }}</span></DetailRow>
+          <DetailRow :label="RUN_PAGE.keptFromLastGood"><span class="tabular" :class="quietZero(render.keptFromLastGood)">{{ formatNumber(render.keptFromLastGood) }}</span></DetailRow>
         </dl>
       </UiCard>
       <UiCard v-if="politeness.length" class="mb-6" data-test="politeness">
@@ -161,7 +175,7 @@ onMounted(load)
         </ul>
       </UiCard>
 
-      <h2 class="mb-3 text-title-3">{{ RUN_PAGE.items }}</h2>
+      <UiCard :title="RUN_PAGE.items" data-test="items">
       <CheckField v-model="onlyFailed" :label="RUN_PAGE.onlyFailed" class="mb-4" />
       <AsyncState :loading="runItems.loading.value && runItems.items.value.length === 0" :error="runItems.error.value" :empty="runItems.items.value.length === 0" :empty-text="RUN_PAGE.noItems" @retry="runItems.reload()">
         <DataTable :columns="columns" :rows="runItems.items.value" :row-key="(i) => String(i.id)" :caption="RUN_PAGE.items">
@@ -171,6 +185,7 @@ onMounted(load)
         </DataTable>
         <UiButton v-if="runItems.next.value" class="mt-4" :loading="runItems.loading.value" @click="moreItems">{{ RUN_PAGE.more }}</UiButton>
       </AsyncState>
+      </UiCard>
     </template>
   </AsyncState>
 </template>

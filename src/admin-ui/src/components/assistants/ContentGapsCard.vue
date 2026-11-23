@@ -9,7 +9,7 @@ import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import { lastDays } from '@/components/costs/costs'
 import { useLoadable } from '@/stores/loadable'
-import { formatNumber, formatRatio } from '@/utils/format'
+import { formatNumber, quietZero, formatRatio } from '@/utils/format'
 import { CONTENT_GAPS as L, COSTS } from '@/utils/labels'
 import { CONTENT_GAP_MESSAGES } from '@/utils/messages'
 
@@ -79,8 +79,8 @@ function key(row: ContentGapRow): string {
             <span v-if="row.noHit || row.notShared" class="text-fg-3" aria-hidden="true">–</span>
             <template v-else>{{ row.collectionName ?? L.deleted }}</template>
           </template>
-          <template #cell-notFound="{ row }"><span class="tabular">{{ formatNumber(row.notFound) }}</span></template>
-          <template #cell-answeredGeneral="{ row }"><span class="tabular">{{ formatNumber(row.answeredGeneral) }}</span></template>
+          <template #cell-notFound="{ row }"><span class="tabular" :class="quietZero(row.notFound)">{{ formatNumber(row.notFound) }}</span></template>
+          <template #cell-answeredGeneral="{ row }"><span class="tabular" :class="quietZero(row.answeredGeneral)">{{ formatNumber(row.answeredGeneral) }}</span></template>
         </DataTable>
         <div class="mt-3 flex flex-wrap items-center gap-4">
           <UiButton v-if="documents.length > SHOWN" data-test="content-gaps-show-all" @click="showAll = !showAll">

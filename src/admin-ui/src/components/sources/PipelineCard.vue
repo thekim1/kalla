@@ -135,7 +135,7 @@ onMounted(load)
         <template v-for="f in fields" :key="f.name">
           <SelectField v-if="f.kind === 'select'" :id="`param-${f.name}`" v-model="values[f.name]!" :label="f.label" :options="f.options" />
           <TextField
-            v-else-if="f.kind === 'integer'" :id="`param-${f.name}`" v-model="values[f.name]!" :label="f.label" :hint="f.hint" inputmode="numeric"
+            v-else-if="f.kind === 'integer'" :id="`param-${f.name}`" v-model="values[f.name]!" :label="f.label" :hint="f.hint" inputmode="numeric" short
             :error="fieldErrors[f.name]"
           />
           <TextAreaField v-else :id="`param-${f.name}`" v-model="values[f.name]!" :label="f.label" :hint="f.hint" :error="fieldErrors[f.name]" mono />

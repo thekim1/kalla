@@ -141,24 +141,24 @@ async function tryWithout(): Promise<void> {
   <UiCard :title="RETRIEVAL.title" data-test="retrieval">
     <p class="mb-4 text-fg-2">{{ RETRIEVAL.lead }}</p>
     <p v-if="proposalFilled" class="mb-4 font-medium" data-test="proposal-filled">{{ RETRIEVAL.proposalFilled }}</p>
-    <form class="grid gap-8" novalidate @submit.prevent="save">
+    <form class="grid max-w-[680px] gap-8" novalidate @submit.prevent="save">
       <FieldGroup :legend="RETRIEVAL.weights">
         <TextField
           v-for="k in (['vectorWeight', 'keywordWeight', 'candidates', 'maxChunksPerDocument', 'expandMaxTokens'] as const)" :id="`rs-${k}`" :key="k"
-          v-model="fields[k]" :label="RETRIEVAL[k]" :hint="hint(k)" :error="errors[k]" inputmode="decimal" :disabled="!canEdit"
+          v-model="fields[k]" :label="RETRIEVAL[k]" :hint="hint(k)" :error="errors[k]" inputmode="decimal" short :disabled="!canEdit"
         />
       </FieldGroup>
       <FieldGroup :legend="RETRIEVAL.coverage" :hint="RETRIEVAL.coverageLead">
         <TextField
           v-for="k in (['coverageMaxDistance', 'coverageMinKeywordScore'] as const)" :id="`rs-${k}`" :key="k"
-          v-model="fields[k]" :label="RETRIEVAL[k]" :hint="hint(k)" :error="errors[k]" inputmode="decimal" :disabled="!canEdit"
+          v-model="fields[k]" :label="RETRIEVAL[k]" :hint="hint(k)" :error="errors[k]" inputmode="decimal" short :disabled="!canEdit"
         />
       </FieldGroup>
       <FieldGroup :legend="RETRIEVAL.recency" :hint="RETRIEVAL.recencyLead">
         <CheckField v-model="recency.on" :label="RETRIEVAL.recencyOn" :disabled="!canEdit" data-test="recency-on" />
         <template v-if="recency.on">
-          <TextField id="rs-halfLifeDays" v-model="recency.halfLifeDays" :label="RETRIEVAL.halfLifeDays" :error="errors.halfLifeDays" inputmode="numeric" :disabled="!canEdit" />
-          <TextField id="rs-weight" v-model="recency.weight" :label="RETRIEVAL.weight" :error="errors.weight" inputmode="decimal" :disabled="!canEdit" />
+          <TextField id="rs-halfLifeDays" v-model="recency.halfLifeDays" :label="RETRIEVAL.halfLifeDays" :error="errors.halfLifeDays" inputmode="numeric" short :disabled="!canEdit" />
+          <TextField id="rs-weight" v-model="recency.weight" :label="RETRIEVAL.weight" :error="errors.weight" inputmode="decimal" short :disabled="!canEdit" />
           <TextField id="rs-kinds" v-model="recency.kinds" :label="RETRIEVAL.kinds" :hint="RETRIEVAL.kindsHint" :error="errors.kinds" :disabled="!canEdit" />
         </template>
       </FieldGroup>

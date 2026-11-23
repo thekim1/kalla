@@ -183,8 +183,8 @@ async function save(): Promise<void> {
         <TextAreaField id="edit-include" v-model="include" :label="SOURCE.include" :hint="SOURCE.includeHint" mono />
         <TextAreaField id="edit-exclude" v-model="exclude" :label="SOURCE.exclude" :hint="SOURCE.excludeHint" mono />
         <TextAreaField id="edit-demote" v-model="demote" :label="SOURCE_EDIT.demote" :hint="SOURCE_EDIT.demoteHint" :error="form.errors.demote" mono />
-        <TextField id="edit-max-pages" v-model="maxPages" :label="SOURCE.maxPages" inputmode="numeric" :error="form.errors.maxPages" />
-        <TextField id="edit-max-depth" v-model="maxDepth" :label="SOURCE.maxDepth" inputmode="numeric" :error="form.errors.maxDepth" />
+        <TextField id="edit-max-pages" v-model="maxPages" :label="SOURCE.maxPages" inputmode="numeric" short :error="form.errors.maxPages" />
+        <TextField id="edit-max-depth" v-model="maxDepth" :label="SOURCE.maxDepth" inputmode="numeric" short :error="form.errors.maxDepth" />
       </template>
       <SelectField v-if="collection?.classification === 'public'" id="edit-pii" v-model="piiMode" :label="SOURCE.piiMode" :options="piiOptions" />
 

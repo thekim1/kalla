@@ -167,7 +167,7 @@ defineExpose({ load })
     </UiCard>
 
     <div v-if="canEdit && questions.length && targetOptions.length" class="flex flex-wrap items-end gap-3" data-test="test-run">
-      <SelectField id="test-run-target" v-model="target" :label="L.runOn" :options="targetOptions" />
+      <SelectField id="test-run-target" v-model="target" class="max-w-sm" :label="L.runOn" :options="targetOptions" />
       <UiButton variant="primary" :loading="starting" :disabled="running" data-test="test-run-start" @click="run">{{ L.run }}</UiButton>
       <p class="w-full text-small text-fg-3" data-test="test-cost">{{ L.cost(questions.length) }}</p>
     </div>
