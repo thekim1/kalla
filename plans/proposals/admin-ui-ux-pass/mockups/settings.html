@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Settings form (proposed)</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block">
 <link rel="stylesheet" href="mock.css">
@@ -11,8 +12,8 @@
 <main class="main">
 <div class="page">
   <div class="head"><div><h1>Settings</h1><div class="sub">How the platform answers, fetches and keeps content.</div></div></div>
-  <div style="display:grid;grid-template-columns:220px minmax(0,1fr);gap:40px">
-    <div class="small">
+  <div class="settings-layout" style="display:grid;grid-template-columns:220px minmax(0,1fr);gap:40px">
+    <div class="small settings-nav">
       <div class="grp" style="padding-left:12px">Answers</div>
       <div class="nav on">Chat</div><div class="nav">Prompt texts</div><div class="nav">Search</div><div class="nav">Assistant templates</div>
       <div class="grp" style="padding-left:12px">Content</div>
@@ -23,6 +24,7 @@
       <div class="nav">Network</div><div class="nav">Role groups</div>
     </div>
     <div class="w-form" style="max-width:680px">
+      <div class="only-phone" style="margin-bottom:16px"><div class="input"><span class="muted">Section</span><b style="font-weight:500">Answers › Chat</b><span class="ms caret">expand_more</span></div></div>
       <h2 style="font-size:20px;margin:0 0 4px;font-weight:600">Chat</h2>
       <div class="fg2" style="margin-bottom:22px">Limits and models every assistant shares.</div>
 
@@ -36,7 +38,7 @@
       <div class="card" style="margin-top:16px">
         <div class="section-title" style="margin-top:0">Limits <i class="pin-i">2</i></div>
         <div class="section-lead">Empty: the value shown in grey applies.</div>
-        <div style="display:flex;gap:24px">
+        <div class="row-wrap" style="display:flex;gap:24px">
           <div class="field"><label>Longest answer</label><div style="display:flex;align-items:center;gap:8px"><div class="input w-num ph">Model’s limit</div><span class="muted">tokens</span></div></div>
           <div class="field"><label>Messages per person</label><div style="display:flex;align-items:center;gap:8px"><div class="input w-num ph">20</div><span class="muted">per minute</span></div></div>
         </div>

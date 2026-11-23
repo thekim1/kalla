@@ -22,7 +22,7 @@ proposal changes them. What makes pages feel busy is **how much asks for attenti
 - the assistant's test is a separate tab from the draft it tests, so you switch tabs after every edit;
 - each form saves with a differently named button at its bottom, and nothing says that there are unsaved changes.
 
-The proposal is nine rules (below) and six decisions (UX1–UX6), each with a recommendation. Together they take most
+The proposal is eleven rules (below) and six decisions (UX1–UX6), each with a recommendation. Together they take most
 of the buttons and form fields off the first screen of the busiest pages, without removing a single function.
 
 ## How the review was done
@@ -30,8 +30,9 @@ of the buttons and form fields off the first screen of the busiest pages, withou
 46 screens at 1,440 px as a platform administrator: every page in the menu, every tab of a knowledge base and an
 assistant, every Settings section, a source page, and the create and edit drawers. The stack was the FakeGateway stack
 with the demo seed (one knowledge base with 13 files, one published assistant, four departments); the parser,
-renderer and Open WebUI were off. Phone width and the dark and Lumen themes were reviewed in M-19 and are not repeated
-here; every proposal below must keep the phone layout (rows as cards, the bottom menu) and all three themes.
+renderer and Open WebUI were off. The same pages again at 390 px on a phone viewport (touch, `isMobile`), and the
+mockups at 1,440, 390 and 320 px with axe-core (WCAG 2.2 A and AA rules). The dark and Lumen themes were reviewed in
+M-19; every proposal uses only tokens, so all three themes follow.
 
 The mockups under [`admin-ui-ux-pass/mockups/`](admin-ui-ux-pass/mockups/) are plain HTML that use the admin UI's own
 tokens (`tokens.css`, light theme), so they show layout and grouping, not a new look. Yellow numbered dots in them
@@ -46,7 +47,7 @@ point to the numbered items in the text. Their data is invented where the seed h
   within the glossary.
 - **The drawers** for create and edit, the command palette (Ctrl K), the empty states, `?tab=` in the address.
 
-## Nine rules
+## Eleven rules
 
 These are the rules each change below follows; once adopted they go into admin design §5 as the layout rules every
 new page is reviewed against.
@@ -71,6 +72,11 @@ new page is reviewed against.
    Green is for a state someone waits for (*Published*, *Done*); amber and red for something to do.
 9. **One rhythm.** Lists use the full content width; forms one column of at most 680 px, with help or a preview in a
    second column when there is room; detail pages start with a row of up to four summary tiles.
+10. **As good on a phone.** Below 760 px every page is one column with no sideways scrolling down to 320 px; the
+    primary action spans the width beside the ⋯; tabs stay one row that scrolls; rows become cards; menus become
+    bottom sheets; touch targets are at least 44 × 44 px (*Phone* below).
+11. **Accessible by construction.** WCAG 2.2 level AA (EN 301 549) for every component and page, checked by the
+    accessibility spec in the three themes and at phone width (*Accessibility* below).
 
 ## Before and after
 
@@ -139,6 +145,81 @@ new page is reviewed against.
    placeholder (M-19 already does this in places).
 3. A list of hosts is a chip input, not a text area with one value per line.
 4. The save bar; ✱ *Cancel* becomes *Discard*, which says what it does.
+
+## Phone
+
+**What happens on a phone today** (390 px):
+
+| Assistant now | Knowledge base now |
+|---|---|
+| ![The assistant page on a phone now](admin-ui-ux-pass/img/before-mobile-assistant.png) | ![The knowledge base on a phone now](admin-ui-ux-pass/img/before-mobile-knowledge-base.png) |
+
+- **The header fills the first screen.** The assistant's five buttons wrap to three rows, the knowledge base's to two,
+  before any content.
+- **Tabs wrap to two or three lines** (eight on the knowledge base), so the active one is hard to find.
+- **The bottom menu has two pages and *Menu*** (`router/nav.ts`, `mobileTabs`: Home, Knowledge bases), where admin
+  design §5.2 sets Home, Knowledge bases, Assistants, Feedback, Menu. The assistant pages need two taps through *Menu*.
+- **The assistant's draft and test are far apart:** the four *General knowledge* cards alone are 500 px tall, and the
+  test is on another tab.
+- There is no sideways scrolling on any page (checked on five pages): M-19's base holds.
+
+**Proposed** (the same mockups at 390 px):
+
+| Assistant | Knowledge base | Home | Feedback | Settings |
+|---|---|---|---|---|
+| ![Assistant on a phone, proposed](admin-ui-ux-pass/img/mobile-assistant.png) | ![Knowledge base on a phone, proposed](admin-ui-ux-pass/img/mobile-knowledge-base.png) | ![Home on a phone, proposed](admin-ui-ux-pass/img/mobile-home.png) | ![Feedback on a phone, proposed](admin-ui-ux-pass/img/mobile-feedback.png) | ![Settings on a phone, proposed](admin-ui-ux-pass/img/mobile-settings.png) |
+
+- **Header:** title and badges, then one row: the primary action across the width and the ⋯ button (44 px). The ⋯
+  opens a bottom sheet with the same items as the desktop menu. Secondary actions such as *Compare with published*
+  move into the sheet.
+- **Bottom menu:** Home, Knowledge bases, Assistants, Feedback, Menu, as §5.2 says (a bug fix, not a design change).
+  *Menu* opens the rest of the side menu as a sheet.
+- **Tabs:** one row that scrolls sideways, the active tab scrolled into view and a fade at the edge to show there is
+  more; never wrapped.
+- **Tiles** two by two; **rows as cards** with the column name as each value's label (M-19's pattern, now on every
+  table including Home's and the Overview's).
+- **Assistant:** the test panel is not beside the form but one tap away: *Try the draft* in the save bar opens it as a
+  full-height sheet, with the draft still saved in memory. The general-knowledge scale keeps all four steps on one row.
+- **Filters:** chips wrap to as many rows as needed (no sideways scrolling of the filter row); the counts drop to a
+  line of their own.
+- **Settings:** the section menu becomes a *Section* picker at the top of the page.
+- **Save bar:** fixed above the bottom menu, its buttons 44 px high and sharing the width; the page gets padding
+  under its last field equal to the bar's height, so nothing is ever hidden behind it.
+- **Tested at 320 px** (WCAG reflow): all five mockups fit without sideways scrolling.
+
+## Accessibility
+
+The target is **WCAG 2.2 level AA**, the level of EN 301 549, which the Swedish DOS law (2018:1937) points to for the
+public sector's digital services. Today's admin UI is a good base: the tokens'
+colour pairs meet AA (`tokens.css` says so and the accessibility spec checks it), focus moves to the page heading on
+navigation, Swedish content is marked `lang="sv"`, and the drop zone has buttons as well as drag and drop (2.5.7).
+
+The mockups pass axe-core's WCAG 2.2 A and AA rules at 1,440, 390 and 320 px with no violations (the yellow note dots
+excluded). Axe catches about a third of the criteria, so each new component also follows the WAI-ARIA Authoring
+Practices pattern named below, and each step is tried with the keyboard and a screen reader (NVDA or VoiceOver)
+before it is merged.
+
+| Component or change | Pattern and criteria | What it must do |
+|---|---|---|
+| ⋯ menu (`MenuButton`) | APG *Menu button*; 2.1.1, 4.1.2 | A real `button` with `aria-haspopup="menu"`, `aria-expanded` and the name "More actions for *Demo-assistent*"; arrow keys move, Enter acts, Esc closes and returns focus to the button. On a phone the sheet is a modal dialog with a focus trap and a *Close* button. *Delete…* keeps its confirmation dialog. |
+| Tabs (one scrolling row) | APG *Tabs*; 1.4.10, 2.4.7 | `role="tablist"` with `tab`s, arrow keys between tabs, the selected tab scrolled into view on focus. The dot on a tab has text for assistive technology ("Quality, needs attention") and is never the only sign (1.4.1). |
+| Filter chips and period picker | APG *Listbox* in a popover, *Radio group* for presets; 1.3.1, 3.3.2, 4.1.3 | Each chip is a button whose name says the filter and its value ("Rating: Thumbs down"); the × has its own name ("Remove the rating filter"). A custom range has two labelled date fields with the format shown. The result count is in a polite live region, so a screen-reader user hears "61 answers" after a change. |
+| Filters in the address | 2.4.2, 3.2.2 | Changing a filter never moves focus or reloads the page; the page title can carry the filtered state. |
+| Save bar (`SaveBar`) | 2.4.11, 4.1.3, 3.3.4 | A labelled region ("Unsaved changes") that appears with a polite announcement; `scroll-padding-bottom` equal to its height so a focused field is never hidden behind it (2.4.11 *Focus not obscured*). Leaving with unsaved changes asks in a dialog; *Discard* asks once. |
+| General-knowledge scale | APG *Radio group*; 1.3.1, 3.3.2 | Four real radio buttons in a `radiogroup` named "General knowledge", the chosen level's description tied with `aria-describedby`; not a set of toggle buttons. |
+| Test panel (chat) | 4.1.3, 1.3.2 | The answers in a `role="log"` with polite announcements; the question field labelled; reading order form → test panel on desktop, and the sheet a modal dialog on a phone. |
+| Summary tiles | 1.3.1, 1.4.1 | Each tile a small heading and value (or a `dl`); the tile that needs action says so in text ("Not measured") besides its coloured border. |
+| Rows as cards | 1.3.1 | The table keeps its semantics (`role="table"`, `row`, `cell`, `columnheader`) when CSS turns rows into cards, because some browsers drop them with `display: block`; or the phone renders a list of cards with the same labels. |
+| Selected radio card | 1.4.11 | The 2 px accent border is the selected state, contrast ≥ 3:1 against the card and the canvas (accent `#3446DB` is 6.9:1 on white and 6.3:1 on the canvas). |
+| Touch targets | 2.5.8 | At least 24 × 24 px everywhere (AA); 44 × 44 px on a phone as our own rule; small ghost buttons in rows (*Handle*) get padding to reach it. |
+| Reflow, zoom, text spacing | 1.4.4, 1.4.10, 1.4.12 | No sideways scrolling at 320 px or at 400 % zoom on desktop; text spacing overrides do not clip labels (chips and tabs size to their text). |
+| Focus | 2.4.3, 2.4.7, 2.4.13 (AAA, aimed for) | The design system's 2 px focus ring on every control, including chips, tiles that link and the bottom menu; focus order follows the visual order. |
+| Motion | 2.3.3 (AAA, aimed for) | Sheets and the save bar slide only when `prefers-reduced-motion` is not set. |
+| Language and names | 3.1.2, 2.5.3 | Swedish names keep `lang="sv"`; a button's visible text starts its accessible name ("Publish draft"). |
+
+**How it is checked:** the accessibility spec in `tests/e2e` (axe over every page, three themes) gains a phone project
+at 390 px and a 320 px reflow check, and covers the new components' open states (menu, sheet, period picker, save
+bar). A keyboard-only pass and a screen-reader pass of each changed page are part of each step's pull request.
 
 ## Decisions for the user
 
@@ -317,14 +398,13 @@ groups* "No member groups" as a grey dash; *Fetched* drops the date when it is t
 ## What this is not
 
 - **Not a new look.** No token, font, radius, colour or icon set changes.
-- **Not the phone layout.** It keeps M-19's: each proposal folds to one column, the ⋯ menu becomes a bottom sheet,
-  the save bar stays at the bottom.
+- **Not a separate phone design.** The phone gets the same pages, folded by rule 10 (*Phone* above).
 - **Not new functions.** Every function on today's pages is still there, at most one click further away when it is
   rare.
 
 ## Where it lands
 
-- **Design:** Decisions "Admin API and UI" (the nine rules, one line each); admin design §5.2 (menu), §5.3, §5.5.1
+- **Design:** Decisions "Admin API and UI" (the eleven rules, one line each); admin design §5.2 (menu), §5.3, §5.5.1
   (Home), §5.5.2 and §5.5.7 point 2 (knowledge base tabs), §5.5.4 (assistant), §5.7 (the renames), §5.10 (Settings
   groups).
 - **Code:** `src/admin-ui/src/**` (stream b's paths); four new Källa components in `components/ui/` (`MenuButton`,
@@ -335,6 +415,7 @@ groups* "No member groups" as a grey dash; *Fetched* drops the date when it is t
   switch in the filter row), B-68 (*Archive* and *Keep* in the ⋯ menu), #953 (the organisation logo in the menu's
   brand). None waits on this proposal; the later step adapts to what has landed.
 - **Order** (each a pull request of its own, smallest first):
+  0. The phone's bottom menu as §5.2 says (Assistants and Feedback added to `mobileTabs`): a bug fix, needs no decision.
   1. Rules 3, 5, 8 and the renames: field widths, grey zeros, repeated texts, radio-card selection (about a day).
   2. UX4: `MenuButton`, the headers and the file rows.
   3. UX6 A: `SaveBar` on every form.
@@ -342,7 +423,8 @@ groups* "No member groups" as a grey dash; *Fetched* drops the date when it is t
   5. UX2: the knowledge base page.
   6. UX5: filters and the address.
   7. UX1 and Home (UX6 C) once B-59 has landed.
-- **Checks:** each step shown in a browser at 1,440 and 390 px in the three themes; the accessibility spec
+- **Checks:** each step shown in a browser at 1,440, 390 and 320 px in the three themes, with a keyboard-only and a
+  screen-reader pass; the accessibility spec
   (`tests/e2e`) and the menu-structure test (`router/*.spec.ts`) updated with the step that changes them.
 
 ## Sources

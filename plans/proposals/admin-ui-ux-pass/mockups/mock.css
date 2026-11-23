@@ -104,3 +104,60 @@ tr:last-child td { border-bottom: 0; } td.num, th.num { text-align: right; font-
 .pin { position: absolute; width: 22px; height: 22px; border-radius: 99px; background: #F2C200; color: #2A2100; font-weight: 700; font-size: 12px; display: grid; place-items: center; z-index: 9; box-shadow: 0 0 0 3px #fff; }
 .pin-i { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 99px; background: #F2C200; color: #2A2100; font-weight: 700; font-size: 11.5px; box-shadow: 0 0 0 2px #fff; vertical-align: middle; flex: none; font-style: normal; }
 .bar.static { position: static; }
+
+/* Focus: every control shows the design system's focus ring (2 px --focus, 2 px offset). */
+:focus-visible { outline: 2px solid #3446DB; outline-offset: 2px; }
+.mtop, .bottom, .sheet, .scrim, .only-phone { display: none; }
+
+/* Phone (≤ 760 px): one column, the bottom menu, tabs in one scrolling row, rows as cards, sheets instead of menus. */
+@media (max-width: 760px) {
+  body { font-size: 15px; }
+  .app { display: block; min-height: 0; }
+  .side, .top, .only-desk { display: none; }
+  .only-phone { display: revert; }
+  .mtop { display: flex; align-items: center; gap: 10px; height: 56px; padding: 0 16px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--canvas); z-index: 4; }
+  .mtop b { font-size: 15px; } .mtop .btn { margin-left: auto; }
+  .bottom { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; height: 64px; background: var(--surface); box-shadow: 0 -1px 0 var(--border); z-index: 6; }
+  .bottom div { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; color: var(--fg-2); min-height: 48px; }
+  .bottom div.on { color: var(--accent-ink); font-weight: 600; }
+  .page { padding: 18px 16px 150px; }
+  .head { flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+  .head > div:first-child { width: 100%; }
+  .head h1 { font-size: 24px; }
+  .head .actions { margin-left: 0; width: 100%; }
+  .head .actions .btn.primary { flex: 1; justify-content: center; }
+  .head .actions .btn { height: 44px; } .head .actions .btn.icon { width: 44px; }
+  .menu { display: none; }
+  .tabs { overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; margin: 0 -16px 18px; padding: 0 16px; -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); }
+  .tab { white-space: nowrap; padding: 12px 10px; }
+  .split, .grid2, .grid3 { grid-template-columns: minmax(0, 1fr) !important; }
+  .head .actions { flex-wrap: wrap; } .health, .row-wrap { flex-wrap: wrap; gap: 10px 16px !important; }
+  .health > span { width: 100%; }
+  .w-num { width: 120px; } .w-md { width: 100%; }
+  .scale div { font-size: 12.5px; padding: 10px 2px; }
+  .test { display: none; }
+  table.rt, table.rt tbody, table.rt tr, table.rt td { display: block; width: 100%; }
+  table.rt tr:has(th) { display: none; }
+  table.rt tr { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  table.rt tr:last-child { border-bottom: 0; }
+  table.rt td { padding: 3px 0; border: 0; text-align: left !important; display: flex; gap: 12px; }
+  table.rt td[data-label]:not([data-label=""])::before { content: attr(data-label); color: var(--fg-3); font-size: 12.5px; min-width: 110px; }
+  table.rt td.first { font-weight: 600; }
+  table.rt td .btn { margin-top: 6px; height: 40px; }
+  .filters { flex-wrap: wrap; } .filters .chip { height: 40px; }
+  .filters .count { width: 100%; margin-left: 0 !important; }
+  .bar { position: fixed; left: 12px; right: 12px; bottom: 76px; z-index: 5; padding: 8px 8px 8px 14px; flex-wrap: wrap; }
+  .bar .state { font-size: 13px; flex: 1 1 100%; }
+  .bar .r { margin-left: 0; width: 100%; } .bar .r .btn { flex: 1; justify-content: center; height: 44px; }
+  .settings-layout { display: block !important; } .settings-nav { display: none; }
+  .card { padding: 16px; }
+}
+@media (max-width: 760px) { .btn.only-phone { display: inline-flex; } div.only-phone { display: block; } }
+@media (max-width: 760px) { .kb { flex-wrap: wrap; } .kb .chips { margin-left: 0; width: 100%; } }
+@media (max-width: 760px) {
+  .card.test { display: none; }
+  .grid3.tiles { grid-template-columns: 1fr 1fr !important; gap: 10px; }
+  table.rt td { flex-wrap: wrap; }
+}
+@media (max-width: 760px) { .bar .r { flex-wrap: wrap; } }
+@media (max-width: 360px) { .bar .r .btn.only-phone { flex-basis: 100%; } }

@@ -28,7 +28,19 @@
       <div class="search"><span class="ms">search</span>Search<kbd>Ctrl K</kbd></div>
       <span class="env">Development</span>
     </div>`
+  // Phone: a top bar with the search, and the bottom menu of admin design §5.2 (Home, Knowledge bases, Assistants,
+  // Feedback, Menu); each target is at least 48 px high.
+  const tab = (id, icon, label) => `<div class="${id === active ? 'on' : ''}"><span class="ms">${icon}</span>${label}</div>`
+  const mtop = `<div class="mtop"><span class="ms">hub</span><b>Källa</b><span class="btn ghost icon" aria-label="Search"><span class="ms">search</span></span></div>`
+  const bottom = `<nav class="bottom" aria-label="Main">${tab('home', 'space_dashboard', 'Home')}${tab('collections', 'library_books', 'Knowledge')}${tab('assistants', 'smart_toy', 'Assistants')}${tab('feedback', 'thumbs_up_down', 'Feedback')}${tab('menu', 'menu', 'Menu')}</nav>`
+  // Tables become cards on a phone: each cell gets its column's name as a label.
+  for (const t of document.querySelectorAll('table')) {
+    t.classList.add('rt')
+    const heads = [...t.querySelectorAll('tr:first-child th')].map((th) => th.textContent.trim())
+    for (const tr of t.querySelectorAll('tr')) [...tr.children].forEach((td, i) => { if (td.tagName === 'TD') { td.dataset.label = heads[i] ?? ''; if (i === 0) td.classList.add('first') } })
+  }
   const app = document.querySelector('.app')
   app.insertAdjacentHTML('afterbegin', side)
-  document.querySelector('.main').insertAdjacentHTML('afterbegin', top)
+  document.querySelector('.main').insertAdjacentHTML('afterbegin', mtop + top)
+  document.body.insertAdjacentHTML('beforeend', bottom)
 })()
