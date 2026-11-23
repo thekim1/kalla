@@ -133,6 +133,10 @@ GRANT SELECT, INSERT, UPDATE ON chat."AssistantDailyUsage" TO kalla_admin;
 -- conversation writer upserts them; the admin upserts the test panel's turns too (admin design §4.9).
 GRANT SELECT, INSERT, UPDATE, DELETE ON chat."AssistantDailyOutcomes" TO kalla_api;
 GRANT SELECT, INSERT, UPDATE ON chat."AssistantDailyOutcomes" TO kalla_admin;
+-- Not-found and general-knowledge turns per nearest hit (data-model §2.3; Decisions "Content-gap report"): only the api's
+-- conversation writer upserts them, never for the test panel; the admin reads them for the content-gap report (admin design §8.7).
+GRANT SELECT, INSERT, UPDATE, DELETE ON chat."AssistantDailyGaps" TO kalla_api;
+GRANT SELECT ON chat."AssistantDailyGaps" TO kalla_admin;
 
 -- audit: every service appends, only the admin reads; no role deletes (retention runs through step functions).
 GRANT INSERT ON audit."AuditLog" TO kalla_api, kalla_admin, kalla_worker;

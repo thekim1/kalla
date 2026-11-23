@@ -9,7 +9,8 @@ namespace Kalla.IntegrationTests;
 /// the checks refuse a negative counter, more estimated calls than calls, more cached than input tokens, an empty step and
 /// an unknown level, the nightly chat step removes assistant usage older than 3 years, and the daily totals keep no token
 /// or cost column (B-38). <c>chat."AssistantDailyOutcomes"</c> (Decisions "Cost per outcome") likewise: its checks, its grants
-/// and its 3 years.
+/// and its 3 years. <c>chat."AssistantDailyGaps"</c> (Decisions "Content-gap report") too, and it has no column that could hold
+/// a question, an answer or who asked.
 /// </summary>
 [Collection(RagDatabaseGroup.Name)]
 public sealed class DailyUsageSchemaTests(RagDatabaseFixture database)
@@ -187,6 +188,86 @@ public sealed class DailyUsageSchemaTests(RagDatabaseFixture database)
         }
 
         (await Sql.ListAsync(admin, $"""SELECT ("Day" > current_date - 7)::text FROM chat."AssistantDailyOutcomes" WHERE "AssistantId" = '{assistant}'"""))
+            .ShouldBe(["true"]);
+    }
+
+    [Fact]
+    public async Task An_assistant_gap_row_takes_every_column_and_the_checks_refuse_what_they_forbid()
+    {
+        var api = database.Connection(Api);
+        var assistant = Guid.NewGuid();
+        var client = Guid.NewGuid();
+        await Sql.ExecuteAsync(api, $"""
+            INSERT INTO chat."AssistantDailyGaps" ("Day", "AssistantId", "ClientId", "Classification", "Outcome", "CollectionId", "DocumentId", "DepartmentId", "Turns")
+            VALUES (current_date, '{assistant}', '{client}', 'internal', 'not-found', gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 3)
+            """);
+
+        // No hit is the zero ids; the counter defaults to 0; answered-general is the other outcome.
+        await Sql.ExecuteAsync(api, $"""
+            INSERT INTO chat."AssistantDailyGaps" ("Day", "AssistantId", "ClientId", "Classification", "Outcome", "CollectionId", "DocumentId", "DepartmentId")
+            VALUES (current_date, '{assistant}', '{client}', 'internal', 'answered-general', '{Guid.Empty}', '{Guid.Empty}', gen_random_uuid())
+            """);
+        (await Sql.ScalarAsync<long>(api, $"""SELECT sum("Turns") FROM chat."AssistantDailyGaps" WHERE "AssistantId" = '{assistant}'""")).ShouldBe(3);
+
+        foreach (var (values, state) in new[]
+                 {
+                     ("'secret', 'not-found', 1", PostgresErrorCodes.CheckViolation),
+                     ("'public', 'answered', 1", PostgresErrorCodes.CheckViolation), // only the two gap outcomes
+                     ("'public', 'unavailable', 1", PostgresErrorCodes.CheckViolation),
+                     ("'public', 'not-found', -1", PostgresErrorCodes.CheckViolation),
+                     ("'public', NULL, 1", PostgresErrorCodes.NotNullViolation),
+                 })
+        {
+            var sql = $"""
+                INSERT INTO chat."AssistantDailyGaps" ("Day", "AssistantId", "ClientId", "CollectionId", "DocumentId", "DepartmentId", "Classification", "Outcome", "Turns")
+                VALUES (current_date, gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), {values})
+                """;
+            (await Should.ThrowAsync<PostgresException>(() => Sql.ExecuteAsync(api, sql))).SqlState.ShouldBe(state, sql);
+        }
+
+        // Only the api writes it (never the test panel, data-model §2.3); the admin reads it for the report; the worker cannot see it.
+        var admin = database.Connection(Admin);
+        (await Sql.ScalarAsync<long>(admin, $"""SELECT count(*) FROM chat."AssistantDailyGaps" WHERE "AssistantId" = '{assistant}'""")).ShouldBe(2);
+        await Sql.ShouldBeDeniedAsync(admin, $"""
+            INSERT INTO chat."AssistantDailyGaps" ("Day", "AssistantId", "ClientId", "Classification", "Outcome", "CollectionId", "DocumentId", "DepartmentId", "Turns")
+            VALUES (current_date, '{assistant}', '{client}', 'internal', 'not-found', '{Guid.Empty}', '{Guid.Empty}', gen_random_uuid(), 1)
+            """);
+        await Sql.ShouldBeDeniedAsync(admin, $"""UPDATE chat."AssistantDailyGaps" SET "Turns" = 0 WHERE "AssistantId" = '{assistant}'""");
+        await Sql.ShouldBeDeniedAsync(database.Connection(Worker), """SELECT count(*) FROM chat."AssistantDailyGaps" """);
+    }
+
+    [Fact]
+    public async Task The_gap_table_has_no_column_for_a_question_an_answer_or_who_asked()
+    {
+        // Decisions "Content-gap report": a count per day and nearest document; the only text columns are the level and the outcome.
+        var columns = await Sql.ListAsync(database.Connection(Api), """
+            SELECT column_name::text || ':' || data_type::text || ':' || coalesce(character_maximum_length::text, '')
+            FROM information_schema.columns WHERE table_schema = 'chat' AND table_name = 'AssistantDailyGaps'
+            """);
+        columns.ShouldBe(
+        [
+            "Day:date:", "AssistantId:uuid:", "ClientId:uuid:", "Classification:character varying:20", "Outcome:character varying:20", "CollectionId:uuid:",
+            "DocumentId:uuid:", "DepartmentId:uuid:", "Turns:integer:",
+        ], ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task The_chat_retention_step_removes_assistant_gaps_older_than_three_years()
+    {
+        // Data-model §8: 3 years, as the other daily tables, by chat.rag_retention_chat_step.
+        var assistant = Guid.NewGuid();
+        await Sql.ExecuteAsync(database.Connection(Api), $"""
+            INSERT INTO chat."AssistantDailyGaps" ("Day", "AssistantId", "ClientId", "Classification", "Outcome", "CollectionId", "DocumentId", "DepartmentId", "Turns")
+            VALUES ((now() AT TIME ZONE 'Europe/Stockholm')::date - interval '3 years 1 day', '{assistant}', gen_random_uuid(), 'internal', 'not-found', '{Guid.Empty}', '{Guid.Empty}', gen_random_uuid(), 1),
+                   ((now() AT TIME ZONE 'Europe/Stockholm')::date - interval '1 day', '{assistant}', gen_random_uuid(), 'internal', 'not-found', '{Guid.Empty}', '{Guid.Empty}', gen_random_uuid(), 1)
+            """);
+
+        var admin = database.Connection(Admin);
+        for (var i = 0; i < 100 && await Sql.ScalarAsync<long>(admin, "SELECT chat.rag_retention_chat_step(1000)") > 0; i++)
+        {
+        }
+
+        (await Sql.ListAsync(admin, $"""SELECT ("Day" > current_date - 7)::text FROM chat."AssistantDailyGaps" WHERE "AssistantId" = '{assistant}'"""))
             .ShouldBe(["true"]);
     }
 

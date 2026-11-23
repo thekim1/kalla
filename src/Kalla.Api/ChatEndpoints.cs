@@ -247,6 +247,7 @@ public static class ChatEndpoints
             // §11.4, §14.2: Open WebUI's message ids from its connection headers (OPENAI_API_CONFIGS), for feedback mapping.
             UserExternalId = who.Client.Kind == "open-webui" ? Header(http, "X-Rag-Owui-User-Message-Id") : null,
             AnswerExternalId = who.Client.Kind == "open-webui" ? Header(http, "X-Rag-Owui-Message-Id") : null,
+            Nearest = plan.Nearest, // §12.1: the content-gap count's key (Decisions "Content-gap report"); ids only
         };
     }
 

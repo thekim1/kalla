@@ -30,6 +30,7 @@ import type {
   TestQuestionRequest,
   TestRunReport,
   AnswerEvaluation,
+  ContentGapReport,
   TestRunSummary,
   BffUser,
   OpenWebUiCompleteRequest,
@@ -347,6 +348,12 @@ export const api = {
     report: (query: CostReportQuery = {}) => http.get<CostReport>('/api/costs', { ...query }),
     /** The report's CSV with the same filters (admin design §8.6). */
     csvUrl: (query: CostReportQuery = {}) => buildUrl('/api/costs', { ...query, format: 'csv' }),
+  },
+  gaps: {
+    /** An assistant's content gaps of a period (admin design §8.7). */
+    assistant: (id: string, query: { from?: string; to?: string } = {}) => http.get<ContentGapReport>(`/api/assistants/${id}/gaps`, { ...query }),
+    /** The same report as CSV. */
+    csvUrl: (id: string, query: { from?: string; to?: string } = {}) => buildUrl(`/api/assistants/${id}/gaps`, { ...query, format: 'csv' }),
   },
   feedback: {
     list: (query: {

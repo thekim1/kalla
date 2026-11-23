@@ -407,6 +407,13 @@ export const COST_MESSAGES = {
   sharedKey: 'The gateway’s figures are the key’s: when other assistants or knowledge bases share the key, theirs are included.',
 } as const
 
+/** The Content gaps card (admin design §8.7). */
+export const CONTENT_GAP_MESSAGES = {
+  share: (share: string, notFound: string, general: string) =>
+    `${share} of the questions in this period were not answered from the knowledge (${notFound} not found, ${general} answered from general knowledge).`,
+  empty: 'No question in this period ended not found or was answered from general knowledge.',
+} as const
+
 /** When the problem has no code we know: by status. */
 export const STATUS_MESSAGES = {
   offline: 'The server cannot be reached. Check your connection and try again.',

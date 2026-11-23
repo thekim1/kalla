@@ -57,6 +57,13 @@ public sealed record ChatTurn(
     /// </summary>
     public string CostOutcome => !UsageOnly || AfterTurn ? Outcome : Unavailable ? Domain.Entities.MessageOutcomes.Unavailable : Domain.Entities.MessageOutcomes.Error;
 
+    /// <summary>
+    /// The nearest hit of a turn that ended <c>not-found</c> or <c>answered-general</c> (§12.1; Decisions "Content-gap report"): the
+    /// first retrieval result's knowledge base and document, null for <i>no hit</i>. The writer counts the turn in
+    /// <c>AssistantDailyGaps</c> by it; no question or subject goes with it.
+    /// </summary>
+    public NearestHit? Nearest { get; init; }
+
     /// <summary><c>Messages.CostUsd</c>: the answer call's cost, the gateway's or the estimate (§12.2); null without an answer call.</summary>
     public decimal? AnswerCostUsd => Usage.FirstOrDefault(r => r.Step == GatewayChatClient.AnswerStep) is { } answer
         ? answer.Estimated ? answer.EstimatedCostUsd : answer.CostUsd
@@ -103,9 +110,10 @@ public sealed record ChatTurn(
 /// The background writer (chat design §12; adapted from the gateway's <c>UsageWriter</c>): a bounded channel the request
 /// path enqueues into after the answer, drained in batches of ≤ 200 turns or 250 ms, one transaction per batch: the
 /// conversation upsert, the messages with <c>Seq</c> under a row lock, their sources, then the <c>AssistantDailyTotals</c>
-/// deltas, the <c>AssistantDailyUsage</c> deltas per step and the <c>AssistantDailyOutcomes</c> deltas per outcome (usage-only
-/// turns included) as the last statements, each in sorted key order. A failed batch is retried after 2 s; after three failures it
-/// is split and each turn tried alone three times, then dropped (<c>rag.chat.writer.dropped{reason}</c>). No journal.
+/// deltas, the <c>AssistantDailyUsage</c> deltas per step, the <c>AssistantDailyOutcomes</c> deltas per outcome (usage-only
+/// turns included) and the <c>AssistantDailyGaps</c> deltas per nearest hit as the last statements, each in sorted key order.
+/// A failed batch is retried after 2 s; after three failures it is split and each turn tried alone three times, then dropped
+/// (<c>rag.chat.writer.dropped{reason}</c>). No journal.
 /// </summary>
 public sealed partial class ConversationWriter : BackgroundService
 {
@@ -339,6 +347,31 @@ public sealed partial class ConversationWriter : BackgroundService
         public decimal EstimatedCostUsd { get; set; }
     }
 
+    private sealed record GapKey(DateOnly Day, Guid AssistantId, Guid ClientId, string Classification, string Outcome, Guid CollectionId, Guid DocumentId);
+
+    /// <summary>The sort order of the gap upserts (§12.2), as <see cref="UsageOrder"/>.</summary>
+    private static readonly Comparer<GapKey> GapOrder = Comparer<GapKey>.Create((a, b) =>
+    {
+        var order = (a.Day, a.AssistantId, a.ClientId).CompareTo((b.Day, b.AssistantId, b.ClientId));
+        if (order == 0)
+        {
+            order = string.CompareOrdinal(a.Classification, b.Classification);
+        }
+
+        if (order == 0)
+        {
+            order = string.CompareOrdinal(a.Outcome, b.Outcome);
+        }
+
+        return order != 0 ? order : (a.CollectionId, a.DocumentId).CompareTo((b.CollectionId, b.DocumentId));
+    });
+
+    private sealed class GapSums
+    {
+        public Guid DepartmentId { get; init; }
+        public int Turns { get; set; }
+    }
+
     private const string InsertConversationSql = """
         INSERT INTO chat."Conversations" AS c ("Id", "Classification", "AssistantId", "ClientId", "SubjectKind", "SubjectId", "ExternalChatId",
             "HistoryMode", "RetentionDays", "CreatedAt", "LastMessageAt", "ExpiresAt")
@@ -374,6 +407,7 @@ public sealed partial class ConversationWriter : BackgroundService
             (a.Day, a.AssistantId, a.ClientId, a.Classification).CompareTo((b.Day, b.AssistantId, b.ClientId, b.Classification))));
         var usage = new SortedDictionary<UsageKey, UsageSums>(UsageOrder);
         var outcomes = new SortedDictionary<OutcomeKey, OutcomeSums>(OutcomeOrder);
+        var gaps = new SortedDictionary<GapKey, GapSums>(GapOrder);
         foreach (var turn in turns.OrderBy(t => t.Key, StringComparer.Ordinal).ThenBy(t => t.At))
         {
             // The calls were made and charged, and the turn was asked, whatever happens to the turn's rows below.
@@ -463,6 +497,7 @@ public sealed partial class ConversationWriter : BackgroundService
             day.Cancelled += turn.Outcome == "cancelled" ? 1 : 0;
             day.Degraded += turn.Degraded is not null ? 1 : 0;
             day.UncitedAnswers += turn.Outcome == "answered" && turn.Sources.Count > 0 && !turn.Sources.Any(s => s.Used) ? 1 : 0;
+            AddGap(gaps, turn); // where the day's NotFound and GeneralAnswers count it, so the gap rows add up to them
         }
 
         // Last, in key order: the hot totals rows are locked for this statement only (performance pass §3.2).
@@ -513,6 +548,19 @@ public sealed partial class ConversationWriter : BackgroundService
                 sums.EstimatedCostUsd);
         }
 
+        // Then the not-found and general-knowledge turns per nearest hit (Decisions "Content-gap report"), also in key order.
+        foreach (var (key, sums) in gaps)
+        {
+            await ExecuteAsync(connection, transaction, """
+                INSERT INTO chat."AssistantDailyGaps" AS g ("Day", "AssistantId", "ClientId", "Classification", "Outcome", "CollectionId", "DocumentId", "DepartmentId",
+                    "Turns")
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                ON CONFLICT ("Day", "AssistantId", "ClientId", "Classification", "Outcome", "CollectionId", "DocumentId") DO UPDATE SET
+                    "Turns" = g."Turns" + excluded."Turns"
+                """, ct, key.Day, key.AssistantId, key.ClientId, key.Classification, key.Outcome, key.CollectionId, key.DocumentId, sums.DepartmentId,
+                sums.Turns);
+        }
+
         await transaction.CommitAsync(ct);
     }
 
@@ -554,6 +602,27 @@ public sealed partial class ConversationWriter : BackgroundService
         sums.Turns += turn.AfterTurn ? 0 : 1;
         sums.CostUsd += turn.Usage.Sum(r => r.CostUsd);
         sums.EstimatedCostUsd += turn.Usage.Sum(r => r.EstimatedCostUsd);
+    }
+
+    /// <summary>
+    /// Adds a written turn that ended <c>not-found</c> or <c>answered-general</c> to the batch's sums per (day, assistant, client,
+    /// level, outcome, nearest hit): its <see cref="ChatTurn.Nearest"/>, the zero ids for <i>no hit</i>. Any other outcome adds nothing.
+    /// </summary>
+    private static void AddGap(SortedDictionary<GapKey, GapSums> gaps, ChatTurn turn)
+    {
+        if (turn.Outcome is not (Domain.Entities.MessageOutcomes.NotFound or Domain.Entities.MessageOutcomes.AnsweredGeneral))
+        {
+            return;
+        }
+
+        var key = new GapKey(StockholmTime.DayOf(turn.At), turn.AssistantId, turn.ClientId, turn.Classification, turn.Outcome,
+            turn.Nearest?.CollectionId ?? Guid.Empty, turn.Nearest?.DocumentId ?? Guid.Empty);
+        if (!gaps.TryGetValue(key, out var sums))
+        {
+            gaps[key] = sums = new GapSums { DepartmentId = turn.DepartmentId };
+        }
+
+        sums.Turns++;
     }
 
     private static object Db(object? value) => value ?? DBNull.Value;

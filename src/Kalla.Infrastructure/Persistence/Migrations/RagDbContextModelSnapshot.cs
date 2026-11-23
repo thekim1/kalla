@@ -272,6 +272,53 @@ namespace Kalla.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Kalla.Domain.Entities.AssistantDailyGap", b =>
+                {
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("AssistantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("CollectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Turns")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.HasKey("Day", "AssistantId", "ClientId", "Classification", "Outcome", "CollectionId", "DocumentId");
+
+                    b.HasIndex("DepartmentId", "Day");
+
+                    b.ToTable("AssistantDailyGaps", "chat", t =>
+                        {
+                            t.HasCheckConstraint("CK_AssistantDailyGaps_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_AssistantDailyGaps_Outcome", "\"Outcome\" IN ('not-found', 'answered-general')");
+
+                            t.HasCheckConstraint("CK_AssistantDailyGaps_Turns", "\"Turns\" >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Kalla.Domain.Entities.AssistantDailyOutcome", b =>
                 {
                     b.Property<DateOnly>("Day")
