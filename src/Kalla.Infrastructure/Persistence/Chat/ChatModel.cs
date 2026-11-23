@@ -184,6 +184,21 @@ internal static class ChatModel
             e.HasIndex(x => new { x.DepartmentId, x.Day });
         });
 
+        // Decisions "Downvotes per document": the ratings per cited document; no question, answer, comment or subject.
+        modelBuilder.Entity<DocumentDailyFeedback>(e =>
+        {
+            e.ToTable("DocumentDailyFeedback", ChatSchema, t =>
+            {
+                ClassificationCheck(t, "DocumentDailyFeedback");
+                t.HasCheckConstraint("CK_DocumentDailyFeedback_Counts", "\"ThumbsUp\" >= 0 AND \"ThumbsDown\" >= 0");
+            });
+            e.HasKey(x => new { x.Day, x.AssistantId, x.ClientId, x.Classification, x.CollectionId, x.DocumentId });
+            e.Property(x => x.Classification).HasMaxLength(20);
+            e.Property(x => x.ThumbsUp).HasDefaultValue(0);
+            e.Property(x => x.ThumbsDown).HasDefaultValue(0);
+            e.HasIndex(x => new { x.CollectionId, x.Day });
+        });
+
         modelBuilder.Entity<FeedbackImportState>(e =>
         {
             e.ToTable("FeedbackImportState", ChatSchema);

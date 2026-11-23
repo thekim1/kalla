@@ -151,6 +151,35 @@ public sealed class FeedbackEndpointsTests(AdminDatabaseFixture database, AdminH
         foreignSummary.GetProperty("imports").EnumerateArray().Select(i => i.GetProperty("clientId").GetGuid()).ShouldNotContain(seed.Client);
     }
 
+    [Fact]
+    public async Task The_cited_document_filter_keeps_the_ratings_whose_answer_cited_it()
+    {
+        // §8.1's documentId, the link from Feedback on documents (§8.8): the down rating's answer cites the document; the up
+        // rating's answer retrieved it without citing it, so it is left out.
+        var seed = await SeedAsync();
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            var upMessage = await db.Feedback.Where(f => f.Id == seed.Up).Select(f => f.MessageId).SingleAsync(Ct);
+            var collection = await db.Documents.Where(d => d.Id == seed.Document).Join(db.Sources, d => d.SourceId, x => x.Id, (d, x) => x.CollectionId).SingleAsync(Ct);
+            db.Add(new MessageSource
+            {
+                MessageId = upMessage, Rank = 1, Classification = Classification.Internal, DocumentId = seed.Document, ChunkId = Guid.CreateVersion7(), CollectionId = collection,
+                Used = false,
+            });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        using var viewer = await AdminDatabaseFixture.UserAsync(host.Factory, RagRoles.Viewer, seed.Code);
+        var cited = await viewer.GetFromJsonAsync<JsonElement>($"/api/feedback?documentId={seed.Document}", Ct);
+        cited.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("id").GetGuid()).ShouldBe([seed.Down]);
+        var none = await viewer.GetFromJsonAsync<JsonElement>($"/api/feedback?documentId={Guid.CreateVersion7()}", Ct);
+        none.GetProperty("items").GetArrayLength().ShouldBe(0);
+
+        // Still the caller's own assistants only: another department's admin sees none of them through the filter.
+        using var stranger = await AdminDatabaseFixture.UserAsync(host.Factory, RagRoles.DepartmentAdmin, "X" + seed.Code);
+        (await stranger.GetFromJsonAsync<JsonElement>($"/api/feedback?documentId={seed.Document}", Ct)).GetProperty("items").GetArrayLength().ShouldBe(0);
+    }
+
     [Theory]
     [InlineData(RagRoles.Editor, HttpStatusCode.Forbidden)]
     [InlineData(RagRoles.PipelineEditor, HttpStatusCode.Forbidden)]

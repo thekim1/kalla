@@ -2046,6 +2046,52 @@ namespace Kalla.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Kalla.Domain.Entities.DocumentDailyFeedback", b =>
+                {
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("AssistantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("CollectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ThumbsDown")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("ThumbsUp")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.HasKey("Day", "AssistantId", "ClientId", "Classification", "CollectionId", "DocumentId");
+
+                    b.HasIndex("CollectionId", "Day");
+
+                    b.ToTable("DocumentDailyFeedback", "chat", t =>
+                        {
+                            t.HasCheckConstraint("CK_DocumentDailyFeedback_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_DocumentDailyFeedback_Counts", "\"ThumbsUp\" >= 0 AND \"ThumbsDown\" >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Kalla.Domain.Entities.EmbeddingCacheEntry", b =>
                 {
                     b.Property<string>("Classification")

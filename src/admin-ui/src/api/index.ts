@@ -31,6 +31,7 @@ import type {
   TestRunReport,
   AnswerEvaluation,
   ContentGapReport,
+  DocumentFeedbackReport,
   TestRunSummary,
   BffUser,
   OpenWebUiCompleteRequest,
@@ -355,9 +356,16 @@ export const api = {
     /** The same report as CSV. */
     csvUrl: (id: string, query: { from?: string; to?: string } = {}) => buildUrl(`/api/assistants/${id}/gaps`, { ...query, format: 'csv' }),
   },
+  documentFeedback: {
+    /** A knowledge base's documents by the ratings of the answers that cited them (admin design §8.8). */
+    collection: (id: string, query: { from?: string; to?: string } = {}) =>
+      http.get<DocumentFeedbackReport>(`/api/collections/${id}/feedback`, { ...query }),
+    /** The same report as CSV. */
+    csvUrl: (id: string, query: { from?: string; to?: string } = {}) => buildUrl(`/api/collections/${id}/feedback`, { ...query, format: 'csv' }),
+  },
   feedback: {
     list: (query: {
-      from?: string; to?: string; assistantId?: string; rating?: string; outcome?: string; state?: string; after?: string; limit?: number
+      from?: string; to?: string; assistantId?: string; rating?: string; outcome?: string; state?: string; documentId?: string; after?: string; limit?: number
     }) => http.get<KeysetPage<FeedbackItem>>('/api/feedback', query),
     summary: (query: { from?: string; to?: string; assistantId?: string } = {}) => http.get<FeedbackSummary>('/api/feedback/summary', query),
     setReviewState: (id: string, state: 'open' | 'reviewed' | 'dismissed') =>

@@ -9,9 +9,10 @@ namespace Kalla.Api;
 
 /// <summary>
 /// <c>POST /v1/feedback</c> (chat design §3.5, §14.1): a rating of an assistant message of the caller's own conversation,
-/// upserted by (message, <c>api</c>) under a lock on the message row, with the daily totals' thumbs moved by the delta. History mode <c>none</c> (all of
-/// P1, weakness review §4): a comment is refused with 400 <c>comment_not_stored</c>. <c>ReasonCategory</c> is the reason
-/// when it is one of Open WebUI's fixed keys or the API's own reasons, else <c>other</c>.
+/// upserted by (message, <c>api</c>) under a lock on the message row, with the daily totals' thumbs and the cited documents'
+/// counts moved by the delta. History mode <c>none</c> (all of P1, weakness review §4): a comment is refused with 400
+/// <c>comment_not_stored</c>. <c>ReasonCategory</c> is the reason when it is one of Open WebUI's fixed keys or the API's own
+/// reasons, else <c>other</c>.
 /// </summary>
 public static class FeedbackEndpoints
 {
@@ -144,7 +145,7 @@ public static class FeedbackEndpoints
                     await upsert.ExecuteNonQueryAsync(ct);
                 }
 
-                await AddRatingToTotalsAsync(connection, transaction, at, assistantId, who.Client.Id, level, assistant.DepartmentId, previous, rating, ct);
+                await AddRatingToCountsAsync(connection, transaction, messageId, at, assistantId, who.Client.Id, level, assistant.DepartmentId, previous, rating, ct);
                 await transaction.CommitAsync(ct);
                 return Results.NoContent();
             }))
@@ -153,12 +154,14 @@ public static class FeedbackEndpoints
     }
 
     /// <summary>
-    /// §14.1: moves the thumbs of <c>chat."AssistantDailyTotals"</c> by the rating's change from <paramref name="previous"/> (a
-    /// changed rating moves one count each way), on the rated message's day, in the caller's transaction; nothing when it is
+    /// §14.1: moves the thumbs of <c>chat."AssistantDailyTotals"</c> and, for each document the message cited
+    /// (<c>MessageSources.Used</c>, once however many of its chunks were cited), of <c>chat."DocumentDailyFeedback"</c>
+    /// (Decisions "Downvotes per document") by the rating's change from <paramref name="previous"/> (a changed rating moves
+    /// one count each way), on the rated message's day, in the caller's transaction, never below 0; nothing when it is
     /// unchanged. The API's ratings and the Open WebUI import (<see cref="FeedbackImporter"/>) both write through it.
     /// </summary>
-    internal static async Task AddRatingToTotalsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, DateTimeOffset at, Guid assistantId,
-        Guid clientId, string level, Guid departmentId, short? previous, short rating, CancellationToken ct)
+    internal static async Task AddRatingToCountsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid messageId, DateTimeOffset at,
+        Guid assistantId, Guid clientId, string level, Guid departmentId, short? previous, short rating, CancellationToken ct)
     {
         var up = (rating == 1 ? 1 : 0) - (previous == 1 ? 1 : 0);
         var down = (rating == -1 ? 1 : 0) - (previous == -1 ? 1 : 0);
@@ -183,6 +186,23 @@ public static class FeedbackEndpoints
             },
         };
         await totals.ExecuteNonQueryAsync(ct);
+
+        await using var documents = new NpgsqlCommand("""
+            INSERT INTO chat."DocumentDailyFeedback" AS f ("Day", "AssistantId", "ClientId", "Classification", "CollectionId", "DocumentId", "DepartmentId",
+                "ThumbsUp", "ThumbsDown")
+            SELECT DISTINCT $1::date, $2::uuid, $3::uuid, $4::text, s."CollectionId", s."DocumentId", $5::uuid, GREATEST($6::integer, 0), GREATEST($7::integer, 0)
+            FROM chat."MessageSources" s WHERE s."MessageId" = $8 AND s."Used"
+            ON CONFLICT ("Day", "AssistantId", "ClientId", "Classification", "CollectionId", "DocumentId") DO UPDATE SET
+                "ThumbsUp" = GREATEST(f."ThumbsUp" + $6, 0), "ThumbsDown" = GREATEST(f."ThumbsDown" + $7, 0)
+            """, connection, transaction)
+        {
+            Parameters =
+            {
+                new() { Value = StockholmTime.DayOf(at) }, new() { Value = assistantId }, new() { Value = clientId }, new() { Value = level },
+                new() { Value = departmentId }, new() { Value = up }, new() { Value = down }, new() { Value = messageId },
+            },
+        };
+        await documents.ExecuteNonQueryAsync(ct);
     }
 
     private static (Guid MessageId, short Rating, string? Reason) Parse(JsonElement body)

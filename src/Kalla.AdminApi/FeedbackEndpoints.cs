@@ -70,7 +70,7 @@ public static class FeedbackEndpoints
                     next);
             })
             .RequireAuthorization(AdminPolicies.Feedback).WithName("ListFeedback")
-            .WithSummary("Ratings of the caller's assistants, newest first (keyset; period, assistant, rating, outcome, has comment, review state); no content");
+            .WithSummary("Ratings of the caller's assistants, newest first (keyset; period, assistant, rating, outcome, has comment, review state, cited document); no content");
 
         feedback.MapGet("/summary", async (DateOnly? from, DateOnly? to, Guid? assistantId, AdminContext admin, CancellationToken ct) =>
             {
@@ -141,7 +141,7 @@ public static class FeedbackEndpoints
         return api;
     }
 
-    /// <summary>The caller's departments' feedback with the list filters (period, assistant, rating, outcome, has comment, state).</summary>
+    /// <summary>The caller's departments' feedback with the list filters (period, assistant, rating, outcome, has comment, state, cited document).</summary>
     private static IQueryable<Feedback> Filtered(AdminContext admin, FeedbackQuery q)
     {
         var departments = admin.Departments().Select(d => d.Id);
@@ -184,11 +184,19 @@ public static class FeedbackEndpoints
             rows = rows.Where(f => f.ReviewState == q.State.Trim());
         }
 
+        // §8.1, §8.8: the ratings whose message cited the document (the link from Feedback on documents).
+        if (q.DocumentId is { } document)
+        {
+            rows = rows.Where(f => admin.Db.MessageSources.Any(s => s.MessageId == f.MessageId && s.Used && s.DocumentId == document));
+        }
+
         return rows;
     }
 }
 
-public sealed record FeedbackQuery(DateTimeOffset? From, DateTimeOffset? To, Guid? AssistantId, short? Rating, string? Outcome, bool? HasComment, string? State, Guid? After, int? Limit);
+public sealed record FeedbackQuery(
+    DateTimeOffset? From, DateTimeOffset? To, Guid? AssistantId, short? Rating, string? Outcome, bool? HasComment, string? State, Guid? DocumentId, Guid? After,
+    int? Limit);
 
 public sealed record CitedDocument(Guid Id, string? Title);
 

@@ -410,6 +410,8 @@ export const ATTENTION = {
       `Version ${d.version ?? '?'} of ${name} answers ${d.asExpected ?? '?'} test questions as expected, ${d.before ?? '?'} before`,
     answers_below_median: (d: Record<string, string>, name: string) =>
       `${d.metric === 'citationPrecision' ? 'Citation precision' : 'Faithfulness'} last night is ${d.points ?? '?'} points below the usual: ${name}`,
+    document_downvoted: (d: Record<string, string>, name: string) =>
+      `Cited in ${d.downvotes ?? '?'} downvoted answers in the last ${d.days ?? '7'} days: ${d.documentTitle ?? ''} in ${name}`,
   } as Record<string, (details: Record<string, string>, name: string) => string>,
   unknown: (name: string) => `${name} needs attention`,
 } as const
@@ -2358,6 +2360,9 @@ export const FEEDBACK = {
   } as Record<string, string>,
   time: 'Time',
   cited: 'Cited documents',
+  /** The cited-document filter (§8.1), set from Feedback on documents (§8.8). */
+  citedFilter: (title: string | null) => (title === null ? 'Only ratings of answers that cited the selected document' : `Only ratings of answers that cited ${title}`),
+  clearCited: 'Show all documents',
   untitled: 'Untitled document',
   version: (n: number) => `version ${n}`,
   caption: 'Feedback, newest first',
@@ -2748,6 +2753,20 @@ export const CONTENT_GAPS = {
   deleted: '(deleted)',
   /** A knowledge base of another department that the assistant's department may no longer link: no name, no title. */
   notShared: 'A knowledge base that is no longer shared with this department',
+  showAll: (count: number) => `Show all ${count}`,
+  showFewer: 'Show fewer',
+} as const
+
+/** The Feedback on documents card on the knowledge base's Overview (admin design §8.8, B-66). */
+export const DOCUMENT_FEEDBACK = {
+  card: 'Feedback on documents',
+  caption: 'The documents cited in rated answers, most downvotes first',
+  document: 'Document',
+  thumbsDown: 'Downvotes',
+  thumbsUp: 'Upvotes',
+  deleted: '(deleted)',
+  /** Under each title: the Feedback page filtered by the document (§8.1). */
+  showRatings: 'Show the ratings',
   showAll: (count: number) => `Show all ${count}`,
   showFewer: 'Show fewer',
 } as const

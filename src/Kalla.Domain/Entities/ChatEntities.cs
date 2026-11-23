@@ -348,6 +348,32 @@ public sealed class AssistantDailyGap
     public int Turns { get; set; }
 }
 
+/// <summary>
+/// Ratings of answers per Europe/Stockholm day (the rated answer's), client, level and cited document
+/// (<c>chat."DocumentDailyFeedback"</c>, data-model §2.3; Decisions "Downvotes per document"; chat design §14.1): each rating
+/// counts once for every document the answer cited (<c>MessageSources.Used</c>), moved by the delta when it changes, never below 0.
+/// No question, answer, comment or subject. Written only by <c>POST /v1/feedback</c> and the Open WebUI import.
+/// </summary>
+public sealed class DocumentDailyFeedback
+{
+    public DateOnly Day { get; set; }
+    public Guid AssistantId { get; set; }
+    public Guid ClientId { get; set; }
+    public required string Classification { get; set; }
+
+    /// <summary>The cited document's knowledge base (no FK).</summary>
+    public Guid CollectionId { get; set; }
+
+    /// <summary>The cited document (no FK).</summary>
+    public Guid DocumentId { get; set; }
+
+    /// <summary>The assistant's department at the time of the rating.</summary>
+    public Guid DepartmentId { get; set; }
+
+    public int ThumbsUp { get; set; }
+    public int ThumbsDown { get; set; }
+}
+
 /// <summary>The watermark of the Open WebUI feedback import per client (<c>chat."FeedbackImportState"</c>, chat design §14.2).</summary>
 public sealed class FeedbackImportState
 {
