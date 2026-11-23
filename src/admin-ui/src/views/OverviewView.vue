@@ -5,6 +5,7 @@ import { api } from '@/api'
 import type { Department, Overview, Role, SyncHealth } from '@/api/types'
 import SetupChecklist from '@/components/collections/SetupChecklist.vue'
 import DeploymentNotices from '@/components/overview/DeploymentNotices.vue'
+import NeedsAttention from '@/components/overview/NeedsAttention.vue'
 import SecretExpiryNotices from '@/components/overview/SecretExpiryNotices.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
@@ -12,6 +13,7 @@ import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useLoadable } from '@/stores/loadable'
+import { useUiStore } from '@/stores/ui'
 import { formatNumber, formatRelative, formatUsdCost } from '@/utils/format'
 import { DEPARTMENT_SOURCE_LABEL, OVERVIEW, PAGE, ROLE_LABEL, SETUP, type Tone } from '@/utils/labels'
 import { readStoredIds, writeStoredIds } from '@/utils/storedIds'
@@ -27,12 +29,15 @@ import { readStoredIds, writeStoredIds } from '@/utils/storedIds'
 const auth = useAuthStore()
 const router = useRouter()
 const overview = useLoadable<Overview | null>(null)
+const ui = useUiStore()
 const canCreate = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor']))
 const hasRole = computed(() => auth.roles.some((r) => r in ROLE_LABEL))
 const synced = ref<Department[] | null>(null)
 onMounted(() => {
   if (!hasRole.value) return
-  void overview.run(() => api.overview())
+  void overview.run(() => api.overview()).then(() => {
+    if (overview.data.value) ui.attention = overview.data.value.attention.length
+  })
   void api.organisation.departments().then((d) => (synced.value = d)).catch(() => undefined)
 })
 const name = computed(() => auth.user?.name ?? auth.user?.email ?? '')
@@ -83,6 +88,7 @@ function showHidden(): void {
 <template>
   <PageHeader :title="name ? OVERVIEW.welcome(name) : PAGE.overview.title" :description="OVERVIEW.lead" />
   <template v-if="overview.data.value">
+    <NeedsAttention :items="overview.data.value.attention" class="mb-6" />
     <SecretExpiryNotices v-if="auth.isPlatformAdmin && overview.data.value.secretExpiry.length" :entries="overview.data.value.secretExpiry" class="mb-6" />
     <DeploymentNotices v-if="auth.isPlatformAdmin && overview.data.value.deploymentNotices.length" :notices="overview.data.value.deploymentNotices" class="mb-6" />
     <UiCard v-if="overview.data.value.needsEmbeddingProfile" :title="OVERVIEW.profileTitle" class="mb-6" data-test="needs-profile">

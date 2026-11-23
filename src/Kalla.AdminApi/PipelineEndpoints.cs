@@ -270,7 +270,7 @@ public static class PipelineEndpoints
     /// The worker instances whose heartbeat is inside <see cref="PipelineValidator.SupportHeartbeatWindow"/>, with their
     /// <c>WorkerNodeSupport</c> rows (engine §4 rule 4, §5.2).
     /// </summary>
-    private static async Task<IReadOnlyCollection<WorkerSupport>> LiveWorkersAsync(AdminContext admin, CancellationToken ct)
+    internal static async Task<IReadOnlyCollection<WorkerSupport>> LiveWorkersAsync(AdminContext admin, CancellationToken ct)
     {
         var since = admin.Now - PipelineValidator.SupportHeartbeatWindow;
         var instances = await admin.Db.WorkerInstances.AsNoTracking().Where(w => w.LastHeartbeatAt > since).ToListAsync(ct);

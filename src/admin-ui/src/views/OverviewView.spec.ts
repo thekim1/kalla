@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { api } from '@/api'
-import type { CollectionSetup, Overview } from '@/api/types'
+import type { AttentionItem, CollectionSetup, Overview } from '@/api/types'
 import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
+import { useUiStore } from '@/stores/ui'
 import { bffUser } from '@/test/fixtures'
-import { OVERVIEW } from '@/utils/labels'
+import { ATTENTION, OVERVIEW } from '@/utils/labels'
 import OverviewView from './OverviewView.vue'
 
 /** An overview with nothing in it but `overrides`. */
@@ -23,6 +24,7 @@ function overviewOf(overrides: Partial<Overview> = {}): Overview {
     },
     secretExpiry: [],
     deploymentNotices: [],
+    attention: [],
     ...overrides,
   }
 }
@@ -105,6 +107,39 @@ describe('Overview: your access (P0 checklist #9)', () => {
     const done = mount(OverviewView, { global: { stubs: { RouterLink: true } } })
     await flushPromises()
     expect(done.find('[data-test=needs-profile]').exists()).toBe(false)
+  })
+})
+
+describe('Home: Needs attention (admin design §5.5.1, B-59)', () => {
+  it('lists each item with its text and link at the top, counts them, and leaves the card out when there is none', async () => {
+    signIn({ roles: ['rag-department-admin'], departmentCodes: ['1000'], departmentSources: [{ code: '1000', source: 'claim' }] })
+    vi.spyOn(api.organisation, 'departments').mockResolvedValue([])
+    const attention: AttentionItem[] = [
+      { kind: 'deletion_waiting', objectType: 'source', objectId: 's1', objectName: 'umea.se/bygga', departmentId: 'd1', since: null,
+        details: { runId: 'r1', collectionName: 'Bygglov', proposed: '212' } },
+      { kind: 'answers_below_median', objectType: 'assistant', objectId: 'a1', objectName: 'Bygglovsassistenten', departmentId: 'd1', since: null,
+        details: { metric: 'faithfulness', points: '8.0' } },
+      { kind: 'template_unsupported', objectType: 'pipeline', objectId: 'p1', objectName: 'url-list', departmentId: 'd1', since: null,
+        details: { template: 'url-list', templateVersion: '4' } },
+    ]
+    const overview = vi.spyOn(api, 'overview').mockResolvedValue(overviewOf({ attention }))
+    const wrapper = mount(OverviewView, { global: { stubs: { RouterLink: LinkStub } } })
+    await flushPromises()
+    const card = wrapper.get('[data-test=needs-attention]')
+    expect(card.text()).toContain(ATTENTION.title(3))
+    const items = card.findAll('[data-test=attention-item]')
+    expect(items[0]!.text()).toContain(ATTENTION.kinds.deletion_waiting!(attention[0]!.details, 'umea.se/bygga'))
+    expect(JSON.parse(items[0]!.get('[data-to]').attributes('data-to')!)).toEqual({ name: 'run', params: { id: 'r1' } })
+    expect(JSON.parse(items[1]!.get('[data-to]').attributes('data-to')!)).toEqual({ name: 'assistant', params: { id: 'a1' }, query: { tab: 'statistics' } })
+    expect(items[1]!.text()).toContain('Faithfulness last night is 8.0 points below the usual')
+    expect(items[2]!.find('[data-to]').exists()).toBe(false) // a worker update: no page to go to
+    expect(useUiStore().attention).toBe(3)
+
+    overview.mockResolvedValue(overviewOf())
+    const calm = mount(OverviewView, { global: { stubs: { RouterLink: LinkStub } } })
+    await flushPromises()
+    expect(calm.find('[data-test=needs-attention]').exists()).toBe(false)
+    expect(useUiStore().attention).toBe(0)
   })
 })
 

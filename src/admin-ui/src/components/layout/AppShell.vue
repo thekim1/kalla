@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { api } from '@/api'
 import { APP, ROLE_LABEL, SHELL, THEME_LABEL } from '@/utils/labels'
 import type { Role } from '@/api/types'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
@@ -27,9 +28,9 @@ const groups = computed(() =>
 )
 const tabs = computed(() => mobileTabs.filter(visible))
 
-// Attention items arrive with the Översikt page (admin design §5.2); none in P0.
+// Home's badge (admin design §5.2, §5.5.1; B-59): the Needs-attention count, read once here and again each time Home loads.
 function badgeCount(item: NavItem): number {
-  return item.badge === 'attention' ? 0 : 0
+  return item.badge === 'attention' ? (ui.attention ?? 0) : 0
 }
 const updateAvailable = false
 
@@ -64,7 +65,13 @@ function onKey(event: KeyboardEvent): void {
     paletteOpen.value = !paletteOpen.value
   }
 }
-onMounted(() => window.addEventListener('keydown', onKey))
+onMounted(() => {
+  window.addEventListener('keydown', onKey)
+  // Home reads the overview itself; elsewhere the badge is read once. A failure leaves no badge.
+  if (ui.attention === null && route.name !== 'overview') {
+    api.overview().then((o) => (ui.attention = o.attention.length)).catch(() => undefined)
+  }
+})
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
 const signingOut = ref(false)

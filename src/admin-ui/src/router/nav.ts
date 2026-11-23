@@ -22,7 +22,7 @@ export interface NavItem {
   /** Other route names that belong to this page, so it stays highlighted on them. */
   children?: string[]
   roles?: Role[]
-  /** Attention items, as the gateway's badges (admin design §5.2); none in P0. */
+  /** Attention items, as the gateway's badges (admin design §5.2): Home's Needs-attention count (B-59). */
   badge?: 'attention'
 }
 
@@ -56,6 +56,7 @@ export const navGroups: NavGroup[] = [
         description: PAGE.overview.description,
         keywords: [...NAV_KEYWORDS.overview],
         roles: ALL_ROLES,
+        badge: 'attention',
       },
       {
         name: 'map',
@@ -138,7 +139,7 @@ export const navGroups: NavGroup[] = [
 
 /** Bottom bar on phones (admin design §5.2); the rest is under Menu. */
 export const mobileTabs: NavItem[] = [
-  { name: 'overview', label: PAGE.overview.title, icon: 'space_dashboard', roles: ALL_ROLES },
+  { name: 'overview', label: PAGE.overview.title, icon: 'space_dashboard', roles: ALL_ROLES, badge: 'attention' },
   { name: 'collections', label: PAGE.collections.title, icon: 'library_books', roles: ALL_ROLES },
 ]
 

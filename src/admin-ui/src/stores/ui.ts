@@ -32,6 +32,8 @@ function systemTheme(): Theme {
 export const useUiStore = defineStore('ui', () => {
   const theme = ref<Theme>(readStoredTheme() ?? systemTheme())
   const toasts = ref<Toast[]>([])
+  /** The Needs-attention count for the Home badge (admin design §5.2, §5.5.1); null until the overview has been read. */
+  const attention = ref<number | null>(null)
   const timers = new Map<number, ReturnType<typeof setTimeout>>()
   let nextId = 1
 
@@ -82,5 +84,5 @@ export const useUiStore = defineStore('ui', () => {
     if (!timers.has(id)) schedule(id)
   }
 
-  return { theme, toasts, setTheme, init, notify, dismiss, pause, resume }
+  return { theme, toasts, attention, setTheme, init, notify, dismiss, pause, resume }
 })
