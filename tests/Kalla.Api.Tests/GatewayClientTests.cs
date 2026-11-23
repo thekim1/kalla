@@ -29,11 +29,11 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
     [Fact]
     public async Task A_call_without_a_ceiling_is_refused_before_sending()
     {
-        var stub = new CountingHandler();
+        var stub = Stub();
         using var host = Build(stub);
 
         await Should.ThrowAsync<GatewayCallRefusedException>(() => SendAsync(host, Post("v1/embeddings")));
-        stub.Calls.ShouldBe(0);
+        stub.Requests.Count.ShouldBe(0);
     }
 
     [Fact]
@@ -56,13 +56,13 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
     [InlineData("1")]
     public async Task A_malformed_ceiling_is_refused_before_sending(string ceiling)
     {
-        var stub = new CountingHandler();
+        var stub = Stub();
         using var host = Build(stub);
         var request = Post("v1/embeddings");
         request.Headers.TryAddWithoutValidation(GatewayHeaders.MaxResidency, ceiling);
 
         await Should.ThrowAsync<GatewayCallRefusedException>(() => SendAsync(host, request));
-        stub.Calls.ShouldBe(0);
+        stub.Requests.Count.ShouldBe(0);
     }
 
     [Theory]
@@ -81,7 +81,10 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         using var response = await SendAsync(host, Post(path, body).WithMaxResidency(ceiling));
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        recording.Calls.ShouldHaveSingleItem().ShouldBe((ResidencyCeiling.ToHeader(ceiling), FakeGatewayFactory.ApiCredentialKey, body));
+        recording.Requests.ShouldHaveSingleItem().ShouldSatisfyAllConditions(
+            r => Ceiling(r).ShouldBe(ResidencyCeiling.ToHeader(ceiling)),
+            r => Key(r).ShouldBe(FakeGatewayFactory.ApiCredentialKey),
+            r => r.Body.ShouldBe(body));
         ResidencyCeiling.TryParse(response.Headers.GetValues(GatewayHeaders.Residency).Single(), out var served).ShouldBeTrue();
         ((int)served).ShouldBeLessThanOrEqualTo((int)ceiling);
     }
@@ -91,14 +94,14 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
     {
         // A credential key that allows Eu at most (register M2): a public assistant's External call is a configuration gap, not sent.
         var logs = new CapturingLoggerProvider();
-        var stub = new CountingHandler();
+        var stub = Stub();
         using var host = Build(stub, logs: logs, key: FakeGatewayFactory.ApiCredentialKey, maxResidency: Residency.Eu);
 
         (await Should.ThrowAsync<GatewayKeyMissingException>(() => SendAsync(host, Post("v1/chat/completions").WithMaxResidency(Residency.External))))
             .Ceiling.ShouldBe(Residency.External);
         using var eu = await SendAsync(host, Post("v1/embeddings").WithMaxResidency(Residency.Eu));
 
-        stub.Calls.ShouldBe(1);
+        stub.Requests.Count.ShouldBe(1);
         logs.Entries.Where(e => e.Category == typeof(ResidencyCeilingHandler).FullName).ShouldHaveSingleItem().ShouldSatisfyAllConditions(
             e => e.Level.ShouldBe(LogLevel.Warning),
             e => e.Message.ShouldContain("External"),
@@ -111,14 +114,14 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         // CapGatewayCalls(Eu) is the worker's registration; Gateway:ServiceMaximum in configuration is not bound, and a
         // credential key that allows every residency does not raise the worker above Eu: an embedding profile's Eu ceiling
         // stays callable (B-37).
-        var stub = new CountingHandler();
+        var stub = Stub();
         using var host = Build(stub, key: FakeGatewayFactory.WorkerCredentialKey, cap: Residency.Eu);
 
         await Should.ThrowAsync<GatewayKeyMissingException>(() => SendAsync(host, Post("v1/chat/completions").WithMaxResidency(Residency.External)));
         using var eu = await SendAsync(host, Post("v1/embeddings").WithMaxResidency(Residency.Eu));
         using var onPrem = await SendAsync(host, Post("v1/embeddings").WithMaxResidency(Residency.OnPrem));
 
-        stub.Calls.ShouldBe(2);
+        stub.Requests.Count.ShouldBe(2);
     }
 
     /// <summary>
@@ -152,7 +155,7 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         await Should.ThrowAsync<GatewayKeyMissingException>(() => SendAsync(host, Post("v1/chat/completions").WithMaxResidency(Residency.External)));
         using var eu = await SendAsync(host, Post("v1/embeddings").WithMaxResidency(Residency.Eu));
 
-        recording.Calls.ShouldHaveSingleItem().Ceiling.ShouldBe("Eu"); // the External call never left the process
+        Ceiling(recording.Requests.ShouldHaveSingleItem()).ShouldBe("Eu"); // the External call never left the process
     }
 
     [Fact]
@@ -220,7 +223,7 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         // No context to read (the reader's client has no gateway behind it): fail closed.
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
         builder.Configuration.AddInMemoryCollection([new("Gateway:BaseUrl", "http://fake-gateway"), new("Gateway:Key", FakeGatewayFactory.ApiCredentialKey)]);
-        var stub = new CountingHandler();
+        var stub = Stub();
         builder.AddGatewayClient(Client).ConfigurePrimaryHttpMessageHandler(() => stub);
         builder.Services.AddHttpClient(GatewayContextReader.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new UnreachableHandler());
         using var host = builder.Build();
@@ -230,7 +233,7 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         (await ceiling.CapAsync(Residency.External, Ct)).ShouldBe(Residency.OnPrem);
         await Should.ThrowAsync<GatewayKeyMissingException>(() => SendAsync(host, Post("v1/embeddings").WithMaxResidency(Residency.Eu)));
         using var onPrem = await SendAsync(host, Post("v1/embeddings").WithMaxResidency(Residency.OnPrem));
-        stub.Calls.ShouldBe(1);
+        stub.Requests.Count.ShouldBe(1);
     }
 
     [Fact]
@@ -241,7 +244,7 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         builder.Configuration.AddInMemoryCollection([
             new("Gateway:BaseUrl", "http://fake-gateway"), new("Gateway:Key", FakeGatewayFactory.ApiCredentialKey), new("Gateway:FirstContextWait", "00:00:00.200"),
         ]);
-        var stub = new CountingHandler();
+        var stub = Stub();
         builder.AddGatewayClient(Client).ConfigurePrimaryHttpMessageHandler(() => stub);
         builder.Services.AddHttpClient(GatewayContextReader.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new HangingHandler());
         using var host = builder.Build();
@@ -253,7 +256,7 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         // The clean refusal above the ceiling, not a TaskCanceledException; and an OnPrem call goes.
         await Should.ThrowAsync<GatewayKeyMissingException>(() => SendAsync(host, Post("v1/embeddings").WithMaxResidency(Residency.Eu)));
         using var onPrem = await SendAsync(host, Post("v1/embeddings").WithMaxResidency(Residency.OnPrem));
-        stub.Calls.ShouldBe(1);
+        stub.Requests.Count.ShouldBe(1);
     }
 
     /// <summary>Never answers until the request is cancelled: a gateway behind a firewall that drops packets.</summary>
@@ -285,13 +288,13 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
     [Fact]
     public async Task A_call_with_a_key_other_than_the_services_is_refused_before_sending()
     {
-        var stub = new CountingHandler();
+        var stub = Stub();
         using var host = Build(stub, key: FakeGatewayFactory.ApiCredentialKey);
         var request = Post("v1/chat/completions").WithMaxResidency(Residency.Eu);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", FakeGatewayFactory.WorkerCredentialKey);
 
         await Should.ThrowAsync<GatewayCallRefusedException>(() => SendAsync(host, request));
-        stub.Calls.ShouldBe(0);
+        stub.Requests.Count.ShouldBe(0);
     }
 
     [Fact]
@@ -332,7 +335,7 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
     [Fact]
     public async Task An_answer_without_a_residency_header_is_aborted()
     {
-        using var host = Build(new CountingHandler { Residency = null });
+        using var host = Build(Stub(residency: null));
         await Should.ThrowAsync<GatewayResidencyException>(() => SendAsync(host, Post("v1/embeddings").WithMaxResidency(Residency.OnPrem)));
     }
 
@@ -340,13 +343,13 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
     public async Task The_model_list_needs_no_residency_header_but_still_its_ceiling_and_key()
     {
         // No deployment answers GET /v1/models, so the gateway sends no x-fors-residency (V8's check, item 13).
-        var counting = new CountingHandler { Residency = null };
+        var counting = Stub(residency: null);
         using var host = Build(counting);
         using var list = await SendAsync(host, new HttpRequestMessage(HttpMethod.Get, "v1/models").WithMaxResidency(Residency.Eu));
         list.StatusCode.ShouldBe(HttpStatusCode.OK);
         await Should.ThrowAsync<GatewayCallRefusedException>(() => SendAsync(host, new HttpRequestMessage(HttpMethod.Get, "v1/models")));
         await Should.ThrowAsync<GatewayResidencyException>(() => SendAsync(host, Post("v1/models").WithMaxResidency(Residency.Eu)));
-        counting.Calls.ShouldBe(2);
+        counting.Requests.Count.ShouldBe(2);
     }
 
     [Fact]
@@ -374,30 +377,30 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         using var response = await SendAsync(host, Post("v1/chat/completions", Chat(model)).WithMaxResidency(ceiling));
 
         response.StatusCode.ShouldBe(status);
-        recording.Calls.Count.ShouldBe(2);
-        recording.Calls.ShouldAllBe(c => c.Ceiling == ResidencyCeiling.ToHeader(ceiling)); // never wider
-        recording.Calls.Select(c => c.Key).Distinct().ShouldBe([FakeGatewayFactory.ApiCredentialKey]);
-        recording.Calls.Select(c => c.Body).Distinct().Count().ShouldBe(1);
+        recording.Requests.Count.ShouldBe(2);
+        recording.Requests.ShouldAllBe(r => Ceiling(r) == ResidencyCeiling.ToHeader(ceiling)); // never wider
+        recording.Requests.Select(Key).Distinct().ShouldBe([FakeGatewayFactory.ApiCredentialKey]);
+        recording.Requests.Select(r => r.Body).Distinct().Count().ShouldBe(1);
     }
 
     [Fact]
     public async Task A_retry_that_succeeds_is_the_answer_and_its_residency_is_checked()
     {
         // The first attempt answers 502, the second goes through to the fake; the ceiling check sees the final answer.
-        var recording = new RecordingHandler(fake.Server.CreateHandler()) { FailFirst = HttpStatusCode.BadGateway };
+        var recording = new RecordingHandler(new FailFirstHandler(fake.Server.CreateHandler()) { Status = HttpStatusCode.BadGateway });
         using var host = Build(recording);
 
         using var response = await SendAsync(host, Post("v1/chat/completions", Chat("fors/chat-standard")).WithMaxResidency(Residency.Eu));
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         response.Headers.GetValues(GatewayHeaders.Residency).ShouldBe(["Eu"]);
-        recording.Calls.Select(c => c.Ceiling).ShouldBe(["Eu", "Eu"]);
+        recording.Requests.Select(Ceiling).ShouldBe(["Eu", "Eu"]);
 
-        var wrong = new RecordingHandler(fake.Server.CreateHandler()) { FailFirst = HttpStatusCode.GatewayTimeout };
+        var wrong = new RecordingHandler(new FailFirstHandler(fake.Server.CreateHandler()) { Status = HttpStatusCode.GatewayTimeout });
         using var wrongHost = Build(wrong);
         await Should.ThrowAsync<GatewayResidencyException>(() =>
             SendAsync(wrongHost, Post("v1/chat/completions", Chat("fake-wrong-residency")).WithMaxResidency(Residency.OnPrem)));
-        wrong.Calls.Count.ShouldBe(2);
+        wrong.Requests.Count.ShouldBe(2);
     }
 
     [Theory]
@@ -412,7 +415,7 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         using var response = await SendAsync(host, Post("v1/chat/completions", Chat(model)).WithMaxResidency(Residency.OnPrem));
 
         response.StatusCode.ShouldBe(status);
-        recording.Calls.Count.ShouldBe(1);
+        recording.Requests.Count.ShouldBe(1);
     }
 
     [Theory]
@@ -435,23 +438,23 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         using var response = await SendAsync(host, Post("v1/chat/completions", Chat("fake-fail-500")).WithMaxResidency(Residency.OnPrem));
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadGateway);
-        recording.Calls.Count.ShouldBe(1);
+        recording.Requests.Count.ShouldBe(1);
     }
 
     [Fact]
     public async Task A_connection_failure_is_retried_once_with_the_same_request()
     {
-        var recording = new RecordingHandler(fake.Server.CreateHandler()) { RefuseFirst = true };
+        var recording = new RecordingHandler(new FailFirstHandler(fake.Server.CreateHandler()) { Refuse = true });
         using var host = Build(recording);
 
         using var response = await SendAsync(host, Post("v1/chat/completions", Chat("fors/chat-standard")).WithMaxResidency(Residency.Eu));
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         response.Headers.GetValues(GatewayHeaders.Residency).ShouldBe(["Eu"]);
-        recording.Calls.Count.ShouldBe(2);
-        recording.Calls.Select(c => c.Ceiling).ShouldBe(["Eu", "Eu"]); // never wider
-        recording.Calls.Select(c => c.Key).Distinct().ShouldBe([FakeGatewayFactory.ApiCredentialKey]);
-        recording.Calls.Select(c => c.Body).Distinct().Count().ShouldBe(1);
+        recording.Requests.Count.ShouldBe(2);
+        recording.Requests.Select(Ceiling).ShouldBe(["Eu", "Eu"]); // never wider
+        recording.Requests.Select(Key).Distinct().ShouldBe([FakeGatewayFactory.ApiCredentialKey]);
+        recording.Requests.Select(r => r.Body).Distinct().Count().ShouldBe(1);
     }
 
     [Fact]
@@ -490,19 +493,19 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
     [Fact]
     public async Task One_retry_in_all_a_connection_failure_then_a_502_reaches_the_caller()
     {
-        var recording = new RecordingHandler(fake.Server.CreateHandler()) { RefuseFirst = true };
+        var recording = new RecordingHandler(new FailFirstHandler(fake.Server.CreateHandler()) { Refuse = true });
         using var host = Build(recording);
 
         using var response = await SendAsync(host, Post("v1/chat/completions", Chat("fake-fail-500")).WithMaxResidency(Residency.OnPrem));
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadGateway);
-        recording.Calls.Count.ShouldBe(2);
+        recording.Requests.Count.ShouldBe(2);
     }
 
     [Fact]
     public async Task A_stream_that_fails_after_its_first_byte_is_never_retried()
     {
-        var breaking = new BreakingStreamHandler();
+        var breaking = new StubHandler(_ => Task.FromResult(Answer("OnPrem", new StreamContent(new BreakingStream()))));
         using var host = Build(breaking);
 
         using var response = await SendAsync(host, Post("v1/chat/completions", Chat("fors/chat-standard")).WithMaxResidency(Residency.OnPrem));
@@ -512,7 +515,7 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         (await stream.ReadAsync(buffer, Ct)).ShouldBeGreaterThan(0);
         await Should.ThrowAsync<IOException>(async () => (await stream.ReadAsync(buffer, Ct)).ShouldBe(0));
 
-        breaking.Calls.ShouldBe(1);
+        breaking.Requests.Count.ShouldBe(1);
     }
 
     [Theory]
@@ -529,12 +532,12 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
     [Fact]
     public async Task A_connection_failure_on_a_client_with_its_own_retry_is_not_retried_here()
     {
-        var recording = new RecordingHandler(fake.Server.CreateHandler()) { RefuseFirst = true };
+        var recording = new RecordingHandler(new FailFirstHandler(fake.Server.CreateHandler()) { Refuse = true });
         using var host = Build(recording, retryFailed: false);
 
         await Should.ThrowAsync<HttpRequestException>(() =>
             SendAsync(host, Post("v1/chat/completions", Chat("fors/chat-standard")).WithMaxResidency(Residency.Eu)));
-        recording.Calls.Count.ShouldBe(1);
+        recording.Requests.Count.ShouldBe(1);
     }
 
     private static int ClosedPort()
@@ -576,65 +579,58 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
     private static HttpRequestMessage Post(string path, string body = """{"model":"bge-m3","input":"x"}""") =>
         new(HttpMethod.Post, path) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
-    /// <summary>
-    /// Records each request that reaches the gateway (ceiling, key, body) and passes it on; <see cref="FailFirst"/> answers
-    /// the first one itself with that status.
-    /// </summary>
-    private sealed class RecordingHandler(HttpMessageHandler inner) : DelegatingHandler(inner)
-    {
-        public List<(string? Ceiling, string? Key, string Body)> Calls { get; } = [];
-        public HttpStatusCode? FailFirst { get; init; }
+    /// <summary>A gateway that answers every request itself: 200 with the given residency header.</summary>
+    private static StubHandler Stub(string? residency = "OnPrem") => new(_ => Task.FromResult(Answer(residency, new StringContent("{}"))));
 
-        /// <summary>The first request fails as a refused connection: no response at all.</summary>
-        public bool RefuseFirst { get; init; }
+    /// <summary>200 with <paramref name="content"/> and the residency header (none when null).</summary>
+    private static HttpResponseMessage Answer(string? residency, HttpContent content)
+    {
+        var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+        if (residency is not null)
+        {
+            response.Headers.Add(GatewayHeaders.Residency, residency);
+        }
+
+        return response;
+    }
+
+    /// <summary>The ceiling a recorded request was sent with.</summary>
+    private static string? Ceiling(RecordedRequest request) => request.Header(GatewayHeaders.MaxResidency);
+
+    /// <summary>The credential key a recorded request was sent with (its bearer token).</summary>
+    private static string? Key(RecordedRequest request) =>
+        AuthenticationHeaderValue.TryParse(request.Header("Authorization"), out var value) ? value.Parameter : null;
+
+    /// <summary>
+    /// Fails the first request itself and passes the rest on: as a refused connection (no response at all) when
+    /// <see cref="Refuse"/>, otherwise with <see cref="Status"/>. Under a <see cref="RecordingHandler"/>, the failed request is
+    /// recorded too.
+    /// </summary>
+    private sealed class FailFirstHandler(HttpMessageHandler inner) : DelegatingHandler(inner)
+    {
+        private int _sent;
+
+        public HttpStatusCode? Status { get; init; }
+
+        public bool Refuse { get; init; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            var ceiling = request.Headers.TryGetValues(GatewayHeaders.MaxResidency, out var values) ? string.Join(",", values) : null;
-            var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken);
-            Calls.Add((ceiling, request.Headers.Authorization?.Parameter, body));
-            if (Calls.Count == 1 && RefuseFirst)
+            if (Interlocked.Increment(ref _sent) == 1)
             {
-                throw new HttpRequestException(HttpRequestError.ConnectionError, "Connection refused (fake-gateway:80)",
-                    new SocketException((int)SocketError.ConnectionRefused));
+                if (Refuse)
+                {
+                    throw new HttpRequestException(HttpRequestError.ConnectionError, "Connection refused (fake-gateway:80)",
+                        new SocketException((int)SocketError.ConnectionRefused));
+                }
+
+                if (Status is { } status)
+                {
+                    return new HttpResponseMessage(status) { Content = new StringContent("""{"error":{"code":"all_providers_failed"}}""") };
+                }
             }
 
-            return Calls.Count == 1 && FailFirst is { } status
-                ? new HttpResponseMessage(status) { Content = new StringContent("""{"error":{"code":"all_providers_failed"}}""") }
-                : await base.SendAsync(request, cancellationToken);
-        }
-    }
-
-    /// <summary>Counts what would reach the gateway; answers 200 with the given residency header.</summary>
-    private sealed class CountingHandler : HttpMessageHandler
-    {
-        public int Calls { get; private set; }
-        public string? Residency { get; init; } = "OnPrem";
-
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            Calls++;
-            var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}") };
-            if (Residency is not null)
-            {
-                response.Headers.Add(GatewayHeaders.Residency, Residency);
-            }
-
-            return Task.FromResult(response);
-        }
-    }
-
-    /// <summary>Answers 200 within the ceiling with a body that breaks after its first bytes.</summary>
-    private sealed class BreakingStreamHandler : HttpMessageHandler
-    {
-        public int Calls { get; private set; }
-
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            Calls++;
-            var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new BreakingStream()) };
-            response.Headers.Add(GatewayHeaders.Residency, "OnPrem");
-            return Task.FromResult(response);
+            return await base.SendAsync(request, cancellationToken);
         }
     }
 
