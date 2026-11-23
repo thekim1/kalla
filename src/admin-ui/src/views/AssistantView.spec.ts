@@ -63,6 +63,37 @@ function mocks() {
 }
 
 describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
+  it('has Publish draft as its one primary action beside Compare with published, and the rest in the ⋯ menu by role (§5.5.4, §5.12 rule 1)', async () => {
+    const header = async (roles: string[], overrides: Partial<Assistant>) => {
+      signIn(roles)
+      mocks()
+      vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, ...overrides })
+      const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
+      await flushPromises()
+      const header = wrapper.get('header')
+      const primary = header.findAll('.bg-accent').map((b) => b.text())
+      const compare = header.find('[data-test=compare-published]').exists()
+      const menu = header.find('[data-test=menu-button]')
+      let items: string[] = []
+      if (menu.exists()) {
+        expect(menu.attributes('aria-label')).toBe('More actions for Bygglovsassistenten')
+        await menu.trigger('click')
+        items = wrapper.findAll('[role=menuitem]').map((i) => i.text().replace(/^[a-z_]+/, ''))
+      }
+      wrapper.unmount()
+      return { primary, compare, items }
+    }
+    const editorItems = ['Edit name and contact', 'Copy', 'Archive']
+    expect(await header(['rag-editor'], { publishedVersion: 2 })).toEqual({ primary: ['Publish draft'], compare: true, items: editorItems })
+    expect(await header(['rag-editor'], { publishedVersion: null })).toEqual({ primary: ['Publish draft'], compare: false, items: editorItems })
+    expect(await header(['rag-editor'], { publishedVersion: 2, draft: null })).toEqual({ primary: [], compare: false, items: editorItems })
+    expect(await header(['rag-department-admin'], { publishedVersion: 2 })).toEqual({ primary: ['Publish draft'], compare: true, items: [...editorItems, 'Delete…'] })
+    expect(await header(['rag-platform-admin'], { state: 'archived' })).toEqual({
+      primary: ['Publish draft'], compare: false, items: ['Edit name and contact', 'Copy', 'Change department', 'Bring back', 'Delete…'],
+    })
+    expect(await header(['rag-viewer'], { publishedVersion: 2 })).toEqual({ primary: [], compare: true, items: [] })
+  })
+
   it('saves the draft with model, instructions and a knowledge base picked with a topic, and shows the V-rule warnings in plain words', async () => {
     signIn(['rag-editor'])
     mocks()
@@ -138,7 +169,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(save.mock.calls[0]![1].collectionLinks).toEqual([{ collectionId: 'c2', tags: ['kompost'] }])
   })
 
-  it('says in the Draft tab\'s lead what saving does, per state, and names the header button Edit details (UI4 B)', async () => {
+  it('says in the Draft tab\'s lead what saving does, per state, and names the header\'s menu item Edit name and contact (UI4 B; admin design §5.7)', async () => {
     signIn(['rag-editor'])
     mocks()
     vi.spyOn(api.assistants, 'version').mockResolvedValue({
@@ -152,7 +183,9 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       const wrapper = mount(AssistantView, { props: { id: 'a1' } })
       await flushPromises()
       const text = wrapper.get('[data-test=draft-lead]').text()
-      expect(wrapper.get('[data-test=edit]').text()).toContain('Edit details')
+      await wrapper.get('[data-test=menu-button]').trigger('click')
+      expect(wrapper.get('[data-test=menu-edit]').text()).toContain('Edit name and contact')
+      await wrapper.get('[data-test=menu-button]').trigger('click')
       wrapper.unmount()
       return text
     }
@@ -524,10 +557,11 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     const table = wrapper.get('[data-test=versions]').text()
     expect(table).toContain('restored from version 1')
     expect(table).toContain('Earlier')
-    expect(wrapper.find('[data-test=restore-3]').exists()).toBe(false) // the live version
-    expect(wrapper.find('[data-test=restore-4]').exists()).toBe(false) // the draft is published, not restored
+    expect(wrapper.find('[data-test=version-menu-3]').exists()).toBe(false) // the live version
+    expect(wrapper.find('[data-test=version-menu-4]').exists()).toBe(false) // the draft is published, not restored
 
-    await wrapper.get('[data-test=restore-2]').trigger('click')
+    await wrapper.get('[data-test=version-menu-2] [data-test=menu-button]').trigger('click')
+    await wrapper.get('[data-test=version-menu-2] [data-test=menu-restore]').trigger('click')
     await flushPromises()
     expect(document.body.textContent).toContain('Version 2 is published again as a new version. Your draft is kept.')
     const confirm = [...document.body.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Restore').at(-1)!
@@ -595,7 +629,8 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
     await flushPromises()
 
-    await wrapper.get('[data-test=delete]').trigger('click')
+    await wrapper.get('[data-test=menu-button]').trigger('click')
+    await wrapper.get('[data-test=menu-delete]').trigger('click')
     await flushPromises()
     expect(document.body.querySelector('[data-test=delete-apps]')!.textContent).toContain('Open WebUI (pilot)')
     expect(document.body.querySelector('[data-test=delete-questions]')!.textContent).toBe('Questions in the last 7 days: 42.')
@@ -616,7 +651,8 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     mocks()
     const editor = mount(AssistantView, { props: { id: 'a1' } })
     await flushPromises()
-    expect(editor.find('[data-test=delete]').exists()).toBe(false)
+    await editor.get('[data-test=menu-button]').trigger('click')
+    expect(editor.find('[data-test=menu-delete]').exists()).toBe(false)
   })
 
   it('archives and brings back the assistant, and sets retention within the level\'s maximum', async () => {
@@ -631,14 +667,16 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
     await flushPromises()
 
-    await wrapper.get('[data-test=archive]').trigger('click')
+    await wrapper.get('[data-test=menu-button]').trigger('click')
+    await wrapper.get('[data-test=menu-archive]').trigger('click')
     await flushPromises()
     expect(document.body.textContent).toContain('The assistant disappears from all clients.')
     ;[...document.body.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Archive').at(-1)!.click()
     await flushPromises()
     expect(archive).toHaveBeenCalledWith('a1', 'a3')
     expect(wrapper.get('[data-test=archived]').text()).toBe('Archived')
-    await wrapper.get('[data-test=unarchive]').trigger('click')
+    await wrapper.get('[data-test=menu-button]').trigger('click')
+    await wrapper.get('[data-test=menu-unarchive]').trigger('click')
     await flushPromises()
     expect(unarchive).toHaveBeenCalledWith('a1', 'a4')
     expect(wrapper.find('[data-test=archived]').exists()).toBe(false)

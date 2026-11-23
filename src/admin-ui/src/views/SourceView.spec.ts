@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { defineComponent, h } from 'vue'
 import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
@@ -28,6 +29,38 @@ function run(overrides: Partial<RunSummary>): RunSummary {
 }
 
 describe('Source (admin design §5.5.3; #278 slice 2)', () => {
+  it('has the primary action of its type and state, Pause beside Fetch now, and Delete in the ⋯ menu (§5.5.3, §5.12 rule 1)', async () => {
+    const upload = vi.fn()
+    const FilesPanel = defineComponent({ setup: (_, { expose }) => { expose({ upload }); return () => h('div') } })
+    const header = async (roles: string[], overrides: Partial<Source>) => {
+      setActivePinia(createPinia())
+      const auth = useAuthStore()
+      auth.user = bffUser({ roles })
+      auth.status = 'authenticated'
+      vi.spyOn(api.sources, 'get').mockResolvedValue({ ...source, ...overrides })
+      vi.spyOn(api.sources, 'runs').mockResolvedValue({ items: [], next: null })
+      vi.spyOn(api.sources, 'piiReport').mockResolvedValue(null as never)
+      const wrapper = mount(SourceView, { props: { id: 's1' }, global: { stubs: { RouterLink: RouterLinkStub, FilesPanel } } })
+      await flushPromises()
+      const h1 = wrapper.get('header')
+      const result = {
+        primary: h1.findAll('.bg-accent').map((b) => b.text().replace(/^[a-z_]+/, '')),
+        pause: h1.find('[data-test=pause]').exists(),
+        menu: h1.find('[data-test=menu-button]').exists(),
+      }
+      if (h1.find('[data-test=upload-files]').exists()) await h1.get('[data-test=upload-files]').trigger('click')
+      wrapper.unmount()
+      return result
+    }
+    expect(await header(['rag-editor'], {})).toEqual({ primary: ['Fetch now'], pause: true, menu: false })
+    expect(await header(['rag-editor'], { type: 'url-list' })).toEqual({ primary: ['Fetch now'], pause: true, menu: false })
+    expect(await header(['rag-editor'], { type: 'upload', settings: {} })).toEqual({ primary: ['Upload files'], pause: false, menu: false })
+    expect(upload).toHaveBeenCalledOnce() // Upload files opens the Files card's own picker
+    expect(await header(['rag-editor'], { state: 'paused', nextRunAt: null })).toEqual({ primary: ['Resume'], pause: false, menu: false })
+    expect(await header(['rag-department-admin'], {})).toEqual({ primary: ['Fetch now'], pause: true, menu: true })
+    expect(await header(['rag-viewer'], {})).toEqual({ primary: [], pause: false, menu: false })
+  })
+
   it('shows the settings, runs with their counts, the personal-data report, and starts a sync', async () => {
     setActivePinia(createPinia())
     const auth = useAuthStore()
@@ -366,7 +399,8 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
 
     const wrapper = mount(SourceView, { props: { id: 's1' }, attachTo: document.body, global: { stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
-    await wrapper.get('[data-test=delete]').trigger('click')
+    await wrapper.get('[data-test=menu-button]').trigger('click')
+    await wrapper.get('[data-test=menu-delete]').trigger('click')
     await flushPromises()
     expect(document.body.textContent).toMatch(/Its 1\s234 documents leave the search at once/)
     const confirm = document.body.querySelector<HTMLButtonElement>('[data-test=confirm]')!
@@ -389,7 +423,7 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     auth.user = bffUser({ roles: ['rag-editor'] })
     const editor = mount(SourceView, { props: { id: 's1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
-    expect(editor.find('[data-test=delete]').exists()).toBe(false)
+    expect(editor.find('[data-test=menu-button]').exists()).toBe(false) // Delete is the menu's only item
   })
 
   it('polls a running run, shows its progress in place and reloads the runs when it ends (#803)', async () => {

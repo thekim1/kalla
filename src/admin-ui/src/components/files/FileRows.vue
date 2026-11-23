@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { UploadFile } from '@/api/types'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import CheckField from '@/components/ui/CheckField.vue'
+import MenuButton, { type MenuItem } from '@/components/ui/MenuButton.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import { formatDateTime } from '@/utils/format'
@@ -25,10 +26,16 @@ const emit = defineEmits<{
   (e: 'open', file: UploadFile): void
   (e: 'replace', file: UploadFile): void
   (e: 'restore', file: UploadFile): void
+  (e: 'delete', file: UploadFile): void
 }>()
 
 const groups = computed(() => (props.grouped ? groupByFolder(props.files) : [{ folder: '', files: props.files }]))
 const selectable = computed(() => props.canEdit && !props.showDeleted)
+// Download joins when the API serves an uploaded file (§5.5.7 point 4); there is no endpoint for it yet.
+const rowMenu: MenuItem[] = [
+  { key: 'replace', label: FILES.replace, icon: 'swap_horiz' },
+  { key: 'delete', label: FILES.removeOne, icon: 'delete', danger: true },
+]
 
 function toggle(id: string, on: boolean): void {
   emit('update:selected', on ? [...props.selected, id] : props.selected.filter((x) => x !== id))
@@ -60,9 +67,11 @@ function toggle(id: string, on: boolean): void {
             <span v-if="f.reason" class="block text-small text-danger">{{ jobMessage(f.reason) }}</span>
           </span>
           <UiBadge :tone="stateTone(f.state)" :label="FILES.states[f.state] ?? f.state" />
-          <UiButton v-if="selectable" size="sm" :aria-label="FILES.replaceLabel(f.fileName)" :data-test="`replace-${f.id}`" @click="emit('replace', f)">
-            {{ FILES.replace }}
-          </UiButton>
+          <!-- A row's actions in its ⋯ menu (admin design §5.5.7 point 4, §5.12 rule 5): said once, not on every row. -->
+          <MenuButton
+            v-if="selectable" size="sm" :label="FILES.rowMenu(f.fileName)" :items="rowMenu" :data-test="`row-menu-${f.id}`"
+            @select="$event === 'replace' ? emit('replace', f) : emit('delete', f)"
+          />
           <template v-if="showDeleted && canRestore">
             <UiButton v-if="restorable(f)" size="sm" :aria-label="FILES.restoreLabel(f.fileName)" :data-test="`restore-${f.id}`" @click="emit('restore', f)">
               {{ FILES.restore }}

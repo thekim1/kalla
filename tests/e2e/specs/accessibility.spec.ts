@@ -66,6 +66,31 @@ test('drawers and dialogs pass axe', async ({ page }) => {
   }
 })
 
+test('the ⋯ menu passes axe open, as a menu on a desktop and as a sheet on a phone, and Esc returns focus (admin design §5.12)', async ({ page }) => {
+  await login(page, 'rag-department-admin')
+  const assistant = ((await getJson(page, '/api/assistants')).items ?? [])[0]
+  test.skip(!assistant, 'needs an assistant (the pilot journey makes one)')
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    await ready(page, `/assistants/${assistant.id}`)
+    const more = page.getByRole('button', { name: /^More actions for / })
+    await expect(more).toHaveAttribute('aria-haspopup', 'menu')
+    await more.click()
+    await expect(more).toHaveAttribute('aria-expanded', 'true')
+    if (width === 1280) {
+      const menu = page.getByRole('menu')
+      await expect(menu).toBeVisible()
+      await expect(menu.getByRole('menuitem').first()).toBeFocused()
+    } else {
+      await expect(page.getByRole('dialog', { name: /^More actions for / })).toBeVisible()
+    }
+    await scan(page, `the ⋯ menu at ${width}px`)
+    await page.keyboard.press('Escape')
+    await expect(more).toBeFocused()
+    await expect(more).toHaveAttribute('aria-expanded', 'false')
+  }
+})
+
 test('all pages reflow at 320px and at 200 percent text size', async ({ page }) => {
   await login(page, 'rag-platform-admin')
   const pages = await allPages(page)

@@ -148,12 +148,14 @@ for (const mode of ['mouse', 'keyboard'] as const) {
 
     // 11 Publish the assistant. It runs on its department's AI gateway key: while the gateway acts as keys, publish needs one
     // that reaches its models (V39); the E2E stack's FakeGateway has "Digitalisering – pilot" for that (AppHost).
-    await act.press(page.getByRole('button', { name: 'Edit details' }))
+    // The header's ⋯ menu holds Edit name and contact (admin design §5.5.4, §5.12 rule 1).
+    await act.press(page.getByRole('button', { name: /^More actions for / }))
+    await act.press(page.getByRole('menuitem', { name: 'Edit name and contact' }))
     const details = page.getByRole('dialog', { name: 'Edit assistant' })
     await act.select(details.getByRole('combobox', { name: 'AI gateway key' }), { label: 'Digitalisering – pilot' })
     await act.press(details.getByRole('button', { name: 'Save', exact: true }))
     await expect(details).toBeHidden()
-    await act.press(page.getByRole('button', { name: 'Publish', exact: true }))
+    await act.press(page.getByRole('button', { name: 'Publish draft', exact: true }))
     await expect(page.getByText('Published: version 1')).toBeVisible()
 
     // 12 Make it available in Open WebUI.

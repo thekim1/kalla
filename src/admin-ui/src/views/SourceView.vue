@@ -17,6 +17,7 @@ import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import DetailRow from '@/components/ui/DetailRow.vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import PageBreadcrumb from '@/components/layout/PageBreadcrumb.vue'
+import MenuButton from '@/components/ui/MenuButton.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
@@ -25,7 +26,7 @@ import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatNumber } from '@/utils/format'
-import { DELETE, LEVEL_LABEL, PAGE, PII_ACTIONS, RUN_STATE_LABEL, SOURCE, SOURCE_EDIT, SOURCE_PAGE, SOURCE_TYPE_LABEL } from '@/utils/labels'
+import { DELETE, LEVEL_LABEL, MENU, PAGE, PII_ACTIONS, RUN_STATE_LABEL, SOURCE, SOURCE_EDIT, SOURCE_PAGE, SOURCE_TYPE_LABEL } from '@/utils/labels'
 import { useKeysetList } from '@/composables/useKeysetList'
 import { usePoll } from '@/composables/usePoll'
 import { runProgressText, runStateTone } from '@/utils/runs'
@@ -190,6 +191,7 @@ async function load(): Promise<void> {
 const paused = computed(() => source.data.value?.state === 'paused')
 // An upload source has no schedule, and the API refuses to pause one (source_not_pausable, #1007).
 const pausable = computed(() => source.data.value?.type !== 'upload')
+const filesPanel = ref<InstanceType<typeof FilesPanel> | null>(null)
 const pausing = ref(false)
 async function togglePause(): Promise<void> {
   const current = source.data.value
@@ -247,11 +249,19 @@ async function reloadPii(): Promise<void> {
         <UiButton v-if="canEdit && paused" variant="primary" icon="play_arrow" :loading="pausing" data-test="resume" @click="togglePause">
           {{ SOURCE_PAGE.resume }}
         </UiButton>
-        <UiButton v-if="canEdit && !paused" variant="primary" icon="sync" :loading="syncing" data-test="sync" @click="syncNow">{{ SOURCE_PAGE.syncNow }}</UiButton>
-        <UiButton v-if="canEdit && !paused && pausable" :loading="pausing" data-test="pause" @click="togglePause">{{ SOURCE_PAGE.pause }}</UiButton>
+        <!-- The primary action follows the type (admin design §5.5.3, §5.12 rule 1): Fetch now for a website or an address
+             list, beside Pause; Upload files for an upload source, which has neither. Delete is in the ⋯ menu. -->
+        <template v-if="canEdit && !paused">
+          <UiButton v-if="pausable" variant="primary" icon="sync" :loading="syncing" data-test="sync" @click="syncNow">{{ SOURCE_PAGE.syncNow }}</UiButton>
+          <UiButton v-else variant="primary" icon="upload_file" data-test="upload-files" @click="filesPanel?.upload()">{{ SOURCE_PAGE.uploadFiles }}</UiButton>
+          <UiButton v-if="pausable" :loading="pausing" data-test="pause" @click="togglePause">{{ SOURCE_PAGE.pause }}</UiButton>
+        </template>
         <ContinueRunButton v-if="continuable && !activeRun && !paused" :run-id="continuable" can-continue @started="loadRuns()" />
         <CancelRunButton v-if="activeRun" :run-id="activeRun.id" :state="activeRun.state" @cancelled="loadRuns()" />
-        <UiButton v-if="canDelete" variant="danger" icon="delete" data-test="delete" @click="openDelete">{{ DELETE.action }}</UiButton>
+        <MenuButton
+          v-if="canDelete" :label="MENU.more(source.data.value.name)" :items="[{ key: 'delete', label: MENU.delete, icon: 'delete', danger: true }]"
+          @select="openDelete"
+        />
       </PageHeader>
       <p v-if="paused" role="status" class="mb-4 rounded-card bg-warn-soft p-4 text-warn" data-test="paused-banner">{{ SOURCE_PAGE.paused }}</p>
       <InlineError v-if="syncError" :message="problemMessage(syncError)" class="mb-4" />
@@ -288,7 +298,6 @@ async function reloadPii(): Promise<void> {
         </div>
       </UiCard>
       <SourceEditDrawer v-model:open="editing" :source="source.data.value" :collection="collection" @saved="saved" />
-      <FilesPanel v-if="source.data.value.type === 'upload'" :source="source.data.value" :can-edit="canEdit" class="mb-6" @committed="loadRuns()" />
       <PipelineCard :source="source.data.value" class="mb-6" />
 
       <!-- Section titles inside their cards (admin design §5.12, Every page). -->
@@ -307,6 +316,8 @@ async function reloadPii(): Promise<void> {
         <UiButton v-if="runs.next.value" class="mt-4" :loading="runs.loading.value" @click="runs.more()">{{ SOURCE_PAGE.more }}</UiButton>
       </AsyncState>
       </UiCard>
+      <!-- Then the files of an upload source (admin design §5.5.3: what it fetches, its runs, its files, held and quarantined). -->
+      <FilesPanel v-if="source.data.value.type === 'upload'" ref="filesPanel" :source="source.data.value" :can-edit="canEdit" class="mb-6" @committed="loadRuns()" />
 
       <!-- Folded by default, with the counts in the summary; flagged documents first (admin design §5.5.3). There is no
            document page to link to, so the names are plain text. -->

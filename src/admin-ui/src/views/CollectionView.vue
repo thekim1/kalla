@@ -22,6 +22,7 @@ import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import DetailRow from '@/components/ui/DetailRow.vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import PageBreadcrumb from '@/components/layout/PageBreadcrumb.vue'
+import MenuButton, { type MenuItem } from '@/components/ui/MenuButton.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import SelectField from '@/components/ui/SelectField.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
@@ -36,7 +37,7 @@ import KeyUnavailableBadge from '@/components/gateway/KeyUnavailableBadge.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatDecimal, formatNumber, quietZero } from '@/utils/format'
-import { COLLECTION, COLLECTIONS, DELETE, EDIT_DRAWER, EVALUATION, LEVEL_LABEL, MOVE_DEPARTMENT, PAGE, RETRIEVAL, RUN_STATE_LABEL, SOURCE, SOURCE_TYPE_LABEL } from '@/utils/labels'
+import { COLLECTION, COLLECTIONS, DELETE, EDIT_DRAWER, EVALUATION, LEVEL_LABEL, MENU, MOVE_DEPARTMENT, PAGE, RETRIEVAL, RUN_STATE_LABEL, SOURCE, SOURCE_TYPE_LABEL } from '@/utils/labels'
 import MoveDepartmentDrawer from '@/components/organisation/MoveDepartmentDrawer.vue'
 import { problemMessage } from '@/utils/problem'
 import PiiActions from '@/components/documents/PiiActions.vue'
@@ -112,6 +113,16 @@ const canManage = computed(() => auth.can('manage') && !shared.value)
 /** A document whose personal-data actions apply: flagged and not cleared, or held again after a clearance (processing §9.5). */
 const needsPiiDecision = (row: DocumentSummary) => row.piiHeld || (row.piiFlagged && !row.piiCleared)
 const deleting = ref(false)
+const headerMenu = computed<MenuItem[]>(() => [
+  ...(canEdit.value ? [{ key: 'edit', label: MENU.editNameAndContact, icon: 'edit' }] : []),
+  ...(canMove.value && !shared.value ? [{ key: 'move', label: MOVE_DEPARTMENT.action, icon: 'swap_horiz' }] : []),
+  ...(canDelete.value && !shared.value ? [{ key: 'delete', label: MENU.delete, icon: 'delete', danger: true }] : []),
+])
+function onHeaderMenu(key: string): void {
+  if (key === 'edit') editing.value = true
+  else if (key === 'move') moving.value = true
+  else if (key === 'delete') deleting.value = true
+}
 const inUse = computed(() => users.value.length > 0 || sources.data.value.length > 0)
 async function deleteCollection(): Promise<void> {
   const deleted = collection.data.value!
@@ -295,12 +306,13 @@ onMounted(load)
           :label="collection.data.value.publishedAt ? COLLECTIONS.published : COLLECTIONS.notPublished"
           data-test="state"
         />
-        <UiButton v-if="canEdit" icon="edit" data-test="edit" @click="editing = true">{{ EDIT_DRAWER.edit }}</UiButton>
-        <UiButton v-if="canMove && !shared" data-test="move-department" @click="moving = true">{{ MOVE_DEPARTMENT.action }}</UiButton>
-        <UiButton v-if="canDelete && !shared" variant="danger" icon="delete" data-test="delete" @click="deleting = true">{{ DELETE.action }}</UiButton>
+        <!-- One primary action (admin design §5.5.2, §5.12 rule 1): Publish until it is published, then Add content; the
+             rest in the ⋯ menu, Delete last. -->
         <UiButton v-if="canPublish && !collection.data.value.publishedAt" variant="primary" :loading="publishing" data-test="publish" @click="publish">
           {{ COLLECTION.publish }}
         </UiButton>
+        <UiButton v-else-if="canEdit" variant="primary" icon="add" data-test="add-content" @click="adding = true">{{ COLLECTION.addContent }}</UiButton>
+        <MenuButton v-if="headerMenu.length" :label="MENU.more(collection.data.value.name)" :items="headerMenu" @select="onHeaderMenu" />
       </PageHeader>
       <InlineError v-if="publishError" :message="problemMessage(publishError)" class="mb-4" />
       <UiTabs id="collection" v-model="tab" :tabs="tabs" :label="COLLECTION.tabsLabel" class="mb-6" />

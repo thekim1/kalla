@@ -599,6 +599,8 @@ export const SHARING_LABEL: Record<SharingLevel, string> = {
 }
 
 export const COLLECTION = {
+  /** The header's primary action once the knowledge base is published (admin design §5.5.2). */
+  addContent: 'Add content',
   tabs: { overview: 'Overview', files: 'Files', sources: 'Sources', documents: 'Documents', topics: 'Topics', sharing: 'Sharing' },
   filesSource: 'Upload source',
   addFiles: 'Add files',
@@ -1034,7 +1036,9 @@ export const FILES = {
   /** Said once in the summary instead of on each row (admin design §5.5.7 point 4, §5.12 rule 5). */
   notScannedSummary: (n: number) => `${formatNumber(n)} ${n === 1 ? 'file was' : 'files were'} not scanned for malware: the scan was off when they were stored`,
   replace: 'Replace',
-  replaceLabel: (name: string) => `Replace ${name}`,
+  /** A file row's ⋯ menu (admin design §5.5.7 point 4). */
+  rowMenu: (name: string) => `Actions for ${name}`,
+  removeOne: 'Remove…',
   select: (name: string) => `Select ${name}`,
   deleteSelected: (n: number) => `Remove ${n} ${n === 1 ? 'file' : 'files'}`,
   deleteTitle: (n: number) => `Remove ${n} ${n === 1 ? 'file' : 'files'}?`,
@@ -1566,6 +1570,8 @@ export const SOURCE_PAGE = {
   resumed: 'The source runs on schedule again.',
   pauseConflict: 'Someone else changed the source. It has been reloaded; try again.',
   syncNow: 'Fetch now',
+  /** An upload source's primary action (admin design §5.5.3). */
+  uploadFiles: 'Upload files',
   syncStarted: 'Fetching has started.',
   alreadyRunning: 'A fetch is already running.',
   runs: 'Runs',
@@ -1878,15 +1884,19 @@ export const ASSISTANT = {
     published: (n: number) => `Saving starts a draft from version ${n}; version ${n} stays live until you publish.`,
     changed: (n: number) => `Draft changed since version ${n}.`,
   },
-  editDetails: 'Edit details',
   draftSaved: 'The draft has been saved.',
   warnings: 'Fix this before you publish',
-  publish: 'Publish',
+  /** The header's one primary action (admin design §5.7). */
+  publish: 'Publish draft',
+  /** Beside it: the draft against the published version (§5.5.4). */
+  compareWithPublished: 'Compare with published',
   published: (n: number) => `Version ${n} is published.`,
   baseChangedTitle: 'Publish a draft based on an older version?',
   baseChangedLead: 'A version was restored after this draft was started. Publishing replaces the published version with these changes:',
   publishAnyway: 'Publish anyway',
   compare: 'Compare',
+  /** A version row's ⋯ menu (admin design §5.5.4). */
+  versionMenu: (n: number) => `More actions for version ${n}`,
   compareTitle: (from: number, to: string) => `Version ${from} compared with ${to}`,
   compareDraft: 'the draft',
   compareVersion: (n: number) => `version ${n}`,
@@ -2450,6 +2460,13 @@ export const EXPLAIN = {
 } as const
 
 /** The edit drawers of a knowledge base and an assistant: their own fields, the level included (#446). */
+/** The ⋯ menu of a header or a row (admin design §5.12 rule 1); its name says whose actions they are. */
+export const MENU = {
+  more: (name: string) => `More actions for ${name}`,
+  editNameAndContact: 'Edit name and contact',
+  delete: 'Delete…',
+} as const
+
 export const EDIT_DRAWER = {
   edit: 'Edit',
   collectionTitle: 'Edit knowledge base',

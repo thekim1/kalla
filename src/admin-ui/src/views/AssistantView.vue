@@ -16,6 +16,7 @@ import AsyncState from '@/components/ui/AsyncState.vue'
 import CheckField from '@/components/ui/CheckField.vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import PageBreadcrumb from '@/components/layout/PageBreadcrumb.vue'
+import MenuButton, { type MenuItem } from '@/components/ui/MenuButton.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import CopyValue from '@/platform/CopyValue.vue'
 import SelectField from '@/components/ui/SelectField.vue'
@@ -41,7 +42,7 @@ import CostCard from '@/components/costs/CostCard.vue'
 import KeyBudgetStatus from '@/components/gateway/KeyBudgetStatus.vue'
 import KeyUnavailableBadge from '@/components/gateway/KeyUnavailableBadge.vue'
 import { actorText, formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
-import { ASSISTANT, ASSISTANT_TESTS, COMMON, DELETE, EDIT_DRAWER, LEVEL_LABEL, MODEL_AVAILABILITY, MOVE_DEPARTMENT, PAGE } from '@/utils/labels'
+import { ASSISTANT, ASSISTANT_TESTS, COMMON, DELETE, EDIT_DRAWER, LEVEL_LABEL, MENU, MODEL_AVAILABILITY, MOVE_DEPARTMENT, PAGE } from '@/utils/labels'
 import MoveDepartmentDrawer from '@/components/organisation/MoveDepartmentDrawer.vue'
 import { ERROR_MESSAGES, formatMessage } from '@/utils/messages'
 import { problemMessage } from '@/utils/problem'
@@ -166,6 +167,25 @@ const versionColumns: Column[] = [
   { key: 'actions', label: ASSISTANT.restore, hideLabel: true, align: 'right' },
 ]
 const archived = computed(() => assistant.data.value?.state === 'archived')
+const headerMenu = computed<MenuItem[]>(() => [
+  ...(canEdit.value
+    ? [
+        { key: 'edit', label: MENU.editNameAndContact, icon: 'edit' },
+        { key: 'copy', label: ASSISTANT.copy, icon: 'content_copy' },
+        ...(canMove.value ? [{ key: 'move', label: MOVE_DEPARTMENT.action, icon: 'swap_horiz' }] : []),
+        archived.value ? { key: 'unarchive', label: ASSISTANT.unarchive, icon: 'unarchive' } : { key: 'archive', label: ASSISTANT.archive, icon: 'archive' },
+      ]
+    : []),
+  ...(canManage.value ? [{ key: 'delete', label: MENU.delete, icon: 'delete', danger: true }] : []),
+])
+function onHeaderMenu(key: string): void {
+  if (key === 'edit') editing.value = true
+  else if (key === 'copy') copying.value = true
+  else if (key === 'move') moving.value = true
+  else if (key === 'archive') archiving.value = true
+  else if (key === 'unarchive') void unarchive()
+  else if (key === 'delete') void openDelete()
+}
 // V36 (#445): general knowledge on a public assistant shows a warning and needs one extra confirmation to publish.
 const publicLevel = computed(() => assistant.data.value?.classification === 'public')
 const historyOptions = computed(() =>
@@ -510,19 +530,20 @@ watch(() => props.id, () => {
         <UiButton v-for="c in portals" :key="c.id" :href="c.portalUrl!" target="_blank" rel="noopener noreferrer" icon="open_in_new" data-test="portal">
           {{ ASSISTANT.openIn(c.name) }} <span class="sr-only">{{ COMMON.opensInNewTab }}</span>
         </UiButton>
-        <template v-if="canEdit">
-          <UiButton icon="edit" data-test="edit" @click="editing = true">{{ ASSISTANT.editDetails }}</UiButton>
-          <UiButton v-if="canMove" data-test="move-department" @click="moving = true">{{ MOVE_DEPARTMENT.action }}</UiButton>
-          <UiButton v-if="archived" :loading="busy === 'unarchive'" data-test="unarchive" @click="unarchive">{{ ASSISTANT.unarchive }}</UiButton>
-          <UiButton v-else icon="archive" data-test="archive" @click="archiving = true">{{ ASSISTANT.archive }}</UiButton>
-          <UiButton icon="content_copy" data-test="copy" @click="copying = true">{{ ASSISTANT.copy }}</UiButton>
-        </template>
-        <UiButton v-if="canManage" variant="danger" icon="delete" data-test="delete" @click="openDelete">{{ DELETE.action }}</UiButton>
+        <!-- One primary action (admin design §5.5.4, §5.12 rule 1): Publish draft, beside Compare with published; the rest
+             in the ⋯ menu, Delete last. -->
+        <UiButton
+          v-if="assistant.data.value.draft && assistant.data.value.publishedVersion" icon="difference" data-test="compare-published"
+          @click="compare(assistant.data.value.publishedVersion)"
+        >
+          {{ ASSISTANT.compareWithPublished }}
+        </UiButton>
         <UiButton
           v-if="canEdit && assistant.data.value.draft" variant="primary" :loading="busy === 'publish'" data-test="publish" @click="publish"
         >
           {{ ASSISTANT.publish }}
         </UiButton>
+        <MenuButton v-if="headerMenu.length" :label="MENU.more(assistant.data.value.name)" :items="headerMenu" @select="onHeaderMenu" />
       </PageHeader>
       <KeyBudgetStatus class="mb-4" :gateway-key-id="assistant.data.value.gatewayKeyId" />
       <InlineError v-if="error" :message="problemMessage(error)" class="mb-4" />
@@ -655,9 +676,11 @@ watch(() => props.id, () => {
             <UiButton v-if="comparable(row as AssistantVersionSummary)" size="sm" class="mr-2" :data-test="`compare-${row.number}`" @click="compare(row.number)">
               {{ ASSISTANT.compare }}
             </UiButton>
-            <UiButton v-if="canEdit && restorable(row as AssistantVersionSummary)" size="sm" :data-test="`restore-${row.number}`" @click="restoring = row.number">
-              {{ ASSISTANT.restore }}
-            </UiButton>
+            <!-- Restore is rare: in the row's ⋯ menu, Compare beside it (admin design §5.5.4). -->
+            <MenuButton
+              v-if="canEdit && restorable(row as AssistantVersionSummary)" size="sm" :label="ASSISTANT.versionMenu(row.number)"
+              :items="[{ key: 'restore', label: ASSISTANT.restore, icon: 'history' }]" :data-test="`version-menu-${row.number}`" @select="restoring = row.number"
+            />
           </template>
         </DataTable>
       </div>
