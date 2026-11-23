@@ -123,7 +123,9 @@ public sealed class ConversationWriterTests(KnowledgeFixture db) : IClassFixture
             await writer.EnqueueAsync(bad);
             await writer.EnqueueAsync(good);
             await writer.FlushAsync(Ct);
-            started.Elapsed.ShouldBeLessThan(ConversationWriter.RetryInterval);
+            // A retried data error costs two retry delays (attempts 1 to 3) before the split, so under two delays means none was
+            // taken; one delay's margin is for a loaded runner's database (2.007 s was seen with no retry).
+            started.Elapsed.ShouldBeLessThan(2 * ConversationWriter.RetryInterval);
         }
         finally
         {
