@@ -208,6 +208,7 @@ app.MapScalarApiReference(o => o.WithTitle("Källa Admin API").WithNonce().Disab
 api.MapGateway();
 api.MapCosts();
 api.MapGaps();
+api.MapDocumentFeedback();
 api.MapEmbeddingProfiles();
 
 app.UseDefaultFiles();

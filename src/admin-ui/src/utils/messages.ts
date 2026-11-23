@@ -44,6 +44,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   upload_file_missing: 'File {n} has not been uploaded to the batch.',
   upload_batch_too_large: 'A batch holds 1 to 100 files and at most 500 MB.',
   source_paused: 'The source is paused. Resume it first.',
+  source_not_pausable: 'An upload source has no schedule to pause.',
   run_not_continuable: 'Only the latest crawl run that ended with pages left or failed can be continued. Use Sync now.',
   slug_taken: 'The short name {slug} is already in use. Try {suggestion}.',
   upload_batch_committed: 'The batch has already been saved with other files.',
@@ -412,6 +413,12 @@ export const CONTENT_GAP_MESSAGES = {
   share: (share: string, notFound: string, general: string) =>
     `${share} of the questions in this period were not answered from the knowledge (${notFound} not found, ${general} answered from general knowledge).`,
   empty: 'No question in this period ended not found or was answered from general knowledge.',
+} as const
+
+/** The sentences of the Feedback on documents card (admin design §8.8, B-66). */
+export const DOCUMENT_FEEDBACK_MESSAGES = {
+  explanation: 'A document counts each time an answer that cited it was rated. A downvote may be about the answer, not the document.',
+  empty: 'No rated answer cited this knowledge base in this period.',
 } as const
 
 /** When the problem has no code we know: by status. */

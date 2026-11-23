@@ -234,17 +234,17 @@ public sealed class ConversationWriterTests(KnowledgeFixture db) : IClassFixture
         var answer = Guid.NewGuid().ToString();
         var first = Turn(null, chat, assistant, client, "owui:u-1", "internal") with
         {
-            Outcome = "not-found", DepartmentId = department, At = at, Nearest = new NearestHit(collection, other), UserExternalId = Guid.NewGuid().ToString(), AnswerExternalId = answer,
+            Outcome = "not-found", DepartmentId = department, At = at, Nearest = new NearestHit(collection, other, "kb", []), UserExternalId = Guid.NewGuid().ToString(), AnswerExternalId = answer,
         };
 
         await writer.WriteAsync(
         [
-            Asked("not-found", new NearestHit(collection, document)),
-            Asked("not-found", new NearestHit(collection, document)),
-            Asked("answered-general", new NearestHit(collection, document)),
+            Asked("not-found", new NearestHit(collection, document, "kb", [])),
+            Asked("not-found", new NearestHit(collection, document, "kb", ["vpn"])), // the subject is not part of the key
+            Asked("answered-general", new NearestHit(collection, document, "kb", [])),
             Asked("not-found", null),
-            Asked("answered", new NearestHit(collection, document)),
-            Asked("cancelled", new NearestHit(collection, document)), // an aborted general-knowledge stream is a cancelled turn
+            Asked("answered", new NearestHit(collection, document, "kb", [])),
+            Asked("cancelled", new NearestHit(collection, document, "kb", [])), // an aborted general-knowledge stream is a cancelled turn
             first,
             ChatTurn.UsageOnlyOf(assistant, department, client, "internal", at, [Charged("follow-ups", 0.0004m)]) with { AfterTurn = true, Outcome = "not-found" },
             ChatTurn.UsageOnlyOf(assistant, department, client, "internal", at, [Charged("condense", 0.0003m)]) with { Error = true },
@@ -266,7 +266,7 @@ public sealed class ConversationWriterTests(KnowledgeFixture db) : IClassFixture
         (await CountAsync(api, $"""SELECT sum("GeneralAnswers") FROM chat."AssistantDailyTotals" WHERE "AssistantId" = '{assistant}'""")).ShouldBe(1);
 
         // A later batch adds to the same rows.
-        await writer.WriteAsync([Asked("not-found", new NearestHit(collection, document))], Ct);
+        await writer.WriteAsync([Asked("not-found", new NearestHit(collection, document, "kb", []))], Ct);
         (await GapsAsync(api, assistant))[("not-found", collection, document)].ShouldBe(3);
     }
 

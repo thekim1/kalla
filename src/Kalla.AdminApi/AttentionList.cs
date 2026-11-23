@@ -52,6 +52,9 @@ public static class AttentionKinds
 
     /// <summary>The nightly answer run's faithfulness or citation precision 5 points below its 28-day median (B-58).</summary>
     public const string AnswersBelowMedian = "answers_below_median";
+
+    /// <summary>A document cited in 3 or more downvoted answers in the last 7 days (§8.8; Decisions "Downvotes per document").</summary>
+    public const string DocumentDownvoted = "document_downvoted";
 }
 
 /// <summary>What an <see cref="AttentionItem"/> is about; the admin UI links each to its page.</summary>
@@ -99,6 +102,12 @@ public static class AttentionList
     /// <summary>Consecutive failures of a sync that raise <see cref="AttentionKinds.SyncFailing"/> (15 minutes at the 5-minute interval).</summary>
     public const int SyncFailures = 3;
 
+    /// <summary>Downvoted answers citing a document within <see cref="DownvoteDays"/> that raise <see cref="AttentionKinds.DocumentDownvoted"/>.</summary>
+    public const int Downvotes = 3;
+
+    /// <summary>The days, today included (Europe/Stockholm), whose downvotes <see cref="AttentionKinds.DocumentDownvoted"/> counts.</summary>
+    public const int DownvoteDays = 7;
+
     public static async Task<IReadOnlyList<AttentionItem>> ComputeAsync(AdminContext admin, OrgSyncStatus organisation, GatewayModelSyncStatus models, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(admin);
@@ -114,6 +123,7 @@ public static class AttentionList
         items.AddRange(await TemplatesAsync(admin, ct));
         items.AddRange(await AssistantTestsAsync(admin, ct));
         items.AddRange(await AnswersAsync(admin, ct));
+        items.AddRange(await DocumentsDownvotedAsync(admin, ct));
         if (admin.IsPlatformAdmin)
         {
             items.AddRange(await FeedbackImportAsync(admin, ct));
@@ -458,6 +468,31 @@ public static class AttentionList
         }
 
         return items;
+    }
+
+    /// <summary>
+    /// Each live document of a knowledge base in scope (its owning department's, not one shared with it) whose rated answers of
+    /// the last <see cref="DownvoteDays"/> days, over every assistant that cited it, hold <see cref="Downvotes"/> downvotes or more.
+    /// The item is about the knowledge base, where its <i>Feedback on documents</i> card is, and names the document.
+    /// </summary>
+    private static async Task<List<AttentionItem>> DocumentsDownvotedAsync(AdminContext admin, CancellationToken ct)
+    {
+        var since = CostEndpoints.Today(admin).AddDays(1 - DownvoteDays);
+        var rows = await (from f in admin.Db.DocumentDailyFeedback.AsNoTracking()
+                          join c in CollectionEndpoints.Scoped(admin).AsNoTracking() on f.CollectionId equals c.Id
+                          where f.Day >= since && f.ThumbsDown > 0
+                          group f by new { f.DocumentId, CollectionId = c.Id, c.Name, c.DepartmentId } into g
+                          where g.Sum(x => x.ThumbsDown) >= Downvotes
+                          select new { g.Key.DocumentId, g.Key.CollectionId, g.Key.Name, g.Key.DepartmentId, Downvotes = g.Sum(x => x.ThumbsDown) }).ToListAsync(ct);
+        Guid[] documentIds = [.. rows.Select(r => r.DocumentId)];
+        var titles = await admin.Db.Documents.AsNoTracking().Where(d => documentIds.Contains(d.Id) && d.DeletedAt == null)
+            .Select(d => new { d.Id, Title = d.Title ?? d.DisplayName ?? d.Url ?? "" }).ToDictionaryAsync(d => d.Id, d => d.Title, ct);
+        return
+        [
+            .. rows.Where(r => titles.ContainsKey(r.DocumentId)).OrderByDescending(r => r.Downvotes).ThenBy(r => r.DocumentId)
+                .Select(r => new AttentionItem(AttentionKinds.DocumentDownvoted, AttentionObjects.Collection, r.CollectionId, r.Name, r.DepartmentId, null,
+                    Details(("documentId", r.DocumentId), ("documentTitle", titles[r.DocumentId]), ("downvotes", r.Downvotes), ("days", DownvoteDays)))),
+        ];
     }
 
     /// <summary>Open WebUI clients whose feedback import failed <see cref="FeedbackImportState.AlertAfterFailedRuns"/> runs in a row.</summary>

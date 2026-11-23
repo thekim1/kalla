@@ -18,7 +18,10 @@ public sealed record HydrationRequest(
     IReadOnlyList<Guid> VisibleSourceIds,
     int NeighbourRadius = 0);
 
-/// <summary>A hit or one of its section neighbours (the hit itself has <see cref="ChunkId"/> = <see cref="HitId"/>).</summary>
+/// <summary>
+/// A hit or one of its section neighbours (the hit itself has <see cref="ChunkId"/> = <see cref="HitId"/>), with its topic
+/// <see cref="Tags"/> as stored (empty for none).
+/// </summary>
 public sealed record HydratedChunk(
     Guid HitId,
     Guid ChunkId,
@@ -31,7 +34,10 @@ public sealed record HydratedChunk(
     int? Page,
     int? PageEnd,
     DateTimeOffset? SourceModifiedAt,
-    string? DocumentType);
+    string? DocumentType)
+{
+    public IReadOnlyList<string> Tags { get; init; } = [];
+}
 
 public sealed record HydratedDocument(
     Guid Id,
@@ -117,7 +123,10 @@ public sealed class PostgresHydrator(NpgsqlDataSource dataSource, PostgresSearch
                     Page: reader.IsDBNull(7) ? null : reader.GetInt32(7),
                     PageEnd: reader.IsDBNull(8) ? null : reader.GetInt32(8),
                     SourceModifiedAt: reader.IsDBNull(9) ? null : reader.GetFieldValue<DateTimeOffset>(9),
-                    DocumentType: reader.IsDBNull(10) ? null : reader.GetString(10)));
+                    DocumentType: reader.IsDBNull(10) ? null : reader.GetString(10))
+                {
+                    Tags = reader.IsDBNull(12) ? [] : reader.GetFieldValue<string[]>(12),
+                });
             }
 
             await reader.NextResultAsync(limit.Token);

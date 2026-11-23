@@ -10,7 +10,8 @@ namespace Kalla.IntegrationTests;
 /// an unknown level, the nightly chat step removes assistant usage older than 3 years, and the daily totals keep no token
 /// or cost column (B-38). <c>chat."AssistantDailyOutcomes"</c> (Decisions "Cost per outcome") likewise: its checks, its grants
 /// and its 3 years. <c>chat."AssistantDailyGaps"</c> (Decisions "Content-gap report") too, and it has no column that could hold
-/// a question, an answer or who asked.
+/// a question, an answer or who asked. <c>chat."DocumentDailyFeedback"</c> (Decisions "Downvotes per document") as well: its
+/// checks, its grants, its 3 years, and no column for content or a subject.
 /// </summary>
 [Collection(RagDatabaseGroup.Name)]
 public sealed class DailyUsageSchemaTests(RagDatabaseFixture database)
@@ -269,6 +270,94 @@ public sealed class DailyUsageSchemaTests(RagDatabaseFixture database)
 
         (await Sql.ListAsync(admin, $"""SELECT ("Day" > current_date - 7)::text FROM chat."AssistantDailyGaps" WHERE "AssistantId" = '{assistant}'"""))
             .ShouldBe(["true"]);
+    }
+
+    [Fact]
+    public async Task A_document_feedback_row_takes_every_column_and_the_checks_refuse_what_they_forbid()
+    {
+        var api = database.Connection(Api);
+        var document = Guid.NewGuid();
+        await Sql.ExecuteAsync(api, $"""
+            INSERT INTO chat."DocumentDailyFeedback" ("Day", "AssistantId", "ClientId", "Classification", "CollectionId", "DocumentId", "DepartmentId", "ThumbsUp", "ThumbsDown")
+            VALUES (current_date, gen_random_uuid(), gen_random_uuid(), 'internal', gen_random_uuid(), '{document}', gen_random_uuid(), 2, 3)
+            """);
+
+        // The counters default to 0.
+        await Sql.ExecuteAsync(api, $"""
+            INSERT INTO chat."DocumentDailyFeedback" ("Day", "AssistantId", "ClientId", "Classification", "CollectionId", "DocumentId", "DepartmentId")
+            VALUES (current_date, gen_random_uuid(), gen_random_uuid(), 'public', gen_random_uuid(), '{document}', gen_random_uuid())
+            """);
+        (await Sql.ScalarAsync<long>(api, $"""SELECT sum("ThumbsUp" + "ThumbsDown") FROM chat."DocumentDailyFeedback" WHERE "DocumentId" = '{document}'""")).ShouldBe(5);
+
+        foreach (var (values, state) in new[]
+                 {
+                     ("'secret', 0, 0", PostgresErrorCodes.CheckViolation),
+                     ("'public', -1, 0", PostgresErrorCodes.CheckViolation), // never below 0
+                     ("'public', 0, -1", PostgresErrorCodes.CheckViolation),
+                     ("NULL, 0, 0", PostgresErrorCodes.NotNullViolation),
+                 })
+        {
+            var sql = $"""
+                INSERT INTO chat."DocumentDailyFeedback" ("Day", "AssistantId", "ClientId", "CollectionId", "DocumentId", "DepartmentId", "Classification", "ThumbsUp", "ThumbsDown")
+                VALUES (current_date, gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), {values})
+                """;
+            (await Should.ThrowAsync<PostgresException>(() => Sql.ExecuteAsync(api, sql))).SqlState.ShouldBe(state, sql);
+        }
+
+        // Only the api writes it (POST /v1/feedback and the import); the admin reads it for the report; the worker cannot see it.
+        var admin = database.Connection(Admin);
+        (await Sql.ScalarAsync<long>(admin, $"""SELECT count(*) FROM chat."DocumentDailyFeedback" WHERE "DocumentId" = '{document}'""")).ShouldBe(2);
+        await Sql.ShouldBeDeniedAsync(admin, $"""
+            INSERT INTO chat."DocumentDailyFeedback" ("Day", "AssistantId", "ClientId", "Classification", "CollectionId", "DocumentId", "DepartmentId")
+            VALUES (current_date, gen_random_uuid(), gen_random_uuid(), 'internal', gen_random_uuid(), '{document}', gen_random_uuid())
+            """);
+        await Sql.ShouldBeDeniedAsync(admin, $"""UPDATE chat."DocumentDailyFeedback" SET "ThumbsDown" = 0 WHERE "DocumentId" = '{document}'""");
+        await Sql.ShouldBeDeniedAsync(database.Connection(Worker), """SELECT count(*) FROM chat."DocumentDailyFeedback" """);
+    }
+
+    [Fact]
+    public async Task The_document_feedback_table_has_no_column_for_a_question_an_answer_a_comment_or_who_asked()
+    {
+        // Decisions "Downvotes per document": counts per day and cited document; the only text column is the level.
+        var columns = await Sql.ListAsync(database.Connection(Api), """
+            SELECT column_name::text || ':' || data_type::text || ':' || coalesce(character_maximum_length::text, '')
+            FROM information_schema.columns WHERE table_schema = 'chat' AND table_name = 'DocumentDailyFeedback'
+            """);
+        columns.ShouldBe(
+        [
+            "Day:date:", "AssistantId:uuid:", "ClientId:uuid:", "Classification:character varying:20", "CollectionId:uuid:", "DocumentId:uuid:",
+            "DepartmentId:uuid:", "ThumbsUp:integer:", "ThumbsDown:integer:",
+        ], ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task The_chat_retention_step_removes_document_feedback_older_than_three_years_beside_the_earlier_tables()
+    {
+        // Data-model §8: 3 years, as the other daily tables, by chat.rag_retention_chat_step; the gaps' and outcomes' deletes
+        // before it still run in the same calls.
+        var assistant = Guid.NewGuid();
+        await Sql.ExecuteAsync(database.Connection(Api), $"""
+            INSERT INTO chat."DocumentDailyFeedback" ("Day", "AssistantId", "ClientId", "Classification", "CollectionId", "DocumentId", "DepartmentId", "ThumbsDown")
+            VALUES ((now() AT TIME ZONE 'Europe/Stockholm')::date - interval '3 years 1 day', '{assistant}', gen_random_uuid(), 'internal', gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 1),
+                   ((now() AT TIME ZONE 'Europe/Stockholm')::date - interval '1 day', '{assistant}', gen_random_uuid(), 'internal', gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 1);
+            INSERT INTO chat."AssistantDailyGaps" ("Day", "AssistantId", "ClientId", "Classification", "Outcome", "CollectionId", "DocumentId", "DepartmentId", "Turns")
+            VALUES ((now() AT TIME ZONE 'Europe/Stockholm')::date - interval '3 years 1 day', '{assistant}', gen_random_uuid(), 'internal', 'not-found', '{Guid.Empty}', '{Guid.Empty}', gen_random_uuid(), 1),
+                   ((now() AT TIME ZONE 'Europe/Stockholm')::date - interval '1 day', '{assistant}', gen_random_uuid(), 'internal', 'not-found', '{Guid.Empty}', '{Guid.Empty}', gen_random_uuid(), 1);
+            INSERT INTO chat."AssistantDailyOutcomes" ("Day", "AssistantId", "ClientId", "Classification", "Outcome", "DepartmentId", "Turns")
+            VALUES ((now() AT TIME ZONE 'Europe/Stockholm')::date - interval '3 years 1 day', '{assistant}', gen_random_uuid(), 'internal', 'answered', gen_random_uuid(), 1),
+                   ((now() AT TIME ZONE 'Europe/Stockholm')::date - interval '1 day', '{assistant}', gen_random_uuid(), 'internal', 'answered', gen_random_uuid(), 1);
+            """);
+
+        var admin = database.Connection(Admin);
+        for (var i = 0; i < 100 && await Sql.ScalarAsync<long>(admin, "SELECT chat.rag_retention_chat_step(1000)") > 0; i++)
+        {
+        }
+
+        foreach (var table in new[] { "DocumentDailyFeedback", "AssistantDailyGaps", "AssistantDailyOutcomes" })
+        {
+            (await Sql.ListAsync(admin, $"""SELECT ("Day" > current_date - 7)::text FROM chat."{table}" WHERE "AssistantId" = '{assistant}'"""))
+                .ShouldBe(["true"], table);
+        }
     }
 
     [Fact]

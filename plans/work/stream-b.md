@@ -84,8 +84,7 @@ Beside P2 wave 1: take B-64 when a wave item waits, or after it. `proposals/topi
 
 ## Support chatbot F6 (user, 2026-11-22)
 
-### [ ] B-66 Downvotes per document (F6)
-- **Taken:** 2026-11-23, the main session on the user's machine (#1011), branch `b/B-66-document-downvotes`.
+### [x] B-66 Downvotes per document (F6) (#1023)
 - **Do:** Decisions "Downvotes per document": the table `chat."DocumentDailyFeedback"` (data-model §2.3) in a migration
   of its own; its delta in `POST /v1/feedback` and the Open WebUI importer (chat §14.1, §14.2: one count per cited
   document, in the rating's transaction, never below 0); admin §4.5's `GET /api/collections/{id}/feedback` (+ CSV);
@@ -165,8 +164,7 @@ one waits. Neither changes an answer that doesn't ask.
 - **Read:** Decisions "Progress, timings and the nearest subject in the chat extension"; chat §3.8, §4.1 (step 13),
   §9.1, §9.6, §9.10, §17, §18.9; #959.
 
-### [ ] B-73 Topics on related documents and the nearest subject (`kalla.nearest`)
-- **Taken:** 2026-11-23, the main session on the user's machine (#1011), branch `b/B-73-nearest-subject`.
+### [x] B-73 Topics on related documents and the nearest subject (`kalla.nearest`) (#1026)
 - **Do:** chat §9.7's `topics` on every related-document entry (the best-ranked chunk's tags as stored; carried on the
   retrieval result if it isn't there yet) and §9.11: the request member `kalla.nearest` and the answer's `nearest`
   (`{ collection, topics }` of the turn's nearest hit for `not-found` and `answered-general`, `null` otherwise), from
@@ -213,7 +211,7 @@ and fixed in the same pull request, named in its body. **Every step's hand-offs*
 names), and a `stream-a` issue for any change in `src/admin-ui/src/platform/**` (stream a's), built against the
 design meanwhile.
 
-### [ ] B-74 The phone's bottom menu as admin §5.2 says (UX pass step 0)
+### [x] B-74 The phone's bottom menu as admin §5.2 says (UX pass step 0) (#1025)
 - **Do:** `mobileTabs` in `router/nav.ts` gets Assistants and Feedback beside Home and Knowledge bases (Home, Knowledge
   bases, Assistants, Feedback, Menu), each filtered by role like the side menu (Feedback: `FEEDBACK_ROLES`); *Menu*
   stays highlighted for every other page.

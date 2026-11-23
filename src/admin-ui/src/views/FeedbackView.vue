@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api'
 import type { AssistantSummary, FeedbackItem, FeedbackSummary } from '@/api/types'
 import AsyncState from '@/components/ui/AsyncState.vue'
@@ -24,10 +25,16 @@ import { problemMessage } from '@/utils/problem'
 // policy's (§3.3; the route's FEEDBACK_ROLES); FeedbackComments holders mark items handled.
 // Without Open WebUI (`/bff/user` `openWebUi.enabled` false) nothing is imported: no import block, and the empty text
 // names the API's feedback endpoint; feedback already stored still shows.
+// `?documentId=` (Show the ratings on a knowledge base's Feedback on documents, §8.8): only the ratings whose answer cited
+// that document, the caller's own assistants' as every row here.
 const auth = useAuthStore()
+const route = useRoute()
+const router = useRouter()
 const summary = ref<FeedbackSummary | null>(null)
 const assistants = ref<AssistantSummary[]>([])
-const filters = reactive({ from: '', to: '', assistantId: '', rating: '', outcome: '', state: 'open' })
+const filters = reactive({
+  from: '', to: '', assistantId: '', rating: '', outcome: '', state: 'open', documentId: typeof route.query.documentId === 'string' ? route.query.documentId : '',
+})
 const busy = ref<string | null>(null)
 const markError = ref<unknown>(null)
 const canMark = computed(() => auth.can('feedback-comments'))
@@ -56,7 +63,7 @@ function day(value: string, next = false): string | undefined {
 
 const feedback = useKeysetList((after?: string) => api.feedback.list({
   from: day(filters.from), to: day(filters.to, true), assistantId: filters.assistantId || undefined, rating: filters.rating || undefined,
-  outcome: filters.outcome || undefined, state: filters.state || undefined, after, limit: 50,
+  outcome: filters.outcome || undefined, state: filters.state || undefined, documentId: filters.documentId || undefined, after, limit: 50,
 }))
 
 async function load(): Promise<void> {
@@ -76,6 +83,17 @@ async function mark(item: FeedbackItem, state: 'reviewed' | 'dismissed' | 'open'
   } finally {
     busy.value = null
   }
+}
+
+/** The filtered document's title, from a row that cited it; null before one has loaded. */
+const citedTitle = computed(() =>
+  feedback.items.value.flatMap((i) => i.citedDocuments).find((d) => d.id === filters.documentId)?.title ?? null)
+
+function clearCited(): void {
+  filters.documentId = ''
+  const query = { ...route.query }
+  delete query.documentId
+  void router.replace({ query })
 }
 
 const totals = computed(() => summary.value?.totals ?? null)
@@ -119,6 +137,10 @@ onMounted(async () => {
     <SelectField id="feedback-outcome" v-model="filters.outcome" :label="FEEDBACK.outcome" :options="outcomeOptions" />
     <SelectField id="feedback-state" v-model="filters.state" :label="FEEDBACK.state" :options="stateOptions" />
   </form>
+  <p v-if="filters.documentId" class="mb-4 flex flex-wrap items-center gap-3" data-test="cited-filter">
+    <span>{{ FEEDBACK.citedFilter(citedTitle) }}</span>
+    <UiButton size="sm" variant="quiet" data-test="clear-cited" @click="clearCited()">{{ FEEDBACK.clearCited }}</UiButton>
+  </p>
   <p class="mb-4 text-small text-fg-2">{{ FEEDBACK.noContent }}</p>
   <InlineError v-if="markError" :message="problemMessage(markError)" class="mb-4" />
 

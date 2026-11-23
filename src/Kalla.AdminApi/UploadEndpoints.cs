@@ -68,6 +68,7 @@ public static class UploadEndpoints
                     throw AdminFaults.Of(AdminErrorCodes.NotAnUploadSource);
                 }
 
+                RefusePaused(source);
                 var batch = new BatchState(Guid.CreateVersion7(), source.Id, admin.Actor, admin.Now);
                 await blobs.PutAsync(BatchKey(batch.BatchId), new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(batch, ContractJson.Options)), null, ct);
                 return Results.Created($"/api/upload-batches/{batch.BatchId}", new UploadBatchCreated(batch.BatchId, MaxFilesPerBatch, MaxBatchBytes));
@@ -311,6 +312,8 @@ public static class UploadEndpoints
                         : throw AdminFaults.Of(AdminErrorCodes.UploadBatchCommitted);
                 }
 
+                RefusePaused(source);
+
                 foreach (var number in request.Files.Distinct())
                 {
                     await using var stream = await blobs.OpenReadAsync(FileKey(batchId, number), null, ct)
@@ -463,6 +466,18 @@ public static class UploadEndpoints
     private static BlobKey FileKey(Guid batchId, int n) => new($"tmp/upload-batches/{batchId:D}/files/{n}.json");
 
     private static BlobKey CommittedKey(Guid batchId) => new($"tmp/upload-batches/{batchId:D}/committed.json");
+
+    /// <summary>
+    /// An upload source paused before Pause was refused on one (0.10.0 allowed it, #1007): its sync job would be dropped by the worker
+    /// (<c>source.paused</c>), so a batch is refused until it is resumed rather than taken and never processed (#1024 review).
+    /// </summary>
+    private static void RefusePaused(Source source)
+    {
+        if (source.State == SourceStates.Paused)
+        {
+            throw AdminFaults.Of(AdminErrorCodes.SourcePaused);
+        }
+    }
 
     /// <summary>
     /// The batch and its source, both in the caller's scope; 404 for an unknown or dropped batch. With <paramref name="open"/>

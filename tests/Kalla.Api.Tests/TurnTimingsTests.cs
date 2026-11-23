@@ -88,9 +88,9 @@ public sealed class TurnTimingsTests
     [Fact]
     public void A_related_document_without_cited_and_number_leaves_both_out_and_the_complete_one_keeps_them()
     {
-        var document = new RelatedDocument(Guid.Empty, "Altan", "https://www.umea.se/bygga/altan", "bygg", 1, true, 1);
+        var document = new RelatedDocument(Guid.Empty, "Altan", "https://www.umea.se/bygga/altan", "bygg", [], 1, true, 1);
         JsonSerializer.Serialize(document with { Cited = null, Number = null }).ShouldBe(
-            """{"document_id":"00000000-0000-0000-0000-000000000000","title":"Altan","url":"https://www.umea.se/bygga/altan","collection":"bygg","rank":1}""");
+            """{"document_id":"00000000-0000-0000-0000-000000000000","title":"Altan","url":"https://www.umea.se/bygga/altan","collection":"bygg","topics":[],"rank":1}""");
         JsonSerializer.Serialize(document with { Cited = false, Number = null }).ShouldContain("\"rank\":1,\"cited\":false}");
         JsonSerializer.Serialize(document).ShouldContain("\"rank\":1,\"cited\":true,\"number\":1}");
     }
