@@ -1,12 +1,13 @@
 # Handover
 
 State of the Källa work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`).
-**Last release `v0.9.2`** (2026-11-21, tag at `c7d5de47`, on Fors `v0.12.2`). **`main` has unreleased code since
-2026-11-23:** P2 wave 1's first four items, a source's schedule, the fix for the 502 after sign-in, the organisation's
-logo and seven code-quality refactors (*State*). The user's VM runs 0.5.0. Three machines have worked on it:
-`~/research/rag` (the user's, sessions 49 to 55), `~/git/ume-rag-platform` (the user's WSL machine, session 56) and
-`thekim1`'s (stream b, stream a, the releases, and a coordinating session that writes proposals). *Start here* says
-what does not travel between machines. Branch `main`, remote `origin` = https://github.com/thekim1/kalla.
+**Last release `v0.10.0`** (2026-11-23, tag at `5a74afb8`, on Fors `v0.13.0`): P2 wave 1. **`main` has unreleased code
+since the tag:** six stream-b items built on the user's machine in session 57 (*State*). The user's VM runs 0.5.0.
+Three machines have worked on it: `~/research/rag` (the user's, sessions 49 to 55 and 57), `~/git/ume-rag-platform`
+(the user's WSL machine, session 56) and `thekim1`'s (stream b, stream a, the releases, and a coordinating session
+that writes proposals). Several sessions post as `ume-nichlas` at the same hour: look before you write. *Start
+here* says what does not travel between machines. Branch `main`, remote `origin` =
+https://github.com/thekim1/kalla.
 
 ## What this is
 
@@ -27,7 +28,7 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
    `plans/archive/work/`), results in `results-a.md`, `results-b.md` and `results-main.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here (session 57)
+## Start here (session 58)
 
 **What does not travel between machines:**
 - **Claude Code's own memory stays on the machine it was written on.** Everything that binds is in
@@ -36,9 +37,9 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
   `gh` on `~/research/rag` and on `~/git/ume-rag-platform`; run `gh auth status` first.
 - **Pushing:** on both of the user's machines `gh` is the credential helper (below); it works on
   `~/git/ume-rag-platform` too (GitHub answers with a "repository moved" note, harmless).
-- **Fors:** `~/git/llmgateway` on `~/git/ume-rag-platform`'s machine is at `6c3c412` (Fors `main`, two commits past
-  `v0.12.2`), the commit Källa's contract copy is pinned to. Elsewhere clone https://github.com/thekim1/fors beside
-  this repository.
+- **Fors:** Källa's contract copy is taken from Fors `v0.13.0` (`9dc9315`). `~/git/llmgateway` on
+  `~/git/ume-rag-platform`'s machine was at `6c3c412` (one commit before that release; the contract is the same):
+  fetch it there. Elsewhere clone https://github.com/thekim1/fors beside this repository.
 - **Docker** on `~/git/ume-rag-platform`'s machine is 29.9.3 (the user upgraded it in session 56) and must be started
   by hand before Testcontainers tests. *State*'s machine block describes `~/research/rag` only.
 
@@ -67,71 +68,52 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
   its pull request what you are about to write; review its pull requests as comments (claims checked against the code).
 - **A decision for the user is asked as four alternatives with one recommendation** (the question tool).
 
-**Since this was written** (updated 2026-11-23, about 18:00 UTC, before the user moves to another machine):
-- **Merged:** #990 and #991 (the main session's), #1000 (#986's metric `rag.chat.prompt.estimate_ratio`), #1002
-  (#999's follow-ups: at most 3 waiting on-demand test-question runs per person, the copy tested end to end), #1005
-  (B-70, Pause and Resume on the source page), #996 (CQ-5b), #1001 (CQ-3, admin UI permissions by policy) and #1006
-  (#1003: the cap reserves its slot first and gives it back on any refusal). Issues #986 and #1003 are closed.
-- **Open:** #1004 (`ume-nichlas`, the main session's: admin §7.4, §4.5, §4.9 and §2.2 for the test-run cap and what a
-  restart does to an unfinished test run; green, needs the user's word) and #958 (Dependabot, item 5).
-- **The Audit is red again** (2026-11-22 and 2026-11-23,
-  [run 45197573594](https://github.com/thekim1/kalla/actions/runs/45197573594)): Debian's security fixes for glibc (`libc6`, `libc-bin` → `2.41-12+deb13u5`, CVE-2026-5435, CVE-2026-19499) and
-  Kerberos (`libkrb5-3` and friends → `1.21.3-5+deb13u2`, CVE-2026-112314 and five more) are not in 0.9.2's
-  **postgres** (32 failing), **clamav** (34) and **parser** (28) images; api, admin, worker, migrations and renderer
-  are clean. A rebuild of those three images (a newer base, or the packages upgraded in the image) and a release
-  turn it green; no issue filed yet (stream a's images). The scan also warns that three parser exceptions match no
-  finding any more and can go: CVE-2026-52296, CVE-2026-52297, CVE-2026-96611.
+**Open when this was written** (2026-11-24, about 00:30 UTC): `thekim1`'s #1024 (the Pause follow-ups of #1007,
+reviewed: ready), #1025 (B-74, reviewed: ready), #1027 (B-75 part 1, reviewed: nine points, three before it merges)
+and #1029 (B-75 part 2, **not reviewed yet**); Dependabot's #958; and the main session's own pull request with this
+file, the handbook's lessons and the design deviations of session 57's six items. In order:
 
-**Open when this was written** (2026-11-23, about 14:50 UTC): `thekim1`'s #996 (CQ-5b, reviewed: ready), Dependabot's
-#958 and the main session's #989 (this file), #990 (the support case, B-83) and #991 (B-58, B-59 and B-63's design
-deviations, and #999's rules). `thekim1` merged #977 (B-58), #963 (B-63), #978 (B-59), #984 (B-58's Settings switch)
-and #999 (#983), each after the main session's review said it was ready, and #997 (Word uploads parse again) before
-its review was done. In order:
-
-1. **#990 and #991**, the main session's own: green; they need the user's word. **#996** is ready (review comment).
-   **#998** follows #997: its fix turns required members off for every stage output, so a cached `DetectResult`
-   without `route` reads as `ParseRoute.Html`; the narrower drop-in (only nullable constructor parameters optional)
-   passes the whole worker suite.
-2. **B-58, B-59 and B-63 are merged; their design deviations are #991.** It also writes down thekim1's hand-off on
-   #963: the personal-data preview's output is read at `Edit` while starting it needs `Manage`. That is sound (the
-   spans hold positions, never values, `PreviewPiiSpan`; an editor already reads the text through the chunks); only
-   reading the output is not audited. If that read should be audited or raised to `Manage`, that is a stream-b change.
-3. **#981's follow-ups** (on #981, for #980): B-57's `TestQuestionDrawer.vue` has a hand-rolled debounce with no unmount
-   clear, `AssistantTestsTab` a fixed poll; `RunView` and `PublicationView` don't reload on a `props.id` change.
-4. **#978's smaller points not taken** (its review): weak tests for the key item on a knowledge base, `owner_inactive`
-   and `not_usable`; `ATTENTION.none` unused; the `personal_data_public` link now opens Documents with `?pii=flagged`.
-5. **#958, the parser's bumps:** `LICENSES.md` has to be regenerated on the branch; stream a's. Best taken with opencv
-   5.1 (item 9).
-6. **#983, the security read of B-54 to B-57: closed by #999** (merged 14:44, reviewed). A draft's test panel, the
-   test runs and the nightly answer run search only what the assistant's department may link (one filter in
-   `AdminTestPanel.AnswerAsync`); a copy leaves out unlinkable links and their expected documents; titles and names of
-   unshared collections are not shown; `POST /test-runs` is rate limited. Its rules are in #991. Left for later (on
-   #999): a cap on queued test runs per user, and an end-to-end test of a copy followed by the panel.
-7. **Read of the never-read documents (handover 56's item 11):** read 1 is done (#988: `to-verify.md`,
-   `postponed-decisions.md`, the gold-set README; issues #986, #987). Read 2 is #990 (the support-assistant case
-   brought up to date with the code and decisions; the user's four answers: the case's framing stays, condense keeps
-   3 s, the rerank model is a deployment's choice, DoIT's key uses PII policy `Allow`; SA-11 queued as B-83). Read 3 is
-   `docs/`: done, filed as stream a's #992 (instructions that fail: `KALLA_OTEL_ENDPOINT` does not exist, it is
-   `FORS_OTEL_ENDPOINT`; `deployment/rag-*`; the runbook's Portainer backup list), #993 (stale facts, MCP claimed),
-   #994 (project vocabulary in operator pages) and #995 (gaps: **Portainer backup and restore with a drill**, the
-   nightly answer run's cost and switch, *Needs attention* in the daily checks, a new department, key expiry, an
-   upgrade from 0.9.x). Decisions "Upgrades in one step" still says "0.5.1 today" for the path from before 0.5.0;
-   #993 asks the docs to pick one path, and the decision follows.
-8. **The code-quality plan** ([`plans/proposals/code-quality-top7.md`](plans/proposals/code-quality-top7.md), tracked
-   in #980): done are #1, #2, #4, #5 (#981), #6 and #7; #5b and #3 are `thekim1`'s next, now that #963 is in; stream
-   a's parts are #974.
-9. **opencv 5.1 from 2026-11-25** (*Watch*): try `opencv-python-headless` 5.1.0.95 in the parser once its uv cutoff
-   lets it in; it may retire the eleven FFmpeg exceptions before 2026-12-17.
-10. **#925's steps 2 to 4** (personal-data verdicts, *reject*, the false-positive summary): the Decisions entry and the
-    design changes are `thekim1`'s session's (said on #925). Step 1 is B-63 (#963, merged).
-11. **The VM's upgrade is `thekim1`'s** (#920): 0.5.0 straight to 0.9.2. No report yet.
+1. **#1029 (B-75 part 2, the names of admin §5.7)** has no review yet; it renames tabs, buttons and filters, so
+   grep `tests/e2e/specs/` and `docs/` for every old name (the browser tests don't run on pull requests). **#1027's
+   review** asked for three things before it merges: the phone's *Knowledge bases* tab on detail pages (merging
+   #1025 first fixes it), the not-scanned summary's sentence (admin §5.5.7 point 4 now says "…were not scanned for
+   malware: the scan was off when they were stored"; the code still has the old text) and the docs hand-off (filed
+   since as #1030).
+2. **Session 57's design deviations are in this file's pull request** (admin §5.5.7, §8.6, §8.7, §8.8, §5.5.1;
+   chat §9.10, §12.2, §17, §18.9; data-model §8). Two things in it are still to build, neither queued yet:
+   **the chat stage metrics of chat §17** (`rag.chat.stage.duration`, `rag.chat.ttft`, `rag.chat.overhead` were
+   never emitted; B-72 takes its own timestamps), and **a filter for files not scanned for malware** in the file
+   list (the row mark is gone with #1027).
+3. **B-83's hand-off, stream a's:** `e2e.yml` runs only the `pilot` and `accessibility` projects; the new `upload`
+   project (`tests/e2e/specs/upload.spec.ts`) runs by hand. Add it to the workflow, or decide it stays by hand.
+4. **A paused upload source on 0.10.0** (said on #1024): 0.10.0 shipped *Pause* on upload sources, and
+   `POST /api/upload-batches/{id}/commit` still takes a batch for a paused one, whose sync job the worker drops.
+   #1024 stops new pauses and keeps *Resume*; refusing the commit with `source_paused` is open.
+5. **The cards of session 57 and the UX pass:** B-78 moves *Content gaps* to the assistant's *Quality* tab and the
+   *Cost* card's outcome tables to *Usage*; B-79 places *Feedback on documents* on the new Overview. The new cards
+   print their counts without `quietZero` (#1027's rule 8): whoever lands second adds it. On the *Cost* card a cost
+   below 0.00005 US$ reads "0,00 US$" (the existing `formatUsdCost`).
+6. **#981's follow-ups** (on #981, for #980) and **#978's smaller points** (its review) are as handover 57 left
+   them: `TestQuestionDrawer.vue`'s hand-rolled debounce, `AssistantTestsTab`'s fixed poll, `RunView` and
+   `PublicationView` not reloading on a `props.id` change; weak tests for the key item on a knowledge base.
+7. **#958, the parser's bumps:** `LICENSES.md` has to be regenerated on the branch; stream a's. Best taken with
+   **opencv 5.1 from 2026-11-25** (*Watch*): try `opencv-python-headless` 5.1.0.95 once the parser's uv cutoff lets
+   it in; it may retire the FFmpeg exceptions before 2026-12-17.
+8. **The docs issues, stream a's:** #992 (instructions that fail: `KALLA_OTEL_ENDPOINT` does not exist, it is
+   `FORS_OTEL_ENDPOINT`; `deployment/rag-*`; the runbook's Portainer backup list), #993 (stale facts), #994 (project
+   vocabulary in operator pages), #995 (gaps: **Portainer backup and restore with a drill**, the nightly answer
+   run, *Needs attention*, a new department, key expiry, an upgrade from 0.9.x), #1030 (the not-scanned mark) and
+   #1028 (B-75's platform pages: Settings groups, Models tabs, *Apps and keys*, in `src/admin-ui/src/platform/**`).
+9. **The Audit** was red on 0.9.2's images (#1009); #1010's fixes are in 0.10.0. Look at the first nightly run
+   after the release: green closes #1009.
+10. **#925's steps 2 to 4** (personal-data verdicts, *reject*, the false-positive summary): the Decisions entry and
+    the design changes are `thekim1`'s session's (said on #925). Step 1 is B-63 (#963, merged).
+11. **The VM's upgrade is `thekim1`'s** (#920): 0.5.0 straight to the current release. No report yet.
 12. **Repository variables:** the workflows read `vars.KALLA_TEST_HOST_RUNNER`, `vars.KALLA_TEST_HOST_DEPLOY_ENV`,
     `vars.KALLA_R1_*` and `secrets.KALLA_R1_API_KEY`, and none exist; `thekim1` was asked on #905 (2026-11-21), no
     answer yet.
-13. **Before Källa's next release, Fors needs one.** `contracts/gateway/` is pinned to Fors `main` at `6c3c412`
-    (thekim1/fors#126, "no release yet"), and the logo of #953 shows only on a Fors that has it. Then the contract
-    README's *Taken from* names the release and the Portainer stack pins it. Fors merges and releases are the user's.
-    #983 no longer blocks it (#999).
+13. **#1015** (the release's merge hold) is still open though `v0.10.0` is tagged and published: `thekim1`'s to
+    close.
 
 ### Waiting on the user
 
@@ -179,30 +161,28 @@ its review was done. In order:
   content (#884), so a test that queues a command for a deleted source can lose its lease (#897).
 - **The demo seed's slug in a test:** `openwebui.spec.ts` leaves out the assistant named `demo-assistent` (#882).
 
-## What session 56 did (2026-11-23)
+## What session 57 did (2026-11-23)
 
-On `~/git/ume-rag-platform` (the user's WSL machine), as the main session. Session 55's work is in this file's
-history. Reviews and reads ran as subagents, one at a time; their claims were checked in the code before posting.
+On `~/research/rag` (the user's machine), as the main session, while `thekim1`'s machine released 0.10.0. Session
+56's work is in this file's history.
 
-- **The UX pass decided** (the user, six questions): UX1 A (B proposed to Fors), UX2 to UX6 C. **#982:** the eleven
-  layout rules and the choices in Decisions "Admin API and UI", admin §5.12 (new) and §5.2 to §5.10 rewritten, the
-  proposal marked decided, the build steps queued as **B-74 to B-81** in stream b's new section *Admin UI UX pass*.
-- **Reviews as comments:** #978 (B-59), #981 (CQ-5), #984 (stream a's switch), and the re-reviews of #977, #978, #984
-  and #963 once `thekim1` had fixed them (each claim checked, the touched tests run locally); `thekim1` merged all four.
-  **Security read of B-54 to B-57** filed as #983 (`release-blocker`).
-- **#985:** B-54 to B-57's design deviations recorded (admin §4.5, §5.5.4, §7.4; chat §8.1; data-model §2.3), and
-  **B-82** queued (the general Publish dialog with the diff, the warnings and the cost; the design had it, nothing
-  built it).
-- **#988:** the first read of the never-read documents. `to-verify.md` (15 done rows archived, rows 182 to 185 for the
-  go-live gaps, every live-block row named by a queue item), `postponed-decisions.md` (V1, Z1, S1, P2 brought up to
-  date), the gold-set README (how the draft becomes `human` questions). Decisions "CI/CD" now says actions are
-  SHA-pinned (a stale fact, not a new decision). Issues #986 (stream b) and #987 (stream a).
-- **#990:** the support-assistant case read through and brought up to date (four answers from the user, and SA-11
-  queued as B-83: a known file's upload replaces it by default, admin §5.5.7 point 6).
-- **#991:** B-58, B-59 and B-63's design deviations (processing §14.8, admin §4.5, §5.2, §5.5.1, §5.5.2, §5.5.3,
-  §10.3, chat §8.1, data-model §2.2, §2.3).
-- **#992 to #995:** the read of `docs/`, filed for stream a. **#996, #997** reviewed; **#998** the follow-up to #997.
-- **Approved as `Crotalus` on the user's word and merged:** #981, #982, then #985, #988.
+- **Six stream-b items, taken on the user's word and announced in #1011** (closed): **B-83** replace an upload by
+  name (#1017), **B-61** cost per outcome (#1018), **B-72** progress chunk and timings (#1021), **B-62** content-gap
+  report (#1022), **B-66** downvotes per document (#1023) and **B-73** topics and the nearest subject (#1026). One
+  implementor agent per item in its own worktree; each diff read against the design, its tests re-run, the three
+  cards and the upload dialog checked in a browser on a FakeGateway stack; all merged, #1022 by `thekim1`.
+- **Found in review and fixed before the pull request:** the content-gap report kept naming another department's
+  knowledge base after its sharing was withdrawn (now #983's rule: named only while linkable today); B-66's table
+  had no retention (now 3 years, as its sibling tables).
+- **Approved as `Crotalus` on the user's word and merged:** #1008, #1004, #1010, #1012, then #1017, #1018, #1021,
+  then #1023, #1026.
+- **Reviews as comments:** #1019 (the release's browser-test fix), #1024, #1025, #1027 (with a review agent; nine
+  points, each checked in the files).
+- **Kept off the release:** nothing of this went to `main` between #1015's hold and the tag; #1018's `Verify` run
+  was cancelled while the dry run ran and ran again after it.
+- **This file's pull request:** the design deviations of the six items, the handbook's lessons (a force push is
+  stopped; a table-adding stream-b item needs a `main-session/` branch; stacking on an unmerged branch; agents for a
+  lane and for browser checks; port 5174) and this handover.
 
 ## Known gaps, documented, not fixed
 
@@ -258,7 +238,7 @@ history. Reviews and reads ran as subagents, one at a time; their claims were ch
   -f version=X.Y.Z-dryrun -f e2e=true`, about 30 minutes, with the runners idle). The boot-only run
   (`-f portainer_boot=X.Y.Z`) takes minutes but uses that version's images already on ghcr.io, so it only fits a change
   that needs no new image.
-- **Rebuild the Portainer stack:** `sh deploy/portainer/build-stack.sh v0.12.2` (Fors's release; or its next one);
+- **Rebuild the Portainer stack:** `sh deploy/portainer/build-stack.sh v0.13.0` (Fors's release; or its next one);
   `--check` is what `deploy-checks` runs.
 - **Try Källa's wizard locally** (a throwaway volume each time): `export FakeGateway__Enabled=true
   Seed__Enabled=false Parser__Mode=off Render__Mode=off OpenWebUi__Enabled=false ClamAv__Mode=off
@@ -277,35 +257,33 @@ history. Reviews and reads ran as subagents, one at a time; their claims were ch
 
 ## State
 
-- **Release:** `v0.9.2` published 2026-11-21 23:27 UTC (tag at `c7d5de47`, on Fors `v0.12.2`); `v0.9.1` and `v0.9.0`
-  the same day. All are `ghcr.io/thekim1/kalla/*`, public, Apache-2.0. `v0.8.0` and earlier are Ume.Rag
-  (`ghcr.io/thekim1/ume-rag/*`, EUPL-1.2).
-- **Audit:** last green on 2026-11-21 ([run 44905272366](https://github.com/thekim1/kalla/actions/runs/44905272366));
-  red since 2026-11-22 on 0.9.2's postgres, clamav and parser images (*Start here*, *Since this was written*). The
-  dated exceptions are in *Watch*.
+- **Release:** `v0.10.0` published 2026-11-23 21:02 UTC (tag at `5a74afb8`, on Fors `v0.13.0`; the Portainer stack
+  is pinned to its images since #1020). `v0.9.x` are `ghcr.io/thekim1/kalla/*` too, public, Apache-2.0. `v0.8.0` and
+  earlier are Ume.Rag (`ghcr.io/thekim1/ume-rag/*`, EUPL-1.2).
+- **Audit:** red on 2026-11-22 and 2026-11-23 on 0.9.2's postgres, clamav and parser images
+  ([run 45197573594](https://github.com/thekim1/kalla/actions/runs/45197573594), #1009); 0.10.0 has the fixes
+  (#1010) and is scanned from the next run. The dated exceptions are in *Watch*.
 - **What a deployer types in Portainer:** 1 value since 0.7.0 (`FORS_DOMAIN`, no secret).
-- **On `main`, unreleased** (eleven notes in `changes/`, one upgrade note: restart `kalla-proxy`): assistant
-  templates, copy an assistant, the version diff and test questions per assistant (B-54 to B-57); a source's own
-  schedule and its next run (#935); the TLS proxy's header buffers (#944); the organisation's logo from Fors and the
-  favicon (#953); one path-rule matcher and one schedule rule in `Kalla.Pipelines` (A-42, A-43); the code-quality
-  refactors (#964 to #973, #981, #996, #1001); the prompt-estimate metric (#1000); the test-run cap (#1002, #1006);
-  Pause and Resume on a source (#1005). Plan files: #961, #975, #976, #982, #985, #988, the two proposals.
-- **Queues:** stream a: the live block (A-L1 to A-L10), A-34 and A-35 with only their live checks open, and issue
-  #974, #987; A-42 and A-43 are done. Stream b: B-58, B-59 and B-63 merged (#977, #984, #978, #963); #983 closed by
-  #999; then B-61, B-62 and B-66 (F10, F7, F6), B-64 and B-65 (the topics editor),
-  B-67 to B-69 (P2 wave 2), B-70 and B-71 (a source's pause and next run), B-72 and B-73 (the chat extension), B-74 to
-  B-82 (the UX pass and the Publish dialog; B-74 waits on nothing), B-83 (replace an upload by name, before T4; waits
-  on nothing), B-42 to B-46 (the gateway phases' live checks) and
-  its live items. An item someone has started says **Taken** in the queue. Main: M-4.
-- **Open issues that matter:** #992 to #995 (the docs), #998 (stage outputs'
-  read), #987 (the
-  grading script), #980 (code quality's tracker), #959 (the chat extension; closes with B-72 and B-73), #974 (code
+- **On `main`, unreleased** (six notes in `changes/`, no upgrade note; three migrations, each adding one `chat`
+  table with its grants: `AssistantDailyOutcomes`, `AssistantDailyGaps`, `DocumentDailyFeedback`): cost per outcome
+  on the *Cost* card (B-61), the content-gap report (B-62), downvotes per document with its attention item (B-66),
+  `kalla.progress` and `kalla.timings` (B-72), `topics` on related documents and `kalla.nearest` (B-73), an upload
+  with a known name replaces the file (B-83).
+- **Queues:** stream a: the live block (A-L1 to A-L10), A-34 and A-35 with only their live checks open, and its
+  issues (*Start here*, 3, 7 and 8, and #974, #987). Stream b: the UX pass, in `thekim1`'s hands (B-74 #1025, B-75
+  #1027 and #1029, then B-76, B-82, B-77, B-78, B-79, B-80, B-81; B-78 and B-79 no longer wait on anything of
+  session 57's), B-64 and B-65 (the topics editor), B-67 to B-69 (P2 wave 2), B-71, B-42 to B-46 (the gateway
+  phases' live checks) and its live items. An item someone has started says **Taken** in the queue. Main: M-4.
+- **Open issues that matter:** #992 to #995, #1028 and #1030 (the docs and the platform pages, stream a's), #1009
+  (the Audit), #1007 (closes with #1024), #987 (the grading script), #980 (code quality's tracker), #974 (code
   quality, stream a's part), #781 and #921 (watch), #920 (the VM's upgrade, `thekim1`'s), #929 (topics; closes with
-  B-65), #667 (M-16's issue: the work is done, `thekim1`'s to close), #333, #511, #580 and #550. In Fors: no open pull
-  request; proposals #108 and #109, #99, #91, and a flaky test #124.
+  B-65), #667 (M-16's issue: the work is done, `thekim1`'s to close), #1015, #333, #511, #580 and #550. In Fors: no
+  open pull request; proposals #108 and #109, #99, #91, and a flaky test #124.
 - **Dependabot works:** grouped pull requests; `.github/dependabot.yml`'s header lists where a pin is repeated.
   Playwright is bumped by hand, in the package list, the renderer image and its lockfile together (#907).
-- **The user's machine (`~/research/rag`), not the machine of session 56:** the main clone on `main`, no worktrees.
+- **The user's machine (`~/research/rag`), not the machine of session 56:** the main clone on `main`, no worktrees
+  (session 57's are removed). Another project's Vite server held port 5174 on 2026-11-23 (handbook, *Environment
+  notes*).
   Docker works without sudo; there is no sudo.
   - **The development stack is under the new names** (session 53; the old `ume-rag` data removed in session 54):
     secrets in `kalla-apphost-dev`, data in
@@ -322,8 +300,8 @@ history. Reviews and reads ran as subagents, one at a time; their claims were ch
     Firefox are in `~/.cache/ms-playwright`. The Aspire CLI is at
     `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on PATH).
 - **`thekim1`'s machine:** a fresh clone after the rename; its development data starts empty under `~/.kalla`.
-- **Fors on the user's machine:** `~/git/llmgateway` is a clone of `thekim1/fors`, checked out at `v0.12.2` with
-  `origin/main` fetched at `6c3c412` (#126, the logo endpoint); read a release with `git show v0.12.2:<path>`. The remote is still named `thekim1/llmgateway` there (GitHub redirects); push
-  with the `gh` credential helper. Merges and releases in Fors are the user's; its rules: draft pull requests (drafts
-  run no CI), checks run locally first, squash-merge. Ports 5000 and 5173 are taken here
+- **Fors on the user's machine:** `~/git/llmgateway` is a clone of `thekim1/fors` on `main` at `v0.13.0`
+  (`9dc9315`); read a release with `git show v0.13.0:<path>`. The remote is still named `thekim1/llmgateway` there
+  (GitHub redirects); push with the `gh` credential helper. Merges and releases in Fors are the user's; its rules:
+  draft pull requests (drafts run no CI), checks run locally first, squash-merge. Ports 5000 and 5173 are taken here
   (`ASPNETCORE_URLS=http://127.0.0.1:0` for its IntegrationTests).

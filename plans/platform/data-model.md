@@ -800,7 +800,7 @@ Nightly, batched step functions in the gateway style (ADR 016): `SECURITY DEFINE
 | `chat."Messages"` + `MessageSources`, `Feedback`, `ToolCalls` (cascade) | `ExpiresAt` = `CreatedAt` + assistant retention (default 90 d, `sensitive` 30 d, max per level policy; `session` 24 h); in P1 metadata rows only (history mode `none`, weakness review §4) | `chat.rag_retention_chat_step(batch)` |
 | `chat."Conversations"` (+ P2 `Attachments`, `AttachmentChunks`) | deleted when no message remains and `ExpiresAt` passed; user delete: rows deleted at once | same function / Chat API `DELETE` |
 | `chat."DataKeys"` | when A1 allows stored content (none in P1, weakness review §4): bucket row deleted when its month has passed and no row references it; shred key destroyed only when `Settings.ChatShreddingEnabled` (§7) | same function; then shred-key destruction |
-| `chat."AssistantDailyTotals"`, `chat."AssistantDailyUsage"`, `chat."AssistantDailyOutcomes"`, `chat."AssistantDailyGaps"` | 3 years *proposed* | same function |
+| `chat."AssistantDailyTotals"`, `chat."AssistantDailyUsage"`, `chat."AssistantDailyOutcomes"`, `chat."AssistantDailyGaps"`, `chat."DocumentDailyFeedback"` | 3 years *proposed* | same function |
 | `content."Documents"`, `"ChunkSets"`, `"Chunks"` | removed from source, **or its source or knowledge base deleted** → soft delete (the chunks of its live set too, so it leaves the index at once), purge after 14 days; a deleted source's upload blobs are tombstoned as a deleted file's are | worker; cascade from `Documents` |
 | `content."ChunkSets"` (`superseded`) + chunks | 14 days after `SupersededAt` (rollback window) | worker |
 | `content."ChunkSets"` (`writing`) | orphans older than 24 hours (engine design §14) | worker sweep |
