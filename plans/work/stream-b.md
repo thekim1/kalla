@@ -118,7 +118,7 @@ tables in one migration of its own (no backward compatibility before production)
 - **Read:** admin §5.3 (Home row), §5.5.1, V32; processing §14.8; cost-attribution §4.2.
 
 
-### [ ] B-63 Clear a personal-data hold in the admin UI, with the highlights (#925 step 1)
+### [x] B-63 Clear a personal-data hold in the admin UI, with the highlights (#925 step 1)
 - **Do:** admin §4.5's `POST /api/documents/{id}/pii-clear` (reason ≥ 10, V26) and `POST /api/documents/{id}/pii-preview`
   (audited `pii.view`) in the admin UI, both built in the API and unused by the UI today: on a flagged, not cleared
   document in the knowledge base's document list (§5.5.2) and in the source's personal-data report (§5.5.3), for
