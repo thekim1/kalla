@@ -14,6 +14,8 @@ const logoUrl = computed(() => auth.user?.logoUrl ?? null)
 const failed = ref(false)
 watch(logoUrl, () => (failed.value = false))
 const box = computed(() => ({ sm: 'h-6 w-6', md: 'h-9 w-9', lg: 'h-11 w-11' })[props.size])
+// A logo keeps the mark's height and its own shape, so a wide wordmark is not shrunk into a square.
+const logoBox = computed(() => ({ sm: 'h-6 max-w-24', md: 'h-9 max-w-36', lg: 'h-11 max-w-48' })[props.size])
 </script>
 
 <template>
@@ -21,8 +23,8 @@ const box = computed(() => ({ sm: 'h-6 w-6', md: 'h-9 w-9', lg: 'h-11 w-11' })[p
     v-if="logoUrl && !failed"
     :src="logoUrl"
     alt=""
-    :class="box"
-    class="shrink-0 rounded-control object-contain"
+    :class="logoBox"
+    class="w-auto shrink-0 rounded-control object-contain"
     data-test="brand-logo"
     @error="failed = true"
   />

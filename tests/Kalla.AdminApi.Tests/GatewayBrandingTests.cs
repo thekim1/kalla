@@ -26,6 +26,7 @@ public sealed class GatewayBrandingTests(AdminDatabaseFixture database)
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private int _logoReads;
+    private Exception? _logoFailure;
 
     /// <summary>kalla-admin with its context read once from a FakeGateway whose admin console has <paramref name="logo"/>.</summary>
     private async Task<(WebApplicationFactory<FakeGatewayProgram> Gateway, WebApplicationFactory<Program> Admin)> StartAsync(byte[]? logo, bool feature = true)
@@ -53,7 +54,7 @@ public sealed class GatewayBrandingTests(AdminDatabaseFixture database)
             {
                 services.AddHttpClient(GatewayContextReader.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
                 services.AddHttpClient(GatewayBranding.HttpClientName)
-                    .ConfigurePrimaryHttpMessageHandler(() => new Counting(gateway.Server.CreateHandler(), () => Interlocked.Increment(ref _logoReads)));
+                    .ConfigurePrimaryHttpMessageHandler(() => new Counting(gateway.Server.CreateHandler(), () => { Interlocked.Increment(ref _logoReads); return _logoFailure; }));
             });
         });
         (await admin.Services.GetRequiredService<GatewayContextReader>().ReadAsync(Ct)).ShouldBeTrue();
@@ -125,12 +126,29 @@ public sealed class GatewayBrandingTests(AdminDatabaseFixture database)
     public void The_type_is_detected_from_the_content_as_the_gateway_does(byte[] data, string? expected) =>
         GatewayBranding.Detect(data).ShouldBe(expected);
 
-    private sealed class Counting(HttpMessageHandler inner, Action counted) : DelegatingHandler(inner)
+    [Fact]
+    public async Task A_logo_read_that_fails_in_any_way_never_fails_the_user_document()
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        // A plain OperationCanceledException (a body read's own timeout) and an unexpected fault: neither is the caller's.
+        foreach (var failure in new Exception[] { new OperationCanceledException(), new InvalidOperationException("unexpected") })
         {
-            counted();
-            return base.SendAsync(request, cancellationToken);
+            _logoFailure = failure;
+            _logoReads = 0;
+            var (gateway, admin) = await StartAsync(Svg);
+            await using var _ = gateway;
+            await using var __ = admin;
+            using var client = AdminDatabaseFixture.HttpsClient(admin);
+
+            (await LogoUrlAsync(client)).ValueKind.ShouldBe(JsonValueKind.Null);
+            (await LogoUrlAsync(client)).ValueKind.ShouldBe(JsonValueKind.Null);
+            _logoReads.ShouldBe(1); // the failure is held like an answer
         }
+    }
+
+    /// <summary>Counts the logo reads; throws what <c>counted</c> returns, when it returns something.</summary>
+    private sealed class Counting(HttpMessageHandler inner, Func<Exception?> counted) : DelegatingHandler(inner)
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            counted() is { } failure ? Task.FromException<HttpResponseMessage>(failure) : base.SendAsync(request, cancellationToken);
     }
 }

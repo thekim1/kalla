@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Options;
@@ -108,8 +108,9 @@ public sealed partial class GatewayBranding(IHttpClientFactory clients, IOptions
                     break;
             }
         }
-        catch (Exception ex) when (ex is HttpRequestException or IOException or TaskCanceledException && !ct.IsCancellationRequested)
+        catch (Exception) when (!ct.IsCancellationRequested)
         {
+            // The logo is decoration: no failure on this path (the body read's own timeout among them) may fail /bff/user.
             LogFailed(logger, null);
         }
 

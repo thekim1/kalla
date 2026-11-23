@@ -19,6 +19,7 @@ describe('the brand mark: the gateway organisation logo, else the built-in icon'
     expect(img.attributes('src')).toBe('/bff/branding/logo?v=abc')
     expect(img.attributes('alt')).toBe('')
     expect(img.classes()).toContain('h-9')
+    expect(img.classes()).toContain('w-auto') // a wide wordmark keeps its shape
     expect(wrapper.find('[data-test=brand-icon]').exists()).toBe(false)
   })
 
