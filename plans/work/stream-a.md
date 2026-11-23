@@ -53,7 +53,8 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 
 ### [ ] A-L2 Parser on real PDFs
 - **Do:** OCR acceptance; text layer vs Docling on 200 umea.se PDFs; parser latency.
-- **Done when:** #131, #132, #80, #62, #65, #150 recorded.
+- **Done when:** #131, #132, #80, #62, #65, #150 recorded, and real municipal legacy Office files converted under
+  the 3 GiB limit (the live part of closed row #71).
 - **Waits on:** A-L1.
 - **Read:** parser §15, §16.
 
