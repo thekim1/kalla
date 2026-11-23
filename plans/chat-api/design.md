@@ -239,6 +239,9 @@ namespace, so it cannot collide with a later OpenAI member; OpenAI's own `metada
 | `kalla.escalation` | `true` or `false`; `true` asks for the escalation hand-off (§9.9); `false` or absent = none; any other value → 400 `invalid_request`, `param` `kalla.escalation` |
 | `kalla.general_knowledge` | `off`, `supplement`, `fallback` or `open`, lower case as stored (#726): the turn runs at the **stricter** of this level and the assistant's own (`QuerySteps.answer.generalKnowledge`, strictest first in that order), so a request never loosens what the assistant's admins set (§7.3, admin V36). Absent or `null`: the assistant's level. Any other value → 400 `invalid_request`, `param` `kalla.general_knowledge`. The **effective** level is what §6.2's routing, §7.3's frame and §10.4 use, and what logs and metrics record |
 | `kalla.topics` | an array of 1–20 strings, each in the chunk tag format (processing §7): the turn searches only chunks that carry one of them, **inside** what the assistant's links allow (Decisions "Topics per request"). A link with topics keeps the topics that are also asked for, and is left out of the turn when none is; a link without topics is searched for the asked topics only. So a request narrows and never widens what the assistant's admins linked, as `kalla.general_knowledge`. Absent, `null` or `[]`: the links as they are. Not an array, more than 20 values, or a value that is not a string in the tag format → 400 `invalid_request`, `param` `kalla.topics`. A topic no link can match is no error: it matches nothing, and a turn left with no link to search ends `not-found` (§10.1). The narrowed links are what the turn's one retrieval uses (knowledge §4.2), so citations, related documents (§9.7) and coverage follow them |
+| `kalla.progress` | `true` or `false`; `true` on a streamed request asks for the progress chunk before the answer's text (§9.10); `false`, absent, or a request without `stream: true` = none; any other value → 400 `invalid_request`, `param` `kalla.progress` |
+| `kalla.timings` | `true` or `false`; `true` asks for the turn's step times (§9.10); `false` or absent = none; any other value → 400 `invalid_request`, `param` `kalla.timings` |
+| `kalla.nearest` | `true` or `false`; `true` asks for the nearest subject of a turn that found no answer (§9.11); `false` or absent = none; any other value → 400 `invalid_request`, `param` `kalla.nearest` |
 | any other member of `kalla` | 400 `unsupported_parameter`, `param` `kalla.<name>`: the namespace is ours, so a typo fails instead of silently doing nothing |
 | client kind `open-webui` | `kalla` is ignored, not validated: Open WebUI renders neither chunk, gets its sources as `source` events (§9.3), and its own follow-up generation stays off (§4.3) |
 
@@ -265,6 +268,9 @@ The member is parsed with the rest of the body (§4.1 step 2), so a refusal come
 | `follow_ups` | present when asked with 1 or more (§9.8; absent for 0); `[]` when skipped, timed out or failed |
 | `escalation` | present when asked with `true` (§9.9; absent otherwise): the hand-off object for `not-found`, `answered-general` and `unavailable`, `null` for `answered` |
 | `topics` | present when `kalla.topics` was asked with one or more: the asked topics that at least one link searched, in the request's order. A topic missing here matched no link, which is how a client sees a mistyped or removed topic; `[]` when none did |
+| `progress` | only in the progress chunk of a streamed answer (§9.10): `"writing"`. Never in the chunks after the text or in a non-streamed answer |
+| `timings` | present when asked with `true` (§9.10): the step times in milliseconds |
+| `nearest` | present when asked with `true` (§9.11): the nearest subject for `not-found` and `answered-general`, `null` for every other outcome and when the search found nothing |
 
 **Delivery.** Without streaming, `kalla` is a top-level member of the `chat.completion` object, written when the
 follow-up call has returned or its budget has run out. When streaming, it comes in `chat.completion.chunk` objects with
@@ -291,6 +297,8 @@ data: [DONE]
   `"summary": null`, or `"escalation": null` for `answered`) goes in the first chunk; when no call is left there is one
   `kalla` chunk.
 - A fixed text (not found, unavailable) ends the same way: final chunk, one `kalla` chunk, usage, `[DONE]`.
+- With `kalla.progress` the stream of a model answer **starts** with one more `kalla` chunk, before the role chunk
+  (§9.10); a fixed text has none.
 - After an error chunk (§9.6) or a client disconnect no `kalla` chunk is written.
 - Clients that read only `choices` skip the chunk, as they skip the usage chunk (checked for the OpenAI Python and JS
   SDKs, §22).
@@ -314,7 +322,7 @@ data: [DONE]
 | 10 | Retrieve | `IRetriever.RetrieveAsync(who, new RetrievalRequest(query, assistant.Id, null, TopK, Hybrid, filters, Section, Chat, true, RunId: messageId))` (knowledge §2.2) | `RetrievalDeniedException` → OpenAI code; 503 `search_unavailable` |
 | 11 | Coverage | §6.2: `Low` → §10.1 fixed text (no model call) unless condense failed; `Unknown` with zero results → §10.2 unavailable text; else continue | – |
 | 12 | Prompt | §6.3 budget, §7 template | 400 `context_length_exceeded` |
-| 13 | Gateway | §8: open the stream, check status, residency, echo **before our first byte** | §3.6 |
+| 13 | Gateway | §8: open the stream, check status, residency, echo **before our first byte**; when the request asked for it, the progress chunk is then that first byte (§9.10) | §3.6 |
 | 14 | Stream | §9: filter, renumber, emit citations, write, flush per event | §9.6 |
 | 15 | Finish | `MarkCited(result, citedRanks)` with only the cited ranks (§9.5); `ChatTurn` → `ConversationWriter.TryEnqueue` (§12); metrics | – |
 
@@ -845,7 +853,7 @@ cited ones and the next-best ones, so staff can open a neighbouring article the 
 |---|---|
 | Source | the turn's `RetrievalResult` the prompt was built from (`ChatPlan.Retrieval`): **no second retrieval**, no embedding, no SQL statement, no model call. Every result already carries its citation with the title and, for uploads, the grant link (knowledge §10; `src/Kalla.Answering/KnowledgeService.cs:526-535`) |
 | Selection | results grouped by `DocumentId`, one entry per document, ordered by the document's best (lowest) rank; the first N (`kalla.related_documents`, ≤ 10; with `retrieval.topK` 10 there are at most 10 documents). Documents the token budget left out of the prompt are listed too: they were retrieved for this question |
-| Entry | `document_id`; `title` (`Citation.Title`, the knowledge §10.2 title rule); `url` by the citation link rule (`Citations.Link`): a crawled page's or file's own URL, an uploaded file's grant link (knowledge §4.6: the caller's client and key, same lifetime), plus `#page=` with the best-ranked chunk's page for PDFs; `collection` (the collection's slug); `rank` (1-based position in this list); `cited` (`true` when the delivered answer cites the document); `number` (its display number `[n]` in the answer, §9.2; omitted when not cited); `modified` and `checked` (the best-ranked chunk's citation dates, knowledge §10.1, ISO 8601 UTC; each omitted when null; Decisions "Source dates on citations") |
+| Entry | `document_id`; `title` (`Citation.Title`, the knowledge §10.2 title rule); `url` by the citation link rule (`Citations.Link`): a crawled page's or file's own URL, an uploaded file's grant link (knowledge §4.6: the caller's client and key, same lifetime), plus `#page=` with the best-ranked chunk's page for PDFs; `collection` (the collection's slug); `topics` (the best-ranked chunk's topic tags as stored, processing §7; `[]` when it has none; Decisions "Progress, timings and the nearest subject in the chat extension"); `rank` (1-based position in this list); `cited` (`true` when the delivered answer cites the document); `number` (its display number `[n]` in the answer, §9.2; omitted when not cited); `modified` and `checked` (the best-ranked chunk's citation dates, knowledge §10.1, ISO 8601 UTC; each omitted when null; Decisions "Source dates on citations") |
 | Outcome `answered` | listed, degraded answers (§10.2) and `Low` after a failed condense (§6.2) included: the answer was built from these results |
 | `not-found`, `answered-general`, `unavailable`, conversational | `[]` |
 | Why nothing on `Low` | coverage `Low` means vector and keyword search both found nothing close (knowledge §7). The answer says exactly that (the not-found text, or the caveat "Jag hittar inget om detta i kommunens källor"); a list of the weak hits beside it would contradict the text and invite trust in unrelated pages, and the general-knowledge prompt deliberately leaves them out (§6.2). The case's need, the next-best articles, is for answered questions, where the list is shown. A later opt-in for weak matches stays possible |
@@ -934,6 +942,39 @@ Skriv sammanfattningen på svenska.
 ```
 
 (`Skriv sammanfattningen på engelska.` for an English turn.)
+
+### 9.10 Progress and timings (`kalla.progress`, `kalla.timings`)
+
+Decisions "Progress, timings and the nearest subject in the chat extension" (thekim1/kalla#959). Both are off unless
+asked for, and a request without them gets today's answer byte for byte.
+
+| Topic | Rule |
+|---|---|
+| Why | nothing reaches the client before the answer model has started (§4.1), so a streaming client can only show "searching" through condense, retrieval and the model's wait for its first token, which is long for a reasoning model. A client that knows the search is done can say so, and can show the sources while the text is still coming. The step times tell a slow condense from a slow model |
+| Progress chunk | with `kalla.progress: true` and `stream: true`, a turn that gets a model answer starts its stream with one chunk in the `kalla` chunk's shape (§3.8): `{"id":…,"object":"chat.completion.chunk","created":…,"model":…,"choices":[],"kalla":{"progress":"writing"}}`. It is written and flushed **after step 13's checks have passed** (§4.1: the gateway has accepted the answer call, and its status, residency and delegation echo are checked) and before the role chunk |
+| Why there | every refusal still comes as an HTTP error before the first byte (§3.6): a spent budget or an unusable key refuses the answer call itself, at step 13. Written before the call was opened, the chunk would turn those refusals into error chunks inside a `200` stream. The gateway starts its own response when the provider has accepted the call, before the first event, so the chunk still comes ahead of a reasoning model's wait |
+| Sources in it | when the request also asked for `kalla.related_documents` with 1 or more, the progress chunk carries that list (§9.7) without `cited` and `number`, which are not known yet. The first `kalla` chunk after the text carries the list again, complete. Without `related_documents` the progress chunk has `progress` only |
+| No chunk | a fixed text (not found, unavailable; §10) and a refused turn have no progress chunk; a conversational message that gets a model answer has one, without sources. A non-streamed request ignores `progress` |
+| Order | progress chunk → role chunk → content → final chunk → `kalla` chunk(s) → usage → `[DONE]`. An error after it is §9.6's error chunk, as after any first byte |
+| Timings | with `kalla.timings: true` the answer's `kalla` (the first `kalla` chunk after the text, or the non-streamed object) has `"timings": {"condense": 840, "retrieve": 120, "first_token": 610, "total": 3900}`: whole milliseconds, each member left out when its step did not run. `condense` and `retrieve` are the stage times of §17 (`rag.chat.stage.duration`); `first_token` is the time from opening the answer call to the model's first event (the stages `gateway_headers` and `first_event` together), left out for a fixed text; `total` is from `ReceivedAt` to the end of the answer's text. A non-streamed answer also gets the header `Server-Timing: condense;dur=840, retrieve;dur=120, first_token;dur=610, total;dur=3900` |
+| Not included | the time of the follow-up and escalation calls (they run after the text, §9.5), and no model name, residency or host: the times of this caller's own turn only |
+| Cost | no model call, no SQL statement: the times are the ones already measured for the metrics |
+| Open WebUI | never: `kalla` is ignored for that client kind (§3.8) |
+
+### 9.11 Nearest subject (`kalla.nearest`)
+
+Decisions "Progress, timings and the nearest subject in the chat extension" (thekim1/kalla#959). A client that sorts
+or routes questions by subject can use it to say where a question without an answer came nearest, for example to
+suggest where to ask instead.
+
+| Topic | Rule |
+|---|---|
+| When | with `kalla.nearest: true`, the answer's `kalla` has `nearest`: for a turn that ended `not-found` or `answered-general`, `{ "collection": "<slug>", "topics": ["…"] }`; `null` for `answered` and `unavailable`, for a conversational message, and when the search found nothing |
+| Source | the turn's **nearest hit**, the first retrieval result's collection, which the turn already hands to the conversation writer for the content-gap counts (§12.1; Decisions "Content-gap report"), with that result's chunk's topic tags (processing §7; `[]` when it has none). No second retrieval and no model call |
+| Only the subject | no title, address, snippet or document id. §9.7 lists no documents for these outcomes because weak hits beside a not-found text invite trust in unrelated pages; a knowledge base's name and a topic say where the question belongs without pointing at a page |
+| Narrowing | it follows the turn's links as narrowed by `kalla.topics` (§3.8): the nearest hit of what was searched |
+| Access | the collection is one the assistant links and this caller may search; its slug already shows in `related_documents` for answered turns. Nothing new is disclosed |
+| Stored | nothing new |
 
 ## 10. Not-found and degraded answers
 
@@ -1514,6 +1555,18 @@ Unit (`Kalla.Api.Tests`) and API tests against FakeGateway (scripted answers per
   D); a turn narrowed to no link (§3.8) adds one to *no hit*; an `answered` turn and a test-panel turn add nothing;
   no row or column holds the question.
 - **Open WebUI**: a request with `kalla` from the `open-webui` client streams exactly as without it (recorded fixture).
+- **Progress chunk** (§9.10): with `kalla.progress` and `stream: true` the first chunk is `{"kalla":{"progress":
+  "writing"}}`, before the role chunk; with `related_documents` 3 it carries three entries without `cited` and
+  `number`, and the chunk after the text has them complete; a not-found text, an unavailable text and a non-streamed
+  request have none; a FakeGateway key with `BudgetExceeded` gives HTTP 402 and no byte of a stream; without
+  `progress` the stream is byte-identical to today's.
+- **Timings** (§9.10): `kalla.timings` gives whole milliseconds with `total` ≥ the sum of the others; no `condense`
+  member on a first turn; no `first_token` on a fixed text; the non-streamed answer has the `Server-Timing` header with
+  the same values.
+- **Topics and the nearest subject** (§9.7, §9.11): a related document's `topics` are its best-ranked chunk's tags,
+  `[]` without any; `kalla.nearest` on a not-found turn gives the first result's collection and tags, on an
+  `answered` turn `null`, with an empty search `null`, and with `kalla.topics` only what the narrowed links searched;
+  no title, address or document id anywhere in it.
 
 ## 19. Milestones
 

@@ -273,6 +273,38 @@ After wave 1, or beside it when a wave-1 item waits.
 - **Waits on:** A-43.
 - **Read:** engine §9.6; #935.
 
+## Chat extension for streaming clients (user, 2026-11-23; #959)
+
+Decisions "Progress, timings and the nearest subject in the chat extension". After the wave items, or beside them when
+one waits. Neither changes an answer that doesn't ask.
+
+### [ ] B-72 Progress chunk and timings (`kalla.progress`, `kalla.timings`)
+- **Do:** chat §3.8's two request members (a value that is not a boolean: 400 `invalid_request` with its `param`) and
+  §9.10: on a streamed turn that gets a model answer, one `kalla` chunk `{"progress":"writing"}` as the first byte,
+  written after step 13's checks have passed (§4.1) and before the role chunk, with the related documents (no `cited`,
+  no `number`) when those are asked for too; none for a fixed text or a non-streamed request. `timings` in the answer's
+  `kalla` from the stage times already measured (§17), and the `Server-Timing` header on a non-streamed answer.
+- **Paths:** `src/Kalla.Answering/**`, `src/Kalla.Api/**`, `tests/**` (b's).
+- **Done when:** chat §18.9's *Progress chunk* and *Timings* tests pass, with the two negative proofs: a request
+  without the members is byte-identical to today's stream, and a refused answer call (FakeGateway `BudgetExceeded`)
+  is HTTP 402 with no byte of a stream.
+- **Waits on:** nothing.
+- **Read:** Decisions "Progress, timings and the nearest subject in the chat extension"; chat §3.8, §4.1 (step 13),
+  §9.1, §9.6, §9.10, §17, §18.9; #959.
+
+### [ ] B-73 Topics on related documents and the nearest subject (`kalla.nearest`)
+- **Do:** chat §9.7's `topics` on every related-document entry (the best-ranked chunk's tags as stored; carried on the
+  retrieval result if it isn't there yet) and §9.11: the request member `kalla.nearest` and the answer's `nearest`
+  (`{ collection, topics }` of the turn's nearest hit for `not-found` and `answered-general`, `null` otherwise), from
+  the value the turn hands the conversation writer (B-62), following the links as `kalla.topics` narrowed them.
+- **Paths:** `src/Kalla.Answering/**`, `src/Kalla.Retrieval/**`, `src/Kalla.Api/**`, `src/Kalla.Domain/**` (b's),
+  `tests/**` (b's).
+- **Done when:** chat §18.9's *Topics and the nearest subject* tests pass, with the negative proof that `nearest`
+  holds no title, address or document id.
+- **Waits on:** B-62 (the nearest hit on the turn); the `topics` on related documents can go first.
+- **Read:** Decisions "Progress, timings and the nearest subject in the chat extension", "Content-gap report", "Topics
+  per request"; chat §3.8, §9.7, §9.11, §12.1, §18.9; processing §7; #959.
+
 ## Live (the live block, see the roadmap)
 
 
