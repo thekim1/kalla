@@ -882,6 +882,25 @@ searched, and a turn with nothing left to search ends `not-found`. Detail: `chat
 
 *From:* support chatbot proposal F8; picked by user, 2026-11-20.
 
+### Progress, timings and the nearest subject in the chat extension
+
+A client other than Open WebUI may ask for three more things in `kalla`. Each is off unless asked for, and an answer
+without them is byte for byte today's.
+
+- **`kalla.progress`:** a streamed turn that gets a model answer starts with one chunk saying the search is done, with
+  the related documents when those are asked for too. It is written only after the gateway has accepted the answer
+  call, so every refusal (a spent budget, an unusable key) still comes as an HTTP error before the first byte.
+- **`kalla.timings`:** the turn's step times in the answer (condense, retrieve, the wait for the first token, the
+  total), and in a `Server-Timing` header on a non-streamed answer.
+- **Topics and the nearest subject:** each related document carries its topics, and `kalla.nearest` gives, for a turn
+  that ended `not-found` or `answered-general`, the knowledge base and topics of the search's first result (the
+  content-gap report's nearest hit). The subject only: never a title, an address or a document id.
+
+Detail: `chat-api/design.md` §3.8, §4.1, §9.7, §9.10, §9.11.
+
+*From:* thekim1/kalla#959 (the support assistant); adopted by user, 2026-11-23, with the progress chunk placed after
+the gateway's acceptance instead of before the answer call.
+
 ### Cost per outcome
 
 Every assistant turn adds its full cost (the sum of its model calls' gateway and estimated cost, as the per-step

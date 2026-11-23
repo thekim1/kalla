@@ -96,6 +96,10 @@ P2 wave 1 (*P2 Broaden* below) is the code work. Beside it, what is open without
   the user on 2026-11-22 (Decisions "Topics editor"); designed in admin §4.5, §5.5.2 and processing §7 and queued as
   A-42 (one matcher in `Kalla.Pipelines`), then B-64 (pick from the sections found) and B-65 (the form and the match
   preview).
+- **The chat extension for streaming clients** (#959, from the support assistant): a progress chunk and step times,
+  topics on related documents and the nearest subject of a turn without an answer; adopted by the user on 2026-11-23
+  (Decisions "Progress, timings and the nearest subject in the chat extension"), designed in chat §9.10 and §9.11 and
+  queued as B-72 and B-73.
 - **CI:** what the test collections of one `Kalla.AdminApi.Tests` process wait for (not CPU, thread pool, disk or
   GC; a profiler would say); the project runs as five processes meanwhile.
 
