@@ -88,10 +88,11 @@ public sealed class RelatedDocumentsTests
     public void A_client_that_does_not_read_ume_ignores_it_without_validation(string kalla) =>
         ChatRequestParser.Parse(Body(kalla), readKalla: false).Kalla.ShouldBeNull();
 
-    private static RetrievedChunk Chunk(int rank, Guid document, string title, string? url = null, string? grant = null, int? page = null, string collection = "bygg") =>
+    private static RetrievedChunk Chunk(int rank, Guid document, string title, string? url = null, string? grant = null, int? page = null, string collection = "bygg",
+        string[]? tags = null) =>
         new(rank, Guid.NewGuid(), document, [], "text", "Bygglov › " + title, page, page, 1.0 / rank, new ChunkScores(null, null, null, null, null, null), null, Guid.Empty,
             collection, "internal", new Citation(document, title, grant is null ? null : title + ".pdf", url, grant, grant is null ? "web" : "file", "page",
-                grant is null ? "text/html" : "application/pdf", "sv", null));
+                grant is null ? "text/html" : "application/pdf", "sv", null)) { Tags = tags ?? [] };
 
     private static RetrievalResult Result(params RetrievedChunk[] chunks) =>
         new(chunks, [], new Coverage(CoverageStatus.Ok, 0.2, 0.5, null, null), null, 1, new RetrievalTimings(0, 0, 0, 0, 0, 0));
@@ -209,13 +210,76 @@ public sealed class RelatedDocumentsTests
     public void The_ume_member_names_are_fixed_and_absent_members_are_left_out()
     {
         // Snake case and the default names give the same member, so the JSON answer and the stream chunk agree.
-        var kalla = new KallaAnswer("answered", false, [new RelatedDocument(Altan, "Altan", "https://www.umea.se/bygga/altan", "bygg", 1, false, null)], null);
+        var kalla = new KallaAnswer("answered", false, [new RelatedDocument(Altan, "Altan", "https://www.umea.se/bygga/altan", "bygg", ["altan"], 1, false, null)], null);
         foreach (var options in new[] { new JsonSerializerOptions(), new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower } })
         {
             JsonSerializer.Serialize(kalla, options).ShouldBe(
-                $$"""{"outcome":"answered","degraded":false,"related_documents":[{"document_id":"{{Altan}}","title":"Altan","url":"https://www.umea.se/bygga/altan","collection":"bygg","rank":1,"cited":false}]}""");
+                $$"""{"outcome":"answered","degraded":false,"related_documents":[{"document_id":"{{Altan}}","title":"Altan","url":"https://www.umea.se/bygga/altan","collection":"bygg","topics":["altan"],"rank":1,"cited":false}]}""");
         }
 
         JsonSerializer.Serialize(new KallaAnswer("not-found", false, null, [])).ShouldBe("""{"outcome":"not-found","degraded":false,"follow_ups":[]}""");
+    }
+
+    [Fact]
+    public void Each_entry_carries_its_best_ranked_chunks_topics_as_stored_and_an_empty_list_without_any()
+    {
+        // §9.7: Altan's best-ranked chunk (rank 2) carries "altan" and "uteplats"; its rank 4 chunk's "plank" is not the entry's.
+        var retrieval = Result(
+            Chunk(4, Altan, "Altan", url: "https://www.umea.se/bygga/altan", tags: ["plank"]),
+            Chunk(1, Taxa, "Taxa 2026", grant: "https://kalla-api.umea.local/v1/documents/t/content?grant=g1.k.p.m"),
+            Chunk(2, Altan, "Altan", url: "https://www.umea.se/bygga/altan", tags: ["altan", "uteplats"]));
+        var list = RelatedDocuments.For(ChatOutcome.Answered, retrieval, [], 10);
+
+        list.Select(d => d.DocumentId).ShouldBe([Taxa, Altan]);
+        list[0].Topics.ShouldBeEmpty();
+        list[1].Topics.ShouldBe(["altan", "uteplats"]);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(list));
+        json.RootElement[0].GetProperty("topics").GetArrayLength().ShouldBe(0); // present, never left out
+        json.RootElement[1].GetProperty("topics").EnumerateArray().Select(t => t.GetString()).ShouldBe(["altan", "uteplats"]);
+    }
+
+    [Theory]
+    [InlineData("""{"nearest":true}""", true)]
+    [InlineData("""{"nearest":false}""", false)]
+    [InlineData("""{}""", false)]
+    public void The_nearest_member_is_a_flag(string kalla, bool expected) => ChatRequestParser.Parse(Body(kalla)).Kalla!.Nearest.ShouldBe(expected);
+
+    [Theory]
+    [InlineData("""{"nearest":"yes"}""")]
+    [InlineData("""{"nearest":1}""")]
+    [InlineData("""{"nearest":null}""")]
+    public void A_nearest_member_that_is_not_a_boolean_is_refused(string kalla)
+    {
+        var refused = Refused(kalla);
+        (refused.Status, refused.Code, refused.Param).ShouldBe((400, "invalid_request", "kalla.nearest"));
+    }
+
+    [Fact]
+    public void The_nearest_member_is_the_subject_or_null_when_asked_and_absent_otherwise()
+    {
+        // §9.11: an answered turn asked for it gets "nearest": null (written, not left out); the subject has exactly collection and topics.
+        foreach (var options in new[] { new JsonSerializerOptions(), new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower } })
+        {
+            JsonSerializer.Serialize(new KallaAnswer("answered", false, null, null, Nearest: new NearestMember(null)), options)
+                .ShouldBe("""{"outcome":"answered","degraded":false,"nearest":null}""");
+            JsonSerializer.Serialize(new KallaAnswer("not-found", false, null, null, Nearest: new NearestMember(new NearestSubject("it-support", ["vpn", "fel-809"]))), options)
+                .ShouldBe("""{"outcome":"not-found","degraded":false,"nearest":{"collection":"it-support","topics":["vpn","fel-809"]}}""");
+            JsonSerializer.Serialize(new KallaAnswer("not-found", false, null, null, Nearest: new NearestMember(new NearestSubject("bygg", []))), options)
+                .ShouldBe("""{"outcome":"not-found","degraded":false,"nearest":{"collection":"bygg","topics":[]}}""");
+        }
+
+        JsonSerializer.Serialize(new KallaAnswer("not-found", false, null, null)).ShouldNotContain("nearest");
+    }
+
+    [Fact]
+    public void The_subject_of_a_nearest_hit_holds_no_document()
+    {
+        // The negative proof (§9.11): the subject is the slug and the tags; the document id stays with the writer's key.
+        var hit = new NearestHit(Guid.NewGuid(), Altan, "bygg", ["altan"]);
+        typeof(NearestSubject).GetProperties().Select(p => p.Name).ShouldBe(["Collection", "Topics"], ignoreOrder: true);
+        var json = JsonSerializer.Serialize(new NearestMember(hit.Subject));
+        json.ShouldBe("""{"collection":"bygg","topics":["altan"]}""");
+        json.ShouldNotContain(Altan.ToString());
+        json.ShouldNotContain(hit.CollectionId.ToString());
     }
 }

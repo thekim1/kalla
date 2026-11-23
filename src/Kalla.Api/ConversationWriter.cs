@@ -60,7 +60,8 @@ public sealed record ChatTurn(
     /// <summary>
     /// The nearest hit of a turn that ended <c>not-found</c> or <c>answered-general</c> (§12.1; Decisions "Content-gap report"): the
     /// first retrieval result's knowledge base and document, null for <i>no hit</i>. The writer counts the turn in
-    /// <c>AssistantDailyGaps</c> by it; no question or subject goes with it.
+    /// <c>AssistantDailyGaps</c> by its two ids and stores nothing else of it: no question, and not the subject (slug and topics)
+    /// that <c>kalla.nearest</c> shows the caller (§9.11).
     /// </summary>
     public NearestHit? Nearest { get; init; }
 
