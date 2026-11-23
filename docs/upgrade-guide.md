@@ -23,6 +23,31 @@ and the release preparation folds the notes in here and writes the release's *Ro
 
 ## Unreleased
 
+## 0.10.0
+
+- **Rolling update: yes** from 0.9.2: three migrations, all additive (new tables, nullable columns and one column with
+  a default, wider check constraints), no variable changes. Paste this release's stack file (or set the image variables
+  to 0.10.0's) and update the stack once. From 0.9.1 or earlier, straight to 0.10.0 by the 0.9.2 section below.
+- **The gateway first, or together: Fors 0.13.0** (the Portainer stack pins it; rolling update yes from Fors 0.12.2; a
+  separate gateway follows Fors's guide, *0.13.0*). With it the admin UI shows the organisation's logo; with an older
+  gateway it keeps the built-in mark.
+- **The stack's TLS proxy** (profile `proxy`): kalla-bootstrap writes its new nginx.conf at the update, but the running
+  `kalla-proxy` reads it only at start. After the update, restart `kalla-proxy` (Portainer: *Containers*, select,
+  *Restart*; Compose: `dc restart kalla-proxy`). Without that, users can still get `502 Bad Gateway` after signing in
+  until they clear their cookies.
+- **Kubernetes with ingress-nginx:** add `nginx.ingress.kubernetes.io/proxy-buffer-size: 32k` to the annotations of
+  the `kalla-admin` Ingress (as in `deploy/kubernetes/example/ingress.yaml`) and apply it.
+- **A proxy of your own in front of Källa or the gateway:** add `proxy_buffer_size 32k; proxy_buffers 8 32k;
+  proxy_busy_buffers_size 64k; large_client_header_buffers 4 32k;` at its `http` level (Nginx Proxy Manager: each
+  proxy host's *Advanced* tab, or `/data/nginx/custom/http_top.conf`), then reload it. An F5 or another proxy: allow
+  response headers of at least 32 KB. **Check:** sign in with a browser that still has old cookies for the host; the
+  proxy's log has no `upstream sent too big header`.
+- **The nightly answer evaluation is on after the upgrade.** From the first night every published, active assistant
+  whose knowledge bases have test questions answers up to 100 of them, and the judge model rates each answer: up to 100
+  answers and 100 judge calls per assistant and night, charged to the assistant's gateway key. Nothing runs while no
+  judge model is set. To run fewer, or none, set *Questions per assistant and night*, or switch *Run the nightly answer
+  evaluation* off, in *Settings › Evaluation* (`Settings.EvaluationAnswerQuestions`, 0 = off).
+
 ## 0.9.2
 
 - **Rolling update: yes** from 0.9.1: no migration, no variable changes, the same gateway (Fors 0.12.2). Paste this

@@ -315,7 +315,7 @@ services:
 
   migrations:
     <<: *hardened
-    image: ${MIGRATIONS_IMAGE:-ghcr.io/thekim1/fors/migrations:0.12.2@sha256:8453ad2a26d1b8be766bd522a9a26fe640ea50cd99d5bc9e3b568b0f014e65bb}
+    image: ${MIGRATIONS_IMAGE:-ghcr.io/thekim1/fors/migrations:0.13.0@sha256:9b2f2b19971cadc5c64f8b5d5651ed46ada6e34f348ffef65a96497c94b3f83c}
     user: "1654:1654"
     restart: "no"
     environment:
@@ -339,7 +339,7 @@ services:
 
   gateway:
     <<: *hardened
-    image: ${GATEWAY_IMAGE:-ghcr.io/thekim1/fors/gateway:0.12.2@sha256:a7c126a912a49a848e0b199830e2f1f6835c85cd58c26c4add88dd9b09012b77}
+    image: ${GATEWAY_IMAGE:-ghcr.io/thekim1/fors/gateway:0.13.0@sha256:5c071ec3a1293a15ed1e23f9c423fb815cd60a226cbd764ea7a5f05055184f83}
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 60s
@@ -381,7 +381,7 @@ services:
 
   adminapi:
     <<: *hardened
-    image: ${ADMINAPI_IMAGE:-ghcr.io/thekim1/fors/adminapi:0.12.2@sha256:8ab48705bebcb251ec383a503f2a2f0746c9b043049cc06ddf70996814263579}
+    image: ${ADMINAPI_IMAGE:-ghcr.io/thekim1/fors/adminapi:0.13.0@sha256:bb0e65ff4bbc8196701525e70e68835ed1deef2c1d1b2e33061f37b16bf2e6a7}
     user: "1654:1654"
     restart: unless-stopped
     ports: ["${FORS_ADMIN_BIND:-0.0.0.0}:${FORS_ADMIN_PORT:-9443}:8443"]
@@ -436,7 +436,7 @@ services:
   dataapi:
     <<: *hardened
     profiles: [data]
-    image: ${DATAAPI_IMAGE:-ghcr.io/thekim1/fors/dataapi:0.12.2@sha256:292c8a12b1848f0843103a8d580d9975ad734c45645f105fafeb03648b423f17}
+    image: ${DATAAPI_IMAGE:-ghcr.io/thekim1/fors/dataapi:0.13.0@sha256:36d67bbe5ba7466693ab2f53fcd9a95bd03837edb11dcfbd978384c3a176bb43}
     user: "1654:1654"
     restart: unless-stopped
     ports: ["${FORS_DATA_BIND:-0.0.0.0}:${FORS_DATA_PORT:-10443}:8443"]

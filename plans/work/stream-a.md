@@ -11,37 +11,6 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 
 ## Code
 
-### [x] A-42 One path-rule matcher in `Kalla.Pipelines`, for the Topics tab (Decisions "Topics editor") (#948)
-- **Do:** move the reading and matching of `pathRules` (`PathRule`, `ReadRules`, the `path` glob with its pasted-address,
-  host-first and trailing-`/` forms, `path-regex`, `host`, `title-regex`, `mediaType`, the tag format) from
-  `Kalla.Worker/Processing/Chunking/Metadata.cs` into `Kalla.Pipelines` (processing §7 *One matcher*), as a public
-  matcher that takes a rule and a document's URL or display name, title and media type and answers whether it matches
-  (and with which tags, `documentType` and date groups). The worker's `Metadata.Apply` keeps its behaviour and calls
-  it. No behaviour change: the existing worker tests pass unchanged; the matching tests move to
-  `Kalla.Pipelines.Tests`.
-- **Paths:** `src/Kalla.Pipelines/**`, `src/Kalla.Worker/**`, `tests/Kalla.Pipelines.Tests/**`,
-  `tests/Kalla.Worker.Tests/**`.
-- **Done when:** `Kalla.Worker.Tests` (`StageRuleTests`, `UploadEngineTests`, `ChunkDateEngineTests`, `PreviewTests`,
-  `GoldenTests`) and `Kalla.Pipelines.Tests` green; the golden chunk output unchanged.
-- **Waits on:** nothing. B-64 and B-65 use it.
-- **Read:** processing §7; admin §4.5 (`topic-suggestions`, `topic-rules/preview`); Decisions "Topics editor".
-
-### [x] A-43 One schedule rule in `Kalla.Pipelines`, for the worker and the admin's next run (#949)
-- **Do:** move the rule that decides when a source is next fetched into `Kalla.Pipelines` (with the Cronos reference):
-  the schedule in force (the source's own, else `Settings.DefaultSchedules` when it names at least one type,
-  else the built-in defaults: `url-list` 02:00 nightly, `crawl` Saturday 01:00; never for uploads), the next occurrence
-  after the last `ScheduledFor` (else `CreatedAt`) in Europe/Stockholm with missed occurrences collapsed into one, and
-  the jitter (`SHA256(sourceId)` first 8 bytes mod `Settings.ScheduleJitterMinutes`). The worker's `SyncScheduler.Due`
-  and `Jitter` and `EngineSettings`' defaults call it. No behaviour change: the existing worker tests pass unchanged;
-  the rule's tests move to `Kalla.Pipelines.Tests`. Today `Kalla.AdminApi/CronSchedules.cs` (#935) repeats the rule;
-  B-71 switches it over.
-- **Paths:** `src/Kalla.Pipelines/**`, `src/Kalla.Worker/**`, `tests/Kalla.Pipelines.Tests/**`,
-  `tests/Kalla.Worker.Tests/**`.
-- **Done when:** `Kalla.Worker.Tests` (the scheduler tests) and `Kalla.Pipelines.Tests` green, with the jitter pinned
-  to the value #935's `CronSchedulesTests` pins (GUID `0193a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b`, 90 minutes: 8).
-- **Waits on:** #935. B-71 uses it.
-- **Read:** engine §9.6; #935's review comment.
-
 ## Live (the live block, see the roadmap)
 
 ### [ ] A-L1 umea.se inventory and the `lastmod` sample's first pass
