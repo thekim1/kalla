@@ -39,9 +39,8 @@ const clearing = useJobPoll<unknown>()
 const sending = ref(false)
 
 const highlightsState = computed(() => {
-  // A failed status read ends the poll with `error` set and no job: failed, never "still finding" (#963 review).
-  if (startError.value || outputError.value || highlights.error.value
-    || (highlights.job.value && highlights.job.value.state !== 'succeeded' && !highlights.polling.value)) return 'failed'
+  // The poll's `failed`: the job ended without succeeding, or its state could not be read (never "still finding").
+  if (startError.value || outputError.value || highlights.failed.value) return 'failed'
   if (highlights.polling.value || !highlights.job.value) return 'running'
   return 'done'
 })
@@ -121,20 +120,16 @@ async function clear(): Promise<void> {
   }
 }
 
-// A failed status read while clearing: say that the outcome is not known, so the admin checks the document (#963 review).
-watch(() => clearing.error.value, (error) => {
-  if (error) clearNotice.value = L.clearUnknown
+watch(() => clearing.job.value?.state, (state) => {
+  if (state !== 'succeeded') return
+  clearOpen.value = false
+  ui.notify(L.cleared)
+  emit('cleared')
 })
 
-watch(() => clearing.job.value?.state, (state) => {
-  if (!state || clearing.polling.value) return
-  if (state === 'succeeded') {
-    clearOpen.value = false
-    ui.notify(L.cleared)
-    emit('cleared')
-  } else {
-    clearNotice.value = L.clearFailed
-  }
+// The clearance failed, or its state could not be read: then the outcome is not known, so the admin checks the document.
+watch(() => clearing.failed.value, (failed) => {
+  if (failed) clearNotice.value = clearing.error.value ? L.clearUnknown : L.clearFailed
 })
 </script>
 
