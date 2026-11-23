@@ -27,8 +27,8 @@ public static class AssistantEndpoints
                 var query = Scoped(admin);
                 if (!string.IsNullOrWhiteSpace(page.Q))
                 {
-                    var q = $"%{page.Q.Trim().Replace("\\", "\\\\", StringComparison.Ordinal).Replace("%", "\\%", StringComparison.Ordinal).Replace("_", "\\_", StringComparison.Ordinal)}%";
-                    query = query.Where(a => EF.Functions.ILike(a.Name, q, "\\") || EF.Functions.ILike(a.Slug, q, "\\"));
+                    var q = Like.Contains(page.Q.Trim());
+                    query = query.Where(a => EF.Functions.ILike(a.Name, q, Like.EscapeCharacter) || EF.Functions.ILike(a.Slug, q, Like.EscapeCharacter));
                 }
 
                 var total = await query.CountAsync(ct);

@@ -51,8 +51,8 @@ public static class EvaluationEndpoints
 
                 if (!string.IsNullOrWhiteSpace(q))
                 {
-                    var pattern = $"%{q.Trim().Replace("\\", "\\\\", StringComparison.Ordinal).Replace("%", "\\%", StringComparison.Ordinal).Replace("_", "\\_", StringComparison.Ordinal)}%";
-                    query = query.Where(x => EF.Functions.ILike(x.Question, pattern, "\\"));
+                    var pattern = Like.Contains(q.Trim());
+                    query = query.Where(x => EF.Functions.ILike(x.Question, pattern, Like.EscapeCharacter));
                 }
 
                 if (after is { } last)
@@ -60,11 +60,11 @@ public static class EvaluationEndpoints
                     query = query.Where(x => x.Id.CompareTo(last) > 0);
                 }
 
-                var take = Math.Clamp(limit ?? 50, 1, 200);
+                var take = Keyset.Take(limit);
                 var rows = await query.OrderBy(x => x.Id).Take(take + 1)
                     .Select(x => new EvaluationQuestionDto(x.Id, x.Layer, x.State, x.Question, x.ExpectedAnswer, x.ExpectedDocumentIds, x.Origin, x.CreatedBy, x.RetiredAt))
                     .ToListAsync(ct);
-                return new KeysetPage<EvaluationQuestionDto, Guid?>([.. rows.Take(take)], rows.Count > take ? rows[take - 1].Id : null);
+                return KeysetPage.From(rows, take, x => x.Id);
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("ListEvaluationQuestions").WithSummary("The set's questions (keyset; layer, state, q)");
 
