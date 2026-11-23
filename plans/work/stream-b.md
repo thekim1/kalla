@@ -136,8 +136,7 @@ tables in one migration of its own (no backward compatibility before production)
 
 After P2 wave 1, or beside it when a wave item waits. Each adds its table in a migration of its own.
 
-### [ ] B-61 Cost per outcome (F10)
-- **Taken:** 2026-11-23, the main session on the user's machine (#1011), branch `b/B-61-cost-per-outcome`.
+### [x] B-61 Cost per outcome (F10) (#1018)
 - **Do:** the table `chat."AssistantDailyOutcomes"` (data-model §2.3, with the admin role's grant and §8's
   retention); the writer's upsert per (day, assistant, client, level, outcome) with the turns and their summed
   gateway and estimated cost, usage-only turns as `unavailable` or `error` (chat §12.2); the test panel's upsert
