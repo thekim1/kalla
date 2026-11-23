@@ -241,7 +241,6 @@ learned, not every session (the session's state is in [`../../HANDOVER.md`](../.
 - **Claude Code's own memory is per machine** and does not follow the work to another one: what binds has to be in
   this file or in `AGENTS.md`. The notes below describe `~/research/rag`; on another machine check each before
   relying on it.
-
 - `rag_key.txt` in the repo root holds the interim-gateway key (mode 600, excluded in `.git/info/exclude`). Never
   commit, print or move it.
 - **Git over HTTPS:** `git -c credential.helper= -c 'credential.helper=!gh auth git-credential' fetch|pull|push …`,
