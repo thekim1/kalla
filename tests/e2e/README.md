@@ -20,6 +20,9 @@ Playwright tests of the admin UI (admin design §10.1, §11.4; repo-and-deployme
   (`docker exec`), and Stop needs a slow answer: export `FakeGateway__Latency__TokenIntervalMs=80` and
   `FakeGateway__Latency__AnswerWords=150` before starting the stack. If the store's first account was made since Open
   WebUI last started (other than by the spec), restart Open WebUI first: making it switched sign-up off until a restart.
+- `specs/upload.spec.ts`: uploads into a knowledge base of files it creates (admin design §5.5.7): a file with a known
+  name replaces it by default and keeps its slot and document, *Keep both* adds a new file, and the same name in a folder
+  is another file.
 
 ## Running them
 
@@ -30,6 +33,7 @@ npm ci
 npx playwright install chromium
 npx playwright test --project=pilot --project=accessibility
 npx playwright test --project=openwebui --no-deps   # after the pilot project on the same stack
+npx playwright test --project=upload                # on the same stack, needs nothing before it
 pwsh scripts/Start-E2E.ps1 -Setup   # the setup wizard's stack: Setup:Try on a fresh volume of its own
 npx playwright test --project=setup
 pwsh scripts/Start-E2E.ps1 -Stop    # stops either stack and removes both test volumes

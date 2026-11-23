@@ -994,6 +994,16 @@ export const FILES = {
   committed: (n: number) => `${n} ${n === 1 ? 'file' : 'files'} saved. Fetching has started.`,
   deletedDone: (n: number) => `${n} ${n === 1 ? 'file is' : 'files are'} removed by the fetch that has started.`,
   replacedDone: (name: string) => `${name} is being replaced. Fetching has started.`,
+  committedReplacing: (n: number, replaced: number) =>
+    `${formatNumber(n)} files saved, ${formatNumber(replaced)} of them ${replaced === 1 ? 'replacing an existing file' : 'replacing existing files'}. Fetching has started.`,
+  /** Added files whose name and folder match files already in the source (admin design §5.5.7 point 6). */
+  knownTitle: (n: number) => (n === 1 ? 'This file is already uploaded' : `${formatNumber(n)} of these files are already uploaded`),
+  knownLead: (n: number) => (n === 1
+    ? 'A file with the same name and folder is already among the uploaded files. Replacing it keeps its document and takes the old version out of the search. Keeping both adds a new document, and the assistant may cite either version.'
+    : 'Files with the same names and folders are already among the uploaded files. Replacing them keeps each document and takes the old versions out of the search. Keeping both adds new documents, and the assistant may cite either version.'),
+  knownList: 'Files already uploaded',
+  replaceKnown: (n: number) => (n === 1 ? 'Replace the existing file' : 'Replace the existing files'),
+  keepBoth: 'Keep both',
   list: 'Uploaded files',
   empty: 'No files yet.',
   name: 'File',
