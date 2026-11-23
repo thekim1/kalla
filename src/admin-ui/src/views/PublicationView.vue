@@ -6,6 +6,7 @@ import AsyncState from '@/components/ui/AsyncState.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import DetailRow from '@/components/ui/DetailRow.vue'
 import InlineError from '@/components/ui/InlineError.vue'
+import PageBreadcrumb from '@/components/layout/PageBreadcrumb.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
@@ -16,7 +17,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useLoadable } from '@/stores/loadable'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatNumber, formatUsdCost } from '@/utils/format'
-import { PUBLICATION, RUN_STATE_LABEL } from '@/utils/labels'
+import { PAGE, PUBLICATION, RUN_STATE_LABEL } from '@/utils/labels'
 import { jobMessage } from '@/utils/messages'
 import { problemMessage } from '@/utils/problem'
 import { runStateTone } from '@/utils/runs'
@@ -128,6 +129,7 @@ onMounted(load)
 <template>
   <AsyncState :loading="publication.loading.value && !publication.data.value" :error="publication.error.value" @retry="load">
     <template v-if="publication.data.value">
+      <PageBreadcrumb :items="[{ label: PAGE.collections.title, to: { name: 'collections' } }]" />
       <PageHeader :title="PUBLICATION.title" :description="pipeline ? PUBLICATION.lead(pipeline.name, publication.data.value.draftNumber ?? 0) : undefined">
         <UiBadge v-if="rolledBack" tone="warn" :label="PUBLICATION.rolledBack" data-test="state" />
         <UiBadge v-else-if="published" tone="ok" :label="PUBLICATION.published" data-test="state" />

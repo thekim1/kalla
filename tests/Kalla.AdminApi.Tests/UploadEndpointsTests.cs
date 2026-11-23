@@ -596,6 +596,8 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database, UploadEn
         using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, code);
         var summary = await Json(await viewer.GetAsync($"/api/sources/{sourceId}/files/summary", Ct));
         (summary.GetProperty("total").GetInt32(), summary.GetProperty("processing").GetInt32(), summary.GetProperty("indexed").GetInt32()).ShouldBe((3, 1, 2));
+        // Said once in the summary, not on each row (admin §5.5.7 point 4, §5.12 rule 5): the unscanned slot and the one indexed without a scan.
+        summary.GetProperty("notScanned").GetInt32().ShouldBe(2);
 
         var processing = await Json(await viewer.GetAsync($"/api/sources/{sourceId}/files?state=processing", Ct));
         processing.GetProperty("items").EnumerateArray().Select(f => f.GetProperty("fileName").GetString()).ShouldBe(["pending.pdf"]);

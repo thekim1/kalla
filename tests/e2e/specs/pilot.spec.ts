@@ -77,7 +77,8 @@ for (const mode of ['mouse', 'keyboard'] as const) {
       return visibleSoon(page.getByRole('main').getByText(/^(Done|Done with remarks)$/).first())
     }, 'the first fetch finishes', 300_000)
     await expect(page.getByText('The whole website was gone through.')).toBeVisible()
-    await act.press(page.getByRole('link', { name: 'Back to the source' }))
+    // The breadcrumb leads back (admin design §5.12): Knowledge bases / Testwebbplatsen /.
+    await act.press(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Testwebbplatsen' }))
 
     // 7 Test questions: one of our own, with the document that answers it.
     const collectionPage = await collectionUrl(page, collection)

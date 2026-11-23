@@ -12,7 +12,7 @@ import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import { useLoadable } from '@/stores/loadable'
 import { groupTotals, lastDays, stepLabel, sumTotals, totalCost } from '@/components/costs/costs'
-import { formatNumber, formatUsdCost } from '@/utils/format'
+import { formatNumber, quietZero, formatUsdCost } from '@/utils/format'
 import { COSTS, PAGE } from '@/utils/labels'
 import { COST_MESSAGES } from '@/utils/messages'
 
@@ -166,19 +166,19 @@ onMounted(async () => {
 >{{ o.name }}</UiButton>
                 </th>
                 <td class="py-2">{{ o.kind === 'assistant' ? COSTS.kindAssistant : COSTS.kindCollection }}</td>
-                <td class="py-2 text-right tabular">{{ formatNumber(o.totals.calls) }}</td>
-                <td class="py-2 text-right tabular">{{ formatUsdCost(o.totals.costUsd) }}</td>
-                <td class="py-2 text-right tabular">{{ formatUsdCost(o.totals.estimatedCostUsd) }}</td>
-                <td class="py-2 text-right tabular font-medium">{{ formatUsdCost(totalCost(o.totals)) }}</td>
+                <td class="py-2 text-right tabular" :class="quietZero(o.totals.calls)">{{ formatNumber(o.totals.calls) }}</td>
+                <td class="py-2 text-right tabular" :class="quietZero(o.totals.costUsd)">{{ formatUsdCost(o.totals.costUsd) }}</td>
+                <td class="py-2 text-right tabular" :class="quietZero(o.totals.estimatedCostUsd)">{{ formatUsdCost(o.totals.estimatedCostUsd) }}</td>
+                <td class="py-2 text-right tabular font-medium" :class="quietZero(totalCost(o.totals))">{{ formatUsdCost(totalCost(o.totals)) }}</td>
               </tr>
               <template v-if="open.has(o.key)">
                 <tr v-for="s in o.steps" :key="`${o.key}:${s.key}`" class="text-small text-fg-2" :data-test="`costs-step-${o.objectId}-${s.key}`">
                   <td class="py-1 pl-6">{{ s.label }}</td>
                   <td />
-                  <td class="py-1 text-right tabular">{{ formatNumber(s.totals.calls) }}</td>
-                  <td class="py-1 text-right tabular">{{ formatUsdCost(s.totals.costUsd) }}</td>
-                  <td class="py-1 text-right tabular">{{ formatUsdCost(s.totals.estimatedCostUsd) }}</td>
-                  <td class="py-1 text-right tabular">{{ formatUsdCost(totalCost(s.totals)) }}</td>
+                  <td class="py-1 text-right tabular" :class="quietZero(s.totals.calls)">{{ formatNumber(s.totals.calls) }}</td>
+                  <td class="py-1 text-right tabular" :class="quietZero(s.totals.costUsd)">{{ formatUsdCost(s.totals.costUsd) }}</td>
+                  <td class="py-1 text-right tabular" :class="quietZero(s.totals.estimatedCostUsd)">{{ formatUsdCost(s.totals.estimatedCostUsd) }}</td>
+                  <td class="py-1 text-right tabular" :class="quietZero(totalCost(s.totals))">{{ formatUsdCost(totalCost(s.totals)) }}</td>
                 </tr>
               </template>
             </template>
@@ -186,10 +186,10 @@ onMounted(async () => {
           <tfoot>
             <tr class="border-t border-line font-medium" data-test="costs-department-total">
               <th scope="row" colspan="2" class="py-2">{{ COSTS.departmentTotal(d.name) }}</th>
-              <td class="py-2 text-right tabular">{{ formatNumber(d.totals.calls) }}</td>
-              <td class="py-2 text-right tabular">{{ formatUsdCost(d.totals.costUsd) }}</td>
-              <td class="py-2 text-right tabular">{{ formatUsdCost(d.totals.estimatedCostUsd) }}</td>
-              <td class="py-2 text-right tabular">{{ formatUsdCost(totalCost(d.totals)) }}</td>
+              <td class="py-2 text-right tabular" :class="quietZero(d.totals.calls)">{{ formatNumber(d.totals.calls) }}</td>
+              <td class="py-2 text-right tabular" :class="quietZero(d.totals.costUsd)">{{ formatUsdCost(d.totals.costUsd) }}</td>
+              <td class="py-2 text-right tabular" :class="quietZero(d.totals.estimatedCostUsd)">{{ formatUsdCost(d.totals.estimatedCostUsd) }}</td>
+              <td class="py-2 text-right tabular" :class="quietZero(totalCost(d.totals))">{{ formatUsdCost(totalCost(d.totals)) }}</td>
             </tr>
           </tfoot>
         </table>

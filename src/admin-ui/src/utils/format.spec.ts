@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { actorText, formatDate, formatDateTime, formatDateTimeToday, formatDecimal, formatRelative, formatUsdCost, lastDaysIso } from './format'
+import { actorText, formatDate, formatDateTime, formatDateTimeToday, formatDecimal, formatRelative, formatUsdCost, lastDaysIso, quietZero } from './format'
 
 describe('formatUsdCost', () => {
   it('keeps up to four decimals under one dollar, so small costs are visible', () => {
@@ -36,6 +36,13 @@ describe('dates as the gateway (admin design §5.7)', () => {
     const now = new Date('2026-10-30T12:00:00Z')
     expect(formatRelative('2026-10-30T11:58:00Z', now)).toBe('2 min ago')
     expect(formatRelative('2026-10-29T12:00:00Z', now)).toBe('Yesterday')
+  })
+})
+
+describe('quietZero (admin design §5.12 rule 8)', () => {
+  it('greys a zero or a missing count and leaves any other number as it is', () => {
+    expect([quietZero(0), quietZero(null), quietZero(undefined)]).toEqual(['text-fg-3', 'text-fg-3', 'text-fg-3'])
+    expect([quietZero(1), quietZero(-2), quietZero(0.5)]).toEqual([undefined, undefined, undefined])
   })
 })
 

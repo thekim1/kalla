@@ -12,7 +12,7 @@ import UiButton from '@/components/ui/UiButton.vue'
 import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
-import { formatDate, formatNumber } from '@/utils/format'
+import { formatDate, formatNumber, quietZero } from '@/utils/format'
 import { ASSISTANTS, LEVEL_LABEL, PAGE } from '@/utils/labels'
 
 // Assistants (admin design §5.3, §5.4 step 9, §5.5.4 "The assistant list"; #278 slice 3): a row is a link to the assistant.
@@ -81,7 +81,7 @@ onMounted(async () => {
           :data-test="`general-knowledge-${row.id}`"
         />
       </template>
-      <template #cell-questions7d="{ row }"><span class="tabular">{{ formatNumber(row.questions7d) }}</span></template>
+      <template #cell-questions7d="{ row }"><span class="tabular" :class="quietZero(row.questions7d)">{{ formatNumber(row.questions7d) }}</span></template>
     </DataTable>
   </AsyncState>
   <AssistantCreateDrawer v-model:open="creating" :departments="departments" @created="created" />

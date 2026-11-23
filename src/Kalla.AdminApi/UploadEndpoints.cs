@@ -138,8 +138,11 @@ public static class UploadEndpoints
                     .Select(g => new { State = g.Key, Count = g.Count(), Bytes = g.Sum(f => f.Upload.Bytes), Last = g.Max(f => (DateTimeOffset?)f.Upload.UploadedAt) })
                     .ToListAsync(ct);
                 int InStates(IReadOnlyList<string> states) => groups.Where(g => states.Contains(g.State)).Sum(g => g.Count);
+                // Said once for the list, not on each row (§5.5.7 point 4, §5.12 rule 5): unscanned, or indexed without a scan.
+                var notScanned = await Files(admin, id, deleted: false)
+                    .CountAsync(f => f.Upload.State == UploadStates.Unscanned || (f.Upload.State == UploadStates.Indexed && f.Upload.ScannedAt == null), ct);
                 return new FilesSummary(groups.Sum(g => g.Count), InStates(FileStates.Processing), InStates(FileStates.Indexed), InStates(FileStates.Failed),
-                    groups.Sum(g => g.Bytes), groups.Max(g => g.Last));
+                    groups.Sum(g => g.Bytes), groups.Max(g => g.Last), notScanned);
             })
             .RequireAuthorization(AdminPolicies.Read).WithTags("Uploads").WithName("SourceFilesSummary")
             .WithSummary("A source's file counts by state, bytes and the last upload (deleted files not counted)");
@@ -634,8 +637,11 @@ public static class FileSorts
     public static IReadOnlyList<string> All { get; } = [Name, Uploaded];
 }
 
-/// <summary>A source's non-deleted files by state (§5.5.7 summary bar): processing, indexed, failed, their bytes and the last upload.</summary>
-public sealed record FilesSummary(int Total, int Processing, int Indexed, int Failed, long Bytes, DateTimeOffset? LastUploadAt);
+/// <summary>
+/// A source's non-deleted files by state (§5.5.7 summary bar): processing, indexed, failed, their bytes, the last upload, and
+/// how many were not scanned for malware (<c>unscanned</c>, or <c>indexed</c> without <c>ScannedAt</c>).
+/// </summary>
+public sealed record FilesSummary(int Total, int Processing, int Indexed, int Failed, long Bytes, DateTimeOffset? LastUploadAt, int NotScanned);
 
 /// <summary>A quarantined file (connectors §11): where it came from, the signature, when; never the content or its hash.</summary>
 public sealed record QuarantinedFileDto(Guid Id, string Origin, string? Name, string? Url, string Signature, Guid? RunId, DateTimeOffset DetectedAt, DateTimeOffset PurgeAfter);

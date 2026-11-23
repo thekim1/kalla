@@ -84,6 +84,8 @@ export const navGroups: NavGroup[] = [
         description: PAGE.collections.description,
         keywords: [...NAV_KEYWORDS.collections],
         roles: ALL_ROLES,
+        // A knowledge base's pages keep the menu item lit (admin design §5.12, Every page).
+        children: ['collection', 'source', 'run', 'publication'],
       },
       {
         name: 'assistants',
@@ -92,6 +94,7 @@ export const navGroups: NavGroup[] = [
         description: PAGE.assistants.description,
         keywords: [...NAV_KEYWORDS.assistants],
         roles: ALL_ROLES,
+        children: ['assistant'],
       },
     ],
   },
