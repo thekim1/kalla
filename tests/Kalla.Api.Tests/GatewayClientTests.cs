@@ -36,6 +36,21 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         stub.Calls.ShouldBe(0);
     }
 
+    [Fact]
+    public void The_call_tag_sets_the_step_and_run_id_once()
+    {
+        // Cost-attribution §4.1: x-fors-step and x-fors-run-id, the gateway's names; a second tag replaces the first.
+        var runId = Guid.Parse("01929b6e-0000-7000-8000-0000000000cc");
+        using var request = Post("v1/chat/completions").WithCallTag("condense", Guid.NewGuid()).WithCallTag("chat-answer", runId);
+
+        request.Headers.GetValues("x-fors-step").ShouldBe(["chat-answer"]);
+        request.Headers.GetValues("x-fors-run-id").ShouldBe(["01929b6e-0000-7000-8000-0000000000cc"]);
+
+        request.WithCallTag("rerank", null);
+        request.Headers.GetValues("x-fors-step").ShouldBe(["rerank"]);
+        request.Headers.Contains("x-fors-run-id").ShouldBeFalse("a call without a run sends no run id");
+    }
+
     [Theory]
     [InlineData("Any")]
     [InlineData("1")]

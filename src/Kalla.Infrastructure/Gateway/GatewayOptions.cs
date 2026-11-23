@@ -61,6 +61,15 @@ public static class GatewayHeaders
     public const string OnBehalfOf = "x-fors-on-behalf-of";
     public const string RequestId = "x-request-id";
 
+    /// <summary>Request header: the call's step, opaque to the gateway (gateway-changes §7.1; cost-attribution §4.1).</summary>
+    public const string Step = "x-fors-step";
+
+    /// <summary>Request header: the run the call is made for, opaque to the gateway (chat: the message id; cost-attribution §4.1).</summary>
+    public const string RunId = "x-fors-run-id";
+
+    /// <summary>Response header: what the gateway's personal-data check did (<c>detected</c>, <c>redacted</c>, <c>blocked</c>).</summary>
+    public const string Pii = "x-fors-pii";
+
     /// <summary>The call's cost in USD on a complete JSON answer (eight decimals; gateway-changes §5.4).</summary>
     public const string CostUsd = "x-fors-cost-usd";
 

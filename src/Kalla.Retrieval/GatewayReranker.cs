@@ -59,12 +59,7 @@ public sealed partial class GatewayReranker(IHttpClientFactory clients, string h
                 documents = request.Passages.Select(p => p.Text).ToArray(),
                 return_documents = false,
             }),
-        }.WithMaxResidency(request.Ceiling);
-        message.Headers.Add("x-fors-step", Step);
-        if (request.RunId is { } runId)
-        {
-            message.Headers.Add("x-fors-run-id", runId.ToString());
-        }
+        }.WithMaxResidency(request.Ceiling).WithCallTag(Step, request.RunId);
 
         HttpResponseMessage response;
         try
