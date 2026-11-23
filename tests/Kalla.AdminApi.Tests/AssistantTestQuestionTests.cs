@@ -170,8 +170,8 @@ public sealed class AssistantTestQuestionTests(AdminDatabaseFixture database)
     [Fact]
     public async Task One_person_may_have_three_on_demand_runs_waiting_and_a_run_after_a_publish_is_not_counted()
     {
-        // #999's follow-up: the rate policy counts a run as one request, but a run is up to 30 questions of model calls. A runner
-        // whose loop is not started keeps every run waiting.
+        // The rate policy counts a run as one request, but a run is up to 30 questions of model calls. A runner whose loop is not
+        // started keeps every run waiting.
         var code = "R" + Random.Shared.Next(100_000, 999_999);
         await using var db = TestPostgres.Context(database.Connection(null));
         var department = new Department { Id = Guid.CreateVersion7(), Name = "Kö " + code, CostCenterCode = code, SyncedAt = DateTimeOffset.UtcNow };
@@ -218,12 +218,70 @@ public sealed class AssistantTestQuestionTests(AdminDatabaseFixture database)
         (await runner.StartAsync(db, fourth, fourthVersion, actor, Ct)).ShouldNotBeNull();
         var (other, otherVersion) = await AssistantAsync(10);
         (await runner.StartAsync(db, other, otherVersion, "annan-" + code + "@umea.se", Ct, onDemand: true)).ShouldNotBeNull();
+
+        // Parallel requests can't beat the cap: the slot is reserved before the run is written. Each start has its own context.
+        var racer = "parallell-" + code + "@umea.se";
+        var racing = new List<(Assistant, AssistantVersion)>();
+        for (var n = 20; n < 25; n++)
+        {
+            racing.Add(await AssistantAsync(n));
+        }
+
+        var outcomes = await Task.WhenAll(racing.Select(async pair =>
+        {
+            await using var own = TestPostgres.Context(database.Connection(null));
+            try
+            {
+                return await runner.StartAsync(own, pair.Item1, pair.Item2, racer, Ct, onDemand: true) is not null;
+            }
+            catch (Kalla.ServiceDefaults.ApiFaultException fault) when (fault.Status == 429)
+            {
+                return false;
+            }
+        }));
+        (outcomes.Count(o => o), runner.Waiting(racer)).ShouldBe((AssistantTestRunner.MaxWaitingPerActor, AssistantTestRunner.MaxWaitingPerActor));
+
+        // A refusal that isn't the cap (no questions) gives the slot back at once.
+        var empty = new Assistant
+        {
+            Slug = "tom-" + code.ToLowerInvariant(), Name = "Tom " + code, DepartmentId = department.Id, Classification = Classification.Internal, UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        db.Add(empty);
+        await db.SaveChangesAsync(Ct);
+        var emptyVersion = new AssistantVersion
+        {
+            AssistantId = empty.Id, Number = 1, GatewayModel = Model, SystemPrompt = "Svara kort.", CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        db.Add(emptyVersion);
+        await db.SaveChangesAsync(Ct);
+        var newcomer = "ny-" + code + "@umea.se";
+        (await runner.StartAsync(db, empty, emptyVersion, newcomer, Ct, onDemand: true)).ShouldBeNull();
+        runner.Waiting(newcomer).ShouldBe(0);
+
+        // A finished run frees its slot: with the loop started, the runs end (answered or not), and a fourth is accepted.
+        await runner.StartAsync(Ct);
+        try
+        {
+            for (var i = 0; i < 600 && runner.Waiting(actor) >= AssistantTestRunner.MaxWaitingPerActor; i++)
+            {
+                await Task.Delay(100, Ct);
+            }
+
+            runner.Waiting(actor).ShouldBeLessThan(AssistantTestRunner.MaxWaitingPerActor);
+            var (later, laterVersion) = await AssistantAsync(30);
+            (await runner.StartAsync(db, later, laterVersion, actor, Ct, onDemand: true)).ShouldNotBeNull();
+        }
+        finally
+        {
+            await runner.StopAsync(CancellationToken.None);
+        }
     }
 
     [Fact]
-    public async Task A_copy_into_another_department_tested_on_its_draft_finds_nothing_of_the_source_departments_knowledge_base()
+    public async Task A_copy_whose_share_was_withdrawn_tested_on_its_draft_finds_nothing_of_the_source_departments_knowledge_base()
     {
-        // #999's follow-up, end to end: A's assistant links A's unshared knowledge base; its copy into B is tested on the draft.
+        // End to end through the panel's sharing filter: A shares its knowledge base with B, so the copy into B keeps the link;
+        // the share is then withdrawn, and the copy's draft, tested in the panel and in a test run, finds nothing of it.
         var codeA = "C" + Random.Shared.Next(100_000, 999_999);
         var codeB = "D" + Random.Shared.Next(100_000, 999_999);
         var word = "c" + codeA.ToLowerInvariant() + "kompost";
@@ -286,12 +344,37 @@ public sealed class AssistantTestQuestionTests(AdminDatabaseFixture database)
         }
 
         (await CandidatesAsync(id)).ShouldBeGreaterThan(0); // A's own draft finds it
+        using (var question = await both.PostAsJsonAsync($"/api/assistants/{id}/test-questions", new { question = $"Hur gör jag med {word}?", expectedBehaviour = "Svarar." }, Ct))
+        {
+            question.StatusCode.ShouldBe(HttpStatusCode.Created, await question.Content.ReadAsStringAsync(Ct));
+        }
 
+        // Shared with B: the copy keeps the link, and its draft finds the knowledge base.
+        await db.Collections.Where(c => c.Id == own.Id).ExecuteUpdateAsync(u => u.SetProperty(c => c.SharedWith, CollectionSharingLevels.Selected), Ct);
+        db.CollectionShares.Add(new CollectionShare { CollectionId = own.Id, DepartmentId = b.Id, SharedBy = "anna@umea.se" });
+        await db.SaveChangesAsync(Ct);
         using var copied = await both.PostAsJsonAsync($"/api/assistants/{id}/copy", new { name = "Kompost kopia " + codeB, departmentId = b.Id }, Ct);
         copied.StatusCode.ShouldBe(HttpStatusCode.Created, await copied.Content.ReadAsStringAsync(Ct));
         var copy = await Json(copied);
-        copy.GetProperty("leftOut").GetProperty("links").GetInt32().ShouldBe(1);
-        (await CandidatesAsync(copy.GetProperty("assistant").GetProperty("id").GetGuid())).ShouldBe(0);
+        copy.GetProperty("leftOut").GetProperty("links").GetInt32().ShouldBe(0);
+        var copyId = copy.GetProperty("assistant").GetProperty("id").GetGuid();
+        (await CandidatesAsync(copyId)).ShouldBeGreaterThan(0);
+
+        // The share is withdrawn: the link stays on the draft, but the panel and a draft test run find nothing of it.
+        await db.CollectionShares.Where(x => x.CollectionId == own.Id).ExecuteDeleteAsync(Ct);
+        await db.Collections.Where(c => c.Id == own.Id).ExecuteUpdateAsync(u => u.SetProperty(c => c.SharedWith, CollectionSharingLevels.Department), Ct);
+        (await both.GetFromJsonAsync<JsonElement>($"/api/assistants/{copyId}/draft", Ct)).GetProperty("collectionLinks")[0].GetProperty("collectionId").GetGuid()
+            .ShouldBe(own.Id);
+        (await CandidatesAsync(copyId)).ShouldBe(0);
+        using (var started = await both.PostAsJsonAsync($"/api/assistants/{copyId}/test-runs", new { target = "Draft" }, Ct))
+        {
+            started.StatusCode.ShouldBe(HttpStatusCode.Accepted, await started.Content.ReadAsStringAsync(Ct));
+        }
+
+        var run = await FinishedAsync(both, copyId, 1);
+        var report = await both.GetFromJsonAsync<JsonElement>($"/api/assistants/{copyId}/test-runs/{run.GetProperty("id").GetGuid()}", Ct);
+        report.GetRawText().ShouldNotContain("komposterar du"); // the chunk's text never reaches the answer
+        report.GetRawText().ShouldNotContain("[1]"); // no citation
     }
 
     [Fact]

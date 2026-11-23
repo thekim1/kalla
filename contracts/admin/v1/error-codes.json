@@ -374,7 +374,7 @@
     {
       "code": "test_runs_waiting",
       "status": 429,
-      "message": "You already have test-question runs waiting. Start another when one has finished."
+      "message": "You already have 3 test-question runs waiting or running. Start another when one has finished."
     },
     {
       "code": "no_test_questions",

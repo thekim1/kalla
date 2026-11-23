@@ -253,7 +253,7 @@ public static class AdminErrorCodes
     public static AdminErrorCode TestRunRunning { get; } = new("test_run_running", 409, "The test questions are already running. Wait for that run to finish.");
 
     /// <summary>The caller has as many test-question runs waiting as one person may start (<c>AssistantTestRunner.MaxWaitingPerActor</c>).</summary>
-    public static AdminErrorCode TestRunsWaiting { get; } = new("test_runs_waiting", 429, "You already have test-question runs waiting. Start another when one has finished.");
+    public static AdminErrorCode TestRunsWaiting { get; } = new("test_runs_waiting", 429, "You already have 3 test-question runs waiting or running. Start another when one has finished.");
 
     /// <summary>§7.4: an assistant without test questions gets no run.</summary>
     public static AdminErrorCode NoTestQuestions { get; } = new("no_test_questions", 409, "The assistant has no test questions to run.");
