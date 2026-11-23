@@ -21,6 +21,7 @@ lands or an input arrives.
 | `v0.9.0` (2026-11-21) | **Källa and Fors** (#899): the rename from Ume.Rag, licence Apache-2.0, on Fors `v0.12.1`, with an upgrade path for Compose, Portainer and Kubernetes; delete knowledge bases, sources and assistants, with what they held purged (#878); source dates, escalation and topics in the chat API (F4, F3, F8); the images' security updates from the first scan of 0.8.0 |
 | `v0.9.1` (2026-11-21) | **The upgrade without SQL by hand**: the one-shots `kalla-roles` and Fors `v0.12.2`'s `roles` rename the database roles, so a Portainer stack is upgraded by renaming its variables and updating once; the admin shows evaluation questions whose documents were deleted (B-60, #893); the admin's name is Källa |
 | `v0.9.2` (2026-11-21) | **Rendering works again**: the worker image carries `libatomic.so.1` for Playwright 1.65's driver (#927), with the driver started inside the built image in CI and the release; topic rules take a pasted address and the Topics tab says how to set them (#929) |
+| `v0.10.0` (2026-11-23) | **P2 wave 1, assistants and answer quality** (B-54 to B-59): templates, copy, version diff, test questions after every publish, the nightly answer run, Home's *Needs attention*; personal-data highlights and Clear (B-63), a source's pause and schedule (B-70); on Fors `v0.13.0` with its logo; the Feedback API limited to its roles (#1014), drafts kept to their department's knowledge bases (#983), Debian fixes in three images (#1010) |
 
 What is left before go-live is live work, and every step of it waits on an input from people. **P2 code is built
 beside it since `v0.9.0`** (user, 2026-11-20; Decisions "P2 starts before go-live"): *P2 Broaden* below.
@@ -144,7 +145,7 @@ nearly done.
 | B-58 | The nightly answer run (`answers`): faithfulness and citation precision per assistant; a platform setting turns it down or off (Decisions "Nightly answer run") | processing §14.8; admin §5.10, §7.2 |
 | B-59 | Home's *Needs attention*: the attention items of every design that names one | admin §5.5.1 |
 
-**Status (2026-11-23):** B-54 to B-57 are merged; B-58 and B-59 are in review.
+**Status (2026-11-23):** done: B-54 to B-59 are released in `v0.10.0`.
 
 Each later item needs the earlier ones only where its row says so in the queue. The live check of wave 1 is the test
 chatbot's assistant (T4) once it exists; until then FakeGateway and the demo seed.

@@ -6,6 +6,155 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
+## 0.10.0 (2026-11-23)
+
+The first P2 release: **assistants and answer quality** (P2 wave 1). Assistants start from a template, can be copied
+and compared version by version, and have test questions that run after every publish; a nightly answer run rates
+the published assistants' answers; Home lists what needs attention; a source can be paused and has its own schedule.
+On **Fors 0.13.0**, whose logo feature the admin UI now shows. Three migrations, all additive; no variable changes.
+**Rolling update: yes** from 0.9.2; from 0.9.1 or earlier, as for 0.9.2. After the update, restart `kalla-proxy` if
+the stack runs it, and note that **the nightly answer evaluation is on** ([upgrade guide](docs/upgrade-guide.md#0100)).
+
+### Added
+
+- **A source's own schedule, and when it next runs**: the URL-list and website forms have *Fetch again*: the platform
+  default for the type, every night at 02:00, every Saturday night at 01:00, or a cron expression of its own (Swedish
+  time). The source page shows the schedule in force and the next scheduled fetch (the per-source spread included), or
+  that the source is paused. `GET /api/sources/{id}` answers `scheduleInForce` and `nextRunAt`.
+- **Assistant templates: three starting points for a new assistant** (B-54): *Create assistant* has *Start from*, with
+  *Allmän rådgivning* (citizen service) preselected, *Intern policy* (staff questions on internal policies, answered
+  only from the documents, naming the document's owner) and *Handläggningsstöd* (step-by-step guidance from the
+  routines, never deciding a case). The template's instructions, not-found texts and query steps are copied into the
+  first draft, and a later change to the template leaves existing assistants alone. Emptying the field starts the
+  draft from the platform's default instructions, as before. The three are seeded into an empty table at the update,
+  the first with the deployment's own default instructions. Platform admins manage templates through
+  `/api/assistant-templates`, and every role can read them. The migration `AssistantTemplates` adds
+  `config."AssistantTemplates"`, which only `kalla-admin` reads and writes.
+- **Assistant templates on the Settings page** (B-54): *Settings*, *Chat and answers*, *Assistant templates* lists the
+  templates. A platform admin can add, edit and delete them, and a delete asks first. A long text in a platform form,
+  such as a template's instructions, is now edited on several lines and keeps its line breaks.
+- **Copy an assistant** (B-55): the assistant page has **Copy**, which asks for a name and a department and opens the
+  copy's draft. The copy starts as a draft of the source's published version, or of its draft when it was never
+  published, with the same instructions, model, knowledge bases, topics, not-found texts and query steps, and the same
+  description, contact, information class, history and retention. Who may use it (audiences, origins), its gateway key,
+  the other versions and the statistics are not copied, and the source is unchanged. A knowledge base the target
+  department can't use shows as a warning on the copy's draft. `POST /api/assistants/{id}/copy`, audited `copy`.
+- **Compare assistant versions** (B-56): *Versions* on the assistant page has **Compare** on each version. It shows
+  what differs from the draft, or from the published version when there is no draft: changed settings by name,
+  knowledge bases added or removed, changed topics, and the instructions and not-found texts line by line, with added
+  and removed lines marked by a sign as well as by colour. Publishing a draft that was started before a restore now
+  shows that diff in its dialog (*Publish anyway*) instead of a plain question. `GET
+  /api/assistants/{id}/versions/{n}/diff?against={m|draft}`, and the 409 `draft_base_changed` of publish carries `diff`.
+  Texts over 20,000 characters are reported as changed without a line diff.
+- **Test questions per assistant** (B-57): the assistant page has a **Test questions** tab. Add up to 30 questions
+  people really ask, each with what a good answer does, and optionally a document the answer should cite and a phrase it
+  should contain. **Save as test question** in *Test* starts one from the question just tried. The questions run after
+  every publish and restore, and on demand with **Run test questions**, on the draft or the published version. Each is
+  answered once as the test panel answers it. The expected document and phrase are checked exactly, and an AI judge
+  (*Settings*, *Evaluation*, the judge model) compares the answer with what a good answer does. The report shows how
+  many came out as expected, compared with the previous version, with the questions that changed and the judge's
+  reasons. After a publish it offers **Keep** or **Restore the previous version**. Nothing is blocked by the result.
+  Each question costs two model calls (the answer and the judgement), counted under the test panel's usage. The
+  migration `AssistantTestQuestions` adds `config."AssistantTestQuestions"` (only `kalla-admin` reads and writes it),
+  the result columns of `content."EvaluationResults"`, and `AssistantVersions.TestRunId`.
+- **The nightly answer run**: every night at 04:00 each published assistant answers up to
+  `Settings.EvaluationAnswerQuestions` test questions of its knowledge bases (people's questions first, then the newest
+  generated ones) with its published settings, and a judge (`Settings.EvaluationJudgeModel`) rates each answer's
+  faithfulness and citation precision. The calls run as the assistant's gateway key and are counted under the test
+  panel's client, as the steps *Nightly answer evaluation* and *Nightly answer judging*. A refused key or a spent
+  budget ends that assistant's run for the night. The assistant's *Statistics* tab shows the last run's figures beside
+  the run before and the share of chat answers without a citation. The setting is in the Settings page's *Evaluation*
+  section (0 to 100 questions a night, default 100; 0 switches the run off). The last 60 runs per assistant are kept.
+- **Home's *Needs attention***: a card at the top of Home lists what needs someone, each line with a link to where it is
+  dealt with, and the Home menu item shows how many. It covers:
+  - a removal waiting for a decision
+  - an evaluation 5 points worse than the run before
+  - a nightly search quality 5 points below its usual (the 28-day median)
+  - documents with personal data in a public knowledge base
+  - a source whose last fetch had remarks, whose last 3 fetches failed, or whose last 3 crawls did not reach the
+    whole site
+  - an assistant or knowledge base whose gateway key cannot be used for what it does
+  - an assistant whose test questions came out worse than the version before, or whose nightly answer evaluation is 5
+    points below its usual
+  - a template version no worker runs
+  - for platform administrators, a failing feedback import, a failing organisation or model sync and a platform model
+    setting whose model is no longer available
+  Department administrators see the items of their own departments.
+- **The nightly answer evaluation's switch**: the Settings page's *Evaluation* section shows the nightly answer run as a
+  switch, *Run the nightly answer evaluation*, with the questions per assistant and night below it while it is on.
+  Switched off it saves 0; switched on again it starts at 100.
+- **Show highlights and Clear on a document flagged for personal data** (B-63): in a knowledge base's document list
+  and in a source's personal-data report, platform and department admins get **Show highlights** on a flagged
+  document that is not cleared. It shows the document's passages with what the check found marked, by type, and is
+  recorded in the audit log as `pii.view`. **Clear** asks why the data may be shown (at least 10 characters) and says
+  what clearing does: a held version is released to the search at once, and later versions stay covered while no
+  count rises. The badges and the report show the document as cleared afterwards, and
+  `GET /api/sources/{id}/pii-report` gains `piiClearedAt`.
+- **Pause and resume a source from its page**: the source page has **Pause** beside **Fetch now**, and **Resume** while
+  the source is paused. A paused source shows *Paused* and *Next scheduled fetch: None: the source is paused*; Fetch now
+  still works. If someone else changed the source first, the page reloads it and says so.
+- **The gateway's organisation logo shows in the admin UI**: the menu, the phone header, the sign-in page and the setup
+  wizard showed the organisation name from the gateway's context but always the built-in mark, because the gateway
+  exposed its admin console's logo only to its own console. With a gateway that offers it (feature
+  `organisation-logo`, thekim1/fors#126), kalla-admin reads the logo from the gateway's Integration API with
+  its credential key (no scope needed), holds it for 5 minutes and serves it from its own origin
+  (`/bff/branding/logo`, named as `logoUrl` in `/bff/user`), so the Content-Security-Policy is unchanged. Without the
+  feature, the Integration API address or a logo, the built-in mark stays, and a failed read never stops the page
+  loading. A wide logo keeps its shape. No configuration change.
+- **The prompt estimate is measured**: the chat API records `rag.chat.prompt.estimate_ratio` (a histogram) on every
+  answer that reports its prompt tokens: the prompt's estimated tokens (characters / 3, plus 4 per message) over the
+  tokens the gateway counted. Above 1 the estimate errs on the safe side. The pilot weeks use it to check the estimate
+  against the real models, Swedish and English (#986).
+
+### Changed
+
+- **The admin UI's favicon is a "K"** on the same green, in place of the "U" mark the gateway's console has too, so the
+  two tabs can be told apart.
+- **Test-question runs per person are capped**: one person may have at most 3 test-question runs they started waiting
+  or running at a time; a fourth is refused until one has finished. The runs after a publish or a restore are not
+  counted.
+
+### Fixed
+
+- **No more 502 after signing in**: after a release, users coming back from Keycloak to Källa's or the gateway's
+  admin could get `502 Bad Gateway` until they cleared their cookies. The sign-in response's cookies outgrew nginx's
+  4 KB header buffer. The stack's TLS proxy and `deploy/proxy/nginx.conf.example` now give headers 32 KB.
+- **Word documents are parsed again**: an uploaded or crawled .docx (and .odt) failed in its parse job with "required
+  property missing" and the job went dead. The fetch job stored the document's detect output without the page count a
+  Word document lacks, and the parse job could not read it back. Stored stage outputs now read a left-out value as
+  empty; what is stored, and its hash, are unchanged.
+- **A stored stage output missing a required value fails again** (#998, after the .docx fix above): only a value that
+  may be empty (a Word document's page count, a section's heading or pages) reads as empty when it is left out. A
+  missing route or format fails the job as before, instead of reading as a default (a missing route would have sent a
+  document down the HTML route).
+- **Load more lists keep the right place, and say when they fail**: on a run's documents and a source's runs, an older
+  answer that arrived after a newer one could leave *Load more* continuing from the wrong place. The held documents,
+  the quarantine and the deletion decision now show an error when their list cannot be read, instead of an empty list.
+- **Nothing loads after a page is left, and a failed job check says so** (#960): the audit log's filters, the test
+  questions' search and the question dialog's document search no longer fetch once their page or dialog is closed
+  while a change waits. A job whose status can't be read ends the wait as failed instead of showing it as running:
+  *Run evaluation* says the evaluation failed. A run or publication page whose refresh fails stops refreshing and
+  shows the error.
+
+### Security
+
+- **A draft no longer reaches another department's knowledge bases**: the test panel, the assistant's test runs and the
+  nightly answer evaluation search only the knowledge bases its department may link, its own and those shared with it
+  (#983). Copying an assistant into another department leaves out links that department may not make, and the test
+  questions' expected documents those links no longer reach; the notice after the copy says how many. A test question
+  whose expected document is in another department's unshared knowledge base no longer shows that document's title.
+  Running test questions is rate-limited like the test panel, and the version comparison names only knowledge bases you
+  can see.
+- **Feedback is its four roles' in the API too** (#980): the feedback list and its totals (`GET /api/feedback`,
+  `GET /api/feedback/summary`) answer platform and department admins, reviewers and viewers, as the Feedback page
+  already did (admin design §3.3); the editor, pipeline-editor and skill-editor roles get 403. Home's thumbs and a
+  knowledge base's downvotes per document are unchanged.
+- **Debian security fixes in the postgres, clamav and parser images**: the nightly image scan of 0.9.2 failed on High
+  findings with a fix in Debian 13's Kerberos libraries (krb5 1.21.3-5+deb13u2, CVE-2026-112314, -112320 to -112323,
+  -119079) and glibc (2.41-12+deb13u5, CVE-2026-19499, -5435). The pinned base images have no rebuild with them yet,
+  so `kalla/postgres` and `kalla/clamav` install the fixed packages on top of their base, and `kalla/parser` takes
+  them from the Debian snapshot of 2026-11-23. Three stale FFmpeg exceptions in the scan's exception list are gone.
+
 ## 0.9.2 (2026-11-21)
 
 A patch release: **JavaScript rendering works again** (every render failed on 0.9.0 and 0.9.1), and topics are easier
