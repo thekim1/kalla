@@ -5,7 +5,7 @@ frontend and backend … and start implementation"). Written by the main session
 `main` at `9f48c107`; every reference below was opened, and the main session re-checked a sample (the four
 `MaxLimit` constants, the 21 inline role lists, the literal gateway header names, the ten copies of the keyset
 pattern, the four `ListLogger`s, the two identical `Enabled` properties). Each fix is one pull request on a
-`main-session/cq-<n>-<slug>` branch. None changes behaviour visible to users, except two latent bugs that #1 and #5
+`main-session/cq-<n>-<slug>` or `b/cq-<n>-<slug>` branch (see *Order*). None changes behaviour visible to users, except two latent bugs that #1 and #5
 fix. No file marked `unchanged` in `src/admin-ui/design-system.lock` is touched.
 
 ## What is already good
@@ -66,12 +66,17 @@ have merged (both change it).
 `src/Kalla.Domain/Admin/PermissionMatrix.cs`. A role that gains or loses a policy needs 21 hand edits, and the UI can
 drift from what the API allows.
 
-**Change.** `utils/permissions.ts`: `POLICY_ROLES` mirroring `PermissionMatrix` (cited in a comment), `auth.can(policy)`
-in `stores/auth.ts`, the inline lists replaced, the `nav.ts` constants derived from the map. Left for later: the view
-lines that #952 and #954 change (`views/AssistantView.vue:120-124`), `platform/nav.ts` (stream a's), and `/bff/user`
-returning the caller's policies (after #953, which touches the same files).
+**Change** (review on #960: no hand-written copy of the matrix). The matrix becomes a contract:
+`tests/Kalla.AdminApi.Tests/PermissionMatrixTests.cs` emits `contracts/admin/v1/permissions.json` (policy → roles)
+from `PermissionMatrix`, exactly as it already keeps `contracts/admin/v1/error-codes.json` (checked on every run,
+rewritten with `KALLA_UPDATE_CONTRACTS=1`). The admin UI imports that file: `utils/permissions.ts` reads it,
+`auth.can(policy)` in `stores/auth.ts` answers from it, the 21 inline lists are replaced (the assistant page's
+included, now that #952 and #954 have merged), and the `router/nav.ts` constants are derived from it. A role that
+gains a policy then fails a test on the side that wasn't changed. `platform/nav.ts` is stream a's and follows. Later,
+and not needed for this: `/bff/user` returning the caller's policies (it touches #953's files).
 
-**Proof.** The three admin-UI commands; a spec that `can()` gives the matrix's answer for every role and policy.
+**Proof.** The three admin-UI commands and `PermissionMatrixTests`; a Vitest spec that reads the contract file and
+checks `can()` for every role and policy in it.
 
 ### 4. The gateway's headers named once
 
@@ -97,10 +102,12 @@ timer on unmount, so **the other three can load after the page is left**. Five b
 
 **Change.** `composables/useDebouncedWatch.ts` (cleans up through `onScopeDispose`) and `composables/usePoll.ts`
 (`usePoll(tick, delay = pollDelay)`: start, stop, a generation guard, stop on unmount); `useJobPoll` rebuilt on it;
-`RunView`, `SourceView` and `PublicationView` moved. `SetupWizard`'s fixed 2 s interval stays.
+`RunView`, `SourceView` and `PublicationView` moved. `SetupWizard`'s fixed 2 s interval stays. **A failed request
+reaches the caller** (review on #960): today `useJobPoll` sets `error` and leaves `job` null, so a caller that reads
+only `job` and `polling` shows "running" for ever (#963's `PiiActions`); the poll stops and its state says failed.
 
 **Proof.** The three admin-UI commands; specs with fake timers: nothing fetched after unmount, the backoff steps, stop
-when the tick says done.
+when the tick says done, and a failed request ends the poll in a failed state.
 
 ### 6. Shared run machinery for `OrganisationSync` and `GatewayModelSync`
 
@@ -132,10 +139,14 @@ count before and after.
 
 ## Order and overlap
 
-- **Wave 1, in parallel** (disjoint files): #1, #2, #4, #7.
-- **Wave 2:** #5 after #1 (both change `AuditView`, `EvaluationQuestions`, `FilesPanel`, `RunView`, `SourceView`); #6
-  alongside it.
-- **Wave 3:** #3 last (it touches most views), after #1 and #5, and after #952 and #954 for the assistant lines.
+- **One at a time** (changed 2026-11-23: three backend test runs at once started 44 Testcontainers and the WSL VM ran
+  out of memory). Done: #1 (#964), #4 (#965), #2 (#966); then #7, #6, #5, #3.
+- **Branches:** the rest use `b/cq-<n>-<slug>` (review on #960): every path is stream b's, and on a `b/` branch
+  `scripts/check-ownership.py` checks that. #1, #2, #4 and #7 were already opened on `main-session/` branches.
+- **#5 and #3 wait for #963** (B-63, which changes `SourceView` and `CollectionView` too), and #3 goes in one sitting
+  at a quiet moment in the queue, since B-58, B-59 and B-66 also add to `AssistantView`, Home and `CollectionView`.
+- **Follow-up:** `EvaluationEndpoints.cs` gets #2's paging kit now that #956 has merged (hard-coded `200`, inline
+  `LIKE` escaping, its own cursor).
 - With the open pull requests: only #2 and #3 touch files of #952–#954, and both leave those lines for a follow-up.
   The UX pass (#955) changes the same views later; these fixes make that work smaller (fewer copies to move).
 
