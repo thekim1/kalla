@@ -15,8 +15,6 @@ namespace Kalla.AdminApi;
 /// </summary>
 public static class FeedbackEndpoints
 {
-    public const int MaxLimit = 200;
-
     public static RouteGroupBuilder MapFeedback(this RouteGroupBuilder api)
     {
         ArgumentNullException.ThrowIfNull(api);
@@ -24,7 +22,7 @@ public static class FeedbackEndpoints
 
         feedback.MapGet("", async ([AsParameters] FeedbackQuery q, AdminContext admin, CancellationToken ct) =>
             {
-                var take = Math.Clamp(q.Limit ?? 50, 1, MaxLimit);
+                var take = Keyset.Take(q.Limit);
                 var rows = Filtered(admin, q);
                 if (q.After is { } last)
                 {
@@ -44,7 +42,7 @@ public static class FeedbackEndpoints
                                       AssistantId = a.Id, AssistantName = a.Name, c.ClientId, m.AssistantVersionId, m.Outcome, m.Coverage, m.Language, MessageId = m.Id,
                                   })
                     .Take(take + 1).ToListAsync(ct);
-                var items = page.Take(take).ToList();
+                var (items, next) = KeysetPage.From(page, take, i => i.Id);
 
                 // Joined in memory (§8.1): version numbers, client names and the cited documents' titles.
                 var versionIds = items.Select(i => i.AssistantVersionId).OfType<Guid>().Distinct().ToList();
@@ -68,7 +66,7 @@ public static class FeedbackEndpoints
                             i.AssistantVersionId is { } v && versions.TryGetValue(v, out var n) ? n : null, i.ClientId, clients.GetValueOrDefault(i.ClientId),
                             i.Outcome, i.Coverage, i.Language, byMessage.GetValueOrDefault(i.MessageId) ?? [])),
                     ],
-                    page.Count > take ? items[^1].Id : null);
+                    next);
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("ListFeedback")
             .WithSummary("Ratings of the caller's assistants, newest first (keyset; period, assistant, rating, outcome, has comment, review state); no content");

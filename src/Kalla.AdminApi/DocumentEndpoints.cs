@@ -13,8 +13,6 @@ namespace Kalla.AdminApi;
 /// </summary>
 public static class DocumentEndpoints
 {
-    public const int MaxLimit = 200;
-
     /// <summary>The live set's chunks returned at most (a document's sections; more is <c>truncated</c>).</summary>
     public const int MaxChunks = 1000;
 
@@ -29,7 +27,7 @@ public static class DocumentEndpoints
         documents.MapGet("", async (Guid? collectionId, Guid? sourceId, string? q, string? pii, string? outcome, Guid? after, int? limit,
                 AdminContext admin, CancellationToken ct) =>
             {
-                var take = Math.Clamp(limit ?? 50, 1, MaxLimit);
+                var take = Keyset.Take(limit);
                 var sources = SourceEndpoints.Scoped(admin);
                 if (collectionId is { } collection)
                 {
@@ -45,7 +43,7 @@ public static class DocumentEndpoints
                 var query = admin.Db.Documents.AsNoTracking().Where(d => d.DeletedAt == null && ids.Contains(d.SourceId));
                 if (!string.IsNullOrWhiteSpace(q))
                 {
-                    var pattern = $"%{Like.Escape(q.Trim())}%";
+                    var pattern = Like.Contains(q.Trim());
                     query = query.Where(d => EF.Functions.ILike(d.Title ?? "", pattern, Like.EscapeCharacter)
                         || EF.Functions.ILike(d.Url ?? "", pattern, Like.EscapeCharacter)
                         || EF.Functions.ILike(d.DisplayName ?? "", pattern, Like.EscapeCharacter));
@@ -75,7 +73,7 @@ public static class DocumentEndpoints
                             && (cs.State == ChunkSetStates.Held || (cs.State == ChunkSetStates.Live && cs.Id == d.LiveChunkSetId))),
                         d.PiiClearedAt != null, d.HeldAt != null, d.LiveChunkSetId != null, d.SourceModifiedAt, d.FetchedAt, d.LastSeenAt))
                     .ToListAsync(ct);
-                return new KeysetPage<DocumentSummary, Guid?>([.. rows.Take(take)], rows.Count > take ? rows[take - 1].Id : null);
+                return KeysetPage.From(rows, take, d => d.Id);
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("ListDocuments")
             .WithSummary("Documents (keyset; collectionId, sourceId, q, pii flagged|cleared, outcome)");
@@ -86,7 +84,7 @@ public static class DocumentEndpoints
                 var sets = await admin.Db.ChunkSets.AsNoTracking().Where(cs => cs.DocumentId == id).OrderByDescending(cs => cs.CreatedAt).ToListAsync(ct);
                 var since = admin.Now - RunItemWindow;
                 var items = await admin.Db.RunItems.AsNoTracking().Where(i => i.DocumentId == id && i.CreatedAt >= since)
-                    .OrderByDescending(i => i.CreatedAt).ThenByDescending(i => i.Id).Take(MaxLimit)
+                    .OrderByDescending(i => i.CreatedAt).ThenByDescending(i => i.Id).Take(Keyset.MaxLimit)
                     .Select(i => new DocumentRunItem(i.RunId, i.Id, i.CreatedAt, i.Outcome, i.Reason, i.Strategy, i.DurationMs))
                     .ToListAsync(ct);
                 var live = sets.FirstOrDefault(cs => cs.Id == document.LiveChunkSetId);
@@ -159,7 +157,7 @@ public static class DocumentEndpoints
         api.MapGet("/sources/{id:guid}/held", async (Guid id, Guid? after, int? limit, AdminContext admin, CancellationToken ct) =>
             {
                 _ = await SourceEndpoints.Scoped(admin).AsNoTracking().SingleOrDefaultAsync(s => s.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
-                var take = Math.Clamp(limit ?? 50, 1, MaxLimit);
+                var take = Keyset.Take(limit);
                 var query = admin.Db.Documents.AsNoTracking().Where(d => d.SourceId == id && d.DeletedAt == null && d.HeldAt != null);
                 if (after is { } last)
                 {
@@ -169,7 +167,7 @@ public static class DocumentEndpoints
                 var rows = await query.OrderBy(d => d.Id).Take(take + 1)
                     .Select(d => new HeldDocument(d.Id, d.Title, d.Url, d.DisplayName, d.HeldAt!.Value, d.HeldBy, d.LastSeenAt))
                     .ToListAsync(ct);
-                return new KeysetPage<HeldDocument, Guid?>([.. rows.Take(take)], rows.Count > take ? rows[take - 1].Id : null);
+                return KeysetPage.From(rows, take, d => d.Id);
             })
             .RequireAuthorization(AdminPolicies.Read).WithTags("Sources").WithName("ListHeldDocuments")
             .WithSummary("A source's documents kept by a rejected deletion (keyset)");

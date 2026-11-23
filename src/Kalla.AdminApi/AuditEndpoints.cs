@@ -13,8 +13,6 @@ namespace Kalla.AdminApi;
 /// </summary>
 public static class AuditEndpoints
 {
-    public const int MaxLimit = 200;
-
     public static RouteGroupBuilder MapAudit(this RouteGroupBuilder api)
     {
         ArgumentNullException.ThrowIfNull(api);
@@ -23,7 +21,7 @@ public static class AuditEndpoints
         audit.MapGet("", async (DateTimeOffset? from, DateTimeOffset? to, string? actor, string? action, string? entityType, string? entityId,
                 Guid? departmentId, string? service, long? after, int? limit, AdminContext admin, CancellationToken ct) =>
             {
-                var take = Math.Clamp(limit ?? 50, 1, MaxLimit);
+                var take = Keyset.Take(limit);
                 var query = Scoped(admin);
                 if (from is { } start)
                 {
@@ -37,7 +35,7 @@ public static class AuditEndpoints
 
                 if (!string.IsNullOrWhiteSpace(actor))
                 {
-                    var pattern = $"%{Like.Escape(actor.Trim())}%";
+                    var pattern = Like.Contains(actor.Trim());
                     query = query.Where(a => a.Actor == actor.Trim() || EF.Functions.ILike(a.ActorName ?? "", pattern, Like.EscapeCharacter));
                 }
 
@@ -75,8 +73,8 @@ public static class AuditEndpoints
                     .Select(a => new AuditSummary(a.Id, a.Timestamp, a.Actor, a.ActorName, a.Action, a.EntityType, a.EntityId, null, null, a.Service,
                         a.DepartmentId, a.Classification, a.ConfigVersion, a.Reason))
                     .ToListAsync(ct);
-                var items = await NamedAsync(admin.Db, [.. rows.Take(take)], ct);
-                return new KeysetPage<AuditSummary, long?>(items, rows.Count > take ? rows[take - 1].Id : null);
+                var (page, next) = KeysetPage.From(rows, take, a => a.Id);
+                return new KeysetPage<AuditSummary, long?>(await NamedAsync(admin.Db, [.. page], ct), next);
             })
             .RequireAuthorization(AdminPolicies.Manage).WithName("ListAudit")
             .WithSummary("The audit log, newest first (keyset; period, actor, action, entity, department, service)");

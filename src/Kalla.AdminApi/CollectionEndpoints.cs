@@ -39,7 +39,7 @@ public static class CollectionEndpoints
                 };
                 if (!string.IsNullOrWhiteSpace(page.Q))
                 {
-                    var q = $"%{Like.Escape(page.Q.Trim())}%";
+                    var q = Like.Contains(page.Q.Trim());
                     query = query.Where(c => EF.Functions.ILike(c.Name, q, Like.EscapeCharacter) || EF.Functions.ILike(c.Slug, q, Like.EscapeCharacter));
                 }
 
@@ -575,28 +575,6 @@ public static class Slugs
         return prefix + n.ToString(CultureInfo.InvariantCulture);
     }
 }
-
-/// <summary><c>ILIKE</c> patterns from user text: <c>%</c>, <c>_</c> and the escape character match themselves.</summary>
-public static class Like
-{
-    public const string EscapeCharacter = "\\";
-
-    public static string Escape(string text)
-    {
-        ArgumentNullException.ThrowIfNull(text);
-        return text.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("%", "\\%", StringComparison.Ordinal).Replace("_", "\\_", StringComparison.Ordinal);
-    }
-}
-
-/// <summary><c>page</c> (from 1) and <c>pageSize</c> (≤ 200, default 50), and <c>q</c> (admin design §4.1).</summary>
-public sealed record PageQuery(int? Page, int? PageSize, string? Q)
-{
-    public int Take => Math.Clamp(PageSize ?? 50, 1, 200);
-
-    public int Skip => (Math.Max(Page ?? 1, 1) - 1) * Take;
-}
-
-public sealed record PageDto<T>(IReadOnlyList<T> Items, int Total);
 
 /// <summary>
 /// A list row. For a collection of another department (<see cref="Shared"/>) this is the shared summary of admin design
