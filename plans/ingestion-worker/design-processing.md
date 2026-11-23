@@ -809,18 +809,36 @@ exists.
   recall@10 falls 5 points below the median of the last 28 days (attention items are P2, Decisions "M-3 settlements"). Enqueued at 03:30 Europe/Stockholm under advisory lock
   `0x5241_4731_0005`. Onyx found an ingestion bug only through poor evaluation scores
   (`../../platforms/onyx.md:322`); this makes that routine.
-- **Later (P2): answers** (Decisions "Nightly answer run"): nightly per published assistant, the evaluation sets of
-  its collections are answered through `Kalla.Answering` with the published version's settings, and a judge
-  (`Settings.EvaluationJudgeModel`, at the assistant's ceiling, `x-fors-step: eval-answer`) rates **faithfulness**
-  (every claim supported by the cited chunks) and **citation precision** (cited chunks support the claims); results
-  per assistant with counts. The `uncited_answer` rate from live chat is shown next to them (chat design).
+- **Later (P2): answers** (Decisions "Nightly answer run"): nightly per published and active assistant (an archived
+  one keeps its published version but gets no run), the evaluation sets of its collections are answered through
+  `Kalla.Answering` with the published version's settings (`x-fors-step: eval-answer-chat`), and a judge
+  (`Settings.EvaluationJudgeModel`, else `Settings.EvaluationModel`, at the assistant's ceiling, `x-fors-step:
+  eval-answer`) rates **faithfulness** (every claim supported by the cited chunks) and **citation precision** (cited
+  chunks support the claims); results per assistant with counts. The `uncited_answer` rate from live chat is shown
+  next to them (chat design).
+  - **How the judge rates:** it gets the question, the delivered answer and the text of each cited source, and
+    returns counts, not figures: the answer's claims, the claims the cited sources support, and which cited sources
+    support a claim. Faithfulness is supported / claims (none without claims), citation precision the supporting
+    cited sources / the cited sources (none without a citation). Only an answer with the outcome `answered` or
+    `answered-general` is judged; a not-found answer or a fixed text has no figures. The run's figures are the means
+    of the judged questions.
+  - **Found, wins and losses:** a question is found when the answer cites one of its expected documents, or, for a
+    question that expects none, when the outcome is `not-found`. `Found` counts them; `Wins` and `Losses` count the
+    questions found now and not in the compared run, and the reverse.
   - **How much, and whether:** at most `Settings.EvaluationAnswerQuestions` questions per assistant and night (0–100,
     default 100; the `human` layer first, then the newest generated questions). **0 switches the run off** for every
     assistant; the platform admin sets it on the Settings page (admin §5.10). There is no switch per assistant. An
-    assistant without a published version, or whose collections have no questions, gets no run.
+    assistant without a published version, or whose collections have no questions, gets no run. Without a judge model
+    (both settings unset) no assistant gets a run, so no answer is paid for and left unrated; the night logs a
+    warning.
   - **The run:** one per assistant and night, kind `answers`, without a `SetId` (its questions come from several
     sets), `SubjectId` the assistant, `SubjectVersion` the published version's number and `ComparedRunId` the
-    assistant's previous finished `answers` run (data-model §2.2). It records its cost.
+    assistant's previous finished `answers` run (data-model §2.2). Its cost is the assistant's usage rows by step
+    (`eval-answer-chat`, `eval-answer`) under `admin-console` (§14.7). Each result keeps the question as asked, the
+    delivered answer and the judge's note; a question that could not be answered or judged keeps a note with the
+    failure's type and status only, never the exception's message (as the gateway sync's error text; an admin API
+    refusal keeps its own text). Metric `rag.admin.answer_runs{outcome}` (`finished`, `refused`, `failed`), beside
+    `rag.evaluation.llm_tokens{step=answer}`.
   - **A refusal:** the calls run as the assistant's gateway key. When the key or its budget is refused (chat §3.6),
     that assistant's run ends for the night: the row stays unfinished (`FinishedAt` null, no metrics), which the
     assistant's Quality tab and the attention rule skip, and the next night starts a new run. The key's state is an

@@ -119,7 +119,7 @@ On real pilot questions after go-live; the test chatbot's data (T5–T6) counts 
 
 | # | Item | Where | Phase | How | Status |
 |---|---|---|---|---|---|
-| 103 | Character estimate ÷ 3 vs real tokenizers (Swedish, English), via `rag.chat.prompt.estimate_ratio` | `chat-api/design.md` §6.3 | P1 | measure | open: metric not built (no `rag.chat.prompt.estimate_ratio` in `src/`; #986) |
+| 103 | Character estimate ÷ 3 vs real tokenizers (Swedish, English), via `rag.chat.prompt.estimate_ratio` | `chat-api/design.md` §6.3 | P1 | measure | open: the metric is #1000, per answer model; Swedish against English needs English sources and is read from the pilot's questions, not from a tag |
 | 105 | `LanguageGuess` ≥ 97 % on real pilot questions | `chat-api/design.md` §10.3 | P1 | measure (pilot data) | open |
 | 136 | Condense skip heuristic (length, no anaphora): share of follow-ups skipped and wrongly skipped, and retrieval recall of skipped vs condensed follow-ups, on real pilot questions | `archive/passes/simplification-pass.md` §8; `chat-api/design.md` §5, §22 | P1 | measure (pilot data) | open |
 | 154 | Conversational check: no false positives on real questions (a short question of stop words plus one content word is not conversational); the .NET Snowball stop lists match Postgres's | `chat-api/design.md` §6.2, §22 | P1 | test + measure (pilot data) | open |

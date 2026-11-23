@@ -470,8 +470,9 @@ retrieval and the gate instead of drawing the not-found text.
 Exact tokenizers of the answer models are unknown to us (on-prem and EU models differ; the gateway itself estimates ≈ 4
 characters per token, `src/Fors.Domain/Services/CostCalculator.cs:64`). The chat role estimates **tokens =
 ⌈characters / 3⌉ + 4 per message**: Swedish compounds tokenise denser than English, so ÷ 3 errs on the safe side.
-The ratio estimate/actual is measured on every answer from the reported `prompt_tokens` (`rag.chat.prompt.estimate_ratio`)
-and `Chat:CharsPerToken` is tuned from it; no tokenizer package is added to the API.
+The ratio estimate/actual is measured per answer model on every chat answer from the reported `prompt_tokens`
+(`rag.chat.prompt.estimate_ratio`), and the divisor (`PromptBuilder.CharsPerToken`, a constant) is tuned from it; no
+tokenizer package is added to the API.
 
 ```
 W = the model's ContextWindow from the GatewayModels mirror (null when unknown)
@@ -670,7 +671,7 @@ x-fors-on-behalf-of: <Assistants.GatewayKeyId>            (from gateway phase 2,
 x-fors-stream-cost: 1                                     (every streamed call; exactly "1"; features stream-cost, gateway-changes §5.4)
 x-fors-max-residency: Eu                                  (effective level, §8.2: public External; internal Eu; sensitive OnPrem)
 x-fors-run-id: <message id, N format>                     (opaque, gateway §7.1)
-x-fors-step: chat-answer | condense | condense-long | follow-ups | assistant-test   (assistant-test: P2 test runs in kalla-admin, admin design §7.4, whose judge call sends assistant-test-judge; query-embed and rerank on their own calls, knowledge §5.2, §6.7)
+x-fors-step: chat-answer | condense | condense-long | follow-ups | assistant-test | eval-answer-chat   (assistant-test: P2 test runs in kalla-admin, admin design §7.4, whose judge call sends assistant-test-judge; eval-answer-chat: the nightly answer run in kalla-admin, processing §14.8, whose judge call sends eval-answer; query-embed and rerank on their own calls, knowledge §5.2, §6.7)
 x-fors-session: <conversation id>                         (session affinity for on-prem prefix caches)
 traceparent: …
 
@@ -1355,7 +1356,7 @@ totals).
 | `rag.chat.filtered` | counter | `kind` (`image`, `html`, `link`, `bare_url`) |
 | `rag.chat.tokens` | counter | `direction` (`input`: all input tokens, cached ones included, as the gateway counts them and `AssistantDailyUsage.InputTokens` holds them; `cached-input`: the cached part; `output`), `step` (`chat-answer`, `condense`, `condense-long`, `follow-ups`, `escalation`, `rerank`, `query-embed`): every model call of §8.3 |
 | `rag.chat.cost` | counter, USD | `step` (as above), `source` (`gateway`: `x-fors-cost-usd` or the stream comment; `estimate`: the mirror's prices, §8.3); a rising `estimate` share means the gateway stopped sending cost |
-| `rag.chat.prompt.estimate_ratio` | histogram | – |
+| `rag.chat.prompt.estimate_ratio` | histogram | `model` (the answer's gateway model alias; bounded by `GatewayModels`): estimate ÷ the reported `prompt_tokens`, chat turns only (not the test panel or evaluation runs) |
 | `rag.chat.stream.stalls` | counter | waits ≥ 1 s between gateway events (gateway `StreamGaps.StallThreshold`, `Pipeline/StreamGaps.cs:10-11`) |
 | `rag.chat.writer.queue`, `.queue_bytes` | observable gauge | – |
 | `rag.chat.writer.batch.duration`, `rag.chat.writer.dropped` | histogram, counter | `reason` (`full`, `poison`, `duplicate`, `shutdown`) |
