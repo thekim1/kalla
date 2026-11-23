@@ -11,12 +11,11 @@ using Kalla.Domain.Entities;
 using Kalla.Infrastructure.Config;
 using Kalla.Infrastructure.Gateway;
 using Kalla.Infrastructure.Persistence;
-using Kalla.Infrastructure.Security;
 
 namespace Kalla.AdminApi;
 
 /// <summary>What one run changed: mirror rows added or changed, removed, and canaries recorded.</summary>
-public sealed record GatewayModelSyncResult(int Written, int Removed, int CanariesRecorded)
+public sealed record GatewayModelSyncResult(int Written, int Removed, int CanariesRecorded) : IMirrorSyncResult
 {
     public bool Changed => Written + Removed > 0;
 }
@@ -30,9 +29,9 @@ public sealed record GatewayModelSyncStatus(bool Enabled, DateTimeOffset? LastRu
 /// and on demand, from <c>GET /v1/models</c> at the service's maximum ceiling with the admin's credential key and the
 /// gateway's facts (<c>kalla</c>, gateway-changes §5.5); <c>If-None-Match</c> with the last <c>ETag</c>, and a <c>304</c> writes
 /// nothing. The same pattern as <see cref="OrganisationSync"/>: one config write under the version lock and an advisory
-/// lock, only changed rows written (data-model §2.1: otherwise every run bumps the config version), one audit entry. A row
-/// per chat, embedding or rerank model or alias: a model is <c>Kind = model</c> with its residency, an alias
-/// <c>Kind = route</c> with its targets' residencies; <c>ModelKind</c>, prices and <c>SupportsTools</c> from the facts; the
+/// lock (<see cref="MirrorSync.WriteAsync"/>), only changed rows written (data-model §2.1: otherwise every run bumps the
+/// config version), one audit entry. A row per chat, embedding or rerank model or alias: a model is <c>Kind = model</c>
+/// with its residency, an alias <c>Kind = route</c> with its targets' residencies; <c>ModelKind</c>, prices and <c>SupportsTools</c> from the facts; the
 /// limits from <c>context_window</c> and <c>max_output_tokens</c> once the gateway sends one (<c>LimitsSource = catalog</c>),
 /// else the manual ones are kept. A catalogue row no longer listed is removed; manual rows are never touched. After each
 /// run the canary embedding of every active profile that has none is recorded (<see cref="RecordCanariesAsync"/>).
@@ -47,22 +46,17 @@ public sealed partial class GatewayModelSync(
     /// <summary>Advisory lock key of the sync ("RAG0" + 0x11), one writer across instances.</summary>
     public const long LockKey = 0x5241_4730_0011;
 
-    private readonly Counter<long> _runs = meters.Create(Microsoft.Extensions.Hosting.Extensions.TelemetryName)
-        .CreateCounter<long>("rag.admin.sync", description: "Organisation and model catalogue sync runs by kind and outcome");
-
+    private readonly MirrorSyncState _state = new("models", meters, gatewayOptions, time);
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private DateTimeOffset? _lastRunAt;
-    private DateTimeOffset? _lastSuccessAt;
-    private int _failures;
-    private string? _lastError;
     private string? _lastCanaryError;
     private GatewayModelSyncResult? _lastResult;
     private string? _etag;
 
     /// <summary>On when the gateway and this service's credential key are configured.</summary>
-    public bool Enabled => !string.IsNullOrWhiteSpace(gatewayOptions.CurrentValue.BaseUrl) && !string.IsNullOrEmpty(gatewayOptions.CurrentValue.Key);
+    public bool Enabled => _state.Enabled;
 
-    public GatewayModelSyncStatus Status => new(Enabled, _lastRunAt, _lastSuccessAt, Volatile.Read(ref _failures), _lastError, _lastResult, _lastCanaryError);
+    public GatewayModelSyncStatus Status =>
+        new(Enabled, _state.LastRunAt, _state.LastSuccessAt, _state.ConsecutiveFailures, _state.LastError, _lastResult, _lastCanaryError);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -83,7 +77,7 @@ public sealed partial class GatewayModelSync(
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            _lastRunAt = time.GetUtcNow();
+            _state.MarkStarted();
             var mirror = Enabled ? await SyncMirrorAsync(actor, cancellationToken) : new GatewayModelSyncResult(0, 0, 0);
             var canaries = await RecordCanariesAsync(cancellationToken);
             if (mirror is null)
@@ -109,60 +103,20 @@ public sealed partial class GatewayModelSync(
             if (answer.Models is not { } models)
             {
                 // 304: the list is as at the last run, which was written.
-                _lastSuccessAt = time.GetUtcNow();
-                _lastError = null;
-                Volatile.Write(ref _failures, 0);
-                _runs.Add(1, new("kind", "models"), new("outcome", "unchanged"));
+                _state.MarkSucceeded("unchanged");
                 return new GatewayModelSyncResult(0, 0, 0);
             }
 
-            await using var scope = scopes.CreateAsyncScope();
-            var db = scope.ServiceProvider.GetRequiredService<RagDbContext>();
-            var outcome = await db.ExecuteConfigWriteAsync(async (_, ct) =>
-            {
-                if (!await db.Database.SqlQuery<bool>($"""SELECT pg_try_advisory_xact_lock({LockKey}) AS "Value" """).SingleAsync(ct))
-                {
-                    return new RunOutcome(null, null); // another instance is syncing
-                }
-
-                var changed = await ApplyAsync(db, models, time.GetUtcNow(), ct);
-                if (!changed.Changed)
-                {
-                    return new RunOutcome(changed, null);
-                }
-
-                await db.SaveChangesAsync(ct);
-                var audit = new AuditLogEntry
-                {
-                    Timestamp = time.GetUtcNow(), Actor = SystemActor, Action = "sync", EntityType = "gateway-models", Service = AdminContext.ServiceName,
-                    ConfigVersion = await db.ConfigVersion.AsNoTracking().Select(v => v.Version).SingleAsync(ct),
-                    Details = JsonSerializer.Serialize(new AuditDetails(null, changed), AuditJson.Options),
-                };
-                actor?.Stamp(audit);
-                db.AuditLog.Add(audit);
-                await db.SaveChangesAsync(ct);
-                return new RunOutcome(changed, audit);
-            }, cancellationToken, lockMetrics);
-
-            if (outcome.Audit is { } entry)
-            {
-                SecurityEvents.AdminChange(SecurityEvents.CreateLogger(scope.ServiceProvider.GetRequiredService<ILoggerFactory>()), entry.Actor,
-                    entry.Action, entry.EntityType, entry.EntityId);
-            }
-
-            _etag = outcome.Result is null ? null : answer.ETag; // another instance's run: ask again in full next time
-            _lastSuccessAt = time.GetUtcNow();
-            _lastError = null;
-            Volatile.Write(ref _failures, 0);
-            _runs.Add(1, new("kind", "models"), new("outcome", outcome.Result is null ? "skipped" : outcome.Result.Changed ? "changed" : "unchanged"));
-            LogRun(logger, outcome.Result?.Written ?? 0, outcome.Result?.Removed ?? 0);
-            return outcome.Result ?? new GatewayModelSyncResult(0, 0, 0);
+            var result = await MirrorSync.WriteAsync(scopes, lockMetrics, time, LockKey, SystemActor, "gateway-models", actor,
+                (db, now, ct) => ApplyAsync(db, models, now, ct), cancellationToken);
+            _etag = result is null ? null : answer.ETag; // another instance's run: ask again in full next time
+            _state.MarkSucceeded(MirrorSyncState.Outcome(result));
+            LogRun(logger, result?.Written ?? 0, result?.Removed ?? 0);
+            return result ?? new GatewayModelSyncResult(0, 0, 0);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            _lastError = ErrorText(ex);
-            var failures = Interlocked.Increment(ref _failures);
-            _runs.Add(1, new("kind", "models"), new("outcome", "failed"));
+            var failures = _state.MarkFailed(ex);
             LogRunFailed(logger, ErrorText(ex), ExceptionText.Types(ex), failures); // never the messages: they can name the gateway (#232)
             return null;
         }
@@ -362,9 +316,6 @@ public sealed partial class GatewayModelSync(
         _gate.Dispose();
         base.Dispose();
     }
-
-    /// <summary>A run's result (null: another instance held the lock) and its audit entry (null: nothing changed).</summary>
-    private sealed record RunOutcome(GatewayModelSyncResult? Result, AuditLogEntry? Audit);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Gateway model sync wrote {Written} and removed {Removed} models")]
     private static partial void LogRun(ILogger logger, int written, int removed);
