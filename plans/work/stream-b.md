@@ -249,7 +249,7 @@ After wave 1, or beside it when a wave-1 item waits.
 
 ## Sources (user, 2026-11-22)
 
-### [ ] B-70 Pause and resume a source from its page
+### [x] B-70 Pause and resume a source from its page (#PR)
 - **Do:** admin §5.5.3's **Pause** in the source page's header beside **Fetch now**, **Resume** while the source is
   paused (`POST /api/sources/{id}/pause` and `/resume` with the source's `version`, both there since P1, `Edit`); a
   paused source says so on its page and in the sources list, and its *Next scheduled fetch* reads *None: the source is

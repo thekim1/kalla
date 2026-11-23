@@ -165,6 +165,10 @@ export const api = {
     get: (id: string) => http.get<Source>(`/api/sources/${id}`),
     remove: (id: string, version: string) => http.del(`/api/sources/${id}?version=${encodeURIComponent(version)}`),
     sync: (id: string) => http.post<SyncStarted>(`/api/sources/${id}/sync`),
+    /** Stop scheduled runs (admin design §5.5.3); the source as saved. */
+    pause: (id: string, version: string) => http.post<Source>(`/api/sources/${id}/pause`, { version }),
+    /** Run on schedule again. */
+    resume: (id: string, version: string) => http.post<Source>(`/api/sources/${id}/resume`, { version }),
     retryFailed: (id: string) => http.post<SyncStarted>(`/api/sources/${id}/retry-failed`),
     impact: (id: string, body: { settings: Record<string, unknown> }) => http.post<SourceImpact>(`/api/sources/${id}/impact`, body),
     update: (id: string, body: SourceUpdate) => http.put<Source>(`/api/sources/${id}`, body),
