@@ -29,14 +29,13 @@ const planning = ref(false)
 const error = ref<unknown>(null)
 const values = reactive<Record<string, string>>({})
 const fieldErrors = reactive<Record<string, string | undefined>>({})
-const canPublish = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-pipeline-editor']))
-const platformAdmin = computed(() => auth.hasAnyRole(['rag-platform-admin']))
+const canPublish = computed(() => auth.can('edit-pipelines'))
 
 const published = computed(() => pipeline.value?.versions.find((v) => v.id === pipeline.value?.publishedVersionId) ?? null)
 const draft = computed(() => pipeline.value?.versions.find((v) => v.state === 'draft') ?? null)
 /** The parameters the form starts from: the draft's when there is one, else the published version's. */
 const current = computed(() => draft.value ?? published.value)
-const copyOnWrite = computed(() => pipeline.value?.departmentId === null && !platformAdmin.value)
+const copyOnWrite = computed(() => pipeline.value?.departmentId === null && !auth.isPlatformAdmin)
 const fields = computed(() =>
   Object.entries(template.value?.paramsSchema.properties ?? {}).map(([name, schema]) => {
     const kind = Array.isArray(schema.enum) ? 'select' : schema.type === 'integer' ? 'integer' : 'json'

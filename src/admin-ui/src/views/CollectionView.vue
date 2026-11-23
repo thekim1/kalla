@@ -86,8 +86,8 @@ const quality = computed(() => {
 })
 /** The Overview's Cost card (admin design §8.6). */
 const collectionCosts = (query: CostQuery) => api.costs.collection(collection.data.value!.id, query)
-const canPublish = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']))
-const canEdit = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor']))
+const canPublish = computed(() => auth.can('manage'))
+const canEdit = computed(() => auth.can('edit'))
 const adding = ref(false)
 const uploadSources = computed(() => sources.data.value.filter((s) => s.type === 'upload'))
 const fileSourceId = ref('')
@@ -99,14 +99,14 @@ const noFilesSource = ref(false)
 // Edit (§5.5.2, #446): the own fields, the level included.
 const editing = ref(false)
 // Change department (#811): platform admins only, on the owner's view.
-const canMove = computed(() => auth.hasAnyRole(['rag-platform-admin']))
+const canMove = computed(() => auth.can('admin'))
 const moving = ref(false)
 // Delete (Decisions "Deleting knowledge bases, sources and assistants"; admin §5.5): Manage, the name typed; while an
 // assistant links it or it has a source, the dialog names them and has no delete button (the API refuses with
 // collection_in_use).
-const canDelete = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']))
+const canDelete = computed(() => auth.can('manage'))
 // B-63: a flagged document's highlights and Clear are Manage's (V26; the API checks the source's department).
-const canManage = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']) && !shared.value)
+const canManage = computed(() => auth.can('manage') && !shared.value)
 /** A document whose personal-data actions apply: flagged and not cleared, or held again after a clearance (processing §9.5). */
 const needsPiiDecision = (row: DocumentSummary) => row.piiHeld || (row.piiFlagged && !row.piiCleared)
 const deleting = ref(false)

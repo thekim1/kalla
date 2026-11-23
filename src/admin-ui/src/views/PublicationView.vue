@@ -36,7 +36,7 @@ const reports = ref<Record<string, { run: EvaluationRun; compared: EvaluationRun
 const confirming = ref(false)
 const rollingBack = ref(false)
 const kept = ref(false)
-const canPublish = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-pipeline-editor']))
+const canPublish = computed(() => auth.can('edit-pipelines'))
 
 const plan = computed(() => publication.data.value?.plan ?? null)
 const version = computed(() => pipeline.value?.versions.find((v) => v.id === publication.data.value?.pipelineVersionId) ?? null)

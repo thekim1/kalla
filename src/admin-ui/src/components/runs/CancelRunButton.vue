@@ -21,7 +21,7 @@ const ui = useUiStore()
 const poll = useJobPoll<unknown>()
 const confirming = ref(false)
 const failure = ref<string | null>(null)
-const canCancel = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor']))
+const canCancel = computed(() => auth.can('edit'))
 const active = computed(() => props.state === 'running' || props.state === 'awaiting-deletion-confirmation')
 
 async function cancel(): Promise<void> {

@@ -18,7 +18,7 @@ const auth = useAuthStore()
 const ui = useUiStore()
 const busy = ref(false)
 const failure = ref<unknown>(null)
-const canEdit = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor']))
+const canEdit = computed(() => auth.can('edit'))
 
 async function start(): Promise<void> {
   busy.value = true

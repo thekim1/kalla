@@ -30,7 +30,7 @@ const auth = useAuthStore()
 const router = useRouter()
 const overview = useLoadable<Overview | null>(null)
 const ui = useUiStore()
-const canCreate = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor']))
+const canCreate = computed(() => auth.can('edit'))
 const hasRole = computed(() => auth.roles.some((r) => r in ROLE_LABEL))
 const synced = ref<Department[] | null>(null)
 onMounted(() => {
