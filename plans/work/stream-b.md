@@ -137,6 +137,7 @@ tables in one migration of its own (no backward compatibility before production)
 After P2 wave 1, or beside it when a wave item waits. Each adds its table in a migration of its own.
 
 ### [ ] B-61 Cost per outcome (F10)
+- **Taken:** 2026-11-23, the main session on the user's machine (#1011), branch `b/B-61-cost-per-outcome`.
 - **Do:** the table `chat."AssistantDailyOutcomes"` (data-model §2.3, with the admin role's grant and §8's
   retention); the writer's upsert per (day, assistant, client, level, outcome) with the turns and their summed
   gateway and estimated cost, usage-only turns as `unavailable` or `error` (chat §12.2); the test panel's upsert
@@ -152,6 +153,7 @@ After P2 wave 1, or beside it when a wave item waits. Each adds its table in a m
 - **Read:** Decisions "Cost per outcome"; chat §12.1, §12.2, §18.9; data-model §2.3, §8; admin §4.9, §8.6.
 
 ### [ ] B-62 Content-gap report (F7)
+- **Taken:** 2026-11-23, the main session on the user's machine (#1011), branch `b/B-62-content-gaps`.
 - **Do:** the table `chat."AssistantDailyGaps"` (data-model §2.3, §8's retention); the nearest hit on `ChatTurn`
   (the first retrieval result's collection and document for a `not-found` or `answered-general` turn, *no hit*
   otherwise) and the writer's upsert (chat §12.1, §12.2), never for the test panel; `GET /api/assistants/{id}/gaps`
@@ -199,6 +201,7 @@ Beside P2 wave 1: take B-64 when a wave item waits, or after it. `proposals/topi
 ## Support chatbot F6 (user, 2026-11-22)
 
 ### [ ] B-66 Downvotes per document (F6)
+- **Taken:** 2026-11-23, the main session on the user's machine (#1011), branch `b/B-66-document-downvotes`.
 - **Do:** Decisions "Downvotes per document": the table `chat."DocumentDailyFeedback"` (data-model §2.3) in a migration
   of its own; its delta in `POST /v1/feedback` and the Open WebUI importer (chat §14.1, §14.2: one count per cited
   document, in the rating's transaction, never below 0); admin §4.5's `GET /api/collections/{id}/feedback` (+ CSV);
@@ -277,6 +280,7 @@ Decisions "Progress, timings and the nearest subject in the chat extension". Aft
 one waits. Neither changes an answer that doesn't ask.
 
 ### [ ] B-72 Progress chunk and timings (`kalla.progress`, `kalla.timings`)
+- **Taken:** 2026-11-23, the main session on the user's machine (#1011), branch `b/B-72-progress-timings`.
 - **Do:** chat §3.8's two request members (a value that is not a boolean: 400 `invalid_request` with its `param`) and
   §9.10: on a streamed turn that gets a model answer, one `kalla` chunk `{"progress":"writing"}` as the first byte,
   written after step 13's checks have passed (§4.1) and before the role chunk, with the related documents (no `cited`,
@@ -291,6 +295,7 @@ one waits. Neither changes an answer that doesn't ask.
   §9.1, §9.6, §9.10, §17, §18.9; #959.
 
 ### [ ] B-73 Topics on related documents and the nearest subject (`kalla.nearest`)
+- **Taken:** 2026-11-23, the main session on the user's machine (#1011), branch `b/B-73-nearest-subject`.
 - **Do:** chat §9.7's `topics` on every related-document entry (the best-ranked chunk's tags as stored; carried on the
   retrieval result if it isn't there yet) and §9.11: the request member `kalla.nearest` and the answer's `nearest`
   (`{ collection, topics }` of the turn's nearest hit for `not-found` and `answered-general`, `null` otherwise), from
@@ -306,6 +311,7 @@ one waits. Neither changes an answer that doesn't ask.
 ## Uploads (user, 2026-11-23)
 
 ### [ ] B-83 Replace by name: a known file's upload replaces it by default (admin §5.5.7 point 6; support case SA-11)
+- **Taken:** 2026-11-23, the main session on the user's machine (#1011), branch `b/B-83-replace-by-name`.
 - **Do:** in the upload's file list (drop zone and picker), match each added file's relative path against the source's
   live files before sending; when any match, one dialog lists them and asks *Replace the existing files* (default) or
   *Keep both*. *Replace* sends each match as that file's replacement, the way the row's *Replace* does (the same
