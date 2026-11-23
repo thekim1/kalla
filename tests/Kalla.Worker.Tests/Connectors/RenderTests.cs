@@ -187,13 +187,16 @@ public sealed class RenderTests : IAsyncLifetime
         // The driver's own message for <h1> (packages/isomorphic/cssParser.ts, Playwright 1.65.1).
         var browser = new FakeBrowser { SelectorError = "Unexpected token \"<\" while parsing css selector \"<h1>\". Did you mean to CSS.escape it?\nCall log:\n  - waiting for <h1>" };
         await using var renderer = Renderer(browser);
-        await using var path = _site.Fetch(renderer: renderer, render: RealRenderOptions());
+        // A page time limit far over the fetch's own work (3.8 s was seen on a loaded runner with a 3 s limit): waiting for the
+        // selector would take all of it, failing at once takes a fraction.
+        var render = RealRenderOptions(pageTimeoutSeconds: 30);
+        await using var path = _site.Fetch(renderer: renderer, render: render);
         var started = TimeProvider.System.GetTimestamp();
 
         var outcome = await path.Connector.FetchAsync(UrlListContext(FetchMode.Browser, readySelector: "<h1>"), Item("/"), Ct);
 
         outcome.ShouldBe(new FetchOutcome.Failed(RenderReasons.BadSelector));
-        TimeProvider.System.GetElapsedTime(started).ShouldBeLessThan(RealRenderOptions().PageTimeout, "a refused selector fails at once");
+        TimeProvider.System.GetElapsedTime(started).ShouldBeLessThan(render.PageTimeout / 2, "a refused selector fails at once");
         Directory.Exists(Path.Join(path.BlobRoot.FullName, "raw")).ShouldBeFalse();
     }
 
