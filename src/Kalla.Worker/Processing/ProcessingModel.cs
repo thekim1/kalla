@@ -203,7 +203,21 @@ public sealed record ChunkSetDraft
 /// <summary>Serialization of stage values for the output cache, and their <c>OutputHash</c> (engine design §8).</summary>
 public static class ProcessingJson
 {
-    public static JsonSerializerOptions Options => ContractJson.Options;
+    /// <summary>
+    /// The contract options, except that a constructor parameter left out reads as its default. Outputs are written without
+    /// their null members (<see cref="ContractJson"/>'s <c>WhenWritingNull</c>), so a nullable parameter that was null is
+    /// absent when the output is read back: a Word document's page count, a section without pages. Required parameters made
+    /// that a "required property missing" failure, and a .docx's parse job went dead. Only reading changes: what is written,
+    /// and so every <see cref="OutputHash"/>, stays the same.
+    /// </summary>
+    public static JsonSerializerOptions Options { get; } = ReadTolerant();
+
+    private static JsonSerializerOptions ReadTolerant()
+    {
+        var options = new JsonSerializerOptions(ContractJson.Options) { RespectRequiredConstructorParameters = false };
+        options.MakeReadOnly();
+        return options;
+    }
 
     /// <summary>SHA-256 of the RFC 8785 form of <paramref name="value"/>: equal values hash equal whatever the member order.</summary>
     public static byte[] OutputHash<T>(T value) => CanonicalJson.Sha256(JsonSerializer.SerializeToElement(value, Options));
