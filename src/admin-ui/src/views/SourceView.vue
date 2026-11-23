@@ -29,6 +29,7 @@ import { pollDelay } from '@/composables/useJobPoll'
 import { useKeysetList } from '@/composables/useKeysetList'
 import { runProgressText, runStateTone } from '@/utils/runs'
 import { problemMessage } from '@/utils/problem'
+import { isApiError } from '@/api/client'
 import PiiActions from '@/components/documents/PiiActions.vue'
 
 // Källa (admin design §5.5.3, §5.4 step 6; #278 slice 2): the source's settings with Ändra (impact confirmation, V25),
@@ -174,6 +175,30 @@ async function load(): Promise<void> {
   pii.value = await api.sources.piiReport(props.id).catch(() => null)
 }
 
+// Pause and resume (admin design §5.5.3; B-70): the source's version goes with the call; a version conflict reloads the
+// source and says so, so a second try acts on what is saved now.
+const paused = computed(() => source.data.value?.state === 'paused')
+const pausing = ref(false)
+async function togglePause(): Promise<void> {
+  const current = source.data.value
+  if (!current) return
+  pausing.value = true
+  syncError.value = null
+  try {
+    source.data.value = paused.value ? await api.sources.resume(current.id, current.version) : await api.sources.pause(current.id, current.version)
+    ui.notify(paused.value ? SOURCE_PAGE.paused : SOURCE_PAGE.resumed)
+  } catch (e) {
+    if (isApiError(e) && e.status === 409) {
+      await source.run(() => api.sources.get(props.id))
+      ui.notify(SOURCE_PAGE.pauseConflict)
+    } else {
+      syncError.value = e
+    }
+  } finally {
+    pausing.value = false
+  }
+}
+
 async function syncNow(): Promise<void> {
   syncing.value = true
   syncError.value = null
@@ -203,7 +228,13 @@ async function reloadPii(): Promise<void> {
       <PageHeader :title="source.data.value.name">
         <UiBadge :label="SOURCE_TYPE_LABEL[source.data.value.type]" />
         <UiBadge :label="LEVEL_LABEL[source.data.value.classification]" />
+        <UiBadge v-if="paused" tone="warn" :label="SOURCE_PAGE.pausedBadge" data-test="paused" />
         <UiButton v-if="canEdit" variant="primary" icon="sync" :loading="syncing" data-test="sync" @click="syncNow">{{ SOURCE_PAGE.syncNow }}</UiButton>
+        <UiButton
+          v-if="canEdit" :icon="paused ? 'play_arrow' : undefined" :loading="pausing" :data-test="paused ? 'resume' : 'pause'" @click="togglePause"
+        >
+          {{ paused ? SOURCE_PAGE.resume : SOURCE_PAGE.pause }}
+        </UiButton>
         <ContinueRunButton v-if="continuable && !activeRun" :run-id="continuable" can-continue @started="loadRuns()" />
         <CancelRunButton v-if="activeRun" :run-id="activeRun.id" :state="activeRun.state" @cancelled="loadRuns()" />
         <UiButton v-if="canDelete" variant="danger" icon="delete" data-test="delete" @click="openDelete">{{ DELETE.action }}</UiButton>

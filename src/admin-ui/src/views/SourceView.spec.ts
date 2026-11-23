@@ -3,7 +3,10 @@ import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
 import type { RunSummary, Source } from '@/api/types'
+import { ApiError } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
+import { useUiStore } from '@/stores/ui'
+import { SOURCE_PAGE } from '@/utils/labels'
 import { bffUser } from '@/test/fixtures'
 import SourceView from './SourceView.vue'
 
@@ -125,6 +128,64 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     await flushPromises()
     expect(wrapper.get('[data-test=schedule]').text()).toBe('0 6 * * 1-5')
     expect(wrapper.get('[data-test=next-run]').text()).toBe('None: the source is paused')
+  })
+
+  it('pauses and resumes with the source’s version, shows the paused state, and hides both without Edit (B-70)', async () => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = bffUser({ roles: ['rag-editor'] })
+    auth.status = 'authenticated'
+    vi.spyOn(api.sources, 'get').mockResolvedValue(source)
+    vi.spyOn(api.sources, 'runs').mockResolvedValue({ items: [], next: null })
+    vi.spyOn(api.sources, 'piiReport').mockResolvedValue(null as never)
+    const paused: Source = { ...source, state: 'paused', nextRunAt: null, version: '4' }
+    const pause = vi.spyOn(api.sources, 'pause').mockResolvedValue(paused)
+    const resume = vi.spyOn(api.sources, 'resume').mockResolvedValue({ ...source, version: '5' })
+    const wrapper = mount(SourceView, { props: { id: 's1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
+    await flushPromises()
+    expect(wrapper.find('[data-test=paused]').exists()).toBe(false)
+    expect(wrapper.find('[data-test=resume]').exists()).toBe(false)
+
+    await wrapper.get('[data-test=pause]').trigger('click')
+    await flushPromises()
+    expect(pause).toHaveBeenCalledWith('s1', '3')
+    expect(wrapper.get('[data-test=paused]').text()).toContain(SOURCE_PAGE.pausedBadge)
+    expect(wrapper.get('[data-test=next-run]').text()).toBe(SOURCE_PAGE.nextRunPaused)
+
+    await wrapper.get('[data-test=resume]').trigger('click')
+    await flushPromises()
+    expect(resume).toHaveBeenCalledWith('s1', '4')
+    expect(wrapper.find('[data-test=paused]').exists()).toBe(false)
+    expect(wrapper.find('[data-test=pause]').exists()).toBe(true)
+    wrapper.unmount()
+
+    // A viewer has neither.
+    auth.user = bffUser({ roles: ['rag-viewer'] })
+    const viewer = mount(SourceView, { props: { id: 's1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
+    await flushPromises()
+    expect(viewer.find('[data-test=pause]').exists()).toBe(false)
+    expect(viewer.find('[data-test=resume]').exists()).toBe(false)
+  })
+
+  it('reloads the source and says so when someone else changed it first (409)', async () => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = bffUser({ roles: ['rag-editor'] })
+    auth.status = 'authenticated'
+    const get = vi.spyOn(api.sources, 'get').mockResolvedValueOnce(source).mockResolvedValue({ ...source, state: 'paused', nextRunAt: null, version: '9' })
+    vi.spyOn(api.sources, 'runs').mockResolvedValue({ items: [], next: null })
+    vi.spyOn(api.sources, 'piiReport').mockResolvedValue(null as never)
+    vi.spyOn(api.sources, 'pause').mockRejectedValue(new ApiError(409, 'POST', { status: 409, title: 'Conflict', code: 'concurrent_change' } as never))
+    const ui = useUiStore()
+    const notify = vi.spyOn(ui, 'notify')
+    const wrapper = mount(SourceView, { props: { id: 's1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
+    await flushPromises()
+    await wrapper.get('[data-test=pause]').trigger('click')
+    await flushPromises()
+    expect(get).toHaveBeenCalledTimes(2)
+    expect(notify).toHaveBeenCalledWith(SOURCE_PAGE.pauseConflict)
+    expect(wrapper.find('[data-test=paused]').exists()).toBe(true) // what is saved now: someone else paused it
+    wrapper.unmount()
   })
 
   it('offers Continue beside Sync now when the latest crawl run can be continued, and reloads the runs (#804)', async () => {
