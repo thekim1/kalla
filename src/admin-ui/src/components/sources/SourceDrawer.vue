@@ -213,7 +213,7 @@ async function save(): Promise<void> {
     <form id="source-create" class="grid gap-5" novalidate @submit.prevent="save">
       <fieldset class="grid gap-2">
         <legend class="mb-1 font-medium">{{ SOURCE.chooseType }}</legend>
-        <label v-for="t in TYPES" :key="t" class="flex cursor-pointer gap-3 rounded-card border border-border p-3" :data-test="`type-${t}`">
+        <label v-for="t in TYPES" :key="t" class="flex cursor-pointer gap-3 rounded-card border border-border p-3 has-checked:bg-accent-soft has-checked:shadow-inset-selected" :data-test="`type-${t}`">
           <input v-model="type" type="radio" name="source-type" :value="t" class="mt-1" />
           <span>
             <span class="block font-medium">{{ SOURCE_TYPE_LABEL[t] }}</span>
@@ -249,8 +249,8 @@ async function save(): Promise<void> {
           <div class="mt-4 grid gap-5">
             <TextAreaField id="source-include" v-model="include" :label="SOURCE.include" :hint="SOURCE.includeHint" mono />
             <TextAreaField id="source-exclude" v-model="exclude" :label="SOURCE.exclude" :hint="SOURCE.excludeHint" mono />
-            <TextField id="source-max-pages" v-model="maxPages" :label="SOURCE.maxPages" inputmode="numeric" :error="form.errors.maxPages" />
-            <TextField id="source-max-depth" v-model="maxDepth" :label="SOURCE.maxDepth" inputmode="numeric" :error="form.errors.maxDepth" />
+            <TextField id="source-max-pages" v-model="maxPages" :label="SOURCE.maxPages" inputmode="numeric" short :error="form.errors.maxPages" />
+            <TextField id="source-max-depth" v-model="maxDepth" :label="SOURCE.maxDepth" inputmode="numeric" short :error="form.errors.maxDepth" />
           </div>
         </details>
         <SelectField

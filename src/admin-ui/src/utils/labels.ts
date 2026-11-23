@@ -88,6 +88,8 @@ export const SHELL = {
   skipToMain: 'Skip to main content',
   mainNav: 'Main menu',
   quickAccess: 'Quick access',
+  /** The breadcrumb above a detail page's title (admin design §5.12). */
+  breadcrumb: 'Breadcrumb',
   needAttention: ' need attention',
   theme: 'Theme',
   signOut: 'Sign out',
@@ -1015,6 +1017,8 @@ export const FILES = {
   } as Record<string, string>,
   /** A file the malware scan did not check (admin design §5.5.7; the deployment runs with the scan off, #535). */
   notScanned: 'Not scanned for malware',
+  /** Said once in the summary instead of on each row (admin design §5.5.7 point 4, §5.12 rule 5). */
+  notScannedSummary: (n: number) => `${formatNumber(n)} ${n === 1 ? 'file' : 'files'} not scanned for malware: the scan is off in this deployment`,
   replace: 'Replace',
   replaceLabel: (name: string) => `Replace ${name}`,
   select: (name: string) => `Select ${name}`,
@@ -1600,7 +1604,6 @@ export const RUN_PAGE = {
   document: 'Document',
   outcome: 'Outcome',
   reason: 'Reason',
-  back: 'Back to the source',
   more: 'Show more',
   politeness: 'Websites fetched with their own politeness',
   render: 'Pages fetched with a browser',

@@ -5,7 +5,7 @@ import type { Topic } from '@/api/types'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import { useLoadable } from '@/stores/loadable'
-import { formatNumber } from '@/utils/format'
+import { formatNumber, quietZero } from '@/utils/format'
 import { TOPICS } from '@/utils/labels'
 
 // Topics (admin design §5.5.2): the tags the sources' path rules put on the chunks, with document counts. The owner also
@@ -53,7 +53,7 @@ onMounted(load)
           </span>
           <span v-else class="text-fg-3">{{ TOPICS.noRule }}</span>
         </template>
-        <template #cell-documents="{ row }"><span class="tabular">{{ formatNumber(row.documents) }}</span></template>
+        <template #cell-documents="{ row }"><span class="tabular" :class="quietZero(row.documents)">{{ formatNumber(row.documents) }}</span></template>
       </DataTable>
     </AsyncState>
   </div>

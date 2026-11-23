@@ -12,7 +12,7 @@ import UiDialog from '@/components/ui/UiDialog.vue'
 import { useJobPoll } from '@/composables/useJobPoll'
 import { useLoadable } from '@/stores/loadable'
 import { useUiStore } from '@/stores/ui'
-import { formatDateTime, formatDecimal, formatNumber, formatUsdCost } from '@/utils/format'
+import { formatDateTime, formatDecimal, formatNumber, quietZero, formatUsdCost } from '@/utils/format'
 import { COMMON, EVALUATION } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 import EvaluationQuestions from './EvaluationQuestions.vue'
@@ -161,7 +161,7 @@ onMounted(load)
             <UiBadge v-if="row.candidate" :label="EVALUATION.candidate" class="ml-1" />
             <UiBadge v-if="!row.finishedAt" tone="accent" :label="EVALUATION.unfinished" class="ml-1" />
           </template>
-          <template #cell-count="{ row }"><span class="tabular">{{ formatNumber(row.questionCount) }}</span></template>
+          <template #cell-count="{ row }"><span class="tabular" :class="quietZero(row.questionCount)">{{ formatNumber(row.questionCount) }}</span></template>
           <template #cell-recall="{ row }"><span class="tabular">{{ decimals(row.recallAtK) }}</span></template>
           <template #cell-mrr="{ row }"><span class="tabular">{{ decimals(row.mrr) }}</span></template>
         </DataTable>

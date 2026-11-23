@@ -616,6 +616,8 @@ export interface UploadSummary {
   failed: number
   bytes: number
   lastUploadAt: IsoDateTime | null
+  /** Files not scanned for malware: `unscanned`, or `indexed` without `scannedAt` (admin design §5.5.7). */
+  notScanned: number
 }
 
 /** `GET /api/sources/{id}/quarantine`: metadata only (connectors §11). */

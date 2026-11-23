@@ -96,7 +96,7 @@ async function save(): Promise<void> {
       <SelectField id="assistant-department" v-model="departmentId" :label="ASSISTANTS.department" :options="departmentOptions" :error="form.errors.departmentId" />
       <fieldset class="grid gap-2">
         <legend class="mb-1 font-medium">{{ ASSISTANTS.level }}</legend>
-        <label v-for="l in LEVELS" :key="l" class="flex cursor-pointer gap-3 rounded-card border border-border p-3">
+        <label v-for="l in LEVELS" :key="l" class="flex cursor-pointer gap-3 rounded-card border border-border p-3 has-checked:bg-accent-soft has-checked:shadow-inset-selected">
           <input :id="`assistant-level-${l}`" v-model="level" type="radio" name="assistant-level" :value="l" class="mt-1" />
           <span><span class="block font-medium">{{ LEVEL_LABEL[l] }}</span><span class="block text-small text-fg-2">{{ LEVEL_HELP[l] }}</span></span>
         </label>

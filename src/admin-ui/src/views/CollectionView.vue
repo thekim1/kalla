@@ -20,6 +20,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import DetailRow from '@/components/ui/DetailRow.vue'
 import InlineError from '@/components/ui/InlineError.vue'
+import PageBreadcrumb from '@/components/layout/PageBreadcrumb.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import SelectField from '@/components/ui/SelectField.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
@@ -33,8 +34,8 @@ import KeyBudgetStatus from '@/components/gateway/KeyBudgetStatus.vue'
 import KeyUnavailableBadge from '@/components/gateway/KeyUnavailableBadge.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
-import { formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
-import { COLLECTION, COLLECTIONS, DELETE, EDIT_DRAWER, EVALUATION, LEVEL_LABEL, MOVE_DEPARTMENT, RETRIEVAL, RUN_STATE_LABEL, SOURCE, SOURCE_TYPE_LABEL } from '@/utils/labels'
+import { formatDateTime, formatDecimal, formatNumber, quietZero } from '@/utils/format'
+import { COLLECTION, COLLECTIONS, DELETE, EDIT_DRAWER, EVALUATION, LEVEL_LABEL, MOVE_DEPARTMENT, PAGE, RETRIEVAL, RUN_STATE_LABEL, SOURCE, SOURCE_TYPE_LABEL } from '@/utils/labels'
 import MoveDepartmentDrawer from '@/components/organisation/MoveDepartmentDrawer.vue'
 import { problemMessage } from '@/utils/problem'
 import PiiActions from '@/components/documents/PiiActions.vue'
@@ -259,6 +260,7 @@ onMounted(load)
 <template>
   <AsyncState :loading="read.loading.value && !read.data.value" :error="read.error.value" @retry="load">
     <template v-if="shared">
+      <PageBreadcrumb :items="[{ label: PAGE.collections.title, to: { name: 'collections' } }]" />
       <PageHeader :title="shared.name" :description="shared.departmentName">
         <UiBadge :label="LEVEL_LABEL[shared.classification]" />
         <UiBadge tone="accent" :label="COLLECTIONS.shared" data-test="shared" />
@@ -284,6 +286,7 @@ onMounted(load)
       </div>
     </template>
     <template v-else-if="collection.data.value">
+      <PageBreadcrumb :items="[{ label: PAGE.collections.title, to: { name: 'collections' } }]" />
       <PageHeader :title="collection.data.value.name">
         <UiBadge :label="LEVEL_LABEL[collection.data.value.classification]" />
         <UiBadge
@@ -392,7 +395,7 @@ onMounted(load)
               </template>
               <span v-else class="text-fg-3">{{ COLLECTION.sourceNoRun }}</span>
             </template>
-            <template #cell-documents="{ row }"><span class="tabular">{{ formatNumber(row.documents) }}</span></template>
+            <template #cell-documents="{ row }"><span class="tabular" :class="quietZero(row.documents)">{{ formatNumber(row.documents) }}</span></template>
             <template #cell-state="{ row }">{{ COLLECTION.sourceStates[row.state] ?? row.state }}</template>
           </DataTable>
         </AsyncState>

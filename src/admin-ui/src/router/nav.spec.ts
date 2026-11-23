@@ -4,7 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { ROLES } from '@/api/types'
 import { ragRoles, useAuthStore } from '@/stores/auth'
 import { createAppRouter, routes } from '.'
-import { ALL_ROLES, filterEntries, mobileTabs, navGroups, searchEntries } from './nav'
+import { ALL_ROLES, filterEntries, isNavItemActive, mobileTabs, navGroups, searchEntries } from './nav'
 import { NAV_KEYWORDS, PAGE, PLATFORM } from '@/utils/labels'
 
 describe('menu structure (copied checks)', () => {
@@ -123,5 +123,16 @@ describe('Costs (admin design §3.3, §8.6; B-41)', () => {
     await router.push('/costs')
     expect(router.currentRoute.value.name).toBe('forbidden')
     expect(router.currentRoute.value.query.from).toBe('/costs')
+  })
+})
+
+describe('the menu item stays lit on a detail page (admin design §5.12, Every page)', () => {
+  const item = (name: string) => navGroups.flatMap((g) => g.items).find((i) => i.name === name)!
+
+  it('lights Knowledge bases on a knowledge base, a source, a run and a publication, and Assistants on an assistant', () => {
+    for (const page of ['collections', 'collection', 'source', 'run', 'publication']) expect(isNavItemActive(item('collections'), page)).toBe(true)
+    expect(isNavItemActive(item('assistants'), 'assistant')).toBe(true)
+    expect(isNavItemActive(item('assistants'), 'collection')).toBe(false)
+    for (const page of ['collection', 'source', 'assistant']) expect(routes.some((r) => r.name === page)).toBe(true)
   })
 })

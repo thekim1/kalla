@@ -173,7 +173,8 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     await flushPromises()
     expect(wrapper.get('[data-test=used-by]').text()).toBe('Permits assistant, GK check (archived)')
     // Each name links to its assistant (§5.5.2), the archived one too.
-    expect(wrapper.findAllComponents(RouterLinkStub).map((l) => l.props('to'))).toEqual([
+    const usedBy = wrapper.get('[data-test=used-by]').element
+    expect(wrapper.findAllComponents(RouterLinkStub).filter((l) => usedBy.contains(l.element)).map((l) => l.props('to'))).toEqual([
       { name: 'assistant', params: { id: 'a1' } },
       { name: 'assistant', params: { id: 'a2' } },
     ])
@@ -459,7 +460,7 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     const full = (id: string, name: string) => ({ ...upload(id, name), settings: {}, version: '1' }) as unknown as Source
 
     function mockFiles() {
-      vi.spyOn(api.sources, 'filesSummary').mockResolvedValue({ total: 0, processing: 0, indexed: 0, failed: 0, bytes: 0, lastUploadAt: null })
+      vi.spyOn(api.sources, 'filesSummary').mockResolvedValue({ total: 0, processing: 0, indexed: 0, failed: 0, bytes: 0, lastUploadAt: null, notScanned: 0 })
       return vi.spyOn(api.sources, 'files').mockResolvedValue({ items: [], next: null })
     }
 

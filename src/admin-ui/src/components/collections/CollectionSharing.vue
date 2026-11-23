@@ -69,10 +69,10 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="grid max-w-4xl gap-5">
+  <div class="grid max-w-[680px] gap-5">
     <fieldset class="grid gap-2">
       <legend class="mb-1 font-medium">{{ SHARING.question }}</legend>
-      <label v-for="l in LEVELS" :key="l" class="flex gap-3 rounded-card border border-border p-3" :class="canManage ? 'cursor-pointer' : 'cursor-not-allowed'">
+      <label v-for="l in LEVELS" :key="l" class="flex gap-3 rounded-card border border-border p-3 has-checked:bg-accent-soft has-checked:shadow-inset-selected" :class="canManage ? 'cursor-pointer' : 'cursor-not-allowed'">
         <input :id="`sharing-${l}`" v-model="level" type="radio" name="sharing" :value="l" class="mt-1" :disabled="!canManage" />
         <span class="font-medium">{{ levelLabel(l) }}</span>
       </label>

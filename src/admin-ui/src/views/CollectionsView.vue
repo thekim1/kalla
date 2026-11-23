@@ -14,7 +14,7 @@ import UiTabs from '@/components/ui/UiTabs.vue'
 import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
-import { formatDate, formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
+import { formatDate, formatDateTime, formatDecimal, formatNumber, quietZero } from '@/utils/format'
 import { COLLECTIONS, LEVEL_LABEL, PAGE, RUN_STATE_LABEL, SHARING_LABEL } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 import { runStateTone } from '@/utils/runs'
@@ -88,7 +88,7 @@ onMounted(async () => {
       <template #cell-department="{ row }">{{ row.departmentName }}</template>
       <template #cell-level="{ row }">{{ LEVEL_LABEL[row.classification as CollectionSummary['classification']] }}</template>
       <template #cell-sharing="{ row }">{{ SHARING_LABEL[row.sharedWith as CollectionSummary['sharedWith']] }}</template>
-      <template #cell-documents="{ row }"><span class="tabular">{{ formatNumber(row.documentCount) }}</span></template>
+      <template #cell-documents="{ row }"><span class="tabular" :class="quietZero(row.documentCount)">{{ formatNumber(row.documentCount) }}</span></template>
       <template #cell-lastFetch="{ row }">
         <RouterLink v-if="row.lastRun" :to="{ name: 'run', params: { id: row.lastRun.id } }" class="text-fg hover:text-fg hover:underline" :data-test="`last-fetch-${row.id}`">
           <span class="tabular">{{ formatDateTime(row.lastRun.startedAt) }}</span>
