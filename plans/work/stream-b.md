@@ -6,6 +6,7 @@ Stream B owns the schema, the admin API, every admin page, retrieval, knowledge 
 **How to use:** take the first item that is not ticked and not waiting. One PR per item (branch `b/<id>-<slug>`), and
 tick it here in that PR (`[x] … (#PR)`). Record `to-verify` rows in [`results-b.md`](results-b.md). If an item is
 waiting, take the next one. Live items need the inputs named in *Waits on*; don't start them early.
+An item someone has started says **Taken** with the date and branch; leave it to them.
 
 Finished items move to [`../archive/work/`](../archive/work/) at each release (the main session); find one by its ID.
 
@@ -78,6 +79,7 @@ tables in one migration of its own (no backward compatibility before production)
   processing §14.8 (the judge prompt family).
 
 ### [ ] B-58 The nightly answer run
+- **Taken:** 2026-11-23, thekim1's Claude Code session, branch `b/B-58-nightly-answer-run`.
 - **Do:** processing §14.8 *answers*: `AnswerEvaluationService` in kalla-admin, nightly per published assistant: the
   evaluation sets of its collections answered through `Kalla.Answering` with the published version's settings, the
   judge (`Settings.EvaluationJudgeModel` at the assistant's ceiling, `x-fors-step: eval-answer`) rating faithfulness
@@ -102,6 +104,7 @@ tables in one migration of its own (no backward compatibility before production)
   (`uncited_answer`).
 
 ### [ ] B-59 Home: *Needs attention*
+- **Taken:** 2026-11-23, thekim1's Claude Code session, branch `b/B-59-needs-attention`.
 - **Do:** admin §5.5.1: `GET /api/overview`'s attention list for the caller's scope (a kind, the object, the reason, a
   link) with the twelve items that §5.5.1's table marks *the list* (V32's Overview warning among them), the *Needs
   attention* card at the top of Home and the badge count; one query per kind, each from data the admin already has.
