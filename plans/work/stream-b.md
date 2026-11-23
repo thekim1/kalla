@@ -153,8 +153,7 @@ After wave 1, or beside it when a wave-1 item waits.
 Decisions "Progress, timings and the nearest subject in the chat extension". After the wave items, or beside them when
 one waits. Neither changes an answer that doesn't ask.
 
-### [ ] B-72 Progress chunk and timings (`kalla.progress`, `kalla.timings`)
-- **Taken:** 2026-11-23, the main session on the user's machine (#1011), branch `b/B-72-progress-timings`.
+### [x] B-72 Progress chunk and timings (`kalla.progress`, `kalla.timings`) (#1021)
 - **Do:** chat §3.8's two request members (a value that is not a boolean: 400 `invalid_request` with its `param`) and
   §9.10: on a streamed turn that gets a model answer, one `kalla` chunk `{"progress":"writing"}` as the first byte,
   written after step 13's checks have passed (§4.1) and before the role chunk, with the related documents (no `cited`,
