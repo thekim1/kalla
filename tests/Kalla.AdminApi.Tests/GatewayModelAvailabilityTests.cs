@@ -31,22 +31,6 @@ public sealed class GatewayModelAvailabilityTests(AdminDatabaseFixture database)
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    /// <summary>Counts the gateway's <c>/v1/models</c> calls on the way to the FakeGateway.</summary>
-    private sealed class CountingHandler(HttpMessageHandler inner) : DelegatingHandler(inner)
-    {
-        public int ModelLists;
-
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            if (request.RequestUri!.AbsolutePath.EndsWith("/v1/models", StringComparison.Ordinal))
-            {
-                Interlocked.Increment(ref ModelLists);
-            }
-
-            return base.SendAsync(request, cancellationToken);
-        }
-    }
-
     private static WebApplicationFactory<FakeGatewayProgram> Gateway() => new WebApplicationFactory<FakeGatewayProgram>().WithWebHostBuilder(web =>
     {
         web.UseEnvironment("Development");
@@ -136,19 +120,19 @@ public sealed class GatewayModelAvailabilityTests(AdminDatabaseFixture database)
     {
         await MirrorAsync();
         await using var gateway = Gateway();
-        var counter = new CountingHandler(gateway.Server.CreateHandler());
+        var counter = new CountingHandler(gateway.Server.CreateHandler(), r => r.RequestUri!.AbsolutePath.EndsWith("/v1/models", StringComparison.Ordinal)); // the /v1/models calls
         var time = new FakeTimeProvider(DateTimeOffset.UtcNow);
         await using var factory = Admin(gateway, counter, time);
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
 
         await AvailableAsync(admin);
         await AvailableAsync(admin);
-        counter.ModelLists.ShouldBe(1);
+        counter.Count.ShouldBe(1);
         await AvailableAsync(admin, "?level=public"); // another ceiling, another list
-        counter.ModelLists.ShouldBe(2);
+        counter.Count.ShouldBe(2);
         time.Advance(GatewayModelAvailability.CacheFor);
         await AvailableAsync(admin);
-        counter.ModelLists.ShouldBe(3);
+        counter.Count.ShouldBe(3);
     }
 
     [Fact]

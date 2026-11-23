@@ -6,6 +6,7 @@ using Microsoft.Extensions.Time.Testing;
 using Kalla.Domain;
 using Kalla.Domain.Retrieval;
 using Kalla.Infrastructure.Gateway;
+using Kalla.TestKit;
 using static Kalla.Retrieval.Tests.Make;
 
 namespace Kalla.Retrieval.Tests;
@@ -45,14 +46,14 @@ public sealed partial class ChatModelRerankerTests : IDisposable
     private static SearchRequest Request(string? model = Model) =>
         new("altan bygglov", RerankScope(model), Embed: Embed, Rerank: new RerankCall(Residency.Eu, Guid.Parse("01929b6e-0000-7000-8000-0000000000aa")));
 
-    private RetrievalEngine Engine(Gateway gateway, TimeSpan? timeout = null) =>
+    private RetrievalEngine Engine(StubHandler gateway, TimeSpan? timeout = null) =>
         new(_index, _sizes, new RetrievalEngineOptions { RerankTimeout = timeout ?? TimeSpan.FromSeconds(5) }, new ChatModelReranker(gateway), new FakeTexts());
 
     [Fact]
     public async Task One_chat_call_at_the_ceiling_scores_every_passage_and_reorders_before_the_cap()
     {
         // The model favours chunk 4 (cut by the cap without reranking) and chunk 6.
-        var gateway = new Gateway(prompt => Answer(prompt, new Dictionary<Guid, int> { [Id(4)] = 10, [Id(6)] = 9 }));
+        var gateway = Gateway(prompt => Answer(prompt, new Dictionary<Guid, int> { [Id(4)] = 10, [Id(6)] = 9 }));
         using var engine = Engine(gateway);
         var result = await engine.SearchAsync(Request(), Ct);
 
@@ -63,7 +64,7 @@ public sealed partial class ChatModelRerankerTests : IDisposable
         result.Degraded.ShouldBeNull();
         result.RerankUsage.ShouldBe(new GatewayCallUsage(ChatModelReranker.Step, Model, 1200, 0, 80, null));
 
-        var call = gateway.Calls.ShouldHaveSingleItem();
+        var call = gateway.Requests.ShouldHaveSingleItem();
         call.Path.ShouldBe("/v1/chat/completions");
         call.Headers["x-fors-max-residency"].ShouldBe("Eu");
         call.Headers["x-fors-step"].ShouldBe(ChatModelReranker.Step);
@@ -86,11 +87,11 @@ public sealed partial class ChatModelRerankerTests : IDisposable
     [Fact]
     public async Task Claude_models_get_no_temperature()
     {
-        var gateway = new Gateway(prompt => Answer(prompt, new Dictionary<Guid, int>()));
+        var gateway = Gateway(prompt => Answer(prompt, new Dictionary<Guid, int>()));
         using var engine = Engine(gateway);
         await engine.SearchAsync(Request("claude-haiku-4-5"), Ct);
 
-        using var body = JsonDocument.Parse(gateway.Calls.ShouldHaveSingleItem().Body);
+        using var body = JsonDocument.Parse(gateway.Requests.ShouldHaveSingleItem().Body);
         body.RootElement.TryGetProperty("temperature", out _).ShouldBeFalse();
         ChatModelReranker.SendsTemperature("eu/Claude-Sonnet-4-5").ShouldBeFalse();
         ChatModelReranker.SendsTemperature("fors/small-eu").ShouldBeTrue();
@@ -133,8 +134,8 @@ public sealed partial class ChatModelRerankerTests : IDisposable
     public async Task Unscored_passages_keep_their_fused_order_below_the_scored_ones_and_the_count_is_logged()
     {
         // Six passages in fused order 5, 1, 2, 6, 3, 4; the model scores only 6, 3 and 1 (three of six: half).
-        var logger = new ListLogger();
-        var gateway = new Gateway(prompt =>
+        var logger = new ListLogger<ChatModelReranker>();
+        var gateway = Gateway(prompt =>
         {
             var ids = PassageIds(prompt);
             var entries = new[] { (Id(6), 9), (Id(3), 2), (Id(1), 5) }.Select(x => new { id = ids.IndexOf(x.Item1) + 1, score = x.Item2 });
@@ -154,7 +155,7 @@ public sealed partial class ChatModelRerankerTests : IDisposable
     [Fact]
     public async Task Malformed_output_keeps_the_fused_order_with_rerank_unavailable_and_the_calls_usage()
     {
-        using var engine = Engine(new Gateway(_ => Ok("""{"scores": [{"id": 1, "score": 9}]}""")));
+        using var engine = Engine(Gateway(_ => Ok("""{"scores": [{"id": 1, "score": 9}]}""")));
         var result = await engine.SearchAsync(Request(), Ct);
 
         result.Hits.Select(h => h.Candidate.ChunkId).ShouldBe(FusedOrder);
@@ -168,7 +169,7 @@ public sealed partial class ChatModelRerankerTests : IDisposable
     [Fact]
     public async Task A_timeout_keeps_the_fused_order_with_rerank_unavailable()
     {
-        var gateway = new Gateway(async (_, ct) =>
+        var gateway = Gateway(async (_, ct) =>
         {
             await Task.Delay(Timeout.InfiniteTimeSpan, ct);
             return Ok("{}");
@@ -180,13 +181,13 @@ public sealed partial class ChatModelRerankerTests : IDisposable
         started.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(5));
         result.Hits.Select(h => h.Candidate.ChunkId).ShouldBe(FusedOrder);
         result.Degraded.ShouldBe(RetrievalDegradation.RerankUnavailable);
-        gateway.Calls.Count.ShouldBe(1);
+        gateway.Requests.Count.ShouldBe(1);
     }
 
     [Fact]
     public async Task A_refused_call_or_an_unset_model_keeps_the_fused_order_with_rerank_unavailable()
     {
-        var refusing = new Gateway(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+        var refusing = Gateway(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
         using (var engine = Engine(refusing))
         {
             var refused = await engine.SearchAsync(Request(), Ct);
@@ -194,7 +195,7 @@ public sealed partial class ChatModelRerankerTests : IDisposable
             refused.Degraded.ShouldBe(RetrievalDegradation.RerankUnavailable);
         }
 
-        var unused = new Gateway(_ => Ok("{}"));
+        var unused = Gateway(_ => Ok("{}"));
         using (var engine = Engine(unused))
         {
             // An explicit request without a model (the evaluation's hybrid-rerank); chat and the test panel never ask (B-16).
@@ -203,7 +204,7 @@ public sealed partial class ChatModelRerankerTests : IDisposable
             unset.Degraded.ShouldBe(RetrievalDegradation.RerankUnavailable);
         }
 
-        unused.Calls.ShouldBeEmpty();
+        unused.Requests.ShouldBeEmpty();
     }
 
     [Fact]
@@ -248,46 +249,17 @@ public sealed partial class ChatModelRerankerTests : IDisposable
     [GeneratedRegex(@"^<passage id=""(\d+)"">$", RegexOptions.Multiline)]
     private static partial Regex PassageTag();
 
-    /// <summary>Collects the formatted log messages.</summary>
-    private sealed class ListLogger : Microsoft.Extensions.Logging.ILogger<ChatModelReranker>
-    {
-        public List<string> Messages { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state)
-            where TState : notnull => null;
-
-        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
-
-        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
-            Messages.Add(formatter(state, exception));
-    }
-
-    public sealed record Call(string Path, IReadOnlyDictionary<string, string> Headers, string Body);
-
     /// <summary>A gateway stub behind <see cref="IHttpClientFactory"/>: records each call and answers from the prompt.</summary>
-    private sealed class Gateway : HttpMessageHandler, IHttpClientFactory
+    private static StubHandler Gateway(Func<string, HttpResponseMessage> answer) => Gateway((prompt, _) => Task.FromResult(answer(prompt)));
+
+    private static StubHandler Gateway(Func<string, CancellationToken, Task<HttpResponseMessage>> answer) => new(async (request, ct) =>
     {
-        private readonly Func<string, CancellationToken, Task<HttpResponseMessage>> _answer;
-
-        public Gateway(Func<string, HttpResponseMessage> answer) => _answer = (prompt, _) => Task.FromResult(answer(prompt));
-
-        public Gateway(Func<string, CancellationToken, Task<HttpResponseMessage>> answer) => _answer = answer;
-
-        public List<Call> Calls { get; } = [];
-
-        public HttpClient CreateClient(string name)
+        string prompt;
+        using (var json = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct)))
         {
-            name.ShouldBe(ChatModelReranker.HttpClientName);
-            return new HttpClient(this, disposeHandler: false) { BaseAddress = new Uri("http://gateway.invalid/") };
+            prompt = json.RootElement.GetProperty("messages")[1].GetProperty("content").GetString()!;
         }
 
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            var body = await request.Content!.ReadAsStringAsync(cancellationToken);
-            Calls.Add(new Call(request.RequestUri!.AbsolutePath, request.Headers.ToDictionary(h => h.Key, h => string.Join(",", h.Value)), body));
-            using var json = JsonDocument.Parse(body);
-            var prompt = json.RootElement.GetProperty("messages")[1].GetProperty("content").GetString()!;
-            return await _answer(prompt, cancellationToken);
-        }
-    }
+        return await answer(prompt, ct);
+    }, ChatModelReranker.HttpClientName);
 }

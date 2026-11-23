@@ -62,7 +62,7 @@ public sealed class IntegrationReadbackTests(AdminDatabaseFixture database)
             {
                 services.AddHttpClient(GatewayContextReader.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
                 services.AddHttpClient(IntegrationApiClient.HttpClientName)
-                    .ConfigurePrimaryHttpMessageHandler(() => new Counting(integration ?? gateway.Server.CreateHandler(), () => Interlocked.Increment(ref _integrationCalls)));
+                    .ConfigurePrimaryHttpMessageHandler(() => new CountingHandler(integration ?? gateway.Server.CreateHandler(), counted: () => Interlocked.Increment(ref _integrationCalls)));
             });
         });
         (await factory.Services.GetRequiredService<GatewayContextReader>().ReadAsync(Ct)).ShouldBeTrue();
@@ -74,15 +74,6 @@ public sealed class IntegrationReadbackTests(AdminDatabaseFixture database)
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
-    }
-
-    private sealed class Counting(HttpMessageHandler inner, Action counted) : DelegatingHandler(inner)
-    {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            counted();
-            return base.SendAsync(request, cancellationToken);
-        }
     }
 
     /// <summary>A department with the dev key <see cref="Chatbot"/> in its mirror.</summary>

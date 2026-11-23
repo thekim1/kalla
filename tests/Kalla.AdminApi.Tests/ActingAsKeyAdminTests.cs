@@ -34,7 +34,7 @@ public sealed class ActingAsKeyAdminTests(AdminDatabaseFixture database)
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private readonly ConcurrentQueue<(string Path, string? OnBehalfOf)> _sent = new();
+    private readonly ConcurrentQueue<RecordedRequest> _sent = new();
 
     private static WebApplicationFactory<FakeGatewayProgram> Gateway() => new WebApplicationFactory<FakeGatewayProgram>().WithWebHostBuilder(web =>
     {
@@ -57,20 +57,10 @@ public sealed class ActingAsKeyAdminTests(AdminDatabaseFixture database)
             foreach (var name in new[] { GatewayChatClient.HttpClientName, GatewayQueryEmbedder.HttpClientName, GatewayContextReader.HttpClientName })
             {
                 services.UseGatewayCredentialCeiling();
-                services.AddHttpClient(name).ConfigurePrimaryHttpMessageHandler(() => new Sent(gateway.Server.CreateHandler(), _sent));
+                services.AddHttpClient(name).ConfigurePrimaryHttpMessageHandler(() => new RecordingHandler(gateway.Server.CreateHandler(), _sent));
             }
         });
     });
-
-    /// <summary>Records each request's path and <c>x-fors-on-behalf-of</c>.</summary>
-    private sealed class Sent(HttpMessageHandler inner, ConcurrentQueue<(string, string?)> sent) : DelegatingHandler(inner)
-    {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            sent.Enqueue((request.RequestUri!.AbsolutePath, request.Headers.TryGetValues(GatewayHeaders.OnBehalfOf, out var v) ? string.Join(",", v) : null));
-            return base.SendAsync(request, cancellationToken);
-        }
-    }
 
     [Fact]
     public async Task The_test_panel_runs_as_the_assistants_key_and_the_retrieval_test_as_the_knowledge_bases()
@@ -135,7 +125,7 @@ public sealed class ActingAsKeyAdminTests(AdminDatabaseFixture database)
 
         var panel = _sent.Where(s => s.Path != "/v1/fors/context").ToList();
         panel.ShouldContain(s => s.Path == "/v1/chat/completions");
-        panel.ShouldAllBe(s => s.OnBehalfOf == AssistantKey.ToString("D"));
+        panel.ShouldAllBe(s => s.Header(GatewayHeaders.OnBehalfOf) == AssistantKey.ToString("D"));
         gateway.Services.GetRequiredService<FakeUsage>().Records.Where(r => r.Step == "chat-answer").ShouldAllBe(r => r.KeyId == AssistantKey);
 
         // The retrieval test: the query embedding as the knowledge base's key.
@@ -147,6 +137,6 @@ public sealed class ActingAsKeyAdminTests(AdminDatabaseFixture database)
 
         var retrieval = _sent.Where(s => s.Path == "/v1/embeddings").ToList();
         retrieval.ShouldNotBeEmpty();
-        retrieval.ShouldAllBe(s => s.OnBehalfOf == CollectionKey.ToString("D"));
+        retrieval.ShouldAllBe(s => s.Header(GatewayHeaders.OnBehalfOf) == CollectionKey.ToString("D"));
     }
 }

@@ -1,5 +1,7 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Kalla.Domain.Retrieval;
+using Kalla.TestKit;
 using static Kalla.Retrieval.Tests.Make;
 
 namespace Kalla.Retrieval.Tests;
@@ -161,7 +163,7 @@ public sealed class KeywordStopListTests
     {
         // #499, B-25: a refresh that fails (for example on the role's statement timeout) is visible, not silent.
         var index = new FakeIndex { Counts = [new(Profile, CollectionA, 10_000)], LexemeFailure = new TimeoutException("KeywordStatistics") };
-        var logger = new GatewayRerankerTests.ListLogger();
+        var logger = new ListLogger<ScopeSizeCache>(LogLevel.Warning);
         var time = new FakeTimeProvider();
         using var cache = new ScopeSizeCache(index, time, logger: logger);
         (await cache.StopLexemesAsync(OneCollection(), Ct)).ShouldBeEmpty();

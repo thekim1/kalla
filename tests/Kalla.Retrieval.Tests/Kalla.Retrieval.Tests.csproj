@@ -4,6 +4,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Kalla.Retrieval\Kalla.Retrieval.csproj" />
+    <ProjectReference Include="..\Kalla.TestKit\Kalla.TestKit.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Data\**" CopyToOutputDirectory="PreserveNewest" />
