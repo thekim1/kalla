@@ -59,11 +59,11 @@ pilot department uses its assistant in Open WebUI. The steps, in order; a step s
 | 0 | The gateway and Källa as deployed for the test chatbot (T0, T1), or the test host's own | T0–T1 | user | after the test chatbot |
 | 1 | Gateway and Keycloak for the pilot: pilot accounts, the key that allows the model `turkos` is published on | step 0 | user | open |
 | 2 | U1 with the web editors, then the umea.se crawl in full and the `lastmod` sample's first pass (A-L1, A-L4) | U1 page URL, owner, contact | user + web editors | open |
-| 3 | Gold set written with DoIT, entered, run three ways (`scripts/grading/`); not-found thresholds set from it | the gold set and its reviewers | user + DoIT | open |
+| 3 | Gold set written with DoIT, entered (B-L2), run three ways by the worker's evaluation run; not-found thresholds set from it; answers hand-graded with `scripts/grading/` for the gate | the gold set and its reviewers | user + DoIT | open |
 | 4 | Test host: deploy from the release bundle, restore drill, R1 performance test, a week of nightly evaluation (A-L5–A-L7) | test host, backup target, key-escrow location, runner (R1) | user, IT security | open |
 | 5 | Checks on the crawled collection: `lastmod` result, freshness and HNSW recall, personal-data dry run (A-L8, A-L9) | steps 2, 4 | stream a | open |
 | 6 | Live feedback import, banner and public-records route | G1 | user + data protection officer | open |
-| 7 | Before go-live: the 7-day package rule applies again; GitHub Actions pinned by SHA with automated bumps (A-20, A-27); `release.yml` and `entra.yml` on a runner of their own under a separate user (#704, Decisions "CI on the self-hosted runner"); LibreOffice placement with the parser sandbox question (Decisions "Legacy Office and RTF uploads") | – | streams, main | postponed on purpose (2026-11-08) |
+| 7 | Before go-live: the 7-day package rule applies again; `release.yml` and `entra.yml` on a runner of their own under a separate user (#704, Decisions "CI on the self-hosted runner"); LibreOffice placement with the parser sandbox question (Decisions "Parser"); to-verify #182–#184 (M-4) | – | streams, main | postponed on purpose (2026-11-08) |
 | 8 | The gate graded by department reviewers; the pilot goes live (M-4) | steps 1–7 | user + main | open |
 
 **Owners and dates** (umea.se pilot). The phase-start rule (`postponed-decisions.md`) asks for a named person and a date on every

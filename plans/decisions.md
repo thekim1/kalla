@@ -422,9 +422,9 @@ freshclam updates from `database.clamav.net`; no internal mirror. Detail: `platf
 ### CI/CD
 
 GitHub Actions run build, test and release. RAG's own Entra registrations are Bicep with the Graph extension, applied
-by `entra.yml`. Pinning actions by commit SHA with automated pin bumps (A-20, A-27) is postponed until before go-live. Detail: `platform/repo-and-deployment.md` §8.1.
+by `entra.yml`. Actions are pinned by commit SHA, with automated pin bumps (A-20, A-27). Detail: `platform/repo-and-deployment.md` §8.1.
 
-*From:* log rows 8, 10, 31; decided by user, 2026-10-29; SHA pins postponed, 2026-11-08.
+*From:* log rows 8, 10, 31; decided by user, 2026-10-29; SHA pins postponed, 2026-11-08, then built (A-20, A-27).
 
 ### CI on the self-hosted runner
 

@@ -47,19 +47,20 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 ### [ ] A-L1 umea.se inventory and the `lastmod` sample's first pass
 - **Do:** run the sitemap inventory (formats, legacy share for Z1, JavaScript need); fetch the 500-URL `lastmod`
   sample and note the re-fetch date (≥ 7 days later).
-- **Done when:** inventory recorded; renderer confirmed not needed (or reported); first pass stored (#139, #170).
+- **Done when:** inventory recorded; renderer confirmed not needed (or reported); first pass stored (#170).
 - **Waits on:** U1 with the web editors.
 - **Read:** connectors §5.4.
 
 ### [ ] A-L2 Parser on real PDFs
 - **Do:** OCR acceptance; text layer vs Docling on 200 umea.se PDFs; parser latency.
-- **Done when:** #131, #132, #79, #80, #110 recorded.
+- **Done when:** #131, #132, #80, #62, #65, #150 recorded.
 - **Waits on:** A-L1.
 - **Read:** parser §15, §16.
 
 ### [ ] A-L3 EU-route capacity and initial-load cost
 - **Do:** `scripts/capacity/` against the EU embedding and chat routes.
-- **Done when:** numbers recorded; the user told the expected initial-load time and cost for umea.se.
+- **Done when:** numbers recorded, with the TTFT p99 of the slowest pilot answer model for a full 16k-token prompt
+  (#149); the user told the expected initial-load time and cost for umea.se.
 - **Waits on:** the gateway session (EU routes, pilot keys).
 - **Read:** performance pass §3.9.
 
@@ -73,8 +74,8 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 ### [ ] A-L5 Test host: deploy and restore drill
 - **Do:** deploy the current release behind the municipal proxy; point-in-time restore drill at a realistic size;
   read escrowed keys back.
-- **Done when:** health green through the proxy; RPO ≤ 5 min and RTO ≤ 4 h achieved and documented (#90, #123,
-  #129).
+- **Done when:** health green through the proxy; RPO ≤ 5 min and RTO ≤ 4 h achieved and documented (#90, #129,
+  #145, #161); Chromium's sandbox under the host's Docker Engine (#29).
 - **Waits on:** test host, backup target, key-escrow location (user).
 - **Read:** repo-and-deployment §7.4.
 
@@ -82,8 +83,8 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Do:** `perf.yml` (or the same harness by script); set the pilot CPU caps from the result. Also record the p95 of
   `rag.admin.config_lock.wait` (to-verify #23, after B-13) and whether the chat conversation writer keeps up; only if it
   falls behind does stream B batch its statements into one round trip (#392, to-verify #20).
-- **Done when:** chat p95 TTFT in phase 2 ≤ 1.10 × phase 1, no errors; caps in `compose.host-24g.yaml` (#100, #101,
-  #106).
+- **Done when:** chat p95 TTFT in phase 2 ≤ 1.10 × phase 1, no errors; caps in `compose.host-24g.yaml` (#6, #21, #100,
+  #101, #102, #104, #106, #140, #141, #162, #181).
 - **Waits on:** A-L5; the self-hosted runner or the accepted stopgap.
 - **Read:** repo-and-deployment §6.2, §8.3.
 
@@ -98,7 +99,7 @@ Finished items move to [`../archive/work/`](../archive/work/) at each release (t
 - **Waits on:** A-L1 + 7 days.
 
 ### [ ] A-L9 Personal-data dry run on the full crawl
-- **Done when:** flags reviewed with the platform team; `PiiOwnDomains` adjusted if needed.
+- **Done when:** flags reviewed with the platform team; `PiiOwnDomains` adjusted if needed (#179).
 - **Waits on:** A-L4.
 - **Read:** processing §9.
 
