@@ -188,6 +188,67 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     wrapper.unmount()
   })
 
+  it('makes Resume the primary action of a paused source, hides Fetch now and Continue, and says what pausing means (#1007)', async () => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = bffUser({ roles: ['rag-editor'] })
+    auth.status = 'authenticated'
+    vi.spyOn(api.sources, 'get').mockResolvedValue({ ...source, state: 'paused', nextRunAt: null })
+    vi.spyOn(api.sources, 'runs').mockResolvedValue({ items: [run({ state: 'failed' })], next: null })
+    vi.spyOn(api.sources, 'piiReport').mockResolvedValue(null as never)
+    vi.spyOn(api.runs, 'get').mockResolvedValue({ canContinue: true } as never)
+    const wrapper = mount(SourceView, { props: { id: 's1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
+    await flushPromises()
+
+    expect(wrapper.get('[data-test=resume]').classes()).toContain('bg-accent')
+    expect(wrapper.find('[data-test=sync]').exists()).toBe(false)
+    expect(wrapper.find('[data-test=pause]').exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'ContinueRunButton' }).exists()).toBe(false)
+    const banner = wrapper.get('[data-test=paused-banner]')
+    expect(banner.attributes('role')).toBe('status')
+    expect(banner.text()).toBe(SOURCE_PAGE.paused)
+    expect(banner.text()).toContain('not fetched on schedule')
+    expect(banner.text()).toContain('already running finishes')
+    expect(banner.text()).not.toContain('Fetch now')
+    wrapper.unmount()
+  })
+
+  it('offers no Pause on an upload source, which has no schedule (#1007)', async () => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = bffUser({ roles: ['rag-editor'] })
+    auth.status = 'authenticated'
+    vi.spyOn(api.sources, 'get').mockResolvedValue({ ...source, type: 'upload', settings: {}, scheduleInForce: null, nextRunAt: null })
+    vi.spyOn(api.sources, 'runs').mockResolvedValue({ items: [], next: null })
+    vi.spyOn(api.sources, 'piiReport').mockResolvedValue(null as never)
+    const wrapper = mount(SourceView, { props: { id: 's1' }, global: { stubs: { RouterLink: RouterLinkStub, FilesPanel: true } } })
+    await flushPromises()
+    expect(wrapper.find('[data-test=pause]').exists()).toBe(false)
+    expect(wrapper.find('[data-test=resume]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('shows a refusal other than a version conflict as an error, without reloading (#1007)', async () => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = bffUser({ roles: ['rag-editor'] })
+    auth.status = 'authenticated'
+    const get = vi.spyOn(api.sources, 'get').mockResolvedValue(source)
+    vi.spyOn(api.sources, 'runs').mockResolvedValue({ items: [], next: null })
+    vi.spyOn(api.sources, 'piiReport').mockResolvedValue(null as never)
+    vi.spyOn(api.sources, 'pause').mockRejectedValue(new ApiError(409, 'POST', { status: 409, title: 'Conflict', code: 'source_not_pausable' } as never))
+    const ui = useUiStore()
+    const notify = vi.spyOn(ui, 'notify')
+    const wrapper = mount(SourceView, { props: { id: 's1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
+    await flushPromises()
+    await wrapper.get('[data-test=pause]').trigger('click')
+    await flushPromises()
+    expect(get).toHaveBeenCalledTimes(1)
+    expect(notify).not.toHaveBeenCalledWith(SOURCE_PAGE.pauseConflict)
+    expect(wrapper.text()).toContain('An upload source has no schedule to pause.')
+    wrapper.unmount()
+  })
+
   it('offers Continue beside Sync now when the latest crawl run can be continued, and reloads the runs (#804)', async () => {
     setActivePinia(createPinia())
     const auth = useAuthStore()

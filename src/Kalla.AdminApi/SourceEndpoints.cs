@@ -260,6 +260,12 @@ public static class SourceEndpoints
         await SourceDto.LoadAsync(admin, await admin.WriteAsync(async attempt =>
         {
             var source = await Scoped(admin).SingleOrDefaultAsync(s => s.Id == id, attempt) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+            if (state == SourceStates.Paused && source.Type == Domain.Entities.SourceTypes.Upload)
+            {
+                // An upload source has no schedule; paused, it would take a batch whose sync job the worker then drops.
+                throw AdminFaults.Of(AdminErrorCodes.SourceNotPausable);
+            }
+
             admin.ExpectVersion(source, request.Version);
             var before = SourceAudit.Of(source);
             source.State = state;
