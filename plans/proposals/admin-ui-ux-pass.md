@@ -1,7 +1,10 @@
 # Admin UI: a UX pass over every page
 
-**Status:** **proposal**, for review. Nothing here binds until the user picks options and the main session moves the
-rules into Decisions "Admin API and UI" and admin design §5. Written by the main session, 2026-11-23, after a review of
+**Status:** **decided** (user, 2026-11-23): UX1 A (option B, the theme switch in a user menu, is proposed to Fors),
+UX2 C, UX3 C, UX4 C, UX5 C and UX6 C, with the eleven rules. The rules and choices now live in Decisions "Admin API
+and UI" and admin design §5 (the rules in §5.12; §5.2, §5.5.1, §5.5.2, §5.5.4, §5.5.7, §5.7 and §5.10 for the pages);
+the build steps of *Order* are stream b's B-74 to B-81. This paper is the record of why and no longer binds; where it
+and the design differ, the design wins. Written by the main session, 2026-11-23, after a review of
 every admin page in a browser on `main` at `9f48c107` (the code of `v0.9.2` plus plan files). Follows
 [`admin-ui-review.md`](admin-ui-review.md) (M-19, built in `v0.6.0`), which fixed Home, the lists, the audit log and
 the assistant page's wording; this pass looks at layout, grouping, placement and names across all pages.

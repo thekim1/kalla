@@ -28,8 +28,6 @@ nobody needs to read them end to end.
 
 **Proposals** (not binding until adopted in `decisions.md`), in [`proposals/`](proposals/), each with a status line.
 With something still to choose from:
-- [`admin-ui-ux-pass.md`](proposals/admin-ui-ux-pass.md): a UX pass over every admin page (layout, grouping,
-  placement, names) with mockups; six decisions UX1–UX6 for the user (2026-11-23).
 - [`support-chatbot-features.md`](proposals/support-chatbot-features.md): ten candidates for a support chatbot; F3,
   F4 and F8 are built, F10 and F7 (2026-11-21) and F6 (2026-11-22) are picked and queued, the rest is the user's pick.
 - [`architecture-plans.md`](proposals/architecture-plans.md): knowledge, assistants and models (2026-11-02); the roadmap
@@ -40,6 +38,8 @@ With something still to choose from:
   outbound question is decided (#580: an assigned gateway key per assistant), the inbound one stays open.
 
 Adopted, being built (their rules are in the decisions and designs each names):
+- [`admin-ui-ux-pass.md`](proposals/admin-ui-ux-pass.md): a UX pass over every admin page with mockups; eleven
+  layout rules and UX1 A, UX2–UX6 C (Decisions "Admin API and UI", admin §5.12, 2026-11-23; B-74 to B-81).
 - [`code-quality-top7.md`](proposals/code-quality-top7.md): seven DRY and best-practice fixes in the admin UI,
   the admin API, the gateway clients and the test kit, one pull request each (user, 2026-11-23).
 - [`topics-editor.md`](proposals/topics-editor.md): topics picked from the sections found on the Topics tab, a form

@@ -917,7 +917,7 @@ cost report: the gateway stays the record for charging. Detail: `chat-api/design
 A turn that ends `not-found` or `answered-general` adds one to a daily count by its **nearest hit**: the knowledge
 base and document of the search's first result, or *no hit* when the search found nothing
 (`chat."AssistantDailyGaps"`). No question text, no subject and no conversation are stored with it. The assistant's
-Statistics tab shows the share of such turns and the documents they came nearest to, most first, with a CSV export.
+Quality tab shows the share of such turns and the documents they came nearest to, most first, with a CSV export.
 Test-panel turns are left out. The proposal's "nearest topic" is the nearest document: topic tags are optional per
 link, a document is always there. Detail: `chat-api/design.md` §12.1, §12.2; `platform/data-model.md` §2.3;
 `admin/design.md` §8.7.
@@ -1036,14 +1036,40 @@ pass of the pilot journey before the pilot. Pilot department admins set up their
 with the platform team pairing.
 P1 has pages for the department journey only, platform objects use generic forms and Scalar, except clients and keys, which have a page of their own (user, 2026-11-13; `admin/design.md` §5.9). An app is connected in one go (its assistants, its first key and how to connect, §5.9.1), every platform page is in the side menu and Settings is a page of sections (§5.10; user, 2026-11-13, M-16). The test panel runs
 chat's code on the draft, unpublished collections included; its extra detail and the Overview attention items are P2.
-From the admin UI review (user, 2026-11-15): Home shows sync health and a **Live** card per published assistant beside the
-setup checklists, which fold away once published (§5.5.1); the knowledge base and assistant lists show last fetch,
-quality, knowledge bases, model and use, and every list row is a real link (§5.5.2, §5.5.4); the audit log shows
-names linked to their objects, events in plain words and pickers for its filters (§9.1); the assistant page keeps
-its draft form, with wording that says what saving does (§5.5.4).
-Detail: `admin/design.md` §1, §4.9, §5, §9.1.
+From the admin UI review (user, 2026-11-15): the setup checklists fold away once published (§5.5.1); the knowledge
+base and assistant lists show last fetch, quality, knowledge bases, model and use, and every list row is a real link
+(§5.5.2, §5.5.4); the audit log shows names linked to their objects, events in plain words and pickers for its
+filters (§9.1); the assistant page keeps its draft form, with wording that says what saving does (§5.5.4).
 
-*From:* log rows 50, 51, 55, 99, 119; decided by user, 2026-11-07; clients and keys page, user 2026-11-13; connect flow, menu and Settings page, user 2026-11-13; admin UI review UI1 B, UI2 B, UI3 A, UI4 B, user 2026-11-15 (`proposals/admin-ui-review.md`).
+Every admin page follows eleven layout rules (§5.12; user, 2026-11-23, the UX pass):
+1. One primary action per view; rare and destructive actions in a ⋯ menu, *Delete* last.
+2. Data first: a list on the first screen, its filters one row of chips.
+3. A field is as wide as its answer; a form column is at most 680 px.
+4. Group by the question people ask, not by the data model.
+5. Say it once: text that repeats on every row goes into the summary or the row's menu.
+6. At most six tabs, each a noun people recognise.
+7. One way to save: a save bar with *Save changes* and *Discard* that names the consequence.
+8. Colour only for what needs attention; zeros, "none" and "not yet" are grey.
+9. One rhythm: full-width lists, one-column forms, detail pages that open with up to four summary tiles.
+10. As good on a phone: one column without sideways scrolling down to 320 px, 44 px touch targets.
+11. Accessible by construction: WCAG 2.2 AA, checked in the three themes and at phone width.
+
+With them (user, 2026-11-23): the side menu is Home alone at the top, then *Build*, *Follow-up* (Map included) and
+*Administration*, one icon per page (§5.2); the theme switch in a user menu is proposed to Fors, not done in Källa
+alone (UX1 A). A knowledge base has six tabs, *Overview* (four summary tiles and a dot on the tab that needs
+action), *Content* (sources and files, opening on the file list when an upload is the only source), *Documents*,
+*Topics*, *Quality* (test questions, evaluation and search settings), *Sharing*; there is no separate *Files* tab
+(§5.5.2, §5.5.7; UX2 C). An assistant has five, *Build* (the draft with its test beside it; below 1,280 px the test
+folds under the form), *Quality*, *Versions*, *Access*, *Usage*, with *Publish draft* in the header, general
+knowledge as one scale and knowledge bases as rows with *Limit to topics* behind a button (§5.5.4; UX3 C). Headers
+and rows have one primary action and a ⋯ menu, the bulk bar shows only with rows selected, and an upload source has
+no *Fetch now* (UX4 C). List filters are chips with a period chip, *Clear filters* and export in the header, kept in
+the address, and fields are sized by rule 3 (UX5 C). Every form saves through the save bar with a leave-page guard,
+and Home shows what needs attention, then what runs: notices, *Needs attention*, *Get started*, *Assistants in use*,
+*Health* (§5.5.1; UX6 C).
+Detail: `admin/design.md` §1, §4.9, §5, §5.12, §9.1.
+
+*From:* log rows 50, 51, 55, 99, 119; decided by user, 2026-11-07; clients and keys page, user 2026-11-13; connect flow, menu and Settings page, user 2026-11-13; admin UI review UI1 B, UI2 B, UI3 A, UI4 B, user 2026-11-15 (`proposals/admin-ui-review.md`); UX pass UX1 A, UX2–UX6 C, user 2026-11-23 (`proposals/admin-ui-ux-pass.md`).
 
 ### Assistants
 
