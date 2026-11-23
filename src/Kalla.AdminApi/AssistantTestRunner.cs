@@ -124,7 +124,7 @@ public sealed partial class AssistantTestRunner(
     public static readonly TimeSpan Stale = TimeSpan.FromHours(1);
 
     /// <summary>
-    /// The on-demand runs one person may have waiting or running in this instance (#983's follow-up): the rate policy counts
+    /// The on-demand runs one person may have waiting or running in this instance: the rate policy counts
     /// a run as one request, but a run is up to 30 questions of model calls, and the queue is shared with the runs after a
     /// publish. The runs after a publish or restore are not counted.
     /// </summary>
@@ -146,13 +146,55 @@ public sealed partial class AssistantTestRunner(
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(assistant);
         ArgumentNullException.ThrowIfNull(version);
-        if (onDemand && _waiting.GetValueOrDefault(actor) >= MaxWaitingPerActor)
+        // The slot is reserved first, atomically, so parallel requests can't all pass the check; it is given back when no run
+        // is queued (no questions, a refusal, any failure).
+        if (onDemand && _waiting.AddOrUpdate(actor, 1, (_, n) => n + 1) > MaxWaitingPerActor)
         {
+            Release(actor);
             throw AdminFaults.Of(AdminErrorCodes.TestRunsWaiting);
         }
 
+        EvaluationRun? run;
+        try
+        {
+            run = await CreateRunAsync(db, assistant, version, ct);
+        }
+        catch
+        {
+            if (onDemand)
+            {
+                Release(actor);
+            }
+
+            throw;
+        }
+
+        if (run is null)
+        {
+            if (onDemand)
+            {
+                Release(actor);
+            }
+
+            return null;
+        }
+
+        // The channel is unbounded, so the write always succeeds; it takes no token, so a client that goes away now can't leave
+        // a counted run that was never queued.
+        _queue.Writer.TryWrite((run.Id, actor, onDemand));
+        return run;
+    }
+
+    /// <summary>The number of on-demand runs <paramref name="actor"/> has waiting or running in this instance.</summary>
+    public int Waiting(string actor) => _waiting.GetValueOrDefault(actor);
+
+    private void Release(string actor) => _waiting.AddOrUpdate(actor, 0, (_, n) => Math.Max(0, n - 1));
+
+    /// <summary>The run row, written under the assistant's advisory lock; null without questions.</summary>
+    private async Task<EvaluationRun?> CreateRunAsync(RagDbContext db, Assistant assistant, AssistantVersion version, CancellationToken ct)
+    {
         var strategy = db.Database.CreateExecutionStrategy();
-        var run = await strategy.ExecuteAsync(async token =>
+        return await strategy.ExecuteAsync(async token =>
         {
             await using var transaction = await db.Database.BeginTransactionAsync(token);
             await db.Database.ExecuteSqlAsync($"SELECT pg_advisory_xact_lock(hashtextextended({assistant.Id.ToString()}, 4711))", token);
@@ -180,17 +222,6 @@ public sealed partial class AssistantTestRunner(
             await transaction.CommitAsync(token);
             return started;
         }, ct);
-        if (run is not null)
-        {
-            if (onDemand)
-            {
-                _waiting.AddOrUpdate(actor, 1, (_, n) => n + 1);
-            }
-
-            await _queue.Writer.WriteAsync((run.Id, actor, onDemand), ct);
-        }
-
-        return run;
     }
 
     /// <summary>
@@ -238,7 +269,7 @@ public sealed partial class AssistantTestRunner(
             {
                 if (onDemand)
                 {
-                    _waiting.AddOrUpdate(actor, 0, (_, n) => Math.Max(0, n - 1));
+                    Release(actor);
                 }
             }
         }
