@@ -73,7 +73,8 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     await flushPromises()
 
     expect(wrapper.get('[data-test=warnings]').text()).toContain('Add a description and a contact before you publish.')
-    expect(wrapper.text()).toContain('Model name: bygglov')
+    // The model name is on the Audience tab, not in the page's subtitle (admin design §5.7).
+    expect(wrapper.get('header').text()).not.toContain('bygglov')
     const options = wrapper.findAll('#assistant-model option').map((o) => o.text())
     expect(options).toContain('fors/chat-eu')
     expect(options).toContain('fors/chat') // a route alias is a chat model
@@ -283,6 +284,16 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       await flushPromises()
       return wrapper
     }
+
+    it('shows the model name with a copy button on the Audience tab (admin design §5.7)', async () => {
+      const wrapper = await mountWith({ publishedVersion: 2 })
+      await wrapper.get('#assistant-tab-audience').trigger('click')
+      await flushPromises()
+      const section = wrapper.get('[data-test=model-name]')
+      expect(section.get('h3').text()).toBe('Model name')
+      expect(section.get('[data-test=copy-value]').text()).toBe('bygglov')
+      expect(section.find('[data-test=copy]').exists()).toBe(true)
+    })
 
     it('links a published assistant to each audience client\'s own UI, in a new tab that the link names', async () => {
       const wrapper = await mountWith({ publishedVersion: 2, audienceClientIds: ['k1', 'k3'] })

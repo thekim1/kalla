@@ -90,6 +90,23 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     expect(push).toHaveBeenCalledWith({ name: 'run', params: { id: 'r1' } })
   })
 
+  it('puts the kept documents and the quarantine in one card, Held and quarantined (admin design §5.7)', async () => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = bffUser({ roles: ['rag-viewer'] })
+    auth.status = 'authenticated'
+    vi.spyOn(api.sources, 'get').mockResolvedValue(source)
+    vi.spyOn(api.sources, 'runs').mockResolvedValue({ items: [], next: null })
+    vi.spyOn(api.sources, 'piiReport').mockResolvedValue(null as never)
+    const wrapper = mount(SourceView, { props: { id: 's1' }, global: { stubs: { RouterLink: RouterLinkStub, HeldDocuments: true, SourceQuarantine: true } } })
+    await flushPromises()
+    const card = wrapper.get('[data-test=held-and-quarantined]')
+    expect(card.get('h2').text()).toBe(SOURCE_PAGE.heldAndQuarantined)
+    expect(card.find('held-documents-stub').exists()).toBe(true)
+    expect(card.find('source-quarantine-stub').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
   it('offers Manage the highlights and Clear on a flagged document, and shows a cleared one as cleared (B-63)', async () => {
     const auth = useAuthStore()
     auth.user = bffUser({ roles: ['rag-department-admin'] })

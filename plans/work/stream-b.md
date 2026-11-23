@@ -223,7 +223,7 @@ design meanwhile.
 - **Waits on:** nothing.
 - **Read:** admin §5.2, §5.12 rule 10.
 
-### [ ] B-75 Field widths, grey zeros, repeated texts and the renames (UX pass step 1)
+### [x] B-75 Field widths, grey zeros, repeated texts and the renames (UX pass step 1) (#1027, #PR)
 - **Do:** admin §5.12 rules 3, 5 and 8 on every page: fields sized to their answer (numbers 8–12 characters, names and
   selects 320–400 px, form columns at most 680 px) in every form and drawer; zeros, "none", "never" and "not yet" as
   grey text; texts that repeat on each row said once (the file list's *Not scanned for malware* in the summary,

@@ -16,6 +16,7 @@ import AsyncState from '@/components/ui/AsyncState.vue'
 import CheckField from '@/components/ui/CheckField.vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
+import CopyValue from '@/platform/CopyValue.vue'
 import SelectField from '@/components/ui/SelectField.vue'
 import TextAreaField from '@/components/ui/TextAreaField.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
@@ -38,7 +39,7 @@ import ContentGapsCard from '@/components/assistants/ContentGapsCard.vue'
 import CostCard from '@/components/costs/CostCard.vue'
 import KeyBudgetStatus from '@/components/gateway/KeyBudgetStatus.vue'
 import KeyUnavailableBadge from '@/components/gateway/KeyUnavailableBadge.vue'
-import { formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
+import { actorText, formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
 import { ASSISTANT, ASSISTANT_TESTS, COMMON, DELETE, EDIT_DRAWER, LEVEL_LABEL, MODEL_AVAILABILITY, MOVE_DEPARTMENT } from '@/utils/labels'
 import MoveDepartmentDrawer from '@/components/organisation/MoveDepartmentDrawer.vue'
 import { ERROR_MESSAGES, formatMessage } from '@/utils/messages'
@@ -495,7 +496,7 @@ watch(() => props.id, () => {
 <template>
   <AsyncState :loading="assistant.loading.value && !assistant.data.value" :error="assistant.error.value" @retry="load">
     <template v-if="assistant.data.value">
-      <PageHeader :title="assistant.data.value.name" :description="ASSISTANT.modelName(assistant.data.value.slug)">
+      <PageHeader :title="assistant.data.value.name">
         <UiBadge :label="LEVEL_LABEL[assistant.data.value.classification]" />
         <UiBadge v-if="assistant.data.value.publishedVersion" tone="ok" :label="ASSISTANT.publishedVersion(assistant.data.value.publishedVersion)" data-test="published" />
         <UiBadge v-if="archived" tone="warn" :label="ASSISTANT.archived" data-test="archived" />
@@ -646,7 +647,7 @@ watch(() => props.id, () => {
           <template #cell-state="{ row }">
             <UiBadge :tone="row.state === 'published' ? 'ok' : 'neutral'" :label="ASSISTANT.versionStates[row.state] ?? row.state" />
           </template>
-          <template #cell-by="{ row }">{{ row.publishedBy ?? row.createdBy ?? '' }}</template>
+          <template #cell-by="{ row }">{{ actorText(row.publishedBy ?? row.createdBy) }}</template>
           <template #cell-when="{ row }"><span class="tabular text-fg-2">{{ formatDateTime(row.publishedAt ?? row.createdAt) }}</span></template>
           <template #cell-actions="{ row }">
             <UiButton v-if="comparable(row as AssistantVersionSummary)" size="sm" class="mr-2" :data-test="`compare-${row.number}`" @click="compare(row.number)">
@@ -680,6 +681,12 @@ watch(() => props.id, () => {
           <h3 id="assistant-who-can-use" class="font-medium">{{ ASSISTANT.whoCanUse }}</h3>
           <p v-if="whoCanUse.length === 0" class="text-fg-3">{{ ASSISTANT.whoCanUseNone }}</p>
           <ul v-else class="ml-5 list-disc"><li v-for="w in whoCanUse" :key="w">{{ w }}</li></ul>
+        </section>
+        <!-- The model name apps choose it by, with a copy button: here rather than in the page's subtitle (admin design §5.7). -->
+        <section class="grid gap-1" data-test="model-name" aria-labelledby="assistant-model-name">
+          <h3 id="assistant-model-name" class="font-medium">{{ ASSISTANT.modelNameLabel }}</h3>
+          <p class="text-small text-fg-2">{{ ASSISTANT.modelNameHint }}</p>
+          <CopyValue :value="assistant.data.value.slug" :copy-label="ASSISTANT.copyModelName" />
         </section>
         <p class="text-fg-2">{{ ASSISTANT.audienceHint }}</p>
         <p v-if="clients.length === 0" class="text-fg-3">{{ ASSISTANT.noClients }}</p>

@@ -3,7 +3,6 @@ import { onMounted } from 'vue'
 import { api } from '@/api'
 import InlineError from '@/components/ui/InlineError.vue'
 import UiButton from '@/components/ui/UiButton.vue'
-import UiCard from '@/components/ui/UiCard.vue'
 import { useKeysetList } from '@/composables/useKeysetList'
 import { formatDate, formatDateTime } from '@/utils/format'
 import { FILES } from '@/utils/labels'
@@ -18,7 +17,9 @@ onMounted(() => quarantine.reload())
 </script>
 
 <template>
-  <UiCard :title="FILES.quarantine" data-test="quarantine">
+  <!-- One part of the source's Held and quarantined card (admin design §5.5.3, §5.7). -->
+  <section aria-labelledby="quarantine-title" data-test="quarantine">
+    <h3 id="quarantine-title" class="mb-2 font-medium">{{ FILES.quarantine }}</h3>
     <p class="mb-3 text-small text-fg-2">{{ FILES.quarantineLead }}</p>
     <InlineError v-if="quarantine.error.value" :message="problemMessage(quarantine.error.value)" class="mb-3" />
     <p v-if="quarantine.loaded.value && quarantine.items.value.length === 0" class="text-fg-2">{{ FILES.quarantineEmpty }}</p>
@@ -31,5 +32,5 @@ onMounted(() => quarantine.reload())
       </li>
     </ul>
     <UiButton v-if="quarantine.next.value" class="mt-3" size="sm" @click="quarantine.more()">{{ FILES.more }}</UiButton>
-  </UiCard>
+  </section>
 </template>

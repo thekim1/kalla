@@ -62,7 +62,7 @@ describe('Assistants (admin design §5.3, §5.5.4)', () => {
       items: [
         assistantSummary({
           id: 'a1', name: 'Bygglov', collections: [{ id: 'c1', name: 'Blanketter' }, { id: 'c2', name: 'umea.se' }], model: 'fors/chat-eu', publishedVersion: 3,
-          publishedAt: '2026-11-10T09:00:00Z', questions7d: 1234,
+          publishedAt: '2026-11-10T09:00:00Z', questions7d: 1234, hasDraft: true,
         }),
         assistantSummary({ id: 'a2', name: 'Skola', published: false, publishedVersion: null, publishedAt: null, hasDraft: true }),
       ],
@@ -77,6 +77,9 @@ describe('Assistants (admin design §5.3, §5.5.4)', () => {
     expect(first!.text()).toContain('fors/chat-eu')
     expect(first!.get('[data-test=published-a1]').text()).toContain('Version 3')
     expect(first!.get('[data-test=published-a1]').text()).toContain('10 Nov 2026')
+    // Admin design §5.7: a draft with changes is said in Published, and the model is plain text.
+    expect(first!.get('[data-test=draft-changes-a1]').text()).toBe('· draft has changes')
+    expect(first!.findAll('td')[3]!.find('.font-mono').exists()).toBe(false)
     expect(first!.text()).toMatch(/1\s234/)
     expect(second!.text()).toContain('Draft only')
     expect(second!.text()).toContain('None')

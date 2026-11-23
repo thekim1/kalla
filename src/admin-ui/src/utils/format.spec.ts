@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDate, formatDateTime, formatDecimal, formatRelative, formatUsdCost, lastDaysIso } from './format'
+import { actorText, formatDate, formatDateTime, formatDateTimeToday, formatDecimal, formatRelative, formatUsdCost, lastDaysIso } from './format'
 
 describe('formatUsdCost', () => {
   it('keeps up to four decimals under one dollar, so small costs are visible', () => {
@@ -36,5 +36,23 @@ describe('dates as the gateway (admin design §5.7)', () => {
     const now = new Date('2026-10-30T12:00:00Z')
     expect(formatRelative('2026-10-30T11:58:00Z', now)).toBe('2 min ago')
     expect(formatRelative('2026-10-29T12:00:00Z', now)).toBe('Yesterday')
+  })
+})
+
+describe('formatDateTimeToday (admin design §5.7)', () => {
+  it('drops the date for a time on today\'s Stockholm date and keeps it otherwise', () => {
+    const now = new Date('2026-11-23T12:00:00Z')
+    expect(formatDateTimeToday('2026-11-23T00:17:00Z', now)).toBe('Today, 01:17')
+    expect(formatDateTimeToday('2026-11-22T22:30:00Z', now)).toBe('22 Nov 2026, 23:30') // 23:30 in Stockholm on the 22nd
+    expect(formatDateTimeToday(null, now)).toBe('—')
+  })
+})
+
+describe('actorText (admin design §5.7)', () => {
+  it('reads the demo seed as Demo data, prefers a person\'s name and keeps any other id', () => {
+    expect(actorText('system:seed')).toBe('Demo data')
+    expect(actorText('oid:1', 'Anna Andersson')).toBe('Anna Andersson')
+    expect(actorText('system:retention')).toBe('system:retention')
+    expect(actorText(null)).toBe('')
   })
 })

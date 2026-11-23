@@ -63,9 +63,12 @@ describe('Organisation: synced departments (P0 checklist #11)', () => {
     await flushPromises()
     const [first, second] = wrapper.findAll('tbody tr')
     expect(first!.text()).toContain('Kommunstyrelsen, KLK-alla')
-    expect(first!.text()).toContain('Own: 2 · Shared with selected departments: 1 · Shared with everyone: 3')
+    // One phrase (admin design §5.7): kept to the department, and shared with selected departments or everyone (1 + 3).
+    expect(first!.get('[data-test=knowledge-bases]').text()).toBe('2 own · 4 shared')
     expect(first!.text()).toContain(`${PLATFORM.organisation.sharedWith}: 4`)
-    expect(second!.text()).toContain(PLATFORM.organisation.noMemberGroups)
+    // No member groups is a grey dash, with the words for a screen reader.
+    expect(second!.get('[data-test=no-member-groups] [aria-hidden=true]').text()).toBe('–')
+    expect(second!.get('[data-test=no-member-groups] .sr-only').text()).toBe(PLATFORM.organisation.noMemberGroups)
     // A viewer gets no link to the gateway's administration.
     expect(wrapper.find('[data-test=gateway-page]').exists()).toBe(false)
   })
