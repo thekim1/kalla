@@ -53,12 +53,15 @@ public sealed partial class RetentionService(IServiceScopeFactory scopes, IOptio
     /// The next 03:00 in Stockholm after <paramref name="now"/>; on the spring DST day a missing hour moves it one hour on.
     /// Copied from the worker's <c>MaintenanceService.NextRunAt</c>.
     /// </summary>
-    public static DateTimeOffset NextRunAt(DateTimeOffset now)
+    public static DateTimeOffset NextRunAt(DateTimeOffset now) => NextRunAt(now, RunAt);
+
+    /// <summary>The next <paramref name="runAt"/> in Stockholm after <paramref name="now"/>, as <see cref="NextRunAt(DateTimeOffset)"/>.</summary>
+    public static DateTimeOffset NextRunAt(DateTimeOffset now, TimeOnly runAt)
     {
         var local = TimeZoneInfo.ConvertTime(now, StockholmTime.Zone);
         for (var day = 0; day <= 2; day++)
         {
-            var candidate = DateOnly.FromDateTime(local.DateTime).AddDays(day).ToDateTime(RunAt);
+            var candidate = DateOnly.FromDateTime(local.DateTime).AddDays(day).ToDateTime(runAt);
             if (StockholmTime.Zone.IsInvalidTime(candidate))
             {
                 candidate = candidate.AddHours(1);

@@ -177,6 +177,37 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database, AdminHo
     }
 
     [Fact]
+    public async Task The_nightly_answer_run_takes_0_to_100_questions_per_assistant_and_0_switches_it_off()
+    {
+        // Decisions "Nightly answer run" (admin §5.10, B-58): Settings.EvaluationAnswerQuestions, default 100.
+        var factory = host.Factory;
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+        var before = await Json(await admin.GetAsync("/api/settings/evaluation", Ct));
+        var version = before.GetProperty("version").GetString();
+        object Body(int questions) => new
+        {
+            evaluationModel = before.GetProperty("evaluationModel").GetString(), evaluationJudgeModel = before.GetProperty("evaluationJudgeModel").GetString(),
+            evaluationMaxQuestions = before.GetProperty("evaluationMaxQuestions").GetInt32(), evaluationAnswerQuestions = questions, version,
+        };
+
+        foreach (var questions in new[] { -1, 101 })
+        {
+            using var refused = await admin.PutAsJsonAsync("/api/settings/evaluation", Body(questions), Ct);
+            refused.StatusCode.ShouldBe(HttpStatusCode.BadRequest, questions.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        using (var off = await admin.PutAsJsonAsync("/api/settings/evaluation", Body(0), Ct))
+        {
+            off.StatusCode.ShouldBe(HttpStatusCode.OK, await off.Content.ReadAsStringAsync(Ct));
+            version = (await Json(off)).GetProperty("version").GetString();
+        }
+
+        (await Json(await admin.GetAsync("/api/settings/evaluation", Ct))).GetProperty("evaluationAnswerQuestions").GetInt32().ShouldBe(0);
+        using var restored = await admin.PutAsJsonAsync("/api/settings/evaluation", Body(before.GetProperty("evaluationAnswerQuestions").GetInt32()), Ct);
+        restored.StatusCode.ShouldBe(HttpStatusCode.OK, await restored.Content.ReadAsStringAsync(Ct));
+    }
+
+    [Fact]
     public async Task V37_refuses_a_host_politeness_profile_outside_its_ranges_or_ceilings_and_saves_a_valid_one_audited()
     {
         var factory = host.Factory;

@@ -82,10 +82,12 @@ public sealed partial class AdminTestPanel(
     /// One question answered by <paramref name="version"/> as the panel does (§4.9): the snapshot view with the version as the
     /// assistant's published one, the <c>admin-console</c> client, the assistant's gateway key, the usage written under
     /// <c>admin-console</c>. <paramref name="answerStep"/> is the answer call's <c>x-fors-step</c> (<c>chat-answer</c> in the panel,
-    /// <c>assistant-test</c> for a test-question run, §7.4). Used outside a request by <see cref="AssistantTestRunner"/>.
+    /// <c>assistant-test</c> for a test-question run, §7.4). Used outside a request by <see cref="AssistantTestRunner"/> and
+    /// <see cref="AnswerEvaluationService"/>; <paramref name="textLength"/> is how much of each candidate's text is returned
+    /// (<see cref="TextLength"/> in the panel, more for the answer judge, which reads the cited text).
     /// </summary>
     public async Task<AssistantTestResult> AnswerAsync(RagDbContext db, string actor, Domain.Entities.Assistant assistant, Domain.Entities.AssistantVersion version,
-        AssistantTestRequest request, string answerStep, CancellationToken ct)
+        AssistantTestRequest request, string answerStep, CancellationToken ct, int textLength = TextLength)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(assistant);
@@ -158,7 +160,7 @@ public sealed partial class AdminTestPanel(
                 request.Target, version.Number,
                 new TestRetrieval(linked, result?.Coverage, result?.Degraded,
                     [.. (result?.Results ?? []).Select(r => new TestCandidate(r.Rank, r.DocumentId, r.Citation.Title, r.Citation.Url ?? r.Citation.DisplayName, r.HeadingPath,
-                        r.Text.Length <= TextLength ? r.Text : r.Text[..TextLength], r.Text.Length > TextLength, r.Scores.VectorDistance, r.Scores.KeywordRank,
+                        r.Text.Length <= textLength ? r.Text : r.Text[..textLength], r.Text.Length > textLength, r.Scores.VectorDistance, r.Scores.KeywordRank,
                         r.Scores.VectorRank, r.Scores.Fused, citedChunks.Contains(r.ChunkId)))],
                     result?.Timings),
                 new TestCondense(plan.Condense is CondenseOutcome.Rewritten, plan.Condense?.ToString()),
@@ -195,11 +197,13 @@ public sealed partial class AdminTestPanel(
     }
 
     /// <summary>
-    /// One call of the answer judge (§7.4) for <paramref name="assistant"/>: <paramref name="model"/> at the assistant's level, as
-    /// its gateway key, <c>x-fors-step: assistant-test-judge</c>; its usage written under <c>admin-console</c> like the panel's.
-    /// Returns the model's text.
+    /// One call of an answer judge for <paramref name="assistant"/>: <paramref name="model"/> at the assistant's level, as its
+    /// gateway key, <paramref name="step"/> as <c>x-fors-step</c> (<c>assistant-test-judge</c> for a test question, §7.4;
+    /// <c>eval-answer</c> for the nightly answer run, processing §14.8); its usage written under <c>admin-console</c> like the
+    /// panel's. Returns the model's answer.
     /// </summary>
-    public async Task<string> JudgeAsync(Domain.Entities.Assistant assistant, string model, IReadOnlyList<ChatMessageIn> messages, CancellationToken ct)
+    public async Task<GatewayAnswer> JudgeAsync(Domain.Entities.Assistant assistant, string model, IReadOnlyList<ChatMessageIn> messages, CancellationToken ct,
+        string step = AssistantTestJudge.Step, int maxTokens = AssistantTestJudge.MaxTokens)
     {
         ArgumentNullException.ThrowIfNull(assistant);
         ArgumentNullException.ThrowIfNull(messages);
@@ -208,9 +212,8 @@ public sealed partial class AdminTestPanel(
         using var acting = GatewayCallScope.Begin(new GatewayCall(assistant.GatewayKeyId, AssistantId: assistant.Id));
         try
         {
-            var answer = await gateway.CompleteAsync(model, ResidencyCeiling.ForLevel(assistant.Classification), messages, AssistantTestJudge.MaxTokens, 0, Guid.CreateVersion7(),
-                AssistantTestJudge.Step, ct, usage: usage.Add);
-            return answer.Text;
+            return await gateway.CompleteAsync(model, ResidencyCeiling.ForLevel(assistant.Classification), messages, maxTokens, 0, Guid.CreateVersion7(),
+                step, ct, usage: usage.Add);
         }
         finally
         {

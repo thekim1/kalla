@@ -1193,6 +1193,29 @@ export interface TestQuestionRequest {
 }
 
 /** A test-question run: how many as expected, and against the compared run (the previous version's). */
+/** A finished nightly answer run (B-58): figures are 0–1, null when nothing was judged. */
+export interface AnswerRunSummary {
+  id: string
+  version: number
+  startedAt: IsoDateTime
+  finishedAt: IsoDateTime
+  questions: number
+  found: number
+  faithfulness: number | null
+  citationPrecision: number | null
+  wins: number | null
+  losses: number | null
+}
+
+/** The Statistics tab's answer evaluation (admin design §5.5.4): the last finished run, the one before, the live uncited rate. */
+export interface AnswerEvaluation {
+  enabled: boolean
+  questionsPerNight: number
+  latest: AnswerRunSummary | null
+  previous: AnswerRunSummary | null
+  live: { days: number; answered: number; uncited: number; rate: number | null }
+}
+
 export interface TestRunSummary {
   id: string
   version: number

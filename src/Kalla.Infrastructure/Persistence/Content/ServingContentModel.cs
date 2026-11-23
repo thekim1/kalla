@@ -13,6 +13,9 @@ namespace Kalla.Infrastructure.Persistence.Content;
 /// </summary>
 internal static class ServingContentModel
 {
+    /// <summary>The kinds of the runs over an assistant, as a SQL list (<see cref="EvaluationRunKinds.Assistant"/>).</summary>
+    private static readonly string AssistantKinds = string.Join(", ", EvaluationRunKinds.Assistant.Select(k => $"'{k}'"));
+
     public static void Configure(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<EvaluationSet>(e =>
@@ -54,22 +57,26 @@ internal static class ServingContentModel
                 t.HasCheckConstraint("CK_EvaluationRuns_K", "\"K\" BETWEEN 1 AND 100");
                 t.HasCheckConstraint("CK_EvaluationRuns_Counts",
                     "\"QuestionCount\" >= 0 AND \"Found\" BETWEEN 0 AND \"QuestionCount\" AND \"Wins\" >= 0 AND \"Losses\" >= 0");
-                t.HasCheckConstraint("CK_EvaluationRuns_Metrics", "\"RecallAtK\" BETWEEN 0 AND 1 AND \"Mrr\" BETWEEN 0 AND 1");
-                // Only an assistant's test-question run has no set, and it names the assistant (data-model §2.2).
+                t.HasCheckConstraint("CK_EvaluationRuns_Metrics",
+                    "\"RecallAtK\" BETWEEN 0 AND 1 AND \"Mrr\" BETWEEN 0 AND 1 AND \"Faithfulness\" BETWEEN 0 AND 1 AND \"CitationPrecision\" BETWEEN 0 AND 1");
+                // Only a run over an assistant (its test questions, its nightly answers) has no set, and it names the assistant
+                // (data-model §2.2).
                 t.HasCheckConstraint("CK_EvaluationRuns_Set",
-                    $"(\"Kind\" = '{EvaluationRunKinds.AssistantTests}') = (\"SetId\" IS NULL) AND (\"Kind\" <> '{EvaluationRunKinds.AssistantTests}' OR \"SubjectId\" IS NOT NULL)");
+                    $"(\"Kind\" IN ({AssistantKinds})) = (\"SetId\" IS NULL) AND (\"Kind\" NOT IN ({AssistantKinds}) OR \"SubjectId\" IS NOT NULL)");
             });
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.Classification).HasMaxLength(20);
             e.Property(x => x.Kind).HasMaxLength(30);
             e.Property(x => x.RecallAtK).HasPrecision(5, 4);
             e.Property(x => x.Mrr).HasPrecision(5, 4);
+            e.Property(x => x.Faithfulness).HasPrecision(5, 4);
+            e.Property(x => x.CitationPrecision).HasPrecision(5, 4);
             e.Property(x => x.Variant).HasMaxLength(30).HasDefaultValue(EvaluationVariants.Hybrid);
             e.Property(x => x.PromptVersion).HasMaxLength(50);
             e.Property(x => x.ThresholdProposal).HasColumnType("jsonb");
             e.HasIndex(x => new { x.SetId, x.StartedAt }).IsDescending(false, true);
-            e.HasIndex(x => new { x.SubjectId, x.StartedAt }, "IX_EvaluationRuns_AssistantTests").IsDescending(false, true)
-                .HasFilter($"\"Kind\" = '{EvaluationRunKinds.AssistantTests}'");
+            e.HasIndex(x => new { x.SubjectId, x.StartedAt }, "IX_EvaluationRuns_Assistant").IsDescending(false, true)
+                .HasFilter($"\"Kind\" IN ({AssistantKinds})");
             e.HasOne<EvaluationSet>().WithMany().HasForeignKey(x => x.SetId).OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -81,12 +88,15 @@ internal static class ServingContentModel
                 t.HasCheckConstraint("CK_EvaluationResults_Coverage", "\"Coverage\" IS NULL OR \"Coverage\" IN ('ok', 'low')");
                 t.HasCheckConstraint("CK_EvaluationResults_ExpectedRank", "\"ExpectedRank\" >= 1");
                 ValuesCheck(t, "EvaluationResults", "Verdict", TestVerdicts.All); // NULL passes a CHECK: results without a judged behaviour
+                t.HasCheckConstraint("CK_EvaluationResults_Metrics", "\"Faithfulness\" BETWEEN 0 AND 1 AND \"CitationPrecision\" BETWEEN 0 AND 1");
             });
             e.HasKey(x => new { x.RunId, x.QuestionId });
             e.Property(x => x.Classification).HasMaxLength(20);
             e.Property(x => x.Coverage).HasMaxLength(10);
             e.Property(x => x.Verdict).HasMaxLength(10);
             e.Property(x => x.JudgeNote).HasMaxLength(1000);
+            e.Property(x => x.Faithfulness).HasPrecision(5, 4);
+            e.Property(x => x.CitationPrecision).HasPrecision(5, 4);
             e.HasOne<EvaluationRun>().WithMany().HasForeignKey(x => x.RunId).OnDelete(DeleteBehavior.Cascade);
         });
 

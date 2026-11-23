@@ -35,16 +35,14 @@ public sealed class ServingSchemaTests(RagDatabaseFixture database)
         foreach (var column in new[]
                  {
                      "Assistants.Mode", "AssistantVersions.Skills", "EvaluationQuestions.SkillVersionId",
-                     "EvaluationRuns.Faithfulness", "EvaluationRuns.CitationPrecision", "EvaluationResults.Faithfulness",
-                     "EvaluationResults.CitationPrecision",
                  })
         {
             columns.ShouldNotContain(column);
         }
 
         // P2 values are refused until P2 adds them; P1 assistants keep history mode none (weakness review §4).
-        (await ConstraintAsync("CK_EvaluationRuns_Kind")).ShouldNotContain("answers");
         (await ConstraintAsync("CK_EvaluationRuns_Kind")).ShouldContain("assistant-tests"); // B-57
+        (await ConstraintAsync("CK_EvaluationRuns_Kind")).ShouldContain("answers"); // B-58
         (await ConstraintAsync("CK_EvaluationRuns_Kind")).ShouldNotContain("skill-gate");
         (await ConstraintAsync("CK_EvaluationQuestions_Layer")).ShouldNotContain("feedback");
         (await ConstraintAsync("CK_EvaluationQuestions_Layer")).ShouldNotContain("skill");
@@ -388,10 +386,14 @@ public sealed class ServingSchemaTests(RagDatabaseFixture database)
 
         foreach (var (sql, constraint) in new[]
                  {
-                     ($"""UPDATE content."EvaluationRuns" SET "Kind" = 'answers' WHERE "Id" = '{runId}'""", "CK_EvaluationRuns_Kind"),
+                     ($"""UPDATE content."EvaluationRuns" SET "Kind" = 'skill-gate' WHERE "Id" = '{runId}'""", "CK_EvaluationRuns_Kind"),
+                     // B-58: a run over an assistant has no set.
+                     ($"""UPDATE content."EvaluationRuns" SET "Kind" = 'answers' WHERE "Id" = '{runId}'""", "CK_EvaluationRuns_Set"),
                      ($"""UPDATE content."EvaluationRuns" SET "Variant" = 'keyword' WHERE "Id" = '{runId}'""", "CK_EvaluationRuns_Variant"),
                      ($"""UPDATE content."EvaluationRuns" SET "QuestionCount" = 2, "Found" = 3 WHERE "Id" = '{runId}'""", "CK_EvaluationRuns_Counts"),
                      ($"""UPDATE content."EvaluationRuns" SET "RecallAtK" = 1.5 WHERE "Id" = '{runId}'""", "CK_EvaluationRuns_Metrics"),
+                     ($"""UPDATE content."EvaluationRuns" SET "Faithfulness" = 1.5 WHERE "Id" = '{runId}'""", "CK_EvaluationRuns_Metrics"),
+                     ($"""UPDATE content."EvaluationResults" SET "CitationPrecision" = -0.1 WHERE "RunId" = '{runId}'""", "CK_EvaluationResults_Metrics"),
                      ($"""UPDATE content."EvaluationResults" SET "Coverage" = 'high' WHERE "RunId" = '{runId}'""", "CK_EvaluationResults_Coverage"),
                      ($"""UPDATE content."EvaluationResults" SET "ExpectedRank" = 0 WHERE "RunId" = '{runId}'""", "CK_EvaluationResults_ExpectedRank"),
                      ($"""UPDATE content."EvaluationQuestions" SET "Layer" = 'feedback' WHERE "Id" = '{questionId}'""", "CK_EvaluationQuestions_Layer"),

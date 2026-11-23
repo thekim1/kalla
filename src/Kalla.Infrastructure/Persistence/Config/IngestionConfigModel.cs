@@ -31,6 +31,7 @@ internal static class IngestionConfigModel
                 t.HasCheckConstraint("CK_Settings_PreviewMaxUsd", "\"PreviewMaxUsd\" >= 0");
                 t.HasCheckConstraint("CK_Settings_NerMinScore", "\"NerMinScore\" BETWEEN 0 AND 1");
                 t.HasCheckConstraint("CK_Settings_EvaluationMaxQuestions", "\"EvaluationMaxQuestions\" BETWEEN 1 AND 10000");
+                t.HasCheckConstraint("CK_Settings_EvaluationAnswerQuestions", "\"EvaluationAnswerQuestions\" BETWEEN 0 AND 100");
             });
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.TrustedProxies).HasColumnType("text[]");

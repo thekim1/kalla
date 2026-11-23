@@ -120,6 +120,9 @@ builder.Services.AddSingleton<Kalla.Answering.Chat.GatewayChatClient>();
 builder.Services.AddSingleton<AdminTestPanel>();
 builder.Services.AddSingleton<AssistantTestRunner>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AssistantTestRunner>());
+// B-58 (processing §14.8): the nightly answer run, while Settings.EvaluationAnswerQuestions is above 0.
+builder.Services.AddSingleton<AnswerEvaluationService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AnswerEvaluationService>());
 builder.Services.AddHostedService<RetentionService>();
 builder.Services.AddHostedService<PublishReportLinker>();
 builder.Services.AddRateLimiter(o =>
@@ -191,6 +194,7 @@ api.MapPreviews();
 api.MapTestRetrieval();
 api.MapAssistantTest();
 api.MapAssistantTestQuestions();
+api.MapAnswerEvaluation();
 api.MapPipelines();
 api.MapUploads();
 api.MapKeys();

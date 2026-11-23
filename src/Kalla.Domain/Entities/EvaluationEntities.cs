@@ -84,10 +84,19 @@ public static class EvaluationRunKinds
     /// <summary>An assistant's test questions (admin design §7.4, P2): run by kalla-admin, no set, <c>SubjectId</c> = the assistant.</summary>
     public const string AssistantTests = "assistant-tests";
 
+    /// <summary>
+    /// The nightly answer run of a published assistant (processing design §14.8, P2): run by kalla-admin, no set (its questions
+    /// come from the sets of several collections), <c>SubjectId</c> = the assistant, <c>SubjectVersion</c> = the published version.
+    /// </summary>
+    public const string Answers = "answers";
+
+    /// <summary>The kalla-admin runs over an assistant: no set, the assistant as subject.</summary>
+    public static IReadOnlyList<string> Assistant { get; } = [AssistantTests, Answers];
+
     /// <summary>The worker's retrieval runs, over a collection's set.</summary>
     public static IReadOnlyList<string> Retrieval { get; } = [PublishReport, Nightly, OnDemand];
 
-    public static IReadOnlyList<string> All { get; } = [PublishReport, Nightly, OnDemand, AssistantTests];
+    public static IReadOnlyList<string> All { get; } = [PublishReport, Nightly, OnDemand, AssistantTests, Answers];
 }
 
 /// <summary>Retrieval variants of a run (weakness review §2: the P1a three-way gold-set run).</summary>
@@ -102,8 +111,7 @@ public static class EvaluationVariants
 
 /// <summary>
 /// One advisory run over a collection's full set (<c>content."EvaluationRuns"</c>, processing design §14): no
-/// decision or override. Counts and metrics are null until the run finishes. Deferred and left out: <c>Faithfulness</c>
-/// and <c>CitationPrecision</c> (P2 <c>answers</c> runs).
+/// decision or override. Counts and metrics are null until the run finishes.
 /// </summary>
 public sealed class EvaluationRun
 {
@@ -112,7 +120,7 @@ public sealed class EvaluationRun
 
     public Guid Id { get; set; } = Guid.CreateVersion7();
 
-    /// <summary>The evaluation set of a retrieval run; null only for <see cref="EvaluationRunKinds.AssistantTests"/>.</summary>
+    /// <summary>The evaluation set of a retrieval run; null only for the runs over an assistant (<see cref="EvaluationRunKinds.Assistant"/>).</summary>
     public Guid? SetId { get; set; }
 
     public required string Classification { get; set; }
@@ -133,6 +141,13 @@ public sealed class EvaluationRun
     public int? Losses { get; set; }
     public decimal? RecallAtK { get; set; }
     public decimal? Mrr { get; set; }
+
+    /// <summary><c>answers</c>: the mean faithfulness of the judged answers (every claim supported by the cited sources).</summary>
+    public decimal? Faithfulness { get; set; }
+
+    /// <summary><c>answers</c>: the mean citation precision of the judged answers (the cited sources support the claims).</summary>
+    public decimal? CitationPrecision { get; set; }
+
     public bool Reranked { get; set; }
     public string Variant { get; set; } = EvaluationVariants.Hybrid;
     public string? PromptVersion { get; set; }
@@ -161,7 +176,8 @@ public static class CoverageStates
 /// One question's result in one run (<c>content."EvaluationResults"</c>). The coverage fields calibrate the not-found
 /// thresholds from answerable and unanswerable <c>human</c> questions (weakness review §2). <c>assistant-tests</c> results
 /// (admin design §7.4) carry <see cref="Verdict"/>, <see cref="Question"/>, <see cref="Answer"/> and <see cref="JudgeNote"/>.
-/// Deferred and left out: <c>Faithfulness</c>, <c>CitationPrecision</c> (P2 <c>answers</c>).
+/// <c>answers</c> results carry <see cref="Faithfulness"/>, <see cref="CitationPrecision"/>, <see cref="Question"/>,
+/// <see cref="Answer"/> and <see cref="JudgeNote"/>.
 /// </summary>
 public sealed class EvaluationResult
 {
@@ -179,6 +195,12 @@ public sealed class EvaluationResult
     public string? Coverage { get; set; }
     public float? BestDistance { get; set; }
     public float? BestKeywordScore { get; set; }
+
+    /// <summary><c>answers</c>: the share of the answer's claims the cited sources support; null when nothing was judged.</summary>
+    public decimal? Faithfulness { get; set; }
+
+    /// <summary><c>answers</c>: the share of the cited sources that support a claim; null when the answer cites none.</summary>
+    public decimal? CitationPrecision { get; set; }
 
     /// <summary><c>assistant-tests</c>: the judge on the expected behaviour (<see cref="TestVerdicts"/>); null when the question has none.</summary>
     public string? Verdict { get; set; }
