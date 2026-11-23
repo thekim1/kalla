@@ -170,11 +170,12 @@ public sealed class RetrievalEngineTests : IDisposable
     [Fact]
     public async Task The_request_names_the_reranker_and_its_model_and_each_has_its_own_time_limit()
     {
-        // ChatModelReranker 3 s by default, GatewayReranker 1.5 s (#438); here shortened, a reranker taking 300 ms.
-        var options = new RetrievalEngineOptions { RerankTimeout = TimeSpan.FromSeconds(5), GatewayRerankTimeout = TimeSpan.FromMilliseconds(100) };
+        // ChatModelReranker 3 s by default, GatewayReranker 1.5 s (#438); here a reranker taking 1 s, far over the gateway reranker's
+        // 100 ms and far under the chat model's 10 s, so a loaded runner's late timers can't let the delay win the race.
+        var options = new RetrievalEngineOptions { RerankTimeout = TimeSpan.FromSeconds(10), GatewayRerankTimeout = TimeSpan.FromMilliseconds(100) };
         new RetrievalEngineOptions().RerankTimeout.ShouldBe(TimeSpan.FromSeconds(3));
         new RetrievalEngineOptions().GatewayRerankTimeout.ShouldBe(TimeSpan.FromMilliseconds(1500));
-        var slow = new FakeReranker(new Dictionary<Guid, double> { [Id(6)] = 0.9 }, delay: TimeSpan.FromMilliseconds(300));
+        var slow = new FakeReranker(new Dictionary<Guid, double> { [Id(6)] = 0.9 }, delay: TimeSpan.FromSeconds(1));
         using var engine = Engine(slow, options);
 
         var chat = await engine.SearchAsync(new SearchRequest("altan", RerankScope(), Embed: Embed, Rerank: new RerankCall(Kalla.Domain.Residency.Eu)), Ct);
