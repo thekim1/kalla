@@ -19,12 +19,13 @@ namespace Kalla.Api;
 /// budget runs out; then the usage chunk and <c>[DONE]</c>. After the first byte an error is one error chunk and <c>[DONE]</c>,
 /// and no <c>kalla</c> chunk; after a disconnect nothing more is written. A turn that ends in either of those calls
 /// <paramref name="aborted"/> instead of <paramref name="finished"/>, once the answer is disposed (its broken-off stream
-/// recorded, chat design §8.3), so its usage is still written (§12.1).
+/// recorded, chat design §8.3), so its usage is still written (§12.1). With <paramref name="progress"/> (§9.10) the stream starts with
+/// that <c>kalla</c> chunk, before the role chunk: the answer call's checks have passed when this result exists (§4.1 step 13).
 /// </summary>
 public sealed class ChatSse(ChatAnswer answer, bool openWebUi, bool includeUsage,
     Func<IReadOnlyList<PromptSource>, int, int, ValueTask>? finished = null, Func<IReadOnlyList<PromptSource>, KallaAnswer>? kalla = null,
     Func<IReadOnlyList<PromptSource>, string, CancellationToken, Task<KallaLater>>? later = null,
-    Func<string, IReadOnlyList<PromptSource>, ValueTask>? aborted = null) : IResult
+    Func<string, IReadOnlyList<PromptSource>, ValueTask>? aborted = null, KallaProgress? progress = null) : IResult
 {
     private static readonly JsonSerializerOptions Json = new() { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
 
@@ -62,6 +63,11 @@ public sealed class ChatSse(ChatAnswer answer, bool openWebUi, bool includeUsage
             {
                 try
                 {
+                    if (progress is not null)
+                    {
+                        await KallaAsync(response, id, created, progress, ct);
+                    }
+
                     await WriteAsync(response, Chunk(new { role = "assistant", content = "" }, null), ct);
                     AnswerEvent.End end = new("stop", 0, 0);
                     await foreach (var item in answer.ReadAsync(ct))

@@ -57,6 +57,7 @@ public sealed class ChatAnswer : IDisposable
         if (Plan.Fixed is { } text)
         {
             yield return new AnswerEvent.Own(text);
+            Plan.Timings.TextEnded();
             yield return new AnswerEvent.End("stop", 0, 0);
             yield break;
         }
@@ -82,6 +83,7 @@ public sealed class ChatAnswer : IDisposable
             {
                 await foreach (var item in _gateway.ReadAsync(_stream!, ct))
                 {
+                    Plan.Timings.FirstEvent(); // §9.10 first_token: from opening the call to the model's first event
                     switch (item)
                     {
                         case GatewayStreamEvent.Delta delta:
@@ -113,6 +115,7 @@ public sealed class ChatAnswer : IDisposable
             yield return new AnswerEvent.Own(Plan.Trailer);
         }
 
+        Plan.Timings.TextEnded();
         _service.RecordPromptEstimate(Plan, promptTokens);
         yield return new AnswerEvent.End(finish, promptTokens, completionTokens);
     }

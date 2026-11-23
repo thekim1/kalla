@@ -124,7 +124,7 @@ public sealed class RelatedDocumentsTests
         list[0].Title.ShouldBe("Taxa 2026");
         list[1].Url.ShouldBe("https://www.umea.se/bygga/altan");
         (list[2].Title, list[2].Collection).ShouldBe(("Plank", "plank"));
-        list.ShouldAllBe(d => !d.Cited && d.Number == null);
+        list.ShouldAllBe(d => d.Cited == false && d.Number == null);
     }
 
     [Fact]

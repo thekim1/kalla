@@ -51,6 +51,7 @@ public static class ChatEndpoints
                 ConversationWriter writer, IPolicySnapshotSource snapshots, KnowledgeSecurity security, ChatMetrics metrics, CancellationToken ct) =>
             await OpenAiAsync(http, async () =>
             {
+                var timings = new TurnTimings(Stopwatch.GetTimestamp()); // §4.1 step 0 ReceivedAt: kalla.timings' total starts here (§9.10)
                 var who = await callers.AuthenticateAsync(http.Request, userRequired: true, ct);
                 JsonDocument body;
                 try
@@ -131,7 +132,7 @@ public static class ChatEndpoints
                 {
                     if (!parsed.Stream)
                     {
-                        var answer = await service.CompleteAsync(who, parsed, usage, ct);
+                        var answer = await service.CompleteAsync(who, parsed, usage, ct, timings);
                         await Enqueue(answer.Plan!, answer.Cited, answer.PromptTokens, answer.CompletionTokens);
                         var kalla = Kalla(answer.Plan!, answer.Cited);
                         // §3.8, §9.8, §9.9: the JSON answer is written when the follow-up and escalation calls have returned or their
@@ -144,10 +145,15 @@ public static class ChatEndpoints
                             await EnqueueUsage(); // the calls came after the turn's write
                         }
 
+                        if (kalla?.Timings is { } times)
+                        {
+                            http.Response.Headers["Server-Timing"] = times.ServerTiming(); // §9.10: the same values as kalla.timings
+                        }
+
                         return Json(answer, kalla);
                     }
 
-                    var plan = await service.PlanAsync(who, parsed, usage, ct);
+                    var plan = await service.PlanAsync(who, parsed, usage, ct, timings);
                     // §8.2: status and residency are checked here, before our first byte; a refusal is still a JSON error.
                     var streamed = await service.OpenAnswerAsync(plan, stream: true, ct);
                     var followUps = service.FollowUpCount(plan, parsed.Kalla);
@@ -155,7 +161,9 @@ public static class ChatEndpoints
                     return new ChatSse(streamed, who.Client.Kind == "open-webui", parsed.IncludeUsage, (c, p, o) => Enqueue(plan, c, p, o),
                         parsed.Kalla is null ? null : cited => Kalla(plan, cited)!,
                         later ? (cited, delivered, token) => service.LaterAsync(plan, parsed.Kalla, parsed.Question, followUps, delivered, cited, token) : null,
-                        (outcome, cited) => EnqueueAborted(plan, outcome, cited));
+                        (outcome, cited) => EnqueueAborted(plan, outcome, cited),
+                        // §9.10: the progress chunk only now, after the gateway accepted the answer call (a refusal above is still an HTTP error).
+                        KallaProgress.For(plan, parsed.Kalla));
                 }
                 catch (ChatException refused) when (refused.Unavailable)
                 {

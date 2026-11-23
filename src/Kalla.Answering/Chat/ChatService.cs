@@ -81,13 +81,15 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
 
     /// <summary>
     /// Steps 5–12 of §4.1 up to the answer call. Condense, the query embedding and rerank add their usage to
-    /// <paramref name="usage"/> as they answer, so a turn that fails afterwards keeps it (§12.1); the plan carries it on.
+    /// <paramref name="usage"/> as they answer, so a turn that fails afterwards keeps it (§12.1); the plan carries it on, and
+    /// <paramref name="timings"/> (from the turn's <c>ReceivedAt</c>; null: from now) with the condense and retrieval times (§9.10).
     /// </summary>
-    public async Task<ChatPlan> PlanAsync(RagPrincipal who, ParsedChat chat, TurnUsage usage, CancellationToken ct)
+    public async Task<ChatPlan> PlanAsync(RagPrincipal who, ParsedChat chat, TurnUsage usage, CancellationToken ct, TurnTimings? timings = null)
     {
         ArgumentNullException.ThrowIfNull(usage);
         ArgumentNullException.ThrowIfNull(who);
         ArgumentNullException.ThrowIfNull(chat);
+        timings ??= TurnTimings.Now();
         var created = time.GetUtcNow();
         var snapshot = snapshots.Current;
         var resolved = Resolved(snapshot);
@@ -158,6 +160,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
                 SearchedTopics = retrieval?.SearchedTopics ?? linkTopics,
                 MaxTokensSource = source,
                 Usage = usage,
+                Timings = timings,
             };
         }
 
@@ -172,14 +175,22 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         {
             // §5, §5.1: a follow-up that is not self-contained, or any question over 2,000 characters, is rewritten for retrieval
             // only; the prompt keeps the user's question.
+            var condenseStarted = Stopwatch.GetTimestamp();
             (query, condense, var condenseFailed) = await CondenseAsync(chat, settings, platform, ceiling, messageId, usage, ct);
+            if (condense is not (CondenseOutcome.SkippedFirstMessage or CondenseOutcome.SkippedSelfContained or CondenseOutcome.Disabled))
+            {
+                timings.Condensed(condenseStarted); // §9.10: only a turn that made the condense call has its time
+            }
+
             try
             {
+                var retrieveStarted = Stopwatch.GetTimestamp();
                 // The rerank call (when the assistant reranks) runs at the turn's ceiling, as the answer does (§6.7).
                 retrieval = await knowledge.RetrieveAsync(who, new RetrievalRequest(query, assistant.Id, null, settings.TopK, Expand: ExpandMode.Section,
                     Purpose: RetrievalPurpose.Chat, AllowDegraded: true, RunId: messageId,
                     RerankCeiling: settings.Rerank is not null ? ceiling : null, Reranker: settings.Rerank ?? RerankerKind.ChatModel, Topics: askedTopics),
                     usage.Add, ct);
+                timings.Retrieved(retrieveStarted);
             }
             catch (RetrievalDeniedException denied) when (denied.Status == 503)
             {
@@ -476,6 +487,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
 
         var model = plan.Assistant.Published!.GatewayModel;
         using var acting = GatewayCallScope.Begin(Acting(plan.Assistant));
+        plan.Timings.AnswerOpening();
         if (stream)
         {
             var response = await gateway.OpenStreamAsync(model, plan.Ceiling, plan.Prompt!.Messages, plan.MaxTokens, plan.Settings.Temperature, plan.MessageId, ct);
@@ -484,16 +496,17 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
 
         var answer = await gateway.CompleteAsync(model, plan.Ceiling, plan.Prompt!.Messages, plan.MaxTokens, plan.Settings.Temperature, plan.MessageId,
             GatewayChatClient.AnswerStep, ct, usage: plan.Usage.Add);
+        plan.Timings.FirstEvent(); // a JSON answer's first event is the whole answer
         return new ChatAnswer(plan, this, gateway, null, answer);
     }
 
     /// <summary>
     /// The turn as one JSON answer: the events of <see cref="ChatAnswer.ReadAsync"/> folded into the content and its annotations;
-    /// every call's usage in <paramref name="usage"/>.
+    /// every call's usage in <paramref name="usage"/>, its step times in <paramref name="timings"/> (§9.10; null: from now).
     /// </summary>
-    public async Task<ChatCompletion> CompleteAsync(RagPrincipal who, ParsedChat chat, TurnUsage usage, CancellationToken ct)
+    public async Task<ChatCompletion> CompleteAsync(RagPrincipal who, ParsedChat chat, TurnUsage usage, CancellationToken ct, TurnTimings? timings = null)
     {
-        var plan = await PlanAsync(who, chat, usage, ct);
+        var plan = await PlanAsync(who, chat, usage, ct, timings);
         using var answer = await OpenAnswerAsync(plan, stream: false, ct);
         var content = new System.Text.StringBuilder();
         var annotations = new List<UrlCitation>();
