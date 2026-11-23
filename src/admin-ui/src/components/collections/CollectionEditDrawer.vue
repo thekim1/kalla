@@ -77,7 +77,7 @@ async function save(): Promise<void> {
       <fieldset class="grid gap-2" aria-describedby="collection-edit-level-hint">
         <legend class="mb-1 font-medium">{{ COLLECTIONS.level }}</legend>
         <p id="collection-edit-level-hint" class="text-small text-fg-2">{{ EDIT_DRAWER.levelHint }}</p>
-        <label v-for="l in LEVELS" :key="l" class="flex cursor-pointer gap-3 rounded-card border border-border p-3">
+        <label v-for="l in LEVELS" :key="l" class="flex cursor-pointer gap-3 rounded-card border border-border p-3 has-checked:bg-accent-soft has-checked:shadow-inset-selected">
           <input :id="`collection-edit-level-${l}`" v-model="level" type="radio" name="collection-edit-level" :value="l" class="mt-1" />
           <span><span class="block font-medium">{{ LEVEL_LABEL[l] }}</span><span class="block text-small text-fg-2">{{ LEVEL_HELP[l] }}</span></span>
         </label>

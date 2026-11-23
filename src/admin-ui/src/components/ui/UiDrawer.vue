@@ -19,7 +19,7 @@ const emit = defineEmits<{ (e: 'update:open', value: boolean): void }>()
       <div class="flex min-w-0 flex-col items-start gap-2">
         <slot name="badge" />
         <h2 :id="titleId" class="text-title-2 outline-none">{{ title }}</h2>
-        <span v-if="subtitle" class="font-mono text-small text-fg-3">{{ subtitle }}</span>
+        <span v-if="subtitle" class="text-small text-fg-3">{{ subtitle }}</span>
         <p :id="descriptionId" class="sr-only">{{ description ?? title }}</p>
       </div>
       <button type="button" :aria-label="COMMON.close" class="grid size-8 flex-none place-items-center rounded-control text-fg-2 hover:bg-hover" @click="emit('update:open', false)">

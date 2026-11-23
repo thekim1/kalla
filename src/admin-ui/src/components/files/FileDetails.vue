@@ -90,7 +90,7 @@ watch(
           <span class="grid gap-1">
             <UiBadge :tone="stateTone(file.state)" :label="FILES.states[file.state] ?? file.state" />
             <span v-if="file.reason" class="text-small text-danger" data-test="detail-reason">{{ jobMessage(file.reason) }}</span>
-            <span v-if="notScanned(file)" class="text-small text-warning" data-test="detail-not-scanned">{{ FILES.notScanned }}</span>
+            <span v-if="notScanned(file)" class="text-small text-warn" data-test="detail-not-scanned">{{ FILES.notScanned }}</span>
           </span>
         </DetailRow>
         <DetailRow v-if="usedBy !== undefined" :label="FILES.details.usedBy">

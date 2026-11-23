@@ -4,7 +4,6 @@ import { api } from '@/api'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import UiButton from '@/components/ui/UiButton.vue'
-import UiCard from '@/components/ui/UiCard.vue'
 import { useKeysetList } from '@/composables/useKeysetList'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
@@ -30,7 +29,9 @@ onMounted(() => held.reload())
 </script>
 
 <template>
-  <UiCard :title="DELETIONS.held" data-test="held">
+  <!-- One part of the source's Held and quarantined card (admin design §5.5.3, §5.7). -->
+  <section aria-labelledby="held-title" data-test="held">
+    <h3 id="held-title" class="mb-2 font-medium">{{ DELETIONS.held }}</h3>
     <p class="mb-3 text-small text-fg-2">{{ DELETIONS.heldLead }}</p>
     <InlineError v-if="held.error.value" :message="problemMessage(held.error.value)" class="mb-3" />
     <p v-if="held.loaded.value && held.items.value.length === 0" class="text-fg-2">{{ DELETIONS.heldEmpty }}</p>
@@ -49,5 +50,5 @@ onMounted(() => held.reload())
     <ConfirmDialog
       v-model:open="releasing" :title="DELETIONS.releaseTitle" :consequence="DELETIONS.releaseConsequence" :confirm-label="DELETIONS.release" :action="release"
     />
-  </UiCard>
+  </section>
 </template>

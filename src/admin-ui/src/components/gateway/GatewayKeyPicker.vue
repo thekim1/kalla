@@ -65,11 +65,11 @@ const limit = (n: number | null) => (n === null ? GATEWAY_KEY.unlimited : format
     />
     <p v-if="failed" class="text-small text-danger" role="alert" data-test="key-load-failed">{{ GATEWAY_KEY.loadFailed }}</p>
     <p v-else-if="list && keys.length === 0" class="text-small text-fg-2" data-test="no-keys">{{ GATEWAY_KEY.noKeys }}</p>
-    <p v-if="modelValue === null && list" class="text-small text-warning" data-test="no-key-warning">{{ GATEWAY_KEY.noneWarning }}</p>
+    <p v-if="modelValue === null && list" class="text-small text-warn" data-test="no-key-warning">{{ GATEWAY_KEY.noneWarning }}</p>
     <p v-if="gone" class="text-small text-danger" data-test="key-gone">{{ GATEWAY_KEY.gone }}</p>
     <div v-if="chosen" class="rounded-card border border-border p-3 text-small" data-test="key-settings">
       <p class="mb-2 font-medium">{{ GATEWAY_KEY.settings }}</p>
-      <p v-if="chosen.hasSystemPrompt" class="mb-2 text-warning" data-test="key-system-prompt">{{ GATEWAY_KEY.systemPrompt }}</p>
+      <p v-if="chosen.hasSystemPrompt" class="mb-2 text-warn" data-test="key-system-prompt">{{ GATEWAY_KEY.systemPrompt }}</p>
       <p v-if="!chosen.selectable" class="mb-2 text-danger" data-test="key-unusable">{{ GATEWAY_KEY.notSelectable(chosen.reason ?? chosen.status) }}</p>
       <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
         <dt class="text-fg-2">{{ GATEWAY_KEY.team }}</dt><dd>{{ chosen.teamName ?? chosen.teamId }}</dd>

@@ -66,6 +66,9 @@ describe('Overview: your access (P0 checklist #9)', () => {
     expect(items[0]).toContain('From your account')
     expect(items[1]).toContain('Unknown department (code 3000)')
     expect(items[1]).toContain('Through a member group')
+    // The greeting (admin design §5.7): the first name, and under it the departments and the roles.
+    expect(wrapper.get('#page-title').text()).toMatch(/^Good (morning|afternoon|evening), Anna$/)
+    expect(wrapper.get('header p').text()).toBe('Bygg och miljö, 3000 · Read access')
   })
 
   it('tells a user without a rag-* role to ask for access', () => {

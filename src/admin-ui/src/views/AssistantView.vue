@@ -15,7 +15,9 @@ import TextField from '@/components/ui/TextField.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import CheckField from '@/components/ui/CheckField.vue'
 import InlineError from '@/components/ui/InlineError.vue'
+import PageBreadcrumb from '@/components/layout/PageBreadcrumb.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
+import CopyValue from '@/platform/CopyValue.vue'
 import SelectField from '@/components/ui/SelectField.vue'
 import TextAreaField from '@/components/ui/TextAreaField.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
@@ -38,8 +40,8 @@ import ContentGapsCard from '@/components/assistants/ContentGapsCard.vue'
 import CostCard from '@/components/costs/CostCard.vue'
 import KeyBudgetStatus from '@/components/gateway/KeyBudgetStatus.vue'
 import KeyUnavailableBadge from '@/components/gateway/KeyUnavailableBadge.vue'
-import { formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
-import { ASSISTANT, ASSISTANT_TESTS, COMMON, DELETE, EDIT_DRAWER, LEVEL_LABEL, MODEL_AVAILABILITY, MOVE_DEPARTMENT } from '@/utils/labels'
+import { actorText, formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
+import { ASSISTANT, ASSISTANT_TESTS, COMMON, DELETE, EDIT_DRAWER, LEVEL_LABEL, MODEL_AVAILABILITY, MOVE_DEPARTMENT, PAGE } from '@/utils/labels'
 import MoveDepartmentDrawer from '@/components/organisation/MoveDepartmentDrawer.vue'
 import { ERROR_MESSAGES, formatMessage } from '@/utils/messages'
 import { problemMessage } from '@/utils/problem'
@@ -495,7 +497,8 @@ watch(() => props.id, () => {
 <template>
   <AsyncState :loading="assistant.loading.value && !assistant.data.value" :error="assistant.error.value" @retry="load">
     <template v-if="assistant.data.value">
-      <PageHeader :title="assistant.data.value.name" :description="ASSISTANT.modelName(assistant.data.value.slug)">
+      <PageBreadcrumb :items="[{ label: PAGE.assistants.title, to: { name: 'assistants' } }]" />
+      <PageHeader :title="assistant.data.value.name">
         <UiBadge :label="LEVEL_LABEL[assistant.data.value.classification]" />
         <UiBadge v-if="assistant.data.value.publishedVersion" tone="ok" :label="ASSISTANT.publishedVersion(assistant.data.value.publishedVersion)" data-test="published" />
         <UiBadge v-if="archived" tone="warn" :label="ASSISTANT.archived" data-test="archived" />
@@ -525,7 +528,7 @@ watch(() => props.id, () => {
       <InlineError v-if="error" :message="problemMessage(error)" class="mb-4" />
       <UiTabs id="assistant" v-model="tab" :tabs="tabs" :label="ASSISTANT.tabsLabel" class="mb-6" />
 
-      <div v-if="tab === 'draft'" id="assistant-panel-draft" role="tabpanel" aria-labelledby="assistant-tab-draft" class="grid max-w-3xl gap-5">
+      <div v-if="tab === 'draft'" id="assistant-panel-draft" role="tabpanel" aria-labelledby="assistant-tab-draft" class="grid max-w-[680px] gap-5">
         <p class="text-fg-2" data-test="draft-lead">{{ draftLead }}</p>
         <UiCard v-if="warnings.length" :title="ASSISTANT.warnings" data-test="warnings">
           <ul class="ml-5 list-disc text-warn"><li v-for="w in warnings" :key="w">{{ w }}</li></ul>
@@ -535,7 +538,7 @@ watch(() => props.id, () => {
         <fieldset class="grid gap-2" data-test="general-knowledge" aria-describedby="assistant-general-knowledge-hint">
           <legend class="mb-1 font-medium">{{ ASSISTANT.generalKnowledge }}</legend>
           <p id="assistant-general-knowledge-hint" class="text-small text-fg-2">{{ ASSISTANT.generalKnowledgeHint }}</p>
-          <label v-for="g in GENERAL_KNOWLEDGE_LEVELS" :key="g" class="flex cursor-pointer gap-3 rounded-card border border-border p-3">
+          <label v-for="g in GENERAL_KNOWLEDGE_LEVELS" :key="g" class="flex cursor-pointer gap-3 rounded-card border border-border p-3 has-checked:bg-accent-soft has-checked:shadow-inset-selected">
             <input
               :id="`assistant-general-knowledge-${g}`" v-model="generalKnowledge" type="radio" name="assistant-general-knowledge" :value="g" class="mt-1"
             />
@@ -552,14 +555,14 @@ watch(() => props.id, () => {
           <summary class="cursor-pointer font-medium">{{ ASSISTANT.advanced }}</summary>
           <div class="mt-4 grid gap-5">
             <p class="text-small text-fg-2">{{ ASSISTANT.advancedHint }}</p>
-            <SelectField id="assistant-model" v-model="model" :label="ASSISTANT.model" :hint="modelHint" :options="modelOptions" data-test="model" />
-            <TextField id="assistant-top-k" v-model="advanced.topK" :label="ASSISTANT.topK" inputmode="numeric" :error="advancedErrors.topK" />
-            <SelectField
-              id="assistant-rerank" v-model="advanced.rerank" :label="ASSISTANT.rerank" :hint="rerankHint" :options="rerankOptions"
+            <SelectField id="assistant-model" v-model="model" class="max-w-sm" :label="ASSISTANT.model" :hint="modelHint" :options="modelOptions" data-test="model" />
+            <TextField id="assistant-top-k" v-model="advanced.topK" :label="ASSISTANT.topK" inputmode="numeric" short :error="advancedErrors.topK" />
+            <SelectField id="assistant-rerank"
+              v-model="advanced.rerank" class="max-w-sm" :label="ASSISTANT.rerank" :hint="rerankHint" :options="rerankOptions"
               :disabled="rerankers.length === 0 && !advanced.rerank" data-test="rerank"
             />
             <CheckField v-model="advanced.condense" :label="ASSISTANT.condense" data-test="condense" />
-            <TextField id="assistant-history" v-model="advanced.maxMessages" :label="ASSISTANT.historyMessages" inputmode="numeric" :error="advancedErrors.maxMessages" />
+            <TextField id="assistant-history" v-model="advanced.maxMessages" :label="ASSISTANT.historyMessages" inputmode="numeric" short :error="advancedErrors.maxMessages" />
             <fieldset class="grid gap-2" data-test="answer-length">
               <legend class="font-medium">{{ ASSISTANT.maxOutputTokens }}</legend>
               <CheckField v-model="advanced.useModelOutput" :label="ASSISTANT.useModelLimit" data-test="use-model-output" />
@@ -567,7 +570,7 @@ watch(() => props.id, () => {
               <p v-if="answerCeiling !== null" class="text-small text-fg-3" data-test="answer-ceiling">{{ ASSISTANT.answerCeiling(formatNumber(answerCeiling)) }}</p>
               <TextField
                 v-if="!advanced.useModelOutput" id="assistant-max-tokens" v-model="advanced.maxOutputTokens" :label="ASSISTANT.maxOutputTokens"
-                inputmode="numeric" :error="advancedErrors.maxOutputTokens"
+                inputmode="numeric" short :error="advancedErrors.maxOutputTokens"
               />
             </fieldset>
             <fieldset class="grid gap-2" data-test="context-size">
@@ -576,11 +579,11 @@ watch(() => props.id, () => {
               <p class="text-small text-fg-3" data-test="model-context-limit">{{ limitHint(chosenModel?.contextWindow) }}</p>
               <TextField
                 v-if="!advanced.useModelContext" id="assistant-context-tokens" v-model="advanced.contextTokens" :label="ASSISTANT.contextTokens"
-                inputmode="numeric" :error="advancedErrors.contextTokens"
+                inputmode="numeric" short :error="advancedErrors.contextTokens"
               />
             </fieldset>
-            <TextField id="assistant-temperature" v-model="advanced.temperature" :label="ASSISTANT.temperature" inputmode="decimal" :error="advancedErrors.temperature" />
-            <SelectField id="assistant-language" v-model="advanced.language" :label="ASSISTANT.language" :options="languageOptions" />
+            <TextField id="assistant-temperature" v-model="advanced.temperature" :label="ASSISTANT.temperature" inputmode="decimal" short :error="advancedErrors.temperature" />
+            <SelectField id="assistant-language" v-model="advanced.language" class="max-w-sm" :label="ASSISTANT.language" :options="languageOptions" />
           </div>
         </details>
         <div v-if="canEdit"><UiButton variant="primary" :loading="busy === 'save'" data-test="save-draft" @click="saveDraft">{{ ASSISTANT.saveDraft }}</UiButton></div>
@@ -589,8 +592,8 @@ watch(() => props.id, () => {
       <div v-else-if="tab === 'test'" id="assistant-panel-test" role="tabpanel" aria-labelledby="assistant-tab-test" class="grid max-w-3xl gap-5">
         <form class="grid gap-3" @submit.prevent="test">
           <TextAreaField id="assistant-question" v-model="question" :label="ASSISTANT.question" :hint="ASSISTANT.askHint" :rows="2" />
-          <SelectField
-            id="assistant-test-general-knowledge" v-model="testLevel" :label="ASSISTANT.testGeneralKnowledge" :hint="ASSISTANT.testGeneralKnowledgeHint"
+          <SelectField id="assistant-test-general-knowledge"
+            v-model="testLevel" class="max-w-sm" :label="ASSISTANT.testGeneralKnowledge" :hint="ASSISTANT.testGeneralKnowledgeHint"
             :options="testLevelOptions"
           />
           <div><UiButton type="submit" variant="primary" :loading="busy === 'test'" :disabled="!question.trim()" data-test="ask">{{ ASSISTANT.ask }}</UiButton></div>
@@ -646,7 +649,7 @@ watch(() => props.id, () => {
           <template #cell-state="{ row }">
             <UiBadge :tone="row.state === 'published' ? 'ok' : 'neutral'" :label="ASSISTANT.versionStates[row.state] ?? row.state" />
           </template>
-          <template #cell-by="{ row }">{{ row.publishedBy ?? row.createdBy ?? '' }}</template>
+          <template #cell-by="{ row }">{{ actorText(row.publishedBy ?? row.createdBy) }}</template>
           <template #cell-when="{ row }"><span class="tabular text-fg-2">{{ formatDateTime(row.publishedAt ?? row.createdAt) }}</span></template>
           <template #cell-actions="{ row }">
             <UiButton v-if="comparable(row as AssistantVersionSummary)" size="sm" class="mr-2" :data-test="`compare-${row.number}`" @click="compare(row.number)">
@@ -659,11 +662,11 @@ watch(() => props.id, () => {
         </DataTable>
       </div>
 
-      <div v-else-if="tab === 'storage'" id="assistant-panel-storage" role="tabpanel" aria-labelledby="assistant-tab-storage" class="grid max-w-3xl gap-5">
+      <div v-else-if="tab === 'storage'" id="assistant-panel-storage" role="tabpanel" aria-labelledby="assistant-tab-storage" class="grid max-w-[680px] gap-5">
         <p class="text-fg-2">{{ ASSISTANT.storageLead }}</p>
-        <SelectField id="assistant-history" v-model="historyMode" :label="ASSISTANT.historyMode" :options="historyOptions" :disabled="!canManage" />
+        <SelectField id="assistant-history" v-model="historyMode" class="max-w-sm" :label="ASSISTANT.historyMode" :options="historyOptions" :disabled="!canManage" />
         <TextField
-          id="assistant-retention" v-model="retentionDays" :label="ASSISTANT.retentionDays" inputmode="numeric" :disabled="!canManage"
+          id="assistant-retention" v-model="retentionDays" :label="ASSISTANT.retentionDays" inputmode="numeric" short :disabled="!canManage"
           :hint="policy ? ASSISTANT.retentionHint(policy.retentionMaxDays) : undefined" :error="retentionError"
         />
         <div v-if="canManage"><UiButton variant="primary" :loading="busy === 'storage'" data-test="save-storage" @click="saveStorage">{{ ASSISTANT.saveStorage }}</UiButton></div>
@@ -675,11 +678,17 @@ watch(() => props.id, () => {
         <ContentGapsCard :assistant-id="props.id" />
       </div>
 
-      <div v-else id="assistant-panel-audience" role="tabpanel" aria-labelledby="assistant-tab-audience" class="grid max-w-3xl gap-4">
+      <div v-else id="assistant-panel-audience" role="tabpanel" aria-labelledby="assistant-tab-audience" class="grid max-w-[680px] gap-4">
         <section class="grid gap-1" data-test="who-can-use" aria-labelledby="assistant-who-can-use">
           <h3 id="assistant-who-can-use" class="font-medium">{{ ASSISTANT.whoCanUse }}</h3>
           <p v-if="whoCanUse.length === 0" class="text-fg-3">{{ ASSISTANT.whoCanUseNone }}</p>
           <ul v-else class="ml-5 list-disc"><li v-for="w in whoCanUse" :key="w">{{ w }}</li></ul>
+        </section>
+        <!-- The model name apps choose it by, with a copy button: here rather than in the page's subtitle (admin design §5.7). -->
+        <section class="grid gap-1" data-test="model-name" aria-labelledby="assistant-model-name">
+          <h3 id="assistant-model-name" class="font-medium">{{ ASSISTANT.modelNameLabel }}</h3>
+          <p class="text-small text-fg-2">{{ ASSISTANT.modelNameHint }}</p>
+          <CopyValue :value="assistant.data.value.slug" :copy-label="ASSISTANT.copyModelName" />
         </section>
         <p class="text-fg-2">{{ ASSISTANT.audienceHint }}</p>
         <p v-if="clients.length === 0" class="text-fg-3">{{ ASSISTANT.noClients }}</p>

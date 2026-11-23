@@ -181,4 +181,12 @@ onMounted(async () => {
     </DataTable>
     <UiButton v-if="feedback.next.value" class="mt-4" :loading="feedback.loading.value" data-test="more" @click="feedback.more()">{{ FEEDBACK.more }}</UiButton>
   </AsyncState>
+  <!-- The endpoint is technical text: behind Details, not in the sentence (admin design §5.7). -->
+  <details
+    v-if="!auth.openWebUiEnabled && feedback.loaded.value && !feedback.error.value && feedback.items.value.length === 0" class="mx-auto max-w-[680px] text-center text-small text-fg-2"
+    data-test="feedback-api-details"
+  >
+    <summary class="cursor-pointer">{{ FEEDBACK.emptyApiDetails }}</summary>
+    <p class="mt-2">{{ FEEDBACK.emptyApiEndpoint }}</p>
+  </details>
 </template>

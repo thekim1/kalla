@@ -11,7 +11,7 @@ import UiButton from '@/components/ui/UiButton.vue'
 import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
-import { formatDateTime, formatRelative } from '@/utils/format'
+import { formatDateTime, formatDateTimeToday, formatRelative } from '@/utils/format'
 import { gatewayHref } from '@/utils/gateway'
 import { COMMON, ORGANISATION, PAGE, PLATFORM } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
@@ -88,16 +88,17 @@ onMounted(load)
       </template>
       <template #cell-memberGroups="{ row }">
         <span v-if="row.memberGroups?.length" lang="sv">{{ row.memberGroups.join(', ') }}</span>
-        <span v-else class="text-fg-3">{{ PLATFORM.organisation.noMemberGroups }}</span>
+        <!-- A grey dash (admin design §5.7); a screen reader hears the words. -->
+        <span v-else class="text-fg-3" data-test="no-member-groups"><span aria-hidden="true">–</span><span class="sr-only">{{ PLATFORM.organisation.noMemberGroups }}</span></span>
       </template>
       <template #cell-sharing="{ row }">
         <template v-if="row.sharing">
-          <span class="block">{{ PLATFORM.organisation.summary(row.sharing.department, row.sharing.selected, row.sharing.municipality) }}</span>
+          <span class="block tabular" data-test="knowledge-bases">{{ PLATFORM.organisation.summary(row.sharing.department, row.sharing.selected + row.sharing.municipality) }}</span>
           <span v-if="row.sharing.sharedWithDepartments" class="block text-small text-fg-3">{{ PLATFORM.organisation.sharedWith }}: {{ row.sharing.sharedWithDepartments }}</span>
         </template>
       </template>
       <template #cell-status="{ row }"><UiBadge :tone="row.isActive ? 'ok' : 'neutral'" :label="row.isActive ? COMMON.active : COMMON.inactive" /></template>
-      <template #cell-syncedAt="{ row }"><span class="tabular text-fg-2">{{ formatDateTime(row.syncedAt) }}</span></template>
+      <template #cell-syncedAt="{ row }"><span class="tabular text-fg-2">{{ formatDateTimeToday(row.syncedAt) }}</span></template>
     </DataTable>
   </AsyncState>
 </template>

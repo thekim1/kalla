@@ -90,6 +90,45 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     expect(push).toHaveBeenCalledWith({ name: 'run', params: { id: 'r1' } })
   })
 
+  it('leads back through the breadcrumb and keeps each section title inside its card (admin design §5.12, Every page)', async () => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = bffUser({ roles: ['rag-viewer'] })
+    auth.status = 'authenticated'
+    vi.spyOn(api.sources, 'get').mockResolvedValue(source)
+    vi.spyOn(api.collections, 'get').mockResolvedValue({ id: 'c1', name: 'Bygga och bo' } as never)
+    vi.spyOn(api.sources, 'runs').mockResolvedValue({ items: [run({})], next: null })
+    vi.spyOn(api.sources, 'piiReport').mockResolvedValue({ applies: false } as never)
+    const wrapper = mount(SourceView, { props: { id: 's1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
+    await flushPromises()
+
+    const crumbs = wrapper.get('[data-test=breadcrumb]')
+    expect(crumbs.attributes('aria-label')).toBe('Breadcrumb')
+    expect(wrapper.findAllComponents(RouterLinkStub).filter((l) => crumbs.element.contains(l.element)).map((l) => [l.text(), l.props('to')])).toEqual([
+      ['Knowledge bases', { name: 'collections' }],
+      ['Bygga och bo', { name: 'collection', params: { id: 'c1' } }],
+    ])
+    expect(wrapper.get('[data-test=runs]').get('h2').text()).toBe(SOURCE_PAGE.runs)
+    wrapper.unmount()
+  })
+
+  it('puts the kept documents and the quarantine in one card, Held and quarantined (admin design §5.7)', async () => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = bffUser({ roles: ['rag-viewer'] })
+    auth.status = 'authenticated'
+    vi.spyOn(api.sources, 'get').mockResolvedValue(source)
+    vi.spyOn(api.sources, 'runs').mockResolvedValue({ items: [], next: null })
+    vi.spyOn(api.sources, 'piiReport').mockResolvedValue(null as never)
+    const wrapper = mount(SourceView, { props: { id: 's1' }, global: { stubs: { RouterLink: RouterLinkStub, HeldDocuments: true, SourceQuarantine: true } } })
+    await flushPromises()
+    const card = wrapper.get('[data-test=held-and-quarantined]')
+    expect(card.get('h2').text()).toBe(SOURCE_PAGE.heldAndQuarantined)
+    expect(card.find('held-documents-stub').exists()).toBe(true)
+    expect(card.find('source-quarantine-stub').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
   it('offers Manage the highlights and Clear on a flagged document, and shows a cleared one as cleared (B-63)', async () => {
     const auth = useAuthStore()
     auth.user = bffUser({ roles: ['rag-department-admin'] })

@@ -93,7 +93,7 @@ async function save(): Promise<void> {
       <TextField id="collection-email" v-model="contactEmail" :label="COLLECTIONS.contactEmail" type="email" inputmode="email" :error="form.errors.contactEmail" />
       <fieldset class="grid gap-2" :aria-describedby="form.errors.classification ? 'collection-level-error' : undefined">
         <legend class="mb-1 font-medium">{{ COLLECTIONS.levelQuestion }}</legend>
-        <label v-for="l in LEVELS" :key="l" class="flex cursor-pointer gap-3 rounded-card border border-border p-3" :data-test="`level-${l}`">
+        <label v-for="l in LEVELS" :key="l" class="flex cursor-pointer gap-3 rounded-card border border-border p-3 has-checked:bg-accent-soft has-checked:shadow-inset-selected" :data-test="`level-${l}`">
           <input :id="`collection-level-${l}`" v-model="level" type="radio" name="classification" :value="l" class="mt-1" />
           <span>
             <span class="block font-medium">{{ LEVEL_LABEL[l] }}</span>
@@ -104,7 +104,7 @@ async function save(): Promise<void> {
       </fieldset>
       <fieldset class="grid gap-2" :aria-describedby="form.errors.content ? 'collection-content-error' : undefined">
         <legend class="mb-1 font-medium">{{ COLLECTIONS.contentQuestion }}</legend>
-        <label v-for="c in CONTENTS" :key="c" class="flex cursor-pointer gap-3 rounded-card border border-border p-3" :data-test="`content-${c}`">
+        <label v-for="c in CONTENTS" :key="c" class="flex cursor-pointer gap-3 rounded-card border border-border p-3 has-checked:bg-accent-soft has-checked:shadow-inset-selected" :data-test="`content-${c}`">
           <input :id="`collection-content-${c}`" v-model="content" type="radio" name="content" :value="c" class="mt-1" />
           <span>
             <span class="block font-medium">{{ COLLECTIONS.content[c] }}</span>
