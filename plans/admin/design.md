@@ -88,7 +88,7 @@ Moved to [`../archive/design-history/admin.md`](../archive/design-history/admin.
 | `DefinitionDriftMonitor` (P2) | 15 min | advisory lock (the one drift leader) | `Tools.State`, repins from pre-registrations (tools §4.4) |
 | `ConfigVersionMonitor` | `rag_config` + 2 s poll | every instance | none (keeps the admin's own snapshot for validators and the test panel) |
 | `AnswerEvaluationService` (P2, weakness review §1) | nightly, while `Settings.EvaluationAnswerQuestions` is above 0 (Decisions "Nightly answer run") | `pg_try_advisory_xact_lock` per assistant run | `EvaluationRuns` of kind `answers` (faithfulness, citation precision) through `Kalla.Answering` and the judge at the assistant's ceiling (processing §14.8) |
-| `AssistantTestRunner` (P2, weakness review §1) | on assistant publish/restore and **Run test questions** | `pg_try_advisory_xact_lock` on (assistant, version); an unfinished run is restarted after a restart | `EvaluationRuns` of kind `assistant-tests` and their `EvaluationResults` (§7.4) |
+| `AssistantTestRunner` (P2, weakness review §1) | on assistant publish/restore and **Run test questions** | `pg_try_advisory_xact_lock` on (assistant, version); a run left unfinished by a restart is not resumed and stops holding the assistant an hour after it started | `EvaluationRuns` of kind `assistant-tests` and their `EvaluationResults` (§7.4) |
 | `SkillGateRunner` (P2) | on publish and **Run again** | `pg_try_advisory_xact_lock` on the version id; an unfinished run is restarted after a restart | `EvaluationRuns` with `Trigger = skill-publish` (tools §3.7) |
 
 - Tick leaders (`OrganisationSync`, `GatewayModelSync`, P2 drift monitor) keep `pg_try_advisory_xact_lock` and no
@@ -481,7 +481,7 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 | `POST /api/assistants/{id}/archive`, `/unarchive` | Edit | `State = archived` hides the assistant from every client (identity §4.3 step 5) and keeps versions, audiences and statistics; unarchive returns `State = active` with the same published version |
 | `POST /api/assistants/{id}/keep` `{ version }` | Edit | **Keep** on the unused-assistant attention item (§5.5.1): sets `UnusedKeptUntil` to now + 90 days; audited `assistant.keep`; 409 on a stale `version` |
 | `GET/POST/PUT/DELETE /api/assistants/{id}/test-questions[/{qid}]` (P2, weakness review §1) | Read / Edit | V33; the expected document is picked by title search in the draft's collections |
-| `POST /api/assistants/{id}/test-runs` `{ target: draft \| published }`; `GET /api/assistants/{id}/test-runs` (P2, weakness review §1) | Edit / Read | §7.4: on demand (the publish run starts by itself); one running run per assistant (409 `test_run_running`); results through `GET /api/evaluation-runs/{id}/results` |
+| `POST /api/assistants/{id}/test-runs` `{ target: draft \| published }`; `GET /api/assistants/{id}/test-runs` (P2, weakness review §1) | Edit / Read | §7.4: on demand (the publish run starts by itself); one running run per assistant (409 `test_run_running`); at most 3 on-demand runs waiting or running per person (429 `test_runs_waiting`, §7.4); results through `GET /api/evaluation-runs/{id}/results` |
 | `PUT /api/assistants/{id}/audiences` | Manage | P1 kind `client` only; V7–V9; not versioned |
 | `PUT /api/assistants/{id}/retention` | Manage | `HistoryMode`, `RetentionDays` within the level's policy (V10); not versioned |
 | `POST /api/assistants/{id}/test` `{ target: draft \| published, … }` | Edit, EditSkills | §4.9; never stored |
@@ -877,7 +877,7 @@ audience). It searches only the version's links that the assistant's department 
 (V11: its own collections and those shared with it; read from the database at each call, so a share withdrawn later
 takes effect at once); another department's unshared collection is neither searched nor listed. The same holds for the
 test-question runs (§7.4) and the nightly answer run (processing §14.8), which answer through the panel. `POST
-…/test-runs` shares the panel's per-user rate policy. It runs the assistant's **draft** by default (the published version when there is no draft, or on request
+…/test-runs` shares the panel's per-user rate policy and the per-person cap on waiting runs (§7.4). It runs the assistant's **draft** by default (the published version when there is no draft, or on request
 with `target = published`), so a change is tried before **Publish**; the draft's V-rule warnings are shown above the
 answer. Nothing is stored but the **usage**: every model call of a test turn (condense, long-question condense, query
 embedding, rerank, answer, follow-ups) is counted as chat counts it (chat §8.3: tokens, cached input, the gateway's cost
@@ -2172,6 +2172,9 @@ Removed (simplification pass): no gate, so no overrides (§16).
   a version, so every version is measured against the same questions; copying an assistant copies its set.
 - **When**: after every publish and restore (on the new published version), and on demand with **Run test questions** on
   the draft or the published version. One run per assistant at a time; an assistant without questions gets no run.
+  A person has at most 3 runs of **Run test questions** waiting or running at a time (counted per `kalla-admin`
+  instance, in memory with the runner's queue); a fourth is refused with 429 `test_runs_waiting` until one finishes,
+  fails or is cancelled. The runs after a publish or restore are neither counted nor refused.
 - **How**: `AssistantTestRunner` in `kalla-admin` (§2.2) runs each question once through `Kalla.Answering` exactly as
   the test panel does (principal `admin-console`, the target version's definition, residency at the assistant's level,
   temperature as configured, `x-fors-step: assistant-test`), then:
