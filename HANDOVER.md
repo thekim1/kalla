@@ -67,11 +67,11 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
   its pull request what you are about to write; review its pull requests as comments (claims checked against the code).
 - **A decision for the user is asked as four alternatives with one recommendation** (the question tool).
 
-**Open when this was written** (2026-11-23, about 14:20 UTC): `thekim1`'s #996 (CQ-5b, reviewed: ready), Dependabot's
+**Open when this was written** (2026-11-23, about 14:50 UTC): `thekim1`'s #996 (CQ-5b, reviewed: ready), Dependabot's
 #958 and the main session's #989 (this file), #990 (the support case, B-83) and #991 (B-58, B-59 and B-63's design
-deviations). `thekim1` merged #977 (B-58), #963 (B-63), #978 (B-59) and #984 (B-58's Settings switch) at about 13:00,
-each after the main session's review said it was ready, and #997 (Word uploads parse again) before its review was
-done. In order:
+deviations, and #999's rules). `thekim1` merged #977 (B-58), #963 (B-63), #978 (B-59), #984 (B-58's Settings switch)
+and #999 (#983), each after the main session's review said it was ready, and #997 (Word uploads parse again) before
+its review was done. In order:
 
 1. **#990 and #991**, the main session's own: green; they need the user's word. **#996** is ready (review comment).
    **#998** follows #997: its fix turns required members off for every stage output, so a cached `DetectResult`
@@ -87,15 +87,11 @@ done. In order:
    and `not_usable`; `ATTENTION.none` unused; the `personal_data_public` link now opens Documents with `?pii=flagged`.
 5. **#958, the parser's bumps:** `LICENSES.md` has to be regenerated on the branch; stream a's. Best taken with opencv
    5.1 (item 9).
-6. **#983, the security read of B-54 to B-57 (release blocker, stream b):** a draft's test panel and B-57's test runs
-   search knowledge bases not shared with the assistant's department (`KnowledgeService.AssistantCollections` never
-   checks sharing; the panel's snapshot confines only unpublished collections), and copying an assistant across
-   departments carries the links over, so it is the normal path; copied test questions keep the source department's
-   documents; no rate policy on `POST /test-runs`. Item 2 (exception text in the judge note) is fixed by #977.
-   **Taken** by `thekim1`'s B-58/B-59 session on `b/983-draft-sharing` (items 1, 3, 4). Fix before the next release.
-   When it is settled, the main session writes the copy's rule for links and expected
-   documents into admin §4.5 (copy row) and §4.9/§7.4 (the panel and the runs search only what V11 allows); #985
-   left them out on purpose.
+6. **#983, the security read of B-54 to B-57: closed by #999** (merged 14:44, reviewed). A draft's test panel, the
+   test runs and the nightly answer run search only what the assistant's department may link (one filter in
+   `AdminTestPanel.AnswerAsync`); a copy leaves out unlinkable links and their expected documents; titles and names of
+   unshared collections are not shown; `POST /test-runs` is rate limited. Its rules are in #991. Left for later (on
+   #999): a cap on queued test runs per user, and an end-to-end test of a copy followed by the panel.
 7. **Read of the never-read documents (handover 56's item 11):** read 1 is done (#988: `to-verify.md`,
    `postponed-decisions.md`, the gold-set README; issues #986, #987). Read 2 is #990 (the support-assistant case
    brought up to date with the code and decisions; the user's four answers: the case's framing stays, condense keeps
@@ -120,7 +116,7 @@ done. In order:
 13. **Before Källa's next release, Fors needs one.** `contracts/gateway/` is pinned to Fors `main` at `6c3c412`
     (thekim1/fors#126, "no release yet"), and the logo of #953 shows only on a Fors that has it. Then the contract
     README's *Taken from* names the release and the Portainer stack pins it. Fors merges and releases are the user's.
-    #983 also blocks the release.
+    #983 no longer blocks it (#999).
 
 ### Waiting on the user
 
@@ -278,13 +274,13 @@ history. Reviews and reads ran as subagents, one at a time; their claims were ch
   favicon (#953); one path-rule matcher and one schedule rule in `Kalla.Pipelines` (A-42, A-43); the code-quality
   refactors (#964 to #973, #981). Plan files: #961, #975, #976, #982, #985, #988, the two proposals.
 - **Queues:** stream a: the live block (A-L1 to A-L10), A-34 and A-35 with only their live checks open, and issue
-  #974, #987; A-42 and A-43 are done. Stream b: B-58, B-59 and B-63 merged (#977, #984, #978, #963); #983 (release
-  blocker) first, then B-61, B-62 and B-66 (F10, F7, F6), B-64 and B-65 (the topics editor),
+  #974, #987; A-42 and A-43 are done. Stream b: B-58, B-59 and B-63 merged (#977, #984, #978, #963); #983 closed by
+  #999; then B-61, B-62 and B-66 (F10, F7, F6), B-64 and B-65 (the topics editor),
   B-67 to B-69 (P2 wave 2), B-70 and B-71 (a source's pause and next run), B-72 and B-73 (the chat extension), B-74 to
   B-82 (the UX pass and the Publish dialog; B-74 waits on nothing), B-83 (replace an upload by name, before T4; waits
   on nothing), B-42 to B-46 (the gateway phases' live checks) and
   its live items. An item someone has started says **Taken** in the queue. Main: M-4.
-- **Open issues that matter:** #983 (security, release blocker, taken), #992 to #995 (the docs), #998 (stage outputs'
+- **Open issues that matter:** #992 to #995 (the docs), #998 (stage outputs'
   read), #986 (a chat metric for to-verify #103), #987 (the
   grading script), #980 (code quality's tracker), #959 (the chat extension; closes with B-72 and B-73), #974 (code
   quality, stream a's part), #781 and #921 (watch), #920 (the VM's upgrade, `thekim1`'s), #929 (topics; closes with
