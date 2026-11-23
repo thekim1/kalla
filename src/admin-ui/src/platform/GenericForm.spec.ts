@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { GatewayModel } from '@/api/types'
-import { LEVEL_LABEL, MODEL_AVAILABILITY, PLATFORM } from '@/utils/labels'
+import { LEVEL_LABEL, MODEL_AVAILABILITY, PLATFORM, SETTINGS_PAGE } from '@/utils/labels'
 import GenericForm from './GenericForm.vue'
+import { withSwitchCounts } from './settingsPage'
 import type { FieldSpec } from './schema'
 
 const fields: FieldSpec[] = [
@@ -21,6 +22,35 @@ afterEach(() => {
 })
 
 describe('GenericForm', () => {
+  it('shows the nightly answer run as a switch over its count: off sends 0, on again starts at 100 (admin design §5.10)', async () => {
+    document.cookie = 'RAG-XSRF-TOKEN=t'
+    const fetch = vi.fn().mockResolvedValue(json({}))
+    vi.stubGlobal('fetch', fetch)
+    const evaluation = withSwitchCounts([{ name: 'evaluationAnswerQuestions', label: 'x', kind: 'number', required: false, nullable: false }], 'evaluation')
+    expect(evaluation[0]).toMatchObject({ kind: 'switchCount', onValue: 100, switchLabel: SETTINGS_PAGE.answerRun.switch })
+    const wrapper = mount(GenericForm, {
+      props: { formId: 'f', fields: evaluation, initial: { evaluationAnswerQuestions: 40, version: '3' }, method: 'put', url: '/api/settings/evaluation', submitLabel: 'Save' },
+    })
+    const toggle = wrapper.get('[role=switch]')
+    expect(toggle.attributes('aria-checked')).toBe('true')
+    expect(toggle.attributes('aria-labelledby')).toBe('f-evaluationAnswerQuestions-switch-label')
+    expect(wrapper.text()).toContain(SETTINGS_PAGE.answerRun.switch)
+    expect((wrapper.get('#f-evaluationAnswerQuestions').element as HTMLInputElement).value).toBe('40')
+
+    await toggle.trigger('click')
+    expect(wrapper.find('#f-evaluationAnswerQuestions').exists()).toBe(false)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(JSON.parse(fetch.mock.calls[0]![1].body)).toEqual({ evaluationAnswerQuestions: 0, version: '3' })
+
+    await toggle.trigger('click')
+    expect((wrapper.get('#f-evaluationAnswerQuestions').element as HTMLInputElement).value).toBe('100')
+    await wrapper.get('#f-evaluationAnswerQuestions').setValue('5')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(JSON.parse(fetch.mock.calls[1]![1].body)).toEqual({ evaluationAnswerQuestions: 5, version: '3' })
+  })
+
   it('sends the edited values with the version it read', async () => {
     document.cookie = 'RAG-XSRF-TOKEN=t'
     const fetch = vi.fn().mockResolvedValue(json({ id: 'c1' }))

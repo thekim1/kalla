@@ -60,6 +60,17 @@ function hint(field: FieldSpec): string | undefined {
   return [field.help, extra, picked].filter(Boolean).join(' ') || undefined
 }
 
+/** A `switchCount` field is on while its count is not 0 (admin design §5.10). */
+function switchOn(field: FieldSpec): boolean {
+  const value = String(values[field.name] ?? '').trim()
+  return value !== '' && Number(value) !== 0
+}
+
+/** Off stores 0; on again starts the count at the field's `onValue`. */
+function setSwitch(field: FieldSpec, on: boolean): void {
+  values[field.name] = on ? String(field.onValue ?? 1) : '0'
+}
+
 /** A select option's text: an information class by its name in the UI (admin design §5.7), anything else as it is. */
 function optionLabel(value: string): string {
   return LEVEL_LABEL[value as Level] ?? value
@@ -130,6 +141,24 @@ async function save(): Promise<void> {
           <span :id="`${idOf(field.name)}-label`" class="font-medium">{{ field.label }}</span>
         </div>
         <p v-if="field.help" :id="`${idOf(field.name)}-help`" class="text-small text-fg-3">{{ field.help }}</p>
+      </div>
+      <div v-else-if="field.kind === 'switchCount'" class="grid gap-3" :data-test="`switch-count-${field.name}`">
+        <div class="grid gap-1">
+          <div class="flex items-center gap-3">
+            <UiSwitch
+              :model-value="switchOn(field)" :labelledby="`${idOf(field.name)}-switch-label`"
+              :describedby="field.help ? `${idOf(field.name)}-help` : undefined" :disabled="readOnly.includes(field.name)"
+              @update:model-value="setSwitch(field, $event)"
+            />
+            <span :id="`${idOf(field.name)}-switch-label`" class="font-medium">{{ field.switchLabel ?? field.label }}</span>
+          </div>
+          <p v-if="field.help" :id="`${idOf(field.name)}-help`" class="text-small text-fg-3">{{ field.help }}</p>
+          <p v-if="!switchOn(field) && form.errors[field.name]" class="text-small text-danger">{{ form.errors[field.name] }}</p>
+        </div>
+        <TextField
+          v-if="switchOn(field)" :id="idOf(field.name)" v-model="values[field.name] as string" :label="field.label" :hint="field.countHint"
+          :disabled="readOnly.includes(field.name)" :error="form.errors[field.name]" inputmode="numeric" short autocomplete="off"
+        />
       </div>
       <SelectField
         v-else-if="field.kind === 'select'" :id="idOf(field.name)" v-model="values[field.name] as string" :label="field.label" :disabled="readOnly.includes(field.name)"
