@@ -81,12 +81,12 @@ public static class UploadEndpoints
                 CancellationToken ct) =>
             {
                 _ = await SourceEndpoints.Scoped(admin).AsNoTracking().SingleOrDefaultAsync(s => s.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
-                var take = Math.Clamp(limit ?? 50, 1, DocumentEndpoints.MaxLimit);
+                var take = Keyset.Take(limit);
                 var order = sort is null or "" ? FileSorts.Name : FileSorts.All.Contains(sort) ? sort : throw AdminFaults.Field("sort", AdminErrorCodes.InvalidValue);
                 var query = Files(admin, id, deleted == true);
                 if (!string.IsNullOrWhiteSpace(q))
                 {
-                    var pattern = $"%{Like.Escape(q.Trim())}%";
+                    var pattern = Like.Contains(q.Trim());
                     query = query.Where(f => EF.Functions.ILike(f.Upload.FileName, pattern, Like.EscapeCharacter));
                 }
 
@@ -147,7 +147,7 @@ public static class UploadEndpoints
         api.MapGet("/sources/{id:guid}/quarantine", async (Guid id, Guid? after, int? limit, AdminContext admin, CancellationToken ct) =>
             {
                 _ = await SourceEndpoints.Scoped(admin).AsNoTracking().SingleOrDefaultAsync(s => s.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
-                var take = Math.Clamp(limit ?? 50, 1, DocumentEndpoints.MaxLimit);
+                var take = Keyset.Take(limit);
                 var query = admin.Db.QuarantinedFiles.AsNoTracking().Where(q => q.SourceId == id);
                 if (after is { } last)
                 {
@@ -156,7 +156,7 @@ public static class UploadEndpoints
 
                 var rows = await query.OrderBy(q => q.Id).Take(take + 1)
                     .Select(q => new QuarantinedFileDto(q.Id, q.Origin, q.Name, q.Url, q.Signature, q.RunId, q.DetectedAt, q.PurgeAfter)).ToListAsync(ct);
-                return new KeysetPage<QuarantinedFileDto, Guid?>([.. rows.Take(take)], rows.Count > take ? rows[take - 1].Id : null);
+                return KeysetPage.From(rows, take, q => q.Id);
             })
             .RequireAuthorization(AdminPolicies.Read).WithTags("Uploads").WithName("ListQuarantine").WithSummary("A source's quarantined files: metadata only (keyset)");
 

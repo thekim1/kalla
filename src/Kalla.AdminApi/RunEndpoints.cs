@@ -11,8 +11,6 @@ namespace Kalla.AdminApi;
 /// </summary>
 public static class RunEndpoints
 {
-    public const int MaxLimit = 200;
-
     public static RouteGroupBuilder MapRuns(this RouteGroupBuilder api)
     {
         ArgumentNullException.ThrowIfNull(api);
@@ -20,7 +18,7 @@ public static class RunEndpoints
         api.MapGet("/sources/{id:guid}/runs", async (Guid id, Guid? after, int? limit, AdminContext admin, CancellationToken ct) =>
             {
                 _ = await SourceEndpoints.Scoped(admin).AsNoTracking().SingleOrDefaultAsync(s => s.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
-                var take = Math.Clamp(limit ?? 50, 1, MaxLimit);
+                var take = Keyset.Take(limit);
                 // Newest first by start, then id; the keyset continues after the last run seen.
                 var query = admin.Db.Runs.AsNoTracking().Where(r => r.SourceId == id);
                 if (after is { } last)
@@ -39,7 +37,7 @@ public static class RunEndpoints
                     rows.Add(await RunLive.WithProgressAsync(admin, run.Summary, run.Classification, id, ct));
                 }
 
-                return new KeysetPage<RunSummary, Guid?>([.. rows.Take(take)], rows.Count > take ? rows[take - 1].Id : null);
+                return KeysetPage.From(rows, take, r => r.Id);
             })
             .RequireAuthorization(AdminPolicies.Read).WithTags("Runs").WithName("ListRuns").WithSummary("A source's runs, newest first (keyset)");
 
@@ -64,7 +62,7 @@ public static class RunEndpoints
         runs.MapGet("/{id:guid}/items", async (Guid id, long? after, int? limit, string? outcome, string? reason, string? q, AdminContext admin, CancellationToken ct) =>
             {
                 var run = await ScopedRunAsync(admin, id, ct);
-                var take = Math.Clamp(limit ?? 50, 1, MaxLimit);
+                var take = Keyset.Take(limit);
                 // RunItems is partitioned by day: bound the scan to the run's days.
                 var from = run.StartedAt.UtcDateTime.Date;
                 var query = admin.Db.RunItems.AsNoTracking().Where(i => i.RunId == id && i.CreatedAt >= from);
@@ -86,7 +84,7 @@ public static class RunEndpoints
 
                 if (!string.IsNullOrWhiteSpace(q))
                 {
-                    var pattern = $"%{Like.Escape(q.Trim())}%";
+                    var pattern = Like.Contains(q.Trim());
                     query = query.Where(i => EF.Functions.ILike(i.Identity, pattern, Like.EscapeCharacter));
                 }
 
@@ -98,7 +96,7 @@ public static class RunEndpoints
                 var rows = await query.OrderBy(i => i.Id).Take(take + 1)
                     .Select(i => new RunItemDto(i.Id, i.CreatedAt, i.DocumentId, i.Identity, i.Outcome, i.Reason, i.Strategy, i.DurationMs, i.CostUsd))
                     .ToListAsync(ct);
-                return new KeysetPage<RunItemDto, long?>([.. rows.Take(take)], rows.Count > take ? rows[take - 1].Id : null);
+                return KeysetPage.From(rows, take, i => i.Id);
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("ListRunItems").WithSummary("A run's items (keyset; outcome, reason, q)");
 
@@ -137,7 +135,7 @@ public static class RunEndpoints
                             p.LastSeenAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture) })), "text/csv; charset=utf-8");
                 }
 
-                var take = Math.Clamp(limit ?? 50, 1, MaxLimit);
+                var take = Keyset.Take(limit);
                 if (after is { } last)
                 {
                     proposals = proposals.Where(p => p.DocumentId.CompareTo(last) > 0);
@@ -146,7 +144,8 @@ public static class RunEndpoints
                 var rows = (await Rows(proposals.OrderBy(p => p.DocumentId).Take(take + 1)).ToListAsync(ct)).OrderBy(p => p.DocumentId).ToList();
                 // The guard's limits for the card's explanation (§5.5.3): every reader, not only the platform admin of Settings.
                 var settings = await admin.Db.Settings.AsNoTracking().SingleOrDefaultAsync(ct) ?? new PlatformSettings();
-                return Results.Ok(new DeletionProposalPage([.. rows.Take(take)], rows.Count > take ? rows[take - 1].DocumentId : null,
+                var (items, next) = KeysetPage.From(rows, take, p => p.DocumentId);
+                return Results.Ok(new DeletionProposalPage(items, next,
                     new DeletionGuardLimits(settings.DeletionGuardPercent, settings.DeletionGuardMinCount, settings.DeletionGuardMaxCount)));
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("ListDeletionProposals").WithSummary("A run's deletion proposals (keyset, or format=csv for all)");
@@ -233,9 +232,6 @@ public static class Csv
         return v.IndexOfAny([delimiter, '"', '\r', '\n']) >= 0 ? "\"" + v.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"" : v;
     }
 }
-
-/// <summary>A keyset page (admin design §4.1): the items and the <c>after</c> value of the next page, null at the end.</summary>
-public sealed record KeysetPage<T, TKey>(IReadOnlyList<T> Items, TKey Next);
 
 /// <summary>The configured deletion guard (<c>Settings.DeletionGuard*</c>, connectors §13.2).</summary>
 public sealed record DeletionGuardLimits(int Percent, int MinCount, int MaxCount);
