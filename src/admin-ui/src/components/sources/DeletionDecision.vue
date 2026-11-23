@@ -23,7 +23,7 @@ const ui = useUiStore()
 const proposals = useKeysetList((after?: string) => api.runs.deletions(props.runId, after))
 const guard = computed(() => proposals.data.value?.guard ?? null)
 const deciding = ref<'' | 'keep' | 'remove'>('')
-const canDecide = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']))
+const canDecide = computed(() => auth.can('manage'))
 const count = computed(() => formatNumber(props.proposedCount))
 
 async function keep(): Promise<void> {

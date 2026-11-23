@@ -36,7 +36,7 @@ const views = [
 ]
 const emptyText = computed(() => (view.value === 'shared' ? COLLECTIONS.emptyShared : view.value === 'all' ? COLLECTIONS.emptyAll : COLLECTIONS.empty))
 const creating = ref(false)
-const canEdit = auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor'])
+const canEdit = auth.can('edit')
 
 const columns: Column[] = [
   { key: 'name', label: COLLECTIONS.name },

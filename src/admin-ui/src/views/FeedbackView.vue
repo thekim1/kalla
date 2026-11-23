@@ -29,7 +29,7 @@ const assistants = ref<AssistantSummary[]>([])
 const filters = reactive({ from: '', to: '', assistantId: '', rating: '', outcome: '', state: 'open' })
 const busy = ref<string | null>(null)
 const markError = ref<unknown>(null)
-const canMark = computed(() => auth.hasAnyRole(['rag-department-admin', 'rag-reviewer']))
+const canMark = computed(() => auth.can('feedback-comments'))
 
 const columns = computed<Column[]>(() => [
   { key: 'time', label: FEEDBACK.time },

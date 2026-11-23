@@ -123,11 +123,14 @@ public sealed class PermissionMatrixTests(AdminHost host) : IClassFixture<AdminH
     }
 }
 
-/// <summary>The exported error codes (admin design §4.1) and audit snapshots without secrets (§11.1).</summary>
+/// <summary>
+/// The exported error codes (admin design §4.1) and permission matrix (§3.1), and audit snapshots without secrets (§11.1).
+/// </summary>
 public sealed class AdminContractTests
 {
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true, IndentSize = 2 };
     private static readonly string ErrorCodesFile = TestPostgres.RepositoryFile(Path.Combine("contracts", "admin", "v1", "error-codes.json"));
+    private static readonly string PermissionsFile = TestPostgres.RepositoryFile(Path.Combine("contracts", "admin", "v1", "permissions.json"));
 
     /// <summary>
     /// The export, generated from <see cref="AdminErrorCodes"/>. With <c>KALLA_UPDATE_CONTRACTS=1</c> the test writes the
@@ -147,6 +150,29 @@ public sealed class AdminContractTests
         }
 
         File.ReadAllText(ErrorCodesFile).ReplaceLineEndings("\n").ShouldBe(json, "Run with KALLA_UPDATE_CONTRACTS=1 to regenerate.");
+    }
+
+    /// <summary>
+    /// The export the admin UI hides what the API refuses by, generated from <see cref="PermissionMatrix"/>: each policy and
+    /// the roles that hold it (a combined policy's roles resolved), both sorted. With <c>KALLA_UPDATE_CONTRACTS=1</c> the
+    /// test writes the file instead of comparing; commit the result.
+    /// </summary>
+    [Fact]
+    public void Permissions_json_matches_the_matrix()
+    {
+        var policies = new SortedDictionary<string, string[]>(StringComparer.Ordinal);
+        foreach (var policy in AdminPolicies.All)
+        {
+            policies[policy] = [.. PermissionMatrix.RolesFor(policy).Order(StringComparer.Ordinal)];
+        }
+
+        var json = JsonSerializer.Serialize(new { version = 1, policies }, Indented) + "\n";
+        if (Environment.GetEnvironmentVariable("KALLA_UPDATE_CONTRACTS") == "1")
+        {
+            File.WriteAllText(PermissionsFile, json);
+        }
+
+        File.ReadAllText(PermissionsFile).ReplaceLineEndings("\n").ShouldBe(json, "Run with KALLA_UPDATE_CONTRACTS=1 to regenerate.");
     }
 
     [Fact]

@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "policies": {
+    "admin": [
+      "rag-platform-admin"
+    ],
+    "edit": [
+      "rag-department-admin",
+      "rag-editor",
+      "rag-platform-admin"
+    ],
+    "edit-or-edit-pipelines": [
+      "rag-department-admin",
+      "rag-editor",
+      "rag-pipeline-editor",
+      "rag-platform-admin"
+    ],
+    "edit-or-edit-skills": [
+      "rag-department-admin",
+      "rag-editor",
+      "rag-platform-admin",
+      "rag-skill-editor"
+    ],
+    "edit-pipelines": [
+      "rag-department-admin",
+      "rag-pipeline-editor",
+      "rag-platform-admin"
+    ],
+    "edit-skills": [
+      "rag-department-admin",
+      "rag-platform-admin",
+      "rag-skill-editor"
+    ],
+    "feedback-comments": [
+      "rag-department-admin",
+      "rag-reviewer"
+    ],
+    "manage": [
+      "rag-department-admin",
+      "rag-platform-admin"
+    ],
+    "read": [
+      "rag-department-admin",
+      "rag-editor",
+      "rag-pipeline-editor",
+      "rag-platform-admin",
+      "rag-reviewer",
+      "rag-skill-editor",
+      "rag-viewer"
+    ],
+    "review": [
+      "rag-reviewer"
+    ]
+  }
+}

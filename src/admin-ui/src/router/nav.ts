@@ -1,6 +1,7 @@
 import type { RouteLocationRaw } from 'vue-router'
 import { ROLES, type Role } from '@/api/types'
 import { platformNavItems } from '@/platform/nav'
+import { rolesFor } from '@/utils/permissions'
 import { NAV_GROUP, NAV_KEYWORDS, PAGE } from '@/utils/labels'
 
 /** A place inside a page (a tab or a card) that search can jump straight to. */
@@ -34,10 +35,14 @@ export interface NavGroup {
 
 /** Every rag-* role: the Read policy (admin design §3.1). */
 export const ALL_ROLES: Role[] = [...ROLES]
-export const PLATFORM_ADMIN: Role[] = ['rag-platform-admin']
-/** The Manage policy (admin design §3.1). */
-export const MANAGE_ROLES: Role[] = ['rag-platform-admin', 'rag-department-admin']
-/** Feedback (admin design §3.3): platform and department admins, reviewers and viewers; not the editor roles. */
+/** The Admin policy (admin design §3.1), from the permission matrix. */
+export const PLATFORM_ADMIN: Role[] = rolesFor('admin')
+/** The Manage policy (admin design §3.1), from the permission matrix. */
+export const MANAGE_ROLES: Role[] = rolesFor('manage')
+/**
+ * Feedback (admin design §3.3): platform and department admins, reviewers and viewers; not the editor roles. No policy
+ * holds exactly these roles (the feedback list is Read), so the page's roles stay a UI choice.
+ */
 export const FEEDBACK_ROLES: Role[] = ['rag-platform-admin', 'rag-department-admin', 'rag-reviewer', 'rag-viewer']
 
 /**

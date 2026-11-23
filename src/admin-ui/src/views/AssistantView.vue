@@ -123,11 +123,11 @@ const historyMode = ref('none')
 const retentionDays = ref('90')
 const retentionError = ref<string | undefined>(undefined)
 const error = ref<unknown>(null)
-const canEdit = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor']))
+const canEdit = computed(() => auth.can('edit'))
 // Change department (#811): platform admins only.
-const canMove = computed(() => auth.hasAnyRole(['rag-platform-admin']))
+const canMove = computed(() => auth.can('admin'))
 const moving = ref(false)
-const canManage = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']))
+const canManage = computed(() => auth.can('manage'))
 // Delete (Decisions "Deleting knowledge bases, sources and assistants"; admin §5.5): Manage, from any state, the name typed;
 // the dialog names the apps it is offered to and its questions of the last 7 days (the list row's count).
 const deleting = ref(false)

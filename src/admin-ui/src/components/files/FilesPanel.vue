@@ -46,7 +46,7 @@ const MAX_LIMIT = 200
 const SEARCH_DELAY_MS = 300
 const STATES: FileStateFilter[] = ['processing', 'indexed', 'failed']
 
-const canRestore = computed(() => auth.hasAnyRole(['rag-platform-admin']))
+const canRestore = computed(() => auth.can('admin'))
 const summary = ref<UploadSummary | null>(null)
 const files = ref<UploadFile[]>([])
 const next = ref<string | null>(null)

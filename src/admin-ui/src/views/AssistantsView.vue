@@ -22,7 +22,7 @@ const router = useRouter()
 const assistants = useLoadable<AssistantSummary[]>([])
 const departments = ref<Department[]>([])
 const creating = ref(false)
-const canEdit = auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor'])
+const canEdit = auth.can('edit')
 const columns: Column[] = [
   { key: 'name', label: ASSISTANTS.name },
   { key: 'level', label: ASSISTANTS.level },

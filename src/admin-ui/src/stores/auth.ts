@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import { api } from '@/api'
 import { readCookie, XSRF_COOKIE } from '@/api/client'
 import { ROLES, type BffUser, type Role } from '@/api/types'
+import { rolesFor, type Policy } from '@/utils/permissions'
 
 export type AuthStatus = 'unknown' | 'loading' | 'authenticated' | 'unauthenticated' | 'error'
 
@@ -40,6 +41,11 @@ export const useAuthStore = defineStore('auth', () => {
   function hasAnyRole(required: readonly Role[] | undefined): boolean {
     if (!required || required.length === 0) return isAuthenticated.value
     return required.some((r) => hasRole(r))
+  }
+
+  /** Whether one of the user's roles holds `policy` in the API's permission matrix; the API decides, this only hides. */
+  function can(policy: Policy): boolean {
+    return rolesFor(policy).some((r) => hasRole(r))
   }
 
   const isPlatformAdmin = computed(() => hasRole('rag-platform-admin'))
@@ -125,6 +131,7 @@ export const useAuthStore = defineStore('auth', () => {
     canOpen,
     hasRole,
     hasAnyRole,
+    can,
     canManageDepartment,
     load,
     ensureLoaded,

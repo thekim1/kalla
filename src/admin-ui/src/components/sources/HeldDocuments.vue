@@ -19,7 +19,7 @@ const auth = useAuthStore()
 const ui = useUiStore()
 const held = useKeysetList((after?: string) => api.sources.held(props.sourceId, after))
 const releasing = ref(false)
-const canRelease = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']))
+const canRelease = computed(() => auth.can('manage'))
 
 async function release(): Promise<void> {
   await api.sources.releaseHeld(props.sourceId)
