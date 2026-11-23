@@ -84,8 +84,7 @@ Beside P2 wave 1: take B-64 when a wave item waits, or after it. `proposals/topi
 
 ## Support chatbot F6 (user, 2026-11-22)
 
-### [ ] B-66 Downvotes per document (F6)
-- **Taken:** 2026-11-23, the main session on the user's machine (#1011), branch `b/B-66-document-downvotes`.
+### [x] B-66 Downvotes per document (F6) (#1023)
 - **Do:** Decisions "Downvotes per document": the table `chat."DocumentDailyFeedback"` (data-model §2.3) in a migration
   of its own; its delta in `POST /v1/feedback` and the Open WebUI importer (chat §14.1, §14.2: one count per cited
   document, in the rating's transaction, never below 0); admin §4.5's `GET /api/collections/{id}/feedback` (+ CSV);
