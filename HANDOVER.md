@@ -67,12 +67,16 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
   its pull request what you are about to write; review its pull requests as comments (claims checked against the code).
 - **A decision for the user is asked as four alternatives with one recommendation** (the question tool).
 
-**Open when this was written** (2026-11-23, about 13:15 UTC): Dependabot's #958 and the main session's #989 (this
-file), #990 (the support case, B-83) and #991 (B-58, B-59 and B-63's design deviations). `thekim1` merged #977 (B-58),
-#963 (B-63), #978 (B-59) and #984 (B-58's Settings switch) at about 13:00, each after the main session's review said it
-was ready. In order:
+**Open when this was written** (2026-11-23, about 14:20 UTC): `thekim1`'s #996 (CQ-5b, reviewed: ready), Dependabot's
+#958 and the main session's #989 (this file), #990 (the support case, B-83) and #991 (B-58, B-59 and B-63's design
+deviations). `thekim1` merged #977 (B-58), #963 (B-63), #978 (B-59) and #984 (B-58's Settings switch) at about 13:00,
+each after the main session's review said it was ready, and #997 (Word uploads parse again) before its review was
+done. In order:
 
-1. **#990 and #991**, the main session's own: green or nearly so; they need the user's word.
+1. **#990 and #991**, the main session's own: green; they need the user's word. **#996** is ready (review comment).
+   **#998** follows #997: its fix turns required members off for every stage output, so a cached `DetectResult`
+   without `route` reads as `ParseRoute.Html`; the narrower drop-in (only nullable constructor parameters optional)
+   passes the whole worker suite.
 2. **B-58, B-59 and B-63 are merged; their design deviations are #991.** It also writes down thekim1's hand-off on
    #963: the personal-data preview's output is read at `Edit` while starting it needs `Manage`. That is sound (the
    spans hold positions, never values, `PreviewPiiSpan`; an editor already reads the text through the chunks); only
@@ -87,15 +91,20 @@ was ready. In order:
    search knowledge bases not shared with the assistant's department (`KnowledgeService.AssistantCollections` never
    checks sharing; the panel's snapshot confines only unpublished collections), and copying an assistant across
    departments carries the links over, so it is the normal path; copied test questions keep the source department's
-   documents; no rate policy on `POST /test-runs`. Item 2 (exception text in the judge note) is fixed by #977. Fix
-   before the next release. When it is settled, the main session writes the copy's rule for links and expected
+   documents; no rate policy on `POST /test-runs`. Item 2 (exception text in the judge note) is fixed by #977.
+   **Taken** by `thekim1`'s B-58/B-59 session on `b/983-draft-sharing` (items 1, 3, 4). Fix before the next release. When it is settled, the main session writes the copy's rule for links and expected
    documents into admin §4.5 (copy row) and §4.9/§7.4 (the panel and the runs search only what V11 allows); #985
    left them out on purpose.
 7. **Read of the never-read documents (handover 56's item 11):** read 1 is done (#988: `to-verify.md`,
    `postponed-decisions.md`, the gold-set README; issues #986, #987). Read 2 is #990 (the support-assistant case
    brought up to date with the code and decisions; the user's four answers: the case's framing stays, condense keeps
    3 s, the rerank model is a deployment's choice, DoIT's key uses PII policy `Allow`; SA-11 queued as B-83). Read 3 is
-   `docs/` (stream a's: findings become `stream-a` issues).
+   `docs/`: done, filed as stream a's #992 (instructions that fail: `KALLA_OTEL_ENDPOINT` does not exist, it is
+   `FORS_OTEL_ENDPOINT`; `deployment/rag-*`; the runbook's Portainer backup list), #993 (stale facts, MCP claimed),
+   #994 (project vocabulary in operator pages) and #995 (gaps: **Portainer backup and restore with a drill**, the
+   nightly answer run's cost and switch, *Needs attention* in the daily checks, a new department, key expiry, an
+   upgrade from 0.9.x). Decisions "Upgrades in one step" still says "0.5.1 today" for the path from before 0.5.0;
+   #993 asks the docs to pick one path, and the decision follows.
 8. **The code-quality plan** ([`plans/proposals/code-quality-top7.md`](plans/proposals/code-quality-top7.md), tracked
    in #980): done are #1, #2, #4, #5 (#981), #6 and #7; #5b and #3 are `thekim1`'s next, now that #963 is in; stream
    a's parts are #974.
@@ -180,6 +189,7 @@ history. Reviews and reads ran as subagents, one at a time; their claims were ch
   queued as B-83: a known file's upload replaces it by default, admin §5.5.7 point 6).
 - **#991:** B-58, B-59 and B-63's design deviations (processing §14.8, admin §4.5, §5.2, §5.5.1, §5.5.2, §5.5.3,
   §10.3, chat §8.1, data-model §2.2, §2.3).
+- **#992 to #995:** the read of `docs/`, filed for stream a. **#996, #997** reviewed; **#998** the follow-up to #997.
 - **Approved as `Crotalus` on the user's word and merged:** #981, #982, then #985, #988.
 
 ## Known gaps, documented, not fixed
@@ -273,7 +283,8 @@ history. Reviews and reads ran as subagents, one at a time; their claims were ch
   B-82 (the UX pass and the Publish dialog; B-74 waits on nothing), B-83 (replace an upload by name, before T4; waits
   on nothing), B-42 to B-46 (the gateway phases' live checks) and
   its live items. An item someone has started says **Taken** in the queue. Main: M-4.
-- **Open issues that matter:** #983 (security, release blocker), #986 (a chat metric for to-verify #103), #987 (the
+- **Open issues that matter:** #983 (security, release blocker, taken), #992 to #995 (the docs), #998 (stage outputs'
+  read), #986 (a chat metric for to-verify #103), #987 (the
   grading script), #980 (code quality's tracker), #959 (the chat extension; closes with B-72 and B-73), #974 (code
   quality, stream a's part), #781 and #921 (watch), #920 (the VM's upgrade, `thekim1`'s), #929 (topics; closes with
   B-65), #667 (M-16's issue: the work is done, `thekim1`'s to close), #333, #511, #580 and #550. In Fors: no open pull
