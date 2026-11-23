@@ -20,7 +20,9 @@ learned, not every session (the session's state is in [`../../HANDOVER.md`](../.
   the PRs"; 2026-11-21); a recorded decision and a bare "ok go on" were stopped. With that word: read the pull
   request's `state`, switch the account in a command of its own, approve, switch back at once. Without it: review
   as a comment, say that it is not the approval, and give the user the line to run
-  (`gh auth switch -u Crotalus && gh pr review <n> --approve && gh auth switch -u ume-nichlas`). A pull request also
+  (`gh auth switch -u Crotalus && gh pr review <n> --approve && gh auth switch -u ume-nichlas`). The word covers the
+  pull requests that were open when the user wrote it: a batch opened afterwards was stopped (2026-11-23), also on the
+  session's own. After a refusal, switch back at once and leave a "ready" comment on each. A pull request also
   goes in on `thekim1`'s approval, or by `thekim1`'s `--admin` on a green one (allowed by the user, 2026-11-19).
   Never `gh pr merge --admin` as `ume-nichlas`. **Merge an approved, green pull request without asking** and tell
   the user afterwards. Design, scope and destructive actions go to the user.
@@ -152,6 +154,11 @@ learned, not every session (the session's state is in [`../../HANDOVER.md`](../.
 - **Shell tests that pass here and fail on the runner:** `join` and `sort` follow the locale's collation (compare by
   exact name in `awk`, or set `LC_ALL=C`), and `producer | grep -m1` fails under `pipefail` when grep closes the
   pipe early (read the output into a variable first).
+- **A red `backend` with no failed step, or many unrelated test classes failing in the same second, is the runner**
+  (2026-11-23: three backend runs at once started 44 Testcontainers and took the runners' WSL VM down). Re-run the
+  failed job (`gh run rerun <run> --failed`) before reading anything into it.
+- **A check with no conclusion is queued, not green.** Read `conclusion // status` and treat empty as waiting; a
+  watcher that merges should wait for `mergeStateStatus` `CLEAN`.
 - **A slow test project: compare one process with two before adding collections** (#775): the collections of one
   `Kalla.AdminApi.Tests` process wait for one another, so CI runs it as five processes
   (`scripts/ci/backend-tests.sh`). Database classes go into one of `AdminDatabaseGroup1`..`4`, the shortest by
@@ -231,6 +238,9 @@ learned, not every session (the session's state is in [`../../HANDOVER.md`](../.
 
 ## Environment notes
 
+- **Claude Code's own memory is per machine** and does not follow the work to another one: what binds has to be in
+  this file or in `AGENTS.md`. The notes below describe `~/research/rag`; on another machine check each before
+  relying on it.
 - `rag_key.txt` in the repo root holds the interim-gateway key (mode 600, excluded in `.git/info/exclude`). Never
   commit, print or move it.
 - **Git over HTTPS:** `git -c credential.helper= -c 'credential.helper=!gh auth git-credential' fetch|pull|push …`,
