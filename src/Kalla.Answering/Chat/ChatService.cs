@@ -45,6 +45,25 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
     private readonly Counter<long>? _escalation = meters?.Create(Microsoft.Extensions.Hosting.Extensions.TelemetryName)
         .CreateCounter<long>("rag.chat.escalation", description: "Escalation hand-offs by reason and what became of the summary");
 
+    private readonly Histogram<double>? _estimateRatio = meters?.Create(Microsoft.Extensions.Hosting.Extensions.TelemetryName)
+        .CreateHistogram<double>("rag.chat.prompt.estimate_ratio",
+            description: "The prompt's estimated tokens (characters / 3 + 4 per message) over the prompt_tokens the gateway reported, per answer, by model");
+
+    /// <summary>
+    /// Chat design §6.3, §17: the prompt's estimate (<see cref="BuiltPrompt.EstimatedTokens"/>) over the <c>prompt_tokens</c> the
+    /// gateway reported, once per answer that reports them, tagged with the answer's gateway model; above 1 the estimate errs
+    /// high (as meant), below 1 it errs low. The constant <see cref="PromptBuilder.CharsPerToken"/> is tuned from it (to-verify
+    /// row 103). Nothing for a fixed text, or an answer without usage.
+    /// </summary>
+    internal void RecordPromptEstimate(ChatPlan plan, int promptTokens)
+    {
+        if (_estimateRatio is not null && promptTokens > 0 && plan.Prompt is { EstimatedTokens: > 0 } prompt)
+        {
+            // The gateway model the answer ran on (bounded by GatewayModels), not the assistant's slug.
+            _estimateRatio.Record((double)prompt.EstimatedTokens / promptTokens, new KeyValuePair<string, object?>("model", plan.Assistant.Published?.GatewayModel));
+        }
+    }
+
     /// <summary><c>Settings.Chat</c> at the current snapshot, over the deployment knobs.</summary>
     public PlatformChatSettings Platform => Resolved(snapshots.Current).Platform;
 
