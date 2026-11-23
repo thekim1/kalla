@@ -1,5 +1,6 @@
 import { PLATFORM, PROMPT_TEXTS, SETTINGS_PAGE } from '@/utils/labels'
 import type { ModelField } from './modelFields'
+import type { FieldSpec } from './schema'
 
 /**
  * The Settings page's sections (admin design §5.10), in the order of the section list. A `settings` section is one
@@ -51,6 +52,25 @@ export const SETTINGS_MODEL_FIELDS: Partial<Record<SettingsSectionName, readonly
     { name: 'url-list', kind: 'text', in: 'defaultSchedules' },
     { name: 'crawl', kind: 'text', in: 'defaultSchedules' },
   ],
+}
+
+/**
+ * The settings sections' numbers shown as a switch and a count (admin design §5.10): the Evaluation section's nightly answer
+ * run is one value, `Settings.EvaluationAnswerQuestions` (0 = off), shown as *Run the nightly answer evaluation* and, while
+ * on, the questions per assistant and night; switched on again it starts at 100 (Decisions "Nightly answer run").
+ */
+export const SETTINGS_SWITCH_COUNT_FIELDS: Partial<Record<SettingsSectionName, Record<string, Pick<FieldSpec, 'switchLabel' | 'label' | 'countHint' | 'onValue'>>>> = {
+  evaluation: {
+    evaluationAnswerQuestions: {
+      switchLabel: SETTINGS_PAGE.answerRun.switch, label: SETTINGS_PAGE.answerRun.count, countHint: SETTINGS_PAGE.answerRun.countHint, onValue: 100,
+    },
+  },
+}
+
+/** The section's fields with its switch-and-count numbers (`SETTINGS_SWITCH_COUNT_FIELDS`) turned into `switchCount` fields. */
+export function withSwitchCounts(fields: FieldSpec[], section: SettingsSectionName): FieldSpec[] {
+  const counts = SETTINGS_SWITCH_COUNT_FIELDS[section] ?? {}
+  return fields.map((f) => (counts[f.name] ? { ...f, ...counts[f.name], kind: 'switchCount' as const } : f))
 }
 
 /** The fields that pick a model: only these need the gateway mirror. */

@@ -32,7 +32,7 @@ export type OpenApiDocument = {
 }
 
 /** `longtext`: a string longer than {@link LONG_TEXT} characters (an assistant template's instructions), edited on several lines. */
-export type FieldKind = 'switch' | 'select' | 'number' | 'text' | 'longtext' | 'datetime' | 'list' | 'json' | 'model'
+export type FieldKind = 'switch' | 'select' | 'number' | 'text' | 'longtext' | 'datetime' | 'list' | 'json' | 'model' | 'switchCount'
 
 /** A string whose `maxLength` is above this is a text area: a one-line input would drop its line breaks. */
 export const LONG_TEXT = 1000
@@ -49,6 +49,13 @@ export interface FieldSpec {
   modelKind?: 'chat' | 'rerank' | 'embedding'
   /** Set on a member of a JSON field: the field it is edited out of and sent back in. */
   parent?: string
+  /**
+   * A `switchCount` field: a number shown as a switch (`switchLabel`) and, while on, the count (`label`, `countHint`). Off
+   * stores 0; switched on again it starts at `onValue` (the nightly answer run, admin design §5.10).
+   */
+  switchLabel?: string
+  countHint?: string
+  onValue?: number
 }
 
 let document: Promise<OpenApiDocument> | null = null
@@ -143,7 +150,8 @@ export function fromInput(field: FieldSpec, input: string | boolean): unknown {
   const text = String(input).trim()
   if (text === '') return field.kind === 'list' ? [] : field.nullable ? null : undefined
   switch (field.kind) {
-    case 'number': {
+    case 'number':
+    case 'switchCount': {
       const n = Number(text.replace(',', '.'))
       if (!Number.isFinite(n)) throw new InputError('number')
       return n

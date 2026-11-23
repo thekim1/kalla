@@ -12,7 +12,7 @@ import GenericForm from './GenericForm.vue'
 import PiiSettingsForm from './PiiSettingsForm.vue'
 import { withModelFields } from './modelFields'
 import { fieldsOf, loadOpenApi, requestSchema, type FieldSpec } from './schema'
-import { needsModels, SETTINGS_MODEL_FIELDS, type SettingsSectionName } from './settingsPage'
+import { needsModels, SETTINGS_MODEL_FIELDS, withSwitchCounts, type SettingsSectionName } from './settingsPage'
 
 // One section of the platform settings on the Settings page (admin design §5.10, §4.8): its fields from the request schema of
 // `PUT /api/settings/{section}` (§5.8), the model fields as pickers over the gateway mirror at the platform ceiling (#466),
@@ -43,7 +43,7 @@ async function load(): Promise<void> {
       needsModels(modelFields) ? api.gateway.models() : Promise.resolve([] as GatewayModel[]),
     ])
     const schema = requestSchema(doc, 'put', url()) ?? requestSchema(doc, 'put', '/api/settings/{section}')
-    loaded.value = { fields: withModelFields(fieldsOf(doc, schema), modelFields), initial, models }
+    loaded.value = { fields: withSwitchCounts(withModelFields(fieldsOf(doc, schema), modelFields), props.section), initial, models }
     formKey.value++
   } catch (e) {
     loaded.value = null
