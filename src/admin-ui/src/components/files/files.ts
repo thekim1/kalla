@@ -4,8 +4,8 @@ import type { Tone } from '@/utils/labels'
 import { FILES } from '@/utils/labels'
 import { formatDecimal } from '@/utils/format'
 
-// Helpers of the Files experience (admin design §5.5.7): sizes, state tones, folders of a relative path, and the upload
-// source a knowledge base of files gets.
+// Helpers of the Files experience (admin design §5.5.7): sizes, state tones, folders of a relative path, the live files an
+// upload would replace, and the upload source a knowledge base of files gets.
 
 /** How often the summary and the visible rows refresh while files are processing (admin design §5.5.7). */
 export const POLL_MS = 3000
@@ -31,6 +31,52 @@ export const folderOf = (path: string): string => {
 
 /** The file's own name, without its folder. */
 export const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
+
+/** A relative path as the admin API stores it (`UploadEndpoints.FileName`): `\` read as `/`, no leading `/`, each segment trimmed. */
+export const storedPath = (path: string): string =>
+  path.trim().replace(/\\/g, '/').replace(/^\/+/, '').split('/').map((s) => s.trim()).join('/')
+
+/** What two paths of the same file share: the stored path, case ignored (as Windows and macOS folders ignore it). */
+export const pathKey = (path: string): string => storedPath(path).toLowerCase()
+
+/** The longest start every path shares ('' when they share none). */
+export function commonStart(paths: string[]): string {
+  let start = paths[0] ?? ''
+  for (const path of paths) {
+    let n = 0
+    while (n < start.length && n < path.length && start[n] === path[n]) n++
+    start = start.slice(0, n)
+  }
+  return start
+}
+
+/** What an upload does with added files that match live ones (admin design §5.5.7 point 6): replace them, or keep both. */
+export type KnownChoice = 'replace' | 'keep'
+
+/** Rows per request when the source's files are looked up by path: the admin API's largest page. */
+const LOOKUP_PAGE = 200
+
+/**
+ * The source's live files whose path is one of `paths` (admin design §5.5.7 point 6), keyed by {@link pathKey}; the newest
+ * when two share a path. The Files card has loaded only its first rows, so this reads the list again, filtered on the
+ * start the paths share (one file's whole path; a dropped folder's name), page by page.
+ */
+export async function liveFilesByPath(sourceId: string, paths: string[]): Promise<Map<string, UploadFile>> {
+  const wanted = new Set(paths.map(pathKey))
+  const found = new Map<string, UploadFile>()
+  const q = commonStart(paths.map(storedPath)).trim() || undefined
+  let after: string | null = null
+  do {
+    const page = await api.sources.files(sourceId, { q, sort: 'name', after: after ?? undefined, limit: LOOKUP_PAGE })
+    for (const file of page.items) {
+      const key = pathKey(file.fileName)
+      const known = found.get(key)
+      if (wanted.has(key) && (!known || Date.parse(file.uploadedAt) > Date.parse(known.uploadedAt))) found.set(key, file)
+    }
+    after = page.items.length ? page.next : null
+  } while (after)
+  return found
+}
 
 export interface FolderGroup {
   folder: string

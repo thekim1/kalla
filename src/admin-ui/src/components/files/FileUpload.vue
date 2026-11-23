@@ -10,12 +10,14 @@ import { useUiStore } from '@/stores/ui'
 import { FILES } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 import { filesFromDrop, filesFromInput, type PickedFile, skipReason, UPLOAD_ACCEPT } from '@/utils/uploads'
-import { baseName, folderOf, sizeText } from './files'
+import { baseName, folderOf, type KnownChoice, liveFilesByPath, pathKey, sizeText } from './files'
+import KnownFilesDialog from './KnownFilesDialog.vue'
 
 // Adding files to an upload source (admin design §4.5, §5.5.7, connectors §9.1–§9.3): choose files or a folder, or drag
 // them onto the drop zone; each file keeps its relative path (`HR/Policys/semester.pdf`), is pre-checked for type, size
 // and path, and goes into an upload batch (three at a time, as many batches as the API's limits need; per-file state, a
-// failed one is retried in the same batch); then one commit per batch. Replace sends new bytes into a slot (same document).
+// failed one is retried in the same batch); then one commit per batch. Replace sends new bytes into a slot (same document);
+// an added file with the path of a live one replaces it too, unless the user keeps both (§5.5.7 point 6).
 const props = defineProps<{ source: Source; topicsLink: boolean }>()
 const emit = defineEmits<{ (e: 'committed'): void; (e: 'topics'): void }>()
 const ui = useUiStore()
@@ -35,7 +37,10 @@ interface Pending {
   path: string
   state: 'waiting' | 'sending' | 'sent' | 'failed' | 'skipped'
   error: string | null
+  /** The slot it is sent into (`X-Upload-Id`): from a row's Replace, or a live file with its path. */
   replaces?: string
+  /** Matched against the source's live files already, so a retry does not ask again. */
+  matched?: boolean
   /** The batch and the file's number in it, given on the first send and kept for a retry. */
   batch?: Batch
   n?: number
@@ -61,6 +66,9 @@ const picker = ref<HTMLInputElement | null>(null)
 const folderPicker = ref<HTMLInputElement | null>(null)
 const replacePicker = ref<HTMLInputElement | null>(null)
 const replacing = ref<UploadFile | null>(null)
+/** The paths the known-files dialog lists while it waits for an answer. */
+const known = ref<string[]>([])
+let answer: ((choice: KnownChoice | null) => void) | null = null
 let nextKey = 1
 
 const maxMb = computed(() => Number(props.source.settings.maxFileSizeMb ?? 50))
@@ -127,6 +135,54 @@ async function sendOne(p: Pending): Promise<void> {
   }
 }
 
+/** Opens the known-files dialog; resolves with the choice, or null when it is closed without one. */
+function ask(paths: string[]): Promise<KnownChoice | null> {
+  known.value = paths
+  return new Promise((resolve) => {
+    answer = resolve
+  })
+}
+
+function answered(choice: KnownChoice | null): void {
+  known.value = []
+  answer?.(choice)
+  answer = null
+}
+
+/**
+ * Admin design §5.5.7 point 6 (support case SA-11): the waiting files whose path matches a live file of the source. When
+ * any does, one dialog asks whether they replace those files (the default: each is sent with that file's `X-Upload-Id`, as
+ * the row's Replace does, so the document keeps its id) or are kept as new files. A slot takes one file of the upload at
+ * most. False when the dialog is closed without a choice: nothing is sent and the files stay in the list.
+ */
+async function matchKnown(): Promise<boolean> {
+  const fresh = pending.value.filter((p) => p.state === 'waiting' && !p.matched && !p.replaces)
+  if (!fresh.length) return true
+  const live = await liveFilesByPath(props.source.id, fresh.map((p) => p.path))
+  const matches: [Pending, UploadFile][] = []
+  const taken = new Set<string>()
+  for (const p of fresh) {
+    const file = live.get(pathKey(p.path))
+    if (!file || taken.has(file.id)) continue
+    taken.add(file.id)
+    matches.push([p, file])
+  }
+  if (matches.length) {
+    const choice = await ask(matches.map(([p]) => p.path))
+    if (!choice) return false
+    if (choice === 'replace') for (const [p, file] of matches) p.replaces = file.id
+  }
+  for (const p of fresh) p.matched = true
+  return true
+}
+
+/** The notice after a commit: the one replaced file by name, else the count and how many of them replace a file. */
+function savedMessage(sent: Pending[]): string {
+  const replaced = sent.filter((p) => p.replaces).length
+  if (sent.length === 1 && replaced) return FILES.replacedDone(baseName(sent[0]!.path))
+  return replaced ? FILES.committedReplacing(sent.length, replaced) : FILES.committed(sent.length)
+}
+
 /** Sends every file not yet sent (batches created as needed); a failed file keeps its error and may be retried. */
 async function send(): Promise<boolean> {
   const queue = pending.value.filter((x) => x.state === 'waiting' || x.state === 'failed')
@@ -150,7 +206,7 @@ async function upload(): Promise<void> {
   busy.value = true
   error.value = null
   try {
-    if (!(await send())) return
+    if (!(await matchKnown()) || !(await send())) return
     const sent = pending.value.filter((p) => p.state === 'sent')
     // One commit (and one sync) per batch; a committed batch leaves the list at once, so a later failure retries only the rest.
     for (const batch of batches.value) {
@@ -159,7 +215,7 @@ async function upload(): Promise<void> {
       pending.value = pending.value.filter((p) => p.batch !== batch)
       batches.value = batches.value.filter((b) => b !== batch)
     }
-    ui.notify(sent.length === 1 && sent[0]!.replaces ? FILES.replacedDone(baseName(sent[0]!.path)) : FILES.committed(sent.length))
+    ui.notify(savedMessage(sent))
     pending.value = pending.value.filter((p) => p.state !== 'skipped')
     batches.value = []
     emit('committed')
@@ -255,5 +311,6 @@ onMounted(() => {
       </ul>
     </template>
     <InlineError v-if="error" :message="problemMessage(error)" class="mt-3" />
+    <KnownFilesDialog :paths="known" @choose="answered" />
   </div>
 </template>

@@ -16,6 +16,8 @@ export default defineConfig({
     { name: 'accessibility', testMatch: /accessibility\.spec\.ts/, dependencies: ['pilot'] },
     // Open WebUI against kalla-api (to-verify 47, 50, 134, 165): chats with an assistant the pilot journey publishes.
     { name: 'openwebui', testMatch: /openwebui\.spec\.ts/, dependencies: ['pilot'] },
+    // Uploads into a knowledge base of files it creates itself (admin design §5.5.7, replace by name: B-83).
+    { name: 'upload', testMatch: /upload\.spec\.ts/ },
     {
       name: 'setup',
       testMatch: /setup\.spec\.ts/,
