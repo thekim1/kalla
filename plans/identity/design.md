@@ -171,6 +171,19 @@ Copied (`AdminAuthentication.cs:188-208`): `isAuthenticated`, `environment`, `na
 `organisation-name` (gateway v0.10.2; M-17 C12), trimmed; null when empty, without the feature or before the first
 context answer.
 
+**The organisation's logo** (#953, as built; Fors: thekim1/fors#126, merged after `v0.12.2`). `/bff/user` also carries
+`logoUrl`, before sign-in too: the address of the logo the gateway's admin console is branded with, or null, and then
+the admin UI shows its built-in mark.
+
+| Topic | Rule |
+|---|---|
+| Read from | `GET /integration/v1/branding/logo` on the gateway's Integration API, with kalla-admin's credential key (no scope), at the context's `integration_api_url`; only while the context has the feature `organisation-logo` and the address passes the read-back's rule (`IntegrationApiClient.Usable`) |
+| Kept | in memory per instance, read again after 5 minutes with `If-None-Match`; one try with a 3 s limit. A failed read is held as long as an answer, keeps the logo it had, and never fails `/bff/user`; a `404` means the gateway shows its built-in icon, so there is none |
+| Accepted | at most 256 KB, of a type the gateway accepts for a logo (PNG, JPEG, WebP, SVG), and only when the bytes are of the type the answer names; anything else is refused and logged |
+| Served | by kalla-admin from its own origin, `GET /bff/branding/logo`, **anonymous** (the sign-in page shows it): the browser never contacts the gateway and the admin UI's Content-Security-Policy stays `img-src 'self' data:`. `logoUrl` is that path with `?v=<the image's hash>`; a request with the current hash is cached for good (`immutable`), any other gets `no-cache`. `404` when there is no logo |
+| An SVG opened directly | the answer carries its own policy, `default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox`, beside `nosniff` and `X-Frame-Options: DENY` from the web defaults, so it runs nothing; inside the page it is an `<img>` |
+| What a visitor can cause | at most one read of the gateway per 5 minutes, failures included |
+
 ### 1.6 Own registration (decided)
 
 Our BFF uses its **own** client `kalla-admin` (plan §2, answered question 7, revised 2026-10-30), next to the
