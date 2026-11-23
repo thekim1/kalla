@@ -3,11 +3,10 @@
 State of the Källa work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`).
 **Last release `v0.9.2`** (2026-11-21, tag at `c7d5de47`, on Fors `v0.12.2`). **`main` has unreleased code since
 2026-11-23:** P2 wave 1's first four items, a source's schedule, the fix for the 502 after sign-in, the organisation's
-logo and six code-quality refactors (*State*). The user's VM runs 0.5.0. Two machines have worked on it:
-`~/research/rag` (the user's, where sessions 49 to 55 ran) and `thekim1`'s (stream b, stream a, the releases, and a
-coordinating session that writes proposals). **Session 56 runs on another machine than session 55** (user,
-2026-11-23): *Start here* says what does not travel. Branch `main`, remote `origin` =
-https://github.com/thekim1/kalla.
+logo and seven code-quality refactors (*State*). The user's VM runs 0.5.0. Three machines have worked on it:
+`~/research/rag` (the user's, sessions 49 to 55), `~/git/ume-rag-platform` (the user's WSL machine, session 56) and
+`thekim1`'s (stream b, stream a, the releases, and a coordinating session that writes proposals). *Start here* says
+what does not travel between machines. Branch `main`, remote `origin` = https://github.com/thekim1/kalla.
 
 ## What this is
 
@@ -28,18 +27,20 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
    `plans/archive/work/`), results in `results-a.md`, `results-b.md` and `results-main.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here (session 56)
+## Start here (session 57)
 
-**On a machine this work has not run on:**
+**What does not travel between machines:**
 - **Claude Code's own memory stays on the machine it was written on.** Everything that binds is in
   [`plans/work/main-handbook.md`](plans/work/main-handbook.md) (*How we work*); read it before anything else.
-- **Accounts:** the session works as `ume-nichlas`, and approvals are the user's (`Crotalus`). Run `gh auth status`
-  first; whether both accounts are in `gh` there is not known.
-- **Pushing:** on `~/research/rag` a plain `git push` hung on the Windows credential manager, so `gh` was the
-  credential helper (below). Another machine may need neither.
-- **Fors:** clone https://github.com/thekim1/fors beside this repository to read the gateway's code at a tag or at
-  `main` (`6c3c412` is the commit Källa's contract copy is pinned to).
-- *State*'s machine block describes `~/research/rag` only.
+- **Accounts:** the session works as `ume-nichlas`, and approvals are the user's (`Crotalus`). Both accounts are in
+  `gh` on `~/research/rag` and on `~/git/ume-rag-platform`; run `gh auth status` first.
+- **Pushing:** on both of the user's machines `gh` is the credential helper (below); it works on
+  `~/git/ume-rag-platform` too (GitHub answers with a "repository moved" note, harmless).
+- **Fors:** `~/git/llmgateway` on `~/git/ume-rag-platform`'s machine is at `6c3c412` (Fors `main`, two commits past
+  `v0.12.2`), the commit Källa's contract copy is pinned to. Elsewhere clone https://github.com/thekim1/fors beside
+  this repository.
+- **Docker** on `~/git/ume-rag-platform`'s machine is 29.9.3 (the user upgraded it in session 56) and must be started
+  by hand before Testcontainers tests. *State*'s machine block describes `~/research/rag` only.
 
 **The rules of the repository:**
 - **`main` is protected** ("Protect main": a pull request with one approving review and the required checks; an
@@ -59,78 +60,81 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
   **The word covers the pull requests open when the user wrote it** (session 55): "review / approve etc" and "approve
   the green PRs" went through for those; a batch that `thekim1` opened afterwards was stopped by the permission check.
   After a refusal: switch back to `ume-nichlas` at once, leave a "ready" comment on each, give the user the line.
-- **Push with `gh` as the credential helper:** a plain `git push` here asks the Windows credential manager and hangs.
+- **Push with `gh` as the credential helper:** a plain `git push` on `~/research/rag` asks the Windows credential
+  manager and hangs.
   Use `git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push …` (session 54).
 - **Look at the open pull requests before each step** (`gh pr list`): the other machine works at the same hour. Say on
   its pull request what you are about to write; review its pull requests as comments (claims checked against the code).
 - **A decision for the user is asked as four alternatives with one recommendation** (the question tool).
 
-**Open when this was written** (2026-11-23, about 11:00 UTC): `thekim1`'s #978 (B-59, just opened, not read), #977
-(B-58), #963 (B-63), Dependabot's #958 and this file's pull request. In order:
+**Open when this was written** (2026-11-23, about 12:00 UTC): `thekim1`'s #977 (B-58), #978 (B-59, stacked on
+#977), #984 (stream a's Settings switch for B-58, stacked on #977), #963 (B-63), Dependabot's #958 and this file's pull
+request. Every one of `thekim1`'s has a main-session review as a comment; none is approved. In order:
 
-1. **#977, B-58 the nightly answer run:** reviewed as a comment, not approved. It follows #961's design. To fix:
+1. **#977, B-58 the nightly answer run:** reviewed (session 55), not approved. Since then only a label commit
+   (43ee79c2). Still to fix:
    - **an archived assistant still gets a run every night** (the service takes every assistant with a published
-     version; archiving keeps it): add `State == active`, and the main session writes "published and active" into
-     processing §14.8;
-   - **the exception's message is stored in the judge's note**; a gateway client's message can name the gateway's host
-     (#232: type and status only, `GatewayModelSync.ErrorText`). The same two lines are on `main` in
-     `AssistantTestRunner.cs:297` and `:322` (B-57), where the note **is** shown to department users;
-   - smaller: no run without a judge model (today it pays for the answers and judges nothing); an `.upgrade.md` that
-     says the run is on by default.
-2. **#978, B-59 Home's *Needs attention*:** not read. Review it against admin §5.5.1's table (#961): the twelve items
-   marked *the list*, B-57's item (merged), and B-58's once #977 is in.
-3. **#963, B-63 clear a personal-data hold:** reviewed, not approved. It needs `@cleared="documents.reload()"`
-   (#964 removed `loadDocuments`), a rebase, and the fault from the review: a document flagged again after a clearance
-   gets no *Clear*, because both views hide the actions once `PiiClearedAt` is set and nothing ever unsets it (the
-   Documents list needs a field for "a flagged set is held"). The code-quality items #5 and #3 wait for it.
-4. **#958, the parser's bumps:** `LICENSES.md` has to be regenerated on the branch (the docstring of
-   `src/parser/scripts/licences.py`); stream a's. Best taken with opencv 5.1 (item 9).
-5. **Design debts of the main session:** deviations of merged pull requests that no design records yet.
-   - **#977, once merged:** the answer call's step `eval-answer-chat`; what `Found`, `Wins` and `Losses` mean for an
-     `answers` run; the question, answer and note stored on its results (data-model §2.2 says `assistant-tests` only);
-     the metric `rag.admin.answer_runs`.
-   - **#956 (B-57):** the judge's own step `assistant-test-judge`; the cost shown as model calls, not in USD and not
-     in the Publish dialog; the document and phrase checks stored as one `Hit`; *Keep* stores nothing.
-   - **#952 (B-55):** *Copy* is a button (until the UX pass's ⋯ menu); the drawer asks for name and department only;
-     the source's own fields (description, contact, class, history, retention) are copied.
-   - **#954 (B-56):** no skills in the diff yet; the general Publish dialog's diff is not built; the bound of 2,000
-     differing lines.
-   - **#950 (B-54):** template fields are checked for shape only. (Its seeding deviation is settled, #961.)
-6. **The code of B-54 to B-57 has no main-session review.** `thekim1` merged #950 to #956 within the hour. Only B-57's
-   retention was read. Their security-relevant parts (the roles and scope checks of the new endpoints: templates,
-   copy into another department, the diff, test questions and test runs) are worth one read.
-7. **The UX pass's six decisions** (UX1 to UX6, [`plans/proposals/admin-ui-ux-pass.md`](plans/proposals/admin-ui-ux-pass.md),
-   merged as a proposal in #955): the user's, each with four options and a recommendation in the proposal. The main
-   session agreed with all six in its review, with UX2 flagged (it undoes the *Files* tab of 2026-11-09). Once picked,
-   the rules go into Decisions "Admin API and UI" and admin §5. Its step 0 (the phone's bottom menu) needs no decision.
-8. **The code-quality plan** ([`plans/proposals/code-quality-top7.md`](plans/proposals/code-quality-top7.md), #960,
-   asked for by the user): done are #1 (#964), #2 (#966, #971), #4 (#965), #6 (#968) and #7 (#967, #973); #5 and #3
-   wait for #963; stream a's parts are issue #974.
+     version): add `State == active`, and the main session writes "published and active" into processing §14.8;
+   - **the exception's message is stored in the judge's note** (#232: type and status only,
+     `GatewayModelSync.ErrorText`); the same two lines are on `main` in `AssistantTestRunner.cs:297` and `:322`
+     (#983 item 2);
+   - smaller: no run without a judge model; an `.upgrade.md` that says the run is on by default.
+   Merge order (thekim1 on #977): #977, then retarget #978 and #984 to `main`.
+2. **#978, B-59 Home's *Needs attention*:** reviewed (session 56). All twelve rows of admin §5.5.1's *the list* are
+   built, plus B-57's and B-58's items; scope is right. **To fix:** `Settings.Crawl.IncompleteRunsAlert` is read as
+   `"IncompleteRunsAlert"` with the case-sensitive `JsonObject` indexer (`AttentionList.cs:254`); the stored key is
+   `incompleteRunsAlert`, so Home stays at 3 when the setting changes. Smaller (follow-ups are fine): a worker outage
+   longer than 60 s flags every pipeline `template_unsupported`; the gateway key item is looser than V39 (audience
+   ceiling, another department's key); weak tests. **Once merged, the main session records** its seven listed
+   deviations and the unlisted ones from the review: "the last 3 finished runs all failed", `evaluation_worse` within
+   29 days, paused sources still raise `source_failing`, the roles (platform-only kinds; every `Read` role sees its
+   departments' items).
+3. **#984, the Evaluation section's switch (stream a):** reviewed (session 56). **To fix:** the switch's state is
+   derived from the count text (`GenericForm.vue:64-67`), so clearing the count to type a new one turns it off, unmounts
+   the field mid-edit, and a save then stores 100 (the request's default). Give the switch its own state.
+4. **#963, B-63 clear a personal-data hold:** reviewed (session 55), not updated since. It needs
+   `@cleared="documents.reload()"` (#964 removed `loadDocuments`; `vue-tsc` fails on the merged result), a rebase, and
+   the fault from the review: a document flagged again after a clearance gets no *Clear*. Code-quality #3 waits for it.
+5. **#958, the parser's bumps:** `LICENSES.md` has to be regenerated on the branch; stream a's. Best taken with opencv
+   5.1 (item 9).
+6. **#983, the security read of B-54 to B-57 (release blocker, stream b):** a draft's test panel and B-57's test runs
+   search knowledge bases not shared with the assistant's department (`KnowledgeService.AssistantCollections` never
+   checks sharing; the panel's snapshot confines only unpublished collections), and copying an assistant across
+   departments carries the links over, so it is the normal path; exception text in the judge note; copied test
+   questions keep the source department's documents; no rate policy on `POST /test-runs`. Fix before the next
+   release. When it is settled, the main session writes the copy's rule for links and expected documents into admin
+   §4.5 (copy row) and §4.9/§7.4 (the panel and the runs search only what V11 allows); #985 left them out on purpose.
+7. **Read of the never-read documents (handover 56's item 11):** read 1 is done (#988: `to-verify.md`,
+   `postponed-decisions.md`, the gold-set README; issues #986, #987). Read 2, `plans/cases/support-assistant/`, was
+   running when this was written: a consistency check of the case against what is built (F3, F4, F8) and queued (B-61,
+   B-62, B-66), not new work; its findings go into `plans/` like #988. Read 3 is `docs/` (stream a's: findings become
+   `stream-a` issues).
+8. **The code-quality plan** ([`plans/proposals/code-quality-top7.md`](plans/proposals/code-quality-top7.md), tracked
+   in #980): done are #1, #2, #4, #5 (#981), #6 and #7; #3 waits for #963; stream a's parts are #974. #981's follow-ups
+   (on #981): B-57's `TestQuestionDrawer.vue:57-60` has a hand-rolled debounce with no unmount clear, `AssistantTestsTab`
+   a fixed poll; `RunView` and `PublicationView` don't reload on a `props.id` change.
 9. **opencv 5.1 from 2026-11-25** (*Watch*): try `opencv-python-headless` 5.1.0.95 in the parser once its uv cutoff
    lets it in; it may retire the eleven FFmpeg exceptions before 2026-12-17.
-10. **#925's steps 2 to 4** (personal-data verdicts, *reject*, the false-positive summary): the user answered the four
-    questions (decisions log, 2026-11-21); the Decisions entry and the design changes are `thekim1`'s session's (said
-    on #925). Step 1 is B-63 (item 3).
-11. **A full read of design shares 2 to 4** once agents can run again (the usage limit resets 2026-11-26 19:00,
-    Europe/Stockholm). Not read at all: `plans/to-verify.md` beyond the rows #941 touched, `postponed-decisions.md`
-    beyond its P2 header, `plans/cases/support-assistant/`, `plans/gold-set/README.md`, `docs/` (stream a's).
-12. **The VM's upgrade is `thekim1`'s** (#920): 0.5.0 straight to 0.9.2 (`docs/portainer.md`, *Upgrade*). A step that
-    did not go as the guide says is a guide fix; the roadmap's T1 row follows the result. No report yet.
-13. **Repository variables:** the workflows read `vars.KALLA_TEST_HOST_RUNNER`, `vars.KALLA_TEST_HOST_DEPLOY_ENV`,
+10. **#925's steps 2 to 4** (personal-data verdicts, *reject*, the false-positive summary): the Decisions entry and the
+    design changes are `thekim1`'s session's (said on #925). Step 1 is B-63 (item 4).
+11. **The VM's upgrade is `thekim1`'s** (#920): 0.5.0 straight to 0.9.2. No report yet.
+12. **Repository variables:** the workflows read `vars.KALLA_TEST_HOST_RUNNER`, `vars.KALLA_TEST_HOST_DEPLOY_ENV`,
     `vars.KALLA_R1_*` and `secrets.KALLA_R1_API_KEY`, and none exist; `thekim1` was asked on #905 (2026-11-21), no
     answer yet.
-14. **Before Källa's next release, Fors needs one.** `contracts/gateway/` is pinned to Fors `main` at `6c3c412`
+13. **Before Källa's next release, Fors needs one.** `contracts/gateway/` is pinned to Fors `main` at `6c3c412`
     (thekim1/fors#126, "no release yet"), and the logo of #953 shows only on a Fors that has it. Then the contract
     README's *Taken from* names the release and the Portainer stack pins it. Fors merges and releases are the user's.
+    #983 also blocks the release.
 
 ### Waiting on the user
 
-- **UX1 to UX6** (item 7).
 - **The umea.se inventory (A-L1):** the first input of the live block (`plans/roadmap.md`); every live item waits on an
   input, A-L1 first.
 - **The NVDA pass (to-verify row 96):** the user's team runs it on Windows with `plans/work/nvda-pass.md`. Its
-  checklist names today's tabs, so hold it until the UX pass's UX2 and UX3 have landed and rewrite the checklist once
-  (the proposal's *Hand-offs*); the result goes in `results-main.md`.
+  checklist names today's tabs, so hold it until B-78 (UX3) and B-79 (UX2) have landed; the main session then rewrites
+  the checklist once; the result goes in `results-main.md`.
+- **The gold set's scope:** the draft covers the 1,166-page "Kommun och politik" slice; whether DoIT extends it to the
+  full umea.se crawl or accepts the slice is open (`plans/gold-set/README.md`).
 - **The support-chatbot proposal:** F3, F4, F8 built; F10, F7, F6 queued (B-61, B-62, B-66); F1, F2, F5, F9 are the
   user's pick (F2 and F1 best after DoIT's real tickets).
 - **P2's wave 3** (the roadmap's *P2 Broaden*): the user picks when wave 2 is nearly done. Stream a has only the live
@@ -168,26 +172,24 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
   content (#884), so a test that queues a command for a deleted source can lose its lease (#897).
 - **The demo seed's slug in a test:** `openwebui.spec.ts` leaves out the assistant named `demo-assistent` (#882).
 
-## What session 55 did (2026-11-22 to 2026-11-23)
+## What session 56 did (2026-11-23)
 
-On `~/research/rag`, as the main session. Session 54's work is in this file's history.
+On `~/git/ume-rag-platform` (the user's WSL machine), as the main session. Session 55's work is in this file's
+history. Reviews and reads ran as subagents, one at a time; their claims were checked in the code before posting.
 
-- **Read P2 wave 1 and 2's designs against the code before stream b built them**, and found gaps. **#961:** Decisions
-  "Nightly answer run" (two of the user's decisions: `Settings.EvaluationAnswerQuestions`, 0 to 100, default 100, 0
-  switches the run off; the attention item at 5 points below the 28-day median), how an `answers` run is keyed and
-  kept, admin §5.5.1's attention items as a table of what builds each, and one seeding rule for assistant templates.
-- **#959 answered.** The user adopted both parts. **#975:** Decisions "Progress, timings and the nearest subject in
-  the chat extension", chat §9.10 and §9.11, B-72 and B-73. One change to the proposal: the progress chunk is written
-  after the gateway has accepted the answer call, so a refused budget or key stays an HTTP error.
-- **#976:** identity §1.5 has `logoUrl` and the anonymous logo endpoint as #953 built them.
-- **Reviews as comments,** each claim checked in the code: #963, #953 with thekim1/fors#126, #955, #960, #957, #958,
-  #964 to #973, #977. Taken in by the authors: a logo read can never fail `/bff/user` and a wide logo keeps its shape
-  (#953); Home keeps its checklists and notices, the assistant gets a *Quality* tab (#955); the permission matrix as a
-  contract file instead of a third hand copy (#960); B-57's retention in its own migration, not a stream-a hand-off
-  (#956).
-- **Approved as `Crotalus` on the user's word and merged:** #961, #957, #955, #960, #964 to #967; then #953, #968,
-  #970, #971, #972, #975; then #976, #969, #973.
-- **`~/research/rag`:** the main clone on `main`, no worktrees, the session's temporary refs removed.
+- **The UX pass decided** (the user, six questions): UX1 A (B proposed to Fors), UX2 to UX6 C. **#982:** the eleven
+  layout rules and the choices in Decisions "Admin API and UI", admin §5.12 (new) and §5.2 to §5.10 rewritten, the
+  proposal marked decided, the build steps queued as **B-74 to B-81** in stream b's new section *Admin UI UX pass*.
+- **Reviews as comments:** #978 (B-59), #981 (CQ-5), #984 (stream a's switch). **Security read of B-54 to B-57**
+  filed as #983 (`release-blocker`).
+- **#985:** B-54 to B-57's design deviations recorded (admin §4.5, §5.5.4, §7.4; chat §8.1; data-model §2.3), and
+  **B-82** queued (the general Publish dialog with the diff, the warnings and the cost; the design had it, nothing
+  built it).
+- **#988:** the first read of the never-read documents. `to-verify.md` (15 done rows archived, rows 182 to 185 for the
+  go-live gaps, every live-block row named by a queue item), `postponed-decisions.md` (V1, Z1, S1, P2 brought up to
+  date), the gold-set README (how the draft becomes `human` questions). Decisions "CI/CD" now says actions are
+  SHA-pinned (a stale fact, not a new decision). Issues #986 (stream b) and #987 (stream a).
+- **Approved as `Crotalus` on the user's word and merged:** #981, #982, then #985, #988.
 
 ## Known gaps, documented, not fixed
 
@@ -268,20 +270,22 @@ On `~/research/rag`, as the main session. Session 54's work is in this file's hi
 - **Audit:** last green on 2026-11-21 ([run 44905272366](https://github.com/thekim1/kalla/actions/runs/44905272366));
   0.9.2's images are scanned from the next run. The dated exceptions are in *Watch*.
 - **What a deployer types in Portainer:** 1 value since 0.7.0 (`FORS_DOMAIN`, no secret).
-- **On `main`, unreleased** (ten notes in `changes/`, one upgrade note: restart `kalla-proxy`): assistant templates,
-  copy an assistant, the version diff and test questions per assistant (B-54 to B-57); a source's own schedule and
-  its next run (#935); the TLS proxy's header buffers (#944); the organisation's logo from Fors and the favicon
-  (#953); one path-rule matcher and one schedule rule in `Kalla.Pipelines` (A-42, A-43); the code-quality refactors
-  (#964 to #973). Plan files: #961, #975, #976, the two proposals.
+- **On `main`, unreleased** (eleven notes in `changes/`, one upgrade note: restart `kalla-proxy`): assistant
+  templates, copy an assistant, the version diff and test questions per assistant (B-54 to B-57); a source's own
+  schedule and its next run (#935); the TLS proxy's header buffers (#944); the organisation's logo from Fors and the
+  favicon (#953); one path-rule matcher and one schedule rule in `Kalla.Pipelines` (A-42, A-43); the code-quality
+  refactors (#964 to #973, #981). Plan files: #961, #975, #976, #982, #985, #988, the two proposals.
 - **Queues:** stream a: the live block (A-L1 to A-L10), A-34 and A-35 with only their live checks open, and issue
-  #974; A-42 and A-43 are done. Stream b: B-58 (#977) and B-59 (#978) in review, B-63 (#963) in review, then B-61,
-  B-62 and B-66 (F10, F7, F6), B-64 and B-65 (the topics editor), B-67 to B-69 (P2 wave 2), B-70 and B-71 (a source's
-  pause and next run), B-72 and B-73 (the chat extension), B-42 to B-46 (the gateway phases' live checks) and its
-  live items. An item someone has started says **Taken** in the queue. Main: M-4.
-- **Open issues that matter:** #959 (the chat extension; closes with B-72 and B-73), #974 (code quality, stream a's
-  part), #781 and #921 (watch), #920 (the VM's upgrade, `thekim1`'s), #929 (topics; closes with B-65), #667 (M-16's
-  issue: the work is done, `thekim1`'s to close), #333, #511, #580 and #550. In Fors: no open pull request; proposals
-  #108 and #109, #99, #91, and a flaky test #124.
+  #974, #987; A-42 and A-43 are done. Stream b: B-58 (#977, with stream a's #984) and B-59 (#978) in review, B-63
+  (#963) in review, #983 (release blocker), then B-61, B-62 and B-66 (F10, F7, F6), B-64 and B-65 (the topics editor),
+  B-67 to B-69 (P2 wave 2), B-70 and B-71 (a source's pause and next run), B-72 and B-73 (the chat extension), B-74 to
+  B-82 (the UX pass and the Publish dialog; B-74 waits on nothing), B-42 to B-46 (the gateway phases' live checks) and
+  its live items. An item someone has started says **Taken** in the queue. Main: M-4.
+- **Open issues that matter:** #983 (security, release blocker), #986 (a chat metric for to-verify #103), #987 (the
+  grading script), #980 (code quality's tracker), #959 (the chat extension; closes with B-72 and B-73), #974 (code
+  quality, stream a's part), #781 and #921 (watch), #920 (the VM's upgrade, `thekim1`'s), #929 (topics; closes with
+  B-65), #667 (M-16's issue: the work is done, `thekim1`'s to close), #333, #511, #580 and #550. In Fors: no open pull
+  request; proposals #108 and #109, #99, #91, and a flaky test #124.
 - **Dependabot works:** grouped pull requests; `.github/dependabot.yml`'s header lists where a pin is repeated.
   Playwright is bumped by hand, in the package list, the renderer image and its lockfile together (#907).
 - **The user's machine (`~/research/rag`), not the machine of session 56:** the main clone on `main`, no worktrees.
