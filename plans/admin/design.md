@@ -877,7 +877,8 @@ audience). It searches only the version's links that the assistant's department 
 (V11: its own collections and those shared with it; read from the database at each call, so a share withdrawn later
 takes effect at once); another department's unshared collection is neither searched nor listed. The same holds for the
 test-question runs (§7.4) and the nightly answer run (processing §14.8), which answer through the panel. `POST
-…/test-runs` shares the panel's per-user rate policy and the per-person cap on waiting runs (§7.4). It runs the assistant's **draft** by default (the published version when there is no draft, or on request
+…/test-runs` shares the panel's per-user rate policy and the per-person cap on waiting runs (§7.4).
+It runs the assistant's **draft** by default (the published version when there is no draft, or on request
 with `target = published`), so a change is tried before **Publish**; the draft's V-rule warnings are shown above the
 answer. Nothing is stored but the **usage**: every model call of a test turn (condense, long-question condense, query
 embedding, rerank, answer, follow-ups) is counted as chat counts it (chat §8.3: tokens, cached input, the gateway's cost
