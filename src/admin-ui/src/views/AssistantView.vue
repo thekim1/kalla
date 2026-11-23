@@ -31,11 +31,13 @@ import AssistantCopyDrawer from '@/components/assistants/AssistantCopyDrawer.vue
 import AssistantEditDrawer from '@/components/assistants/AssistantEditDrawer.vue'
 import VersionDiffView from '@/components/assistants/VersionDiffView.vue'
 import UiDrawer from '@/components/ui/UiDrawer.vue'
+import AssistantTestsTab from '@/components/assistants/AssistantTestsTab.vue'
+import TestQuestionDrawer from '@/components/assistants/TestQuestionDrawer.vue'
 import CostCard from '@/components/costs/CostCard.vue'
 import KeyBudgetStatus from '@/components/gateway/KeyBudgetStatus.vue'
 import KeyUnavailableBadge from '@/components/gateway/KeyUnavailableBadge.vue'
 import { formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
-import { ASSISTANT, COMMON, DELETE, EDIT_DRAWER, LEVEL_LABEL, MODEL_AVAILABILITY, MOVE_DEPARTMENT } from '@/utils/labels'
+import { ASSISTANT, ASSISTANT_TESTS, COMMON, DELETE, EDIT_DRAWER, LEVEL_LABEL, MODEL_AVAILABILITY, MOVE_DEPARTMENT } from '@/utils/labels'
 import MoveDepartmentDrawer from '@/components/organisation/MoveDepartmentDrawer.vue'
 import { ERROR_MESSAGES, formatMessage } from '@/utils/messages'
 import { problemMessage } from '@/utils/problem'
@@ -44,14 +46,14 @@ import { problemMessage } from '@/utils/problem'
 // V-rule warnings, Testa on the draft (POST /api/assistants/{id}/test, nothing stored), Publicera (V34, V8 at the gateway),
 // Målgrupp (the clients that offer it), Versioner with Återställ (publishes an earlier version again as a new one), Lagring
 // (history mode and retention days within the level's policy, V10) and Arkivera / Ta fram igen.
-type Tab = 'draft' | 'test' | 'versions' | 'audience' | 'storage' | 'statistics'
+type Tab = 'draft' | 'test' | 'test-questions' | 'versions' | 'audience' | 'storage' | 'statistics'
 const props = defineProps<{ id: string }>()
 const auth = useAuthStore()
 const ui = useUiStore()
 const router = useRouter()
 const assistant = useLoadable<Assistant | null>(null)
 /** The tab is kept in `?tab=`, so a reload or a link opens it. */
-const tab = useTabQuery<Tab>(['draft', 'test', 'versions', 'audience', 'storage', 'statistics'])
+const tab = useTabQuery<Tab>(['draft', 'test', 'test-questions', 'versions', 'audience', 'storage', 'statistics'])
 /** The Statistics tab's Cost card (admin design §8.6). */
 const assistantCosts = (query: CostQuery) => api.costs.assistant(props.id, query)
 const draft = ref<AssistantDraft | null>(null)
@@ -146,6 +148,7 @@ async function deleteAssistant(): Promise<void> {
 const tabs = [
   { value: 'draft' as const, label: ASSISTANT.tabs.draft },
   { value: 'test' as const, label: ASSISTANT.tabs.test },
+  { value: 'test-questions' as const, label: ASSISTANT.tabs.testQuestions },
   { value: 'versions' as const, label: ASSISTANT.tabs.versions },
   { value: 'audience' as const, label: ASSISTANT.tabs.audience },
   { value: 'storage' as const, label: ASSISTANT.tabs.storage },
@@ -459,6 +462,15 @@ const saveStorage = () => run('storage', async () => {
   ui.notify(ASSISTANT.storageSaved)
 })
 
+// Test questions (B-57): the knowledge bases the draft links, for the expected-document picker; Save as test question in Test.
+const linkedCollections = computed(() => links.value.map((l) => ({ id: l.collectionId, name: collections.value.find((c) => c.id === l.collectionId)?.name ?? l.collectionId })))
+const savingQuestion = ref(false)
+
+function restoredFromTests(restored: Assistant): void {
+  assistant.data.value = restored
+  if (versions.value) void loadVersions()
+}
+
 onMounted(load)
 
 // Copy (B-55): open the copy's draft. The route reuses this page, so a new id starts it over.
@@ -599,6 +611,7 @@ watch(() => props.id, () => {
             <p v-if="result.gateway.finishReason === 'length'" role="status" class="mt-2 font-medium text-warn" data-test="length-stopped">
               {{ ASSISTANT.lengthStopped }}
             </p>
+            <div v-if="canEdit" class="mt-3"><UiButton size="sm" icon="add" data-test="save-test-question" @click="savingQuestion = true">{{ ASSISTANT_TESTS.saveFromTest }}</UiButton></div>
           </UiCard>
           <UiCard :title="ASSISTANT.sources">
             <ol class="grid gap-3">
@@ -611,6 +624,10 @@ watch(() => props.id, () => {
             </ol>
           </UiCard>
         </template>
+      </div>
+
+      <div v-else-if="tab === 'test-questions'" id="assistant-panel-test-questions" role="tabpanel" aria-labelledby="assistant-tab-test-questions" class="max-w-4xl">
+        <AssistantTestsTab :assistant="assistant.data.value" :can-edit="canEdit" :collections="linkedCollections" @restored="restoredFromTests" />
       </div>
 
       <div v-else-if="tab === 'versions'" id="assistant-panel-versions" role="tabpanel" aria-labelledby="assistant-tab-versions" class="grid max-w-4xl gap-4">
@@ -686,6 +703,10 @@ watch(() => props.id, () => {
         :department-id="assistant.data.value.departmentId" :version="assistant.data.value.version" @moved-assistant="moved"
       />
       <AssistantCopyDrawer v-if="canEdit" v-model:open="copying" :assistant="assistant.data.value" @copied="copied" />
+      <TestQuestionDrawer
+        v-if="canEdit" v-model:open="savingQuestion" :assistant-id="assistant.data.value.id" :question="null" :initial-question="question"
+        :collections="linkedCollections" @saved="ui.notify(ASSISTANT_TESTS.saved)"
+      />
       <AssistantEditDrawer
         v-if="canEdit" v-model:open="editing" :assistant="assistant.data.value"
         @saved="edited"

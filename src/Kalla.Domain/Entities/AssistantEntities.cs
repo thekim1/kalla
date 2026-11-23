@@ -110,6 +110,38 @@ public sealed class AssistantTemplate
 }
 
 /// <summary>
+/// One of an assistant's test questions (data-model <c>AssistantTestQuestions</c>, admin design §7.4, P2): run against every
+/// new published version and on demand. The set belongs to the assistant, not a version. Read only by <c>kalla-admin</c>.
+/// </summary>
+public sealed class AssistantTestQuestion
+{
+    /// <summary>V33: at most this many per assistant.</summary>
+    public const int MaxPerAssistant = 30;
+    public const int MaxText = 2_000;
+    public const int MaxPhrase = 200;
+
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+    public Guid AssistantId { get; set; }
+    public short Ordinal { get; set; }
+    public required string Question { get; set; }
+
+    /// <summary>Free text for the judge ("Ska hänvisa till kontaktcenter och inte ange någon avgift").</summary>
+    public required string ExpectedBehaviour { get; set; }
+
+    /// <summary>A document that should be cited (→ <c>content."Documents"</c>, no FK).</summary>
+    public Guid? ExpectedDocumentId { get; set; }
+
+    /// <summary>A phrase the answer should contain (case-insensitive, after Unicode normalisation).</summary>
+    public string? ExpectedPhrase { get; set; }
+
+    public string? CreatedBy { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+    public uint Version { get; set; }
+}
+
+/// <summary>
 /// A version of an assistant's settings (<c>config."AssistantVersions"</c>, data-model §2.1): at most one open draft and
 /// one published version per assistant; published and superseded rows are immutable. A draft carries its own stamps and
 /// <c>xmin</c> token, so editing it never touches <see cref="Assistant"/>, and its rows do not bump the config version
@@ -147,6 +179,9 @@ public sealed class AssistantVersion
     public IReadOnlyList<Guid> LinkedCollectionIds() => CollectionLink.Ids(CollectionLinks);
 
     public Guid? RestoredFromVersionId { get; set; }
+
+    /// <summary>The latest <c>assistant-tests</c> run on this version (admin design §7.4, advisory; → <c>content."EvaluationRuns"</c>, no FK).</summary>
+    public Guid? TestRunId { get; set; }
     public string? CreatedBy { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

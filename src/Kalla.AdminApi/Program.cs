@@ -115,6 +115,8 @@ builder.AddGatewayClient(Kalla.Answering.Chat.GatewayChatClient.HttpClientName);
 builder.Services.AddOptions<Kalla.Answering.Chat.ChatOptions>().BindConfiguration(Kalla.Answering.Chat.ChatOptions.SectionName);
 builder.Services.AddSingleton<Kalla.Answering.Chat.GatewayChatClient>();
 builder.Services.AddSingleton<AdminTestPanel>();
+builder.Services.AddSingleton<AssistantTestRunner>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AssistantTestRunner>());
 builder.Services.AddHostedService<RetentionService>();
 builder.Services.AddHostedService<PublishReportLinker>();
 builder.Services.AddRateLimiter(o =>
@@ -184,6 +186,7 @@ api.MapExplainAccess();
 api.MapPreviews();
 api.MapTestRetrieval();
 api.MapAssistantTest();
+api.MapAssistantTestQuestions();
 api.MapPipelines();
 api.MapUploads();
 api.MapKeys();

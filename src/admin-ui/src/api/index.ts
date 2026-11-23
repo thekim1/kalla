@@ -25,6 +25,10 @@ import type {
   AssistantVersion,
   AssistantVersionSummary,
   VersionDiff,
+  TestQuestion,
+  TestQuestionRequest,
+  TestRunReport,
+  TestRunSummary,
   BffUser,
   OpenWebUiCompleteRequest,
   OpenWebUiSaved,
@@ -207,6 +211,16 @@ export const api = {
   assistantTemplates: {
     /** Every role reads them: the create-assistant drawer offers the active ones (admin design §5 step 9). */
     list: () => http.get<AssistantTemplate[]>('/api/assistant-templates'),
+  },
+  /** An assistant's test questions and their runs (admin design §7.4, B-57). */
+  assistantTests: {
+    questions: (id: string) => http.get<TestQuestion[]>(`/api/assistants/${id}/test-questions`),
+    create: (id: string, body: TestQuestionRequest) => http.post<TestQuestion>(`/api/assistants/${id}/test-questions`, body),
+    update: (id: string, qid: string, body: TestQuestionRequest) => http.put<TestQuestion>(`/api/assistants/${id}/test-questions/${qid}`, body),
+    remove: (id: string, qid: string, version: string) => http.del(`/api/assistants/${id}/test-questions/${qid}?version=${encodeURIComponent(version)}`),
+    run: (id: string, target: 'Draft' | 'Published') => http.post<TestRunSummary>(`/api/assistants/${id}/test-runs`, { target }),
+    runs: (id: string) => http.get<TestRunSummary[]>(`/api/assistants/${id}/test-runs`),
+    report: (id: string, runId: string) => http.get<TestRunReport>(`/api/assistants/${id}/test-runs/${runId}`),
   },
   assistants: {
     list: (query: { q?: string; page?: number; pageSize?: number } = {}) => http.get<Page<AssistantSummary>>('/api/assistants', query),

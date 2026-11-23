@@ -55,6 +55,9 @@ internal static class ServingContentModel
                 t.HasCheckConstraint("CK_EvaluationRuns_Counts",
                     "\"QuestionCount\" >= 0 AND \"Found\" BETWEEN 0 AND \"QuestionCount\" AND \"Wins\" >= 0 AND \"Losses\" >= 0");
                 t.HasCheckConstraint("CK_EvaluationRuns_Metrics", "\"RecallAtK\" BETWEEN 0 AND 1 AND \"Mrr\" BETWEEN 0 AND 1");
+                // Only an assistant's test-question run has no set, and it names the assistant (data-model §2.2).
+                t.HasCheckConstraint("CK_EvaluationRuns_Set",
+                    $"(\"Kind\" = '{EvaluationRunKinds.AssistantTests}') = (\"SetId\" IS NULL) AND (\"Kind\" <> '{EvaluationRunKinds.AssistantTests}' OR \"SubjectId\" IS NOT NULL)");
             });
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.Classification).HasMaxLength(20);
@@ -65,6 +68,8 @@ internal static class ServingContentModel
             e.Property(x => x.PromptVersion).HasMaxLength(50);
             e.Property(x => x.ThresholdProposal).HasColumnType("jsonb");
             e.HasIndex(x => new { x.SetId, x.StartedAt }).IsDescending(false, true);
+            e.HasIndex(x => new { x.SubjectId, x.StartedAt }, "IX_EvaluationRuns_AssistantTests").IsDescending(false, true)
+                .HasFilter($"\"Kind\" = '{EvaluationRunKinds.AssistantTests}'");
             e.HasOne<EvaluationSet>().WithMany().HasForeignKey(x => x.SetId).OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -75,10 +80,13 @@ internal static class ServingContentModel
                 ClassificationCheck(t, "EvaluationResults");
                 t.HasCheckConstraint("CK_EvaluationResults_Coverage", "\"Coverage\" IS NULL OR \"Coverage\" IN ('ok', 'low')");
                 t.HasCheckConstraint("CK_EvaluationResults_ExpectedRank", "\"ExpectedRank\" >= 1");
+                ValuesCheck(t, "EvaluationResults", "Verdict", TestVerdicts.All); // NULL passes a CHECK: results without a judged behaviour
             });
             e.HasKey(x => new { x.RunId, x.QuestionId });
             e.Property(x => x.Classification).HasMaxLength(20);
             e.Property(x => x.Coverage).HasMaxLength(10);
+            e.Property(x => x.Verdict).HasMaxLength(10);
+            e.Property(x => x.JudgeNote).HasMaxLength(1000);
             e.HasOne<EvaluationRun>().WithMany().HasForeignKey(x => x.RunId).OnDelete(DeleteBehavior.Cascade);
         });
 

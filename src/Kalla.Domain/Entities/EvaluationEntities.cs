@@ -81,7 +81,13 @@ public static class EvaluationRunKinds
     public const string Nightly = "nightly";
     public const string OnDemand = "on-demand";
 
-    public static IReadOnlyList<string> All { get; } = [PublishReport, Nightly, OnDemand];
+    /// <summary>An assistant's test questions (admin design §7.4, P2): run by kalla-admin, no set, <c>SubjectId</c> = the assistant.</summary>
+    public const string AssistantTests = "assistant-tests";
+
+    /// <summary>The worker's retrieval runs, over a collection's set.</summary>
+    public static IReadOnlyList<string> Retrieval { get; } = [PublishReport, Nightly, OnDemand];
+
+    public static IReadOnlyList<string> All { get; } = [PublishReport, Nightly, OnDemand, AssistantTests];
 }
 
 /// <summary>Retrieval variants of a run (weakness review §2: the P1a three-way gold-set run).</summary>
@@ -105,7 +111,10 @@ public sealed class EvaluationRun
     public const int DefaultK = 10;
 
     public Guid Id { get; set; } = Guid.CreateVersion7();
-    public Guid SetId { get; set; }
+
+    /// <summary>The evaluation set of a retrieval run; null only for <see cref="EvaluationRunKinds.AssistantTests"/>.</summary>
+    public Guid? SetId { get; set; }
+
     public required string Classification { get; set; }
     public required string Kind { get; set; }
 
@@ -150,9 +159,9 @@ public static class CoverageStates
 
 /// <summary>
 /// One question's result in one run (<c>content."EvaluationResults"</c>). The coverage fields calibrate the not-found
-/// thresholds from answerable and unanswerable <c>human</c> questions (weakness review §2). Deferred and left out:
-/// <c>Faithfulness</c>, <c>CitationPrecision</c> (P2 <c>answers</c>) and <c>Verdict</c>, <c>Question</c>,
-/// <c>Answer</c>, <c>JudgeNote</c> (P2 <c>assistant-tests</c>).
+/// thresholds from answerable and unanswerable <c>human</c> questions (weakness review §2). <c>assistant-tests</c> results
+/// (admin design §7.4) carry <see cref="Verdict"/>, <see cref="Question"/>, <see cref="Answer"/> and <see cref="JudgeNote"/>.
+/// Deferred and left out: <c>Faithfulness</c>, <c>CitationPrecision</c> (P2 <c>answers</c>).
 /// </summary>
 public sealed class EvaluationResult
 {
@@ -170,6 +179,28 @@ public sealed class EvaluationResult
     public string? Coverage { get; set; }
     public float? BestDistance { get; set; }
     public float? BestKeywordScore { get; set; }
+
+    /// <summary><c>assistant-tests</c>: the judge on the expected behaviour (<see cref="TestVerdicts"/>); null when the question has none.</summary>
+    public string? Verdict { get; set; }
+
+    /// <summary><c>assistant-tests</c>: the question as asked, so a later edit does not rewrite the run.</summary>
+    public string? Question { get; set; }
+
+    /// <summary><c>assistant-tests</c>: the delivered answer, generated from collection content at the assistant's level.</summary>
+    public string? Answer { get; set; }
+
+    /// <summary><c>assistant-tests</c>: the judge's short reason.</summary>
+    public string? JudgeNote { get; set; }
+}
+
+/// <summary>The answer judge's verdict on an expected behaviour (admin design §7.4).</summary>
+public static class TestVerdicts
+{
+    public const string Pass = "pass";
+    public const string Fail = "fail";
+    public const string Unsure = "unsure";
+
+    public static IReadOnlyList<string> All { get; } = [Pass, Fail, Unsure];
 }
 
 /// <summary>

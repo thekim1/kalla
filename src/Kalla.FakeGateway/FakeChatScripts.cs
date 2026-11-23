@@ -7,7 +7,7 @@ namespace Kalla.FakeGateway;
 /// <summary>
 /// Scripted JSON chat answers for the worker's evaluation steps (issue #129, main session's decision), the reranker, the
 /// long-question condense and the follow-up suggestions: a chat call with <c>x-fors-step</c> <c>eval-generate</c>,
-/// <c>eval-judge</c>, <c>rerank</c>, <c>condense-long</c>, <c>follow-ups</c> or <c>escalation</c> is answered from
+/// <c>eval-judge</c>, <c>rerank</c>, <c>condense-long</c>, <c>follow-ups</c>, <c>escalation</c> or <c>assistant-test-judge</c> is answered from
 /// <c>FakeGateway:ChatScripts:&lt;step&gt;</c> (a string: every call; an array: in order, cycling per step and process), after
 /// the usual key, ceiling and target checks. Without a script, built-in answers keep a dev run of <c>generate-set</c>, a
 /// reranking assistant, a long question and follow-up suggestions working (<see cref="DefaultRerank"/>: word overlap;
@@ -23,6 +23,12 @@ public sealed partial class FakeChatScripts(IConfiguration configuration)
     public const string CondenseLongStep = "condense-long";
     public const string FollowUpsStep = "follow-ups";
     public const string EscalationStep = "escalation";
+
+    /// <summary>The answer judge of an assistant's test-question run (admin design §7.4).</summary>
+    public const string AssistantTestJudgeStep = "assistant-test-judge";
+
+    /// <summary>The test-question judge's default: the answer passes.</summary>
+    public const string DefaultAssistantTestJudge = """{"verdict": "pass", "note": "Svaret gör det som förväntas."}""";
 
     /// <summary>How many of the message's words <see cref="DefaultCondenseLong"/> keeps.</summary>
     public const int CondenseLongWords = 12;
@@ -70,6 +76,7 @@ public sealed partial class FakeChatScripts(IConfiguration configuration)
             CondenseLongStep => DefaultCondenseLong(userText),
             FollowUpsStep => DefaultFollowUps(userText),
             EscalationStep => DefaultEscalation(userText),
+            AssistantTestJudgeStep => DefaultAssistantTestJudge,
             _ => null,
         };
     }

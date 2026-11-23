@@ -102,6 +102,24 @@ internal static class ServingConfigModel
             IngestionConfigModel.ChangeStamps(e);
         });
 
+        // An assistant's test questions (data-model AssistantTestQuestions, P2; admin design §7.4): admin-only, so no config-changed
+        // trigger; the limits of V33 are the admin's, the lengths also checked here.
+        modelBuilder.Entity<AssistantTestQuestion>(e =>
+        {
+            e.ToTable("AssistantTestQuestions", ConfigSchema, t =>
+            {
+                t.HasCheckConstraint("CK_AssistantTestQuestions_Texts",
+                    $"char_length(\"Question\") BETWEEN 1 AND {AssistantTestQuestion.MaxText} AND char_length(\"ExpectedBehaviour\") BETWEEN 1 AND {AssistantTestQuestion.MaxText}");
+                t.HasCheckConstraint("CK_AssistantTestQuestions_Ordinal", "\"Ordinal\" >= 0");
+            });
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.ExpectedPhrase).HasMaxLength(AssistantTestQuestion.MaxPhrase);
+            e.Property(x => x.CreatedBy).HasMaxLength(200);
+            e.HasIndex(x => x.AssistantId);
+            e.HasOne<Assistant>().WithMany().HasForeignKey(x => x.AssistantId).OnDelete(DeleteBehavior.Cascade);
+            IngestionConfigModel.ChangeStamps(e);
+        });
+
         modelBuilder.Entity<AssistantAudience>(e =>
         {
             e.ToTable("AssistantAudiences", ConfigSchema, t =>

@@ -28,7 +28,7 @@ public static class EvaluationEndpoints
                 var sets = admin.Db.EvaluationSets.AsNoTracking().Where(s => s.CollectionId == id).Select(s => s.Id);
                 var counts = await admin.Db.EvaluationQuestions.AsNoTracking().Where(q => sets.Contains(q.SetId)).GroupBy(q => new { q.Layer, q.State })
                     .Select(g => new QuestionCount(g.Key.Layer, g.Key.State, g.Count())).ToListAsync(ct);
-                var runs = await admin.Db.EvaluationRuns.AsNoTracking().Where(r => sets.Contains(r.SetId)).OrderByDescending(r => r.StartedAt).Take(10).ToListAsync(ct);
+                var runs = await admin.Db.EvaluationRuns.AsNoTracking().Where(r => r.SetId != null && sets.Contains(r.SetId.Value)).OrderByDescending(r => r.StartedAt).Take(10).ToListAsync(ct);
                 var gone = await DocumentGoneAsync(admin, runs, ct);
                 return new EvaluationOverview(await sets.AnyAsync(ct), counts, [.. runs.Select(r => EvaluationRunDto.Of(r, gone.GetValueOrDefault(r.Id)))]);
             })
@@ -189,7 +189,7 @@ public static class EvaluationEndpoints
     {
         var collections = CollectionEndpoints.Scoped(admin).Select(c => c.Id);
         var sets = admin.Db.EvaluationSets.Where(s => collections.Contains(s.CollectionId)).Select(s => s.Id);
-        return await admin.Db.EvaluationRuns.AsNoTracking().SingleOrDefaultAsync(r => r.Id == runId && sets.Contains(r.SetId), ct)
+        return await admin.Db.EvaluationRuns.AsNoTracking().SingleOrDefaultAsync(r => r.Id == runId && r.SetId != null && sets.Contains(r.SetId.Value), ct)
             ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
     }
 
