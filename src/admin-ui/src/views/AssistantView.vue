@@ -477,7 +477,8 @@ onMounted(load)
 // Copy (B-55): open the copy's draft. The route reuses this page, so a new id starts it over.
 const copying = ref(false)
 function copied(result: AssistantCopyResult): void {
-  ui.notify(ASSISTANT.copied(result.assistant.name))
+  const leftOut = ASSISTANT.copyLeftOut(result.leftOut?.links ?? 0, result.leftOut?.expectedDocuments ?? 0)
+  ui.notify(leftOut ? `${ASSISTANT.copied(result.assistant.name)} ${leftOut}` : ASSISTANT.copied(result.assistant.name))
   void router.push({ name: 'assistant', params: { id: result.assistant.id }, query: { tab: 'draft' } })
 }
 

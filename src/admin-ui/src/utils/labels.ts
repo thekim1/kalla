@@ -1909,6 +1909,12 @@ export const ASSISTANT = {
   copyName: (name: string) => `${name} (copy)`,
   copyDepartment: 'Department of the copy',
   copied: (name: string) => `The copy ${name} has been created. Check its draft before publishing.`,
+  /** what the copy left out, said after the copied notice. */
+  copyLeftOut: (links: number, documents: number) =>
+    [
+      links ? `${links === 1 ? '1 knowledge base' : `${links} knowledge bases`} not shared with its department ${links === 1 ? 'was' : 'were'} left out.` : '',
+      documents ? `${documents === 1 ? '1 test question' : `${documents} test questions`} lost ${documents === 1 ? 'its' : 'their'} expected document.` : '',
+    ].filter(Boolean).join(' '),
   archive: 'Archive',
   archiveTitle: 'Archive the assistant?',
   archiveConsequence: 'The assistant disappears from all clients. Versions, audience and statistics are kept, and you can bring it back.',

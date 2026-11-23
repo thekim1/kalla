@@ -75,6 +75,99 @@ public sealed class AssistantTestQuestionTests(AdminDatabaseFixture database)
     }
 
     [Fact]
+    public async Task A_draft_linking_another_departments_unshared_knowledge_base_searches_nothing_of_it_and_shows_none_of_its_titles()
+    {
+        // A draft can hold a link B's department may not make (saved with V11's warning, or a share withdrawn since). The test
+        // panel, the test runs and the nightly answer run search only what V11 allows; V33 refuses such a document as expected,
+        // and a question that already names one shows no title.
+        var codeA = "A" + Random.Shared.Next(100_000, 999_999);
+        var codeB = "B" + Random.Shared.Next(100_000, 999_999);
+        var word = "x" + codeA.ToLowerInvariant() + "hemlig";
+        await using var writer = new ContentFixtureWriter(database.Connection(RagDatabase.Worker), database.Connection(RagDatabase.Admin));
+        var profile = await writer.AddEmbeddingProfileAsync(8, Ct);
+        await using var db = TestPostgres.Context(database.Connection(null));
+        var a = new Department { Id = Guid.CreateVersion7(), Name = "Avdelning " + codeA, CostCenterCode = codeA, SyncedAt = DateTimeOffset.UtcNow };
+        var b = new Department { Id = Guid.CreateVersion7(), Name = "Avdelning " + codeB, CostCenterCode = codeB, SyncedAt = DateTimeOffset.UtcNow };
+        var secret = new Collection
+        {
+            Slug = "hemlig-" + codeA.ToLowerInvariant(), Name = "Hemlig " + codeA, DepartmentId = a.Id, Classification = Classification.Internal, EmbeddingProfileId = profile,
+            PublishedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow, // SharedWith: the department only
+        };
+        var pipeline = new Pipeline { Name = "hemlig-" + codeA, TemplateId = "url-list", UpdatedAt = DateTimeOffset.UtcNow };
+        var source = new Source
+        {
+            CollectionId = secret.Id, Type = SourceTypes.UrlList, Name = "Sidor", Classification = Classification.Internal, PipelineId = pipeline.Id, UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        db.AddRange(a, b, secret, pipeline, source);
+        if (!await db.GatewayModels.AnyAsync(m => m.Name == Model, Ct))
+        {
+            db.GatewayModels.Add(new GatewayModel { Name = Model, Residencies = ["Eu"], Source = GatewayModelSources.Catalog });
+        }
+
+        await db.SaveChangesAsync(Ct);
+        var document = await writer.AddDocumentAsync(new FixtureDocumentSpec
+        {
+            CollectionId = secret.Id, EmbeddingProfileId = profile, SourceId = source.Id, Classification = Classification.Internal, Title = "Hemlig rutin " + codeA,
+            Url = $"https://www.umea.se/{codeA}/hemlig",
+        }, [new FixtureChunk($"Den hemliga rutinen för {word} gäller bara avdelning A.")], Ct);
+
+        await using var gateway = new WebApplicationFactory<FakeGatewayProgram>().WithWebHostBuilder(web =>
+        {
+            web.UseEnvironment("Development");
+            web.UseSetting("FakeGateway:CredentialKeys:admin:Key", AdminKey);
+        });
+        await using var factory = Admin(gateway);
+        using var editor = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, codeB);
+        using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, codeB);
+
+        using var created = await editor.PostAsJsonAsync("/api/assistants", new
+        {
+            name = "Guiden " + codeB, departmentId = b.Id, classification = "internal", description = "Om rutiner.", contactName = "Anna", contactEmail = "anna@umea.se",
+        }, Ct);
+        created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync(Ct));
+        var createdBody = await Json(created);
+        var id = createdBody.GetProperty("id").GetGuid();
+        // V11 only warns on a draft, so the unshared link is saved.
+        using (var draft = await editor.PutAsJsonAsync($"/api/assistants/{id}/draft", new
+               {
+                   gatewayModel = Model, systemPrompt = "Svara kort.", collectionLinks = new[] { new { collectionId = secret.Id, tags = Array.Empty<string>() } },
+                   version = createdBody.GetProperty("draft").GetProperty("version").GetString(),
+               }, Ct))
+        {
+            draft.StatusCode.ShouldBe(HttpStatusCode.OK, await draft.Content.ReadAsStringAsync(Ct));
+        }
+
+        // The panel searches nothing of it and doesn't name it.
+        using (var tested = await editor.PostAsJsonAsync($"/api/assistants/{id}/test", new { question = $"Vad gäller för {word}?", target = "Draft" }, Ct))
+        {
+            tested.StatusCode.ShouldBe(HttpStatusCode.OK, await tested.Content.ReadAsStringAsync(Ct));
+            var body = await Json(tested);
+            body.GetProperty("retrieval").GetProperty("candidates").GetArrayLength().ShouldBe(0);
+            body.GetProperty("retrieval").GetProperty("collections").GetArrayLength().ShouldBe(0);
+            body.GetRawText().ShouldNotContain("hemliga rutinen");
+            body.GetRawText().ShouldNotContain("Hemlig rutin");
+        }
+
+        // V33 refuses its document as expected; a question that already names it shows no title.
+        using (var refused = await editor.PostAsJsonAsync($"/api/assistants/{id}/test-questions", new
+               {
+                   question = $"Vad gäller för {word}?", expectedBehaviour = "Svarar.", expectedDocumentId = document.Id,
+               }, Ct))
+        {
+            refused.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        }
+
+        db.AssistantTestQuestions.Add(new AssistantTestQuestion
+        {
+            AssistantId = id, Ordinal = 0, Question = $"Vad gäller för {word}?", ExpectedBehaviour = "Svarar.", ExpectedDocumentId = document.Id,
+            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync(Ct);
+        var expected = (await viewer.GetFromJsonAsync<JsonElement>($"/api/assistants/{id}/test-questions", Ct))[0].GetProperty("expectedDocument");
+        (expected.GetProperty("title").ValueKind, expected.GetProperty("unlinked").GetBoolean()).ShouldBe((JsonValueKind.Null, true));
+    }
+
+    [Fact]
     public async Task A_publish_runs_the_questions_each_check_passes_or_fails_and_the_next_run_compares_with_the_previous_version()
     {
         var code = "Q" + Random.Shared.Next(100_000, 999_999);

@@ -125,7 +125,9 @@ public static class AssistantTestQuestionEndpoints
                 }), ct);
                 return Results.Accepted($"/api/assistants/{id}/test-runs/{run.Id}", TestRunSummary.Of(run, null));
             })
-            .RequireAuthorization(AdminPolicies.Edit).WithName("RunAssistantTestQuestions").WithSummary("Run the test questions on the draft or the published version");
+            // the test panel's rate policy, so an editor cannot fill the runner's queue ahead of the runs after a publish.
+            .RequireAuthorization(AdminPolicies.Edit).RequireRateLimiting(AssistantTestEndpoints.RatePolicy).WithName("RunAssistantTestQuestions")
+            .WithSummary("Run the test questions on the draft or the published version");
 
         group.MapGet("/test-runs", async (Guid id, AdminContext admin, CancellationToken ct) =>
             {
@@ -182,12 +184,16 @@ public static class AssistantTestQuestionEndpoints
         }
     }
 
-    /// <summary>The collections the draft or the published version links.</summary>
+    /// <summary>
+    /// The collections the draft or the published version links that the assistant's department may link (V11: its own and
+    /// those shared with it).  another department's unshared collection, carried over by a copy, counts as unlinked, so
+    /// V33 refuses its documents and their titles are not shown.
+    /// </summary>
     internal static async Task<HashSet<Guid>> LinkedCollectionsAsync(AdminContext admin, Assistant assistant, CancellationToken ct)
     {
         var ids = new[] { assistant.DraftVersionId, assistant.PublishedVersionId }.OfType<Guid>().ToList();
         var versions = await admin.Db.AssistantVersions.AsNoTracking().Where(v => ids.Contains(v.Id)).ToListAsync(ct);
-        return [.. versions.SelectMany(v => v.LinkedCollectionIds())];
+        return await CollectionSharing.LinkableAsync(admin.Db, assistant.DepartmentId, [.. versions.SelectMany(v => v.LinkedCollectionIds()).Distinct()], ct);
     }
 
     /// <summary>The expected documents' titles and collections (a deleted document is absent, so its question shows it as gone).</summary>
@@ -220,7 +226,10 @@ public static class AssistantTestQuestionEndpoints
     }
 }
 
-/// <summary>A test question's expected document: its title, or <c>Deleted</c> when it is gone; <c>Unlinked</c> when no linked collection holds it now.</summary>
+/// <summary>
+/// A test question's expected document: its title, or <c>Deleted</c> when it is gone; <c>Unlinked</c>, without a title, when no
+/// collection the assistant links and may link holds it now.
+/// </summary>
 public sealed record ExpectedDocumentDto(Guid Id, string? Title, bool Deleted, bool Unlinked);
 
 public sealed record TestQuestionDto(
@@ -234,7 +243,10 @@ public sealed record TestQuestionDto(
     /// <summary>V33: an expected document no linked collection holds any more is marked, never refused.</summary>
     internal static ExpectedDocumentDto? Expected(Guid? id, IReadOnlyDictionary<Guid, (string Title, Guid CollectionId)> documents, IReadOnlySet<Guid> linked) =>
         id is not { } d ? null
-        : documents.TryGetValue(d, out var doc) ? new ExpectedDocumentDto(d, doc.Title, false, !linked.Contains(doc.CollectionId))
+        // a document no linkable collection holds shows no title (it may be another department's).
+        : documents.TryGetValue(d, out var doc) ? linked.Contains(doc.CollectionId)
+            ? new ExpectedDocumentDto(d, doc.Title, false, false)
+            : new ExpectedDocumentDto(d, null, false, true)
         : new ExpectedDocumentDto(d, null, true, true);
 }
 
