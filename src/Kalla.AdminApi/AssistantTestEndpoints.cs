@@ -103,7 +103,11 @@ public sealed partial class AdminTestPanel(
         var current = await snapshots.LoadAsync(configVersion, ct);
         var audience = await db.AssistantAudiences.AsNoTracking().Where(a => a.AssistantId == id && a.Kind == Domain.Entities.AssistantAudienceKinds.Client)
             .Select(a => a.SubjectId).ToListAsync(ct);
-        var (view, client, notPublished) = View(current, assistant, version, audience, request.History.Count > 0);
+        // #983: only what the assistant's department may link (V11: its own collections and those shared with it). A draft can
+        // hold another department's link (a copy, or a share withdrawn since); the panel, the test runs and the nightly answer
+        // run must not search it.
+        var linkable = await CollectionSharing.LinkableAsync(db, assistant.DepartmentId, version.LinkedCollectionIds(), ct);
+        var (view, client, notPublished) = View(current, assistant, version, linkable, audience, request.History.Count > 0);
         var who = new RagPrincipal(SubjectKind.EntraUser, actor, null, null, client, CredentialKind.AccessToken, null,
             new HashSet<string>(StringComparer.Ordinal), new MembershipFacts(new HashSet<Guid>(), new HashSet<string>(StringComparer.Ordinal), true), view.Version);
 
@@ -151,7 +155,7 @@ public sealed partial class AdminTestPanel(
 
             _runs.Add(1, new KeyValuePair<string, object?>("outcome", ChatOutcomes.Name(plan.Outcome)));
             var citedChunks = cited.SelectMany(s => s.Chunks.Select(c => c.ChunkId)).ToHashSet();
-            var linked = version.LinkedCollectionIds().Where(view.Collections.ContainsKey).Select(c => view.Collections[c])
+            var linked = version.LinkedCollectionIds().Where(linkable.Contains).Where(view.Collections.ContainsKey).Select(c => view.Collections[c])
                 .Select(c => new TestedCollectionRef(c.Id, c.Name, !notPublished.Contains(c.Id) && c.PublishedAt is not null)).ToList();
             var result = plan.Retrieval;
             var records = usage.Take();
@@ -294,11 +298,13 @@ public sealed partial class AdminTestPanel(
     /// <summary>
     /// The snapshot as the panel sees it: the tested version as the assistant's published one (active), its collections
     /// live, and the <c>admin-console</c> client at the assistant's level, or with test history at the level of the audience's
-    /// history-storing clients (chat design §8.2). A distinct negative version keeps the per-instance caches apart.
+    /// history-storing clients (chat design §8.2). A distinct negative version keeps the per-instance caches apart. Only the
+    /// links in <paramref name="linkable"/> are kept (#983: V11's own and shared collections of the assistant's department).
     /// </summary>
     private static (PolicySnapshot View, ClientEntry Client, HashSet<Guid> NotPublished) View(PolicySnapshot current, Domain.Entities.Assistant assistant,
-        Domain.Entities.AssistantVersion version, IReadOnlyList<Guid?> audience, bool withHistory)
+        Domain.Entities.AssistantVersion version, HashSet<Guid> linkable, IReadOnlyList<Guid?> audience, bool withHistory)
     {
+        var links = version.CollectionLinks.Where(l => linkable.Contains(l.CollectionId)).ToList();
         var entry = current.Assistants.TryGetValue(assistant.Id, out var known)
             ? known
             : new AssistantEntry(assistant.Id, assistant.Slug, assistant.Name, assistant.Classification, assistant.HistoryMode, assistant.State, assistant.DepartmentId,
@@ -307,12 +313,12 @@ public sealed partial class AdminTestPanel(
         {
             State = Domain.Entities.AssistantStates.Active,
             GatewayKeyId = assistant.GatewayKeyId, // the key as saved now, as the test runs (B-42)
-            Published = new PublishedVersionEntry(version.Id, version.Number, version.GatewayModel!, version.CollectionLinks, version.SystemPrompt, version.QuerySteps,
+            Published = new PublishedVersionEntry(version.Id, version.Number, version.GatewayModel!, links, version.SystemPrompt, version.QuerySteps,
                 version.NotFound, version.PublishedAt),
         };
         var collections = current.Collections.ToDictionary();
         var notPublished = new HashSet<Guid>();
-        foreach (var id in version.LinkedCollectionIds())
+        foreach (var id in Domain.Entities.CollectionLink.Ids(links))
         {
             // Only the assistant's own department's unpublished collections: a shared one stays invisible until its owner publishes it.
             if (collections.TryGetValue(id, out var c) && !c.Deleted && c.PublishedAt is null && c.DepartmentId == assistant.DepartmentId)

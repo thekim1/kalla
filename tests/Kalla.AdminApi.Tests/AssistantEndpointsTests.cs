@@ -114,10 +114,11 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database, Assis
     private static IEnumerable<string> Codes(JsonElement warnings) => warnings.EnumerateArray().Select(w => w.GetProperty("code").GetString()!);
 
     [Fact]
-    public async Task A_copy_into_another_department_is_a_draft_of_the_published_version_without_key_or_audience_and_warns_on_an_unshared_collection()
+    public async Task A_copy_into_another_department_is_a_draft_of_the_published_version_without_key_audience_or_an_unshared_collection()
     {
         // B-55 (admin design §4.5): the copy's only version is a draft equal to the source's published version; audiences,
-        // the key, the other versions and the statistics stay behind; V11 is checked for the target department as a warning.
+        // the key, the other versions and the statistics stay behind. #983: a knowledge base the target department may not link is
+        // left out (and counted), never carried over.
         var seed = await SeedAsync();
         var other = await SeedAsync();
         var factory = host.Factory;
@@ -171,7 +172,8 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database, Assis
         using var copied = await admin.PostAsJsonAsync($"/api/assistants/{id}/copy", new { name = "Bygglovshjälpen kopia " + other.Code, departmentId = other.Department }, Ct);
         copied.StatusCode.ShouldBe(HttpStatusCode.Created, await copied.Content.ReadAsStringAsync(Ct));
         var result = await Json(copied);
-        Codes(result.GetProperty("warnings")).ShouldContain(AdminErrorCodes.CollectionNotShared.Code);
+        Codes(result.GetProperty("warnings")).ShouldNotContain(AdminErrorCodes.CollectionNotShared.Code);
+        (result.GetProperty("leftOut").GetProperty("links").GetInt32(), result.GetProperty("leftOut").GetProperty("expectedDocuments").GetInt32()).ShouldBe((1, 0));
         var copy = result.GetProperty("assistant");
         var copyId = copy.GetProperty("id").GetGuid();
         copyId.ShouldNotBe(id);
@@ -185,7 +187,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database, Assis
         var copyDraft = await admin.GetFromJsonAsync<JsonElement>($"/api/assistants/{copyId}/draft", Ct);
         (copyDraft.GetProperty("systemPrompt").GetString(), copyDraft.GetProperty("gatewayModel").GetString(), copyDraft.GetProperty("notFound").GetProperty("sv").GetString())
             .ShouldBe(("Publicerad text.", Model, "Hittar inget."));
-        copyDraft.GetProperty("collectionLinks")[0].GetProperty("collectionId").GetGuid().ShouldBe(seed.Collection);
+        copyDraft.GetProperty("collectionLinks").GetArrayLength().ShouldBe(0); // seed's collection is not shared with other
         (await admin.GetFromJsonAsync<JsonElement>($"/api/assistants/{copyId}/versions", Ct)).GetArrayLength().ShouldBe(1);
         (await admin.GetFromJsonAsync<JsonElement>($"/api/assistants/{copyId}/test-questions", Ct)).EnumerateArray().Select(q => q.GetProperty("question").GetString())
             .ShouldBe(["Behöver jag bygglov?"]);
@@ -199,7 +201,11 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database, Assis
         using (var same = await admin.PostAsJsonAsync($"/api/assistants/{id}/copy", new { name = "Bygglov kopia 2 " + seed.Code, departmentId = seed.Department }, Ct))
         {
             same.StatusCode.ShouldBe(HttpStatusCode.Created);
-            Codes((await Json(same)).GetProperty("warnings")).ShouldNotContain(AdminErrorCodes.CollectionNotShared.Code);
+            var sameBody = await Json(same);
+            Codes(sameBody.GetProperty("warnings")).ShouldNotContain(AdminErrorCodes.CollectionNotShared.Code);
+            sameBody.GetProperty("leftOut").GetProperty("links").GetInt32().ShouldBe(0);
+            (await admin.GetFromJsonAsync<JsonElement>($"/api/assistants/{sameBody.GetProperty("assistant").GetProperty("id").GetGuid()}/draft", Ct))
+                .GetProperty("collectionLinks")[0].GetProperty("collectionId").GetGuid().ShouldBe(seed.Collection);
         }
 
         using (var taken = await admin.PostAsJsonAsync($"/api/assistants/{id}/copy", new { name = "x", slug = source.GetProperty("slug").GetString(), departmentId = seed.Department }, Ct))

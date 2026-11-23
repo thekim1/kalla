@@ -100,7 +100,7 @@ public static class AssistantEndpoints
         // department; V11/V12 come back as warnings.
         assistants.MapPost("/{id:guid}/copy", async (Guid id, AssistantCopyRequest request, AdminContext admin, CancellationToken ct) =>
             {
-                var (copy, draft) = await admin.WriteAsync(async attempt =>
+                var (copy, draft, dropped) = await admin.WriteAsync(async attempt =>
                 {
                     var source = await LoadAsync(admin, id, attempt, tracked: false);
                     if (!await admin.Departments().AnyAsync(d => d.Id == request.DepartmentId, attempt))
@@ -129,30 +129,47 @@ public static class AssistantEndpoints
                     };
                     admin.Db.Assistants.Add(copy);
                     await admin.Db.SaveChangesAsync(attempt);
+                    // #983: only the links the target department may make (V11: its own collections and those shared with it). Another
+                    // department's unshared knowledge base is left out, so no test of the copy searches it.
+                    var sourceLinks = from?.CollectionLinks ?? [];
+                    var linkable = await CollectionSharing.LinkableAsync(admin.Db, request.DepartmentId, CollectionLink.Ids(sourceLinks), attempt);
+                    var links = sourceLinks.Where(l => linkable.Contains(l.CollectionId)).ToList();
                     var draft = new AssistantVersion
                     {
                         AssistantId = copy.Id, Number = 1, GatewayModel = from?.GatewayModel, SystemPrompt = from?.SystemPrompt ?? "", QuerySteps = from?.QuerySteps ?? "{}",
-                        NotFound = from?.NotFound ?? "{}", CollectionLinks = from?.CollectionLinks ?? [],
+                        NotFound = from?.NotFound ?? "{}", CollectionLinks = links,
                         CreatedBy = admin.Actor, CreatedAt = admin.Now, UpdatedAt = admin.Now, UpdatedBy = admin.Actor,
                     };
                     admin.Db.AssistantVersions.Add(draft);
                     // The test questions come along (admin design §4.5, §7.4: the set belongs to the assistant); their runs do not.
                     var questions = await admin.Db.AssistantTestQuestions.AsNoTracking().Where(q => q.AssistantId == source.Id).ToListAsync(attempt);
+                    // #983: an expected document stays only when a kept link holds it (V33 for the copy); else it is cleared.
+                    var keptCollections = CollectionLink.Ids(links).ToHashSet();
+                    var expected = questions.Select(q => q.ExpectedDocumentId).OfType<Guid>().Distinct().ToList();
+                    var reachable = (await (from d in admin.Db.Documents.AsNoTracking()
+                                            join s in admin.Db.Sources.AsNoTracking() on d.SourceId equals s.Id
+                                            where expected.Contains(d.Id) && d.DeletedAt == null
+                                            select new { d.Id, s.CollectionId }).ToListAsync(attempt))
+                        .Where(d => keptCollections.Contains(d.CollectionId)).Select(d => d.Id).ToHashSet();
                     admin.Db.AssistantTestQuestions.AddRange(questions.Select(q => new AssistantTestQuestion
                     {
                         AssistantId = copy.Id, Ordinal = q.Ordinal, Question = q.Question, ExpectedBehaviour = q.ExpectedBehaviour,
-                        ExpectedDocumentId = q.ExpectedDocumentId, ExpectedPhrase = q.ExpectedPhrase,
+                        ExpectedDocumentId = q.ExpectedDocumentId is { } document && reachable.Contains(document) ? document : null, ExpectedPhrase = q.ExpectedPhrase,
                         CreatedBy = admin.Actor, CreatedAt = admin.Now, UpdatedAt = admin.Now, UpdatedBy = admin.Actor,
                     }));
                     await admin.Db.SaveChangesAsync(attempt);
                     copy.DraftVersionId = draft.Id;
                     var origin = from is null ? $"{source.Slug}" : $"{source.Slug} version {from.Number.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
-                    return new AdminChange<(Assistant, AssistantVersion)>((copy, draft), "copy", AuditEntityTypes.Assistant, copy.Id, null, AssistantAudit.Of(copy))
+                    var left = new CopyLeftOut(sourceLinks.Count - links.Count,
+                        questions.Count(q => q.ExpectedDocumentId is { } document && !reachable.Contains(document)));
+                    return new AdminChange<(Assistant, AssistantVersion, CopyLeftOut)>((copy, draft, left), "copy", AuditEntityTypes.Assistant, copy.Id, null,
+                        new { assistant = AssistantAudit.Of(copy), testQuestions = questions.Count, linksLeftOut = left.Links, expectedDocumentsCleared = left.ExpectedDocuments })
                     {
                         DepartmentId = copy.DepartmentId, Classification = copy.Classification, Reason = $"Copied from {origin} ({source.Id})",
                     };
                 }, ct);
-                return Results.Created($"/api/assistants/{copy.Id}", AssistantCopyDto.Of(await DetailAsync(admin, copy, ct), await WarningsAsync(admin, copy, draft, ct)));
+                return Results.Created($"/api/assistants/{copy.Id}",
+                    AssistantCopyDto.Of(await DetailAsync(admin, copy, ct), await WarningsAsync(admin, copy, draft, ct), dropped));
             })
             .RequireAuthorization(AdminPolicies.Edit).WithName("CopyAssistant").WithSummary("Copy an assistant into a draft of a new one; V11/V12 for the target department as warnings");
 
@@ -548,11 +565,18 @@ public static class AssistantEndpoints
         return api;
     }
 
-    /// <summary>The diff of two versions, with the names of the knowledge bases they link (deleted ones too).</summary>
+    /// <summary>
+    /// The diff of two versions, with the names of the knowledge bases they link that the caller may see: their own
+    /// departments' (deleted ones too) and those shared with them (#983). Another department's unshared one shows its id.
+    /// </summary>
     private static async Task<VersionDiffDto> DiffAsync(AdminContext admin, AssistantVersion from, AssistantVersion to, bool toDraft, CancellationToken ct)
     {
         var ids = from.LinkedCollectionIds().Concat(to.LinkedCollectionIds()).Distinct().ToList();
-        var names = await admin.Db.Collections.IgnoreQueryFilters().AsNoTracking().Where(c => ids.Contains(c.Id)).ToDictionaryAsync(c => c.Id, c => c.Name, ct);
+        var departments = admin.Departments().Select(d => d.Id);
+        var shared = CollectionSharing.SharedWith(admin.Db, departments).Select(c => c.Id);
+        var names = await admin.Db.Collections.IgnoreQueryFilters().AsNoTracking()
+            .Where(c => ids.Contains(c.Id) && (departments.Contains(c.DepartmentId) || shared.Contains(c.Id)))
+            .ToDictionaryAsync(c => c.Id, c => c.Name, ct);
         return AssistantVersionDiff.Of(from, to, toDraft, names);
     }
 
@@ -1211,11 +1235,18 @@ public sealed record AssistantCopyRequest : AdminRequest
 }
 
 /// <summary>The copy and its draft's V-rule warnings for the target department (V11, V12 and the others a draft save returns), shaped as a draft's.</summary>
-public sealed record AssistantCopyDto(AssistantDto Assistant, IReadOnlyList<object> Warnings)
+/// <summary>
+/// The copy and its V11/V12 warnings, and what was left out (#983): <see cref="CopyLeftOut.Links"/> knowledge bases the target
+/// department may not link, <see cref="CopyLeftOut.ExpectedDocuments"/> test questions' expected documents no kept link holds.
+/// </summary>
+public sealed record AssistantCopyDto(AssistantDto Assistant, IReadOnlyList<object> Warnings, CopyLeftOut LeftOut)
 {
-    public static AssistantCopyDto Of(AssistantDto assistant, IReadOnlyList<RuleProblem> warnings) =>
-        new(assistant, [.. warnings.Select(w => (object)new { code = w.Code.Code, @params = w.Params, affected = w.Affected })]);
+    public static AssistantCopyDto Of(AssistantDto assistant, IReadOnlyList<RuleProblem> warnings, CopyLeftOut leftOut) =>
+        new(assistant, [.. warnings.Select(w => (object)new { code = w.Code.Code, @params = w.Params, affected = w.Affected })], leftOut);
 }
+
+/// <summary>What a copy into another department left out (#983); counts only, no names of another department's objects.</summary>
+public sealed record CopyLeftOut(int Links, int ExpectedDocuments);
 
 public sealed record AssistantUpdateRequest : AssistantFields
 {

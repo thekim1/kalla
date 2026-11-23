@@ -11,7 +11,7 @@ const assistant = {
 } as Assistant
 
 const departments = [{ id: 'd1', name: 'Bygg' }, { id: 'd2', name: 'Miljö' }] as Department[]
-const result: AssistantCopyResult = { assistant: { ...assistant, id: 'a2', name: 'Miljöassistenten', departmentId: 'd2' }, warnings: [] }
+const result: AssistantCopyResult = { assistant: { ...assistant, id: 'a2', name: 'Miljöassistenten', departmentId: 'd2' }, warnings: [], leftOut: { links: 0, expectedDocuments: 0 } }
 
 async function open() {
   const wrapper = mount(AssistantCopyDrawer, { props: { open: false, assistant }, attachTo: document.body })
@@ -58,5 +58,11 @@ describe('Copy an assistant (admin design §4.5, B-55)', () => {
     expect(wrapper.emitted('copied')).toBeUndefined()
     expect(document.body.textContent).toContain('already exists')
     wrapper.unmount()
+  })
+
+  it('says what a copy into another department left out, and nothing when it left out nothing (#983)', () => {
+    expect(ASSISTANT.copyLeftOut(0, 0)).toBe('')
+    expect(ASSISTANT.copyLeftOut(1, 0)).toBe('1 knowledge base not shared with its department was left out.')
+    expect(ASSISTANT.copyLeftOut(2, 3)).toBe('2 knowledge bases not shared with its department were left out. 3 test questions lost their expected document.')
   })
 })
