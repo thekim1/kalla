@@ -92,7 +92,8 @@ done. In order:
    checks sharing; the panel's snapshot confines only unpublished collections), and copying an assistant across
    departments carries the links over, so it is the normal path; copied test questions keep the source department's
    documents; no rate policy on `POST /test-runs`. Item 2 (exception text in the judge note) is fixed by #977.
-   **Taken** by `thekim1`'s B-58/B-59 session on `b/983-draft-sharing` (items 1, 3, 4). Fix before the next release. When it is settled, the main session writes the copy's rule for links and expected
+   **Taken** by `thekim1`'s B-58/B-59 session on `b/983-draft-sharing` (items 1, 3, 4). Fix before the next release.
+   When it is settled, the main session writes the copy's rule for links and expected
    documents into admin §4.5 (copy row) and §4.9/§7.4 (the panel and the runs search only what V11 allows); #985
    left them out on purpose.
 7. **Read of the never-read documents (handover 56's item 11):** read 1 is done (#988: `to-verify.md`,
