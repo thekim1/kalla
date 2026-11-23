@@ -339,8 +339,12 @@ async function reloadPii(): Promise<void> {
         <p v-else-if="pii" class="text-fg-2">{{ SOURCE_PAGE.piiNone }}</p>
       </UiCard>
 
-      <HeldDocuments :source-id="source.data.value.id" class="mt-8" />
-      <SourceQuarantine :source-id="source.data.value.id" class="mt-8" />
+      <!-- Kept documents and quarantined files, under a name that says what they are (admin design §5.7); neither is about
+           personal data. -->
+      <UiCard :title="SOURCE_PAGE.heldAndQuarantined" class="mt-8" data-test="held-and-quarantined">
+        <HeldDocuments :source-id="source.data.value.id" />
+        <SourceQuarantine :source-id="source.data.value.id" class="mt-6" />
+      </UiCard>
       <ConfirmDialog
         v-if="canDelete" v-model:open="deleting" :title="DELETE.sourceTitle" :confirm-label="DELETE.action" danger
         :consequence="DELETE.sourceConsequence(documentCount === null ? '–' : formatNumber(documentCount))"

@@ -65,7 +65,7 @@ onMounted(async () => {
         <span v-else class="text-fg-3">{{ ASSISTANTS.noCollections }}</span>
       </template>
       <template #cell-model="{ row }">
-        <span v-if="row.model" class="font-mono text-small">{{ row.model }}</span>
+        <span v-if="row.model">{{ row.model }}</span>
         <span v-else class="text-fg-3">{{ ASSISTANTS.noModel }}</span>
       </template>
       <template #cell-published="{ row }">
@@ -73,6 +73,7 @@ onMounted(async () => {
         <span v-else-if="row.publishedVersion !== null" :data-test="`published-${row.id}`">
           <UiBadge tone="ok" :label="ASSISTANTS.publishedVersion(row.publishedVersion)" />
           <span class="ml-2 tabular text-small text-fg-2">{{ formatDate(row.publishedAt) }}</span>
+          <span v-if="row.hasDraft" class="text-small text-fg-2" :data-test="`draft-changes-${row.id}`"> · {{ ASSISTANTS.draftHasChanges }}</span>
         </span>
         <UiBadge v-else :label="ASSISTANTS.draftOnly" />
         <UiBadge

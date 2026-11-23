@@ -117,6 +117,10 @@ describe('Feedback (admin design §8.1)', () => {
     expect(wrapper.get('[data-test=totals]').text()).toContain('1 up, 0 down')
     expect(wrapper.text()).toContain(FEEDBACK.emptyApi)
     expect(wrapper.text()).not.toContain('Open WebUI')
+    // The endpoint is behind Details, not in the sentence (admin design §5.7).
+    expect(FEEDBACK.emptyApi).not.toContain('/v1/feedback')
+    expect(wrapper.get('[data-test=feedback-api-details] summary').text()).toBe('Details')
+    expect(wrapper.get('[data-test=feedback-api-details]').text()).toContain('POST /v1/feedback')
 
     list.mockResolvedValue({ items: [item()], next: null })
     await wrapper.findAll('select')[1]!.setValue('-1')

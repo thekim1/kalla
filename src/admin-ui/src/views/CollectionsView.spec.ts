@@ -28,6 +28,10 @@ describe('Knowledge bases (admin design §5.2, §4.5 view=)', () => {
 
     const wrapper = mountView()
     await flushPromises()
+    // Admin design §5.7: the search has a placeholder and an aria-label, no label above it.
+    const search = wrapper.get('[data-test=collections-search]')
+    expect([search.attributes('placeholder'), search.attributes('aria-label')]).toEqual(['Search by name', 'Search knowledge bases'])
+    expect(wrapper.find('label[for=collections-search]').exists()).toBe(false)
 
     expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ view: 'mine' }))
     expect(wrapper.findAll('[role=tab]').map((t) => t.text())).toEqual(['Ours', 'Shared with us', 'All'])
@@ -119,7 +123,7 @@ describe('Knowledge bases (admin design §5.2, §4.5 view=)', () => {
     await flushPromises()
 
     expect(wrapper.findAll('th[scope=col]').map((h) => h.text())).toEqual(
-      ['Name', 'Department', 'Information class', 'Sharing', 'Documents', 'Last fetch', 'Quality', 'State'],
+      ['Name', 'Department', 'Class', 'Sharing', 'Documents', 'Last fetch', 'Quality', 'State'],
     )
     const [measured, fresh, shared] = wrapper.findAll('tbody tr')
     const links = wrapper.findAllComponents(RouterLinkStub)

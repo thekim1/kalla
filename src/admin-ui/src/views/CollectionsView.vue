@@ -7,14 +7,13 @@ import CollectionCreateDrawer from '@/components/collections/CollectionCreateDra
 import AsyncState from '@/components/ui/AsyncState.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
-import TextField from '@/components/ui/TextField.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiTabs from '@/components/ui/UiTabs.vue'
 import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
-import { formatDate, formatDateTime, formatDecimal, formatNumber, quietZero } from '@/utils/format'
+import { formatDate, formatDateTimeToday, formatDecimal, formatNumber, quietZero } from '@/utils/format'
 import { COLLECTIONS, LEVEL_LABEL, PAGE, RUN_STATE_LABEL, SHARING_LABEL } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 import { runStateTone } from '@/utils/runs'
@@ -41,7 +40,7 @@ const canEdit = auth.can('edit')
 const columns: Column[] = [
   { key: 'name', label: COLLECTIONS.name },
   { key: 'department', label: COLLECTIONS.department },
-  { key: 'level', label: COLLECTIONS.level },
+  { key: 'level', label: COLLECTIONS.levelColumn },
   { key: 'sharing', label: COLLECTIONS.sharing },
   { key: 'documents', label: COLLECTIONS.documents, align: 'right' },
   { key: 'lastFetch', label: COLLECTIONS.lastFetch },
@@ -73,10 +72,16 @@ onMounted(async () => {
   <PageHeader :title="PAGE.collections.title" :description="COLLECTIONS.lead">
     <UiButton v-if="canEdit" variant="primary" icon="add" data-test="create" @click="creating = true">{{ COLLECTIONS.create }}</UiButton>
   </PageHeader>
-  <form class="mb-4 max-w-sm" role="search" @submit.prevent="load">
-    <TextField id="collections-search" v-model="q" :label="COLLECTIONS.search" type="search" />
-  </form>
-  <UiTabs id="collections" v-model="view" :tabs="views" :label="COLLECTIONS.viewsLabel" class="mb-4" />
+  <!-- The search sits on the tabs' row, right-aligned, with a placeholder and no label above (admin design §5.7). -->
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <UiTabs id="collections" v-model="view" :tabs="views" :label="COLLECTIONS.viewsLabel" />
+    <form class="w-full sm:w-72" role="search" @submit.prevent="load">
+      <input
+        id="collections-search" v-model="q" type="search" class="field-input" :placeholder="COLLECTIONS.searchPlaceholder" :aria-label="COLLECTIONS.search"
+        autocomplete="off" data-test="collections-search"
+      >
+    </form>
+  </div>
   <div :id="`collections-panel-${view}`" role="tabpanel" :aria-labelledby="`collections-tab-${view}`">
   <AsyncState :loading="collections.loading.value" :error="collections.error.value" :empty="collections.data.value.length === 0" :empty-text="emptyText" @retry="load">
     <DataTable :columns="columns" :rows="collections.data.value" :row-key="(c) => c.id" :caption="COLLECTIONS.list" :row-to="rowTo">
@@ -91,7 +96,7 @@ onMounted(async () => {
       <template #cell-documents="{ row }"><span class="tabular" :class="quietZero(row.documentCount)">{{ formatNumber(row.documentCount) }}</span></template>
       <template #cell-lastFetch="{ row }">
         <RouterLink v-if="row.lastRun" :to="{ name: 'run', params: { id: row.lastRun.id } }" class="text-fg hover:text-fg hover:underline" :data-test="`last-fetch-${row.id}`">
-          <span class="tabular">{{ formatDateTime(row.lastRun.startedAt) }}</span>
+          <span class="tabular">{{ formatDateTimeToday(row.lastRun.startedAt) }}</span>
           <UiBadge :tone="runStateTone(row.lastRun.state)" :label="RUN_STATE_LABEL[row.lastRun.state] ?? row.lastRun.state" class="ml-2" />
         </RouterLink>
         <span v-else class="text-fg-3">{{ row.shared ? COLLECTIONS.noValue : COLLECTIONS.neverFetched }}</span>
