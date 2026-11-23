@@ -8,6 +8,7 @@ import TextAreaField from '@/components/ui/TextAreaField.vue'
 import TextField from '@/components/ui/TextField.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiDialog from '@/components/ui/UiDialog.vue'
+import { useDebouncedWatch } from '@/composables/useDebouncedWatch'
 import { COMMON, EVALUATION } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 
@@ -31,7 +32,6 @@ const textError = ref<string | null>(null)
 const error = ref<unknown>(null)
 const busy = ref(false)
 let searchRequest = 0
-let timer: ReturnType<typeof setTimeout> | null = null
 
 const titleOf = (d: { title: string | null; displayName: string | null; url: string | null }, id: string) => d.title ?? d.displayName ?? d.url ?? id
 
@@ -58,10 +58,7 @@ watch(
   { immediate: true },
 )
 
-watch(search, (q) => {
-  if (timer) clearTimeout(timer)
-  timer = setTimeout(() => void runSearch(q), 250)
-})
+useDebouncedWatch(search, (q) => void runSearch(q), 250)
 
 async function runSearch(q: string): Promise<void> {
   const mine = ++searchRequest

@@ -10,6 +10,7 @@ import TextField from '@/components/ui/TextField.vue'
 import ToggleChip from '@/components/ui/ToggleChip.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
+import { useDebouncedWatch } from '@/composables/useDebouncedWatch'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { FILES } from '@/utils/labels'
@@ -64,7 +65,6 @@ const retrying = ref(false)
 const error = ref<unknown>(null)
 const uploader = ref<InstanceType<typeof FileUpload> | null>(null)
 let request = 0
-let searchTimer: ReturnType<typeof setTimeout> | null = null
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 let active = true
 
@@ -214,12 +214,9 @@ async function toggleDeleted(): Promise<void> {
   await load()
 }
 
-watch(search, (value) => {
-  if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => {
-    q.value = value.trim()
-  }, SEARCH_DELAY_MS)
-})
+useDebouncedWatch(search, (value) => {
+  q.value = value.trim()
+}, SEARCH_DELAY_MS)
 watch([q, state, sort], () => void load())
 // A refreshed row replaces the one the details show.
 watch(files, (list) => {
@@ -234,7 +231,6 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   active = false
   stopPolling()
-  if (searchTimer) clearTimeout(searchTimer)
   document.removeEventListener('visibilitychange', visibilityChanged)
 })
 </script>

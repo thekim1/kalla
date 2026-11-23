@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { api } from '@/api'
 import type { EvaluationRun, Pipeline, Publication, RunSummary, Source } from '@/api/types'
 import AsyncState from '@/components/ui/AsyncState.vue'
@@ -10,7 +10,8 @@ import PageHeader from '@/components/ui/PageHeader.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
-import { FINISHED_STATES, pollDelay } from '@/composables/useJobPoll'
+import { FINISHED_STATES } from '@/composables/useJobPoll'
+import { usePoll } from '@/composables/usePoll'
 import { useAuthStore } from '@/stores/auth'
 import { useLoadable } from '@/stores/loadable'
 import { useUiStore } from '@/stores/ui'
@@ -35,10 +36,7 @@ const reports = ref<Record<string, { run: EvaluationRun; compared: EvaluationRun
 const confirming = ref(false)
 const rollingBack = ref(false)
 const kept = ref(false)
-const error = ref<unknown>(null)
 const canPublish = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-pipeline-editor']))
-let timer: ReturnType<typeof setTimeout> | null = null
-const started = Date.now()
 
 const plan = computed(() => publication.data.value?.plan ?? null)
 const version = computed(() => pipeline.value?.versions.find((v) => v.id === publication.data.value?.pipelineVersionId) ?? null)
@@ -88,20 +86,18 @@ async function refresh(): Promise<void> {
   }
 }
 
-// Polls while something is still moving: the plan, the re-processing, the evaluation report (§4.7 delays).
+// Polls while something is still moving: the plan, the re-processing, the evaluation report (§4.7 delays). A failed
+// refresh ends the poll and shows its error.
+const moving = computed(() => planning.value || (published.value && !rolledBack.value && !kept.value && !(reprocessed.value && reported.value)))
+const poll = usePoll(async () => {
+  await refresh()
+  return !moving.value
+})
+const error = poll.error
+
 function schedule(): void {
-  if (timer) clearTimeout(timer)
-  const moving = planning.value || (published.value && !rolledBack.value && !kept.value && !(reprocessed.value && reported.value))
-  if (!moving) return
-  timer = setTimeout(async () => {
-    try {
-      await refresh()
-    } catch (e) {
-      error.value = e
-      return
-    }
-    schedule()
-  }, pollDelay(Date.now() - started))
+  if (moving.value) poll.start(false)
+  else poll.stop()
 }
 
 async function load(): Promise<void> {
@@ -127,9 +123,6 @@ async function rollback(): Promise<void> {
 }
 
 onMounted(load)
-onBeforeUnmount(() => {
-  if (timer) clearTimeout(timer)
-})
 </script>
 
 <template>

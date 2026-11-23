@@ -82,8 +82,9 @@ async function runNow(): Promise<void> {
   }
 }
 
+// The run's end, or a failed request about it (the job then unknown).
 watch(
-  () => runPoll.job.value?.state,
+  () => (runPoll.failed.value ? 'failed' : runPoll.job.value?.state),
   (state) => {
     if (!state || runPoll.polling.value) return
     ui.notify(state === 'succeeded' ? EVALUATION.runDone : EVALUATION.runFailed)
