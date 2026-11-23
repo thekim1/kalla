@@ -429,7 +429,7 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 
 | Method and path | Policy | Notes |
 |---|---|---|
-| `GET /api/documents` (keyset; `collectionId`, `sourceId`, `q`, `pii`, `outcome`) | Read | `pii` is `flagged` (a held flagged set or a flagged live set) or `cleared` |
+| `GET /api/documents` (keyset; `collectionId`, `sourceId`, `q`, `pii`, `outcome`) | Read | `pii` is `flagged` (a held flagged set or a flagged live set) or `cleared`; each row has `piiFlagged` (a held flagged set or a flagged live set), `piiCleared` (`PiiClearedAt` set), `piiHeld` (a flagged set is held now, also after an earlier clearance: a later version flagged again, processing §9.5) and `held` (the deletion hold) |
 | `GET /api/documents/{id}` | Read | its source, chunk sets (pipeline version, site-profile version), run items 90 days, PII counts and state of the live chunk set |
 | `GET /api/documents/{id}/chunks` | Edit, EditPipelines | chunk text with heading path (breadcrumb prefix), tokens |
 | `POST /api/documents/{id}/pii-clear` | Manage | reason ≥ 10 (V26); `command` `clear-pii-flag` |
@@ -453,8 +453,8 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 | Method and path | Policy | Notes |
 |---|---|---|
 | `GET /api/jobs/{id}` | Read (job's department) | `State`, `Result` (secrets stripped), queue position and age |
-| `GET /api/previews/{jobId}/documents/{document}/stages/{stage}/output` | Edit, EditPipelines | decrypted preview blob, ≤ 2 MB, `text/markdown` or JSON; `{document}` is the document id or its index in the result (a URL or upload preview has no document id), `{stage}` a stage name or `before`/`after` (a crawled page's extraction without and with the site profile, §6.4) |
-| `POST /api/documents/{id}/pii-preview` | Manage | `preview` job up to the personal-data stage; spans from preview blobs (24 h); audited `pii.view` |
+| `GET /api/previews/{jobId}/documents/{document}/stages/{stage}/output` | Edit, EditPipelines | decrypted preview blob, ≤ 2 MB, `text/markdown` or JSON; `{document}` is the document id or its index in the result (a URL or upload preview has no document id), `{stage}` a stage name or `before`/`after` (a crawled page's extraction without and with the site profile, §6.4); also a personal-data preview's output (below), in the job's department |
+| `POST /api/documents/{id}/pii-preview` | Manage | `preview` job up to the personal-data stage of the newest set (a held one, else the live one); spans from preview blobs (24 h); audited `pii.view`. The audited step is the start: the job's id reaches only Manage holders (the response, the audit log), and its output is read as any preview's. The spans are chunk ordinals, types and offsets, never values, into text an `Edit` holder of that department already reads (`…/chunks`, a pipeline preview) |
 
 **Evaluation**
 
@@ -993,9 +993,10 @@ The Administration group is §5.10's.
 header filters every list; a user with one department never sees it.
 
 Start page: Home (a reviewer-only user starts on Feedback). Badges: Home counts attention items (gateway `badge`
-pattern, `nav.ts:25`). No e-mail: awaiting deletions, worse evaluation reports, site-profile proposals, P2 drift and
-pending approvals appear as rows of Home's *Needs attention* and as badges, plus SIEM events for the security-relevant
-ones.
+pattern, `nav.ts:25`); the count is the length of `GET /api/overview`'s attention list, read once per page load
+outside Home for a user with a Källa role, and again each time Home loads. No e-mail: awaiting deletions, worse
+evaluation reports, site-profile proposals, P2 drift and pending approvals appear as rows of Home's *Needs attention*
+and as badges, plus SIEM events for the security-relevant ones.
 
 ### 5.3 Pages by phase
 
@@ -1127,12 +1128,13 @@ item with another entry is added to the list by the work that entry names, and i
 | An evaluation report (after a publish or nightly) ≥ 5 points worse than the previous run | the list |
 | A nightly recall@10 5 points below its 28-day median (processing §14.8) | the list |
 | PII-flagged documents in a `public` collection | the list |
-| Degraded runs | the list |
-| A source with ≥ 3 failed runs | the list |
+| A source whose latest finished run is degraded | the list |
+| A source whose last 3 finished runs all failed | the list |
 | A source with N (default 3) runs without a complete traversal (simplification pass §2) | the list |
 | Feedback import failing ≥ 4 runs | the list |
-| Org or model sync failing | the list |
-| An assistant or knowledge base whose gateway key is unusable, has lost a model or residency the object uses, or whose budget is spent (*The gateway key item* below) | the list |
+| Org or model sync failing 3 times in a row (15 minutes at the 5-minute interval) | the list |
+| An assistant or knowledge base whose gateway key is unusable, has lost a model or residency the object uses (*The gateway key item* below) | the list |
+| An assistant or knowledge base whose gateway key's budget is spent | a mirror of the key budgets (gateway phase 3) |
 | V32's Overview warning: a platform model setting whose model lost its residency | the list |
 | A template version without a supporting worker (`content."WorkerNodeSupport"`, engine design) | the list |
 | An assistant test run with fewer questions as expected than the previous version's (§7.4) | the assistant test questions (§7.4) |
@@ -1142,10 +1144,38 @@ item with another entry is added to the list by the work that entry names, and i
 | Site-profile proposals (platform admins; weakness review §1) | site-profile learning (a later wave) |
 | Tool drift and pending approvals | tools (a later wave) |
 
-**The gateway key item:** the key is unusable when it is disabled, revoked or expired, or its team or department is
-inactive; the item carries the reason and a link to the key in the gateway (§4.10, V39; cost-attribution §4.2). The
-admin derives it from the mirror (§4.10) and, from gateway phase 3, the key's budgets (`exhausted`, §4.5); it stores
-no refusal of its own. A `402` or key refusal seen by chat or the worker shows in the turn outcomes (`unavailable`)
+**How the list reads its items** (`GET /api/overview`'s `attention: [{ kind, objectType, objectId, objectName,
+departmentId, since, details }]`, `details` the item's figures as text; one query per kind, nothing stored):
+
+- **Who sees what.** Every role with `Read` gets the items of its own departments' objects (their own knowledge
+  bases, not ones shared with them; their assistants and pipelines). The platform kinds are for platform admins
+  only: the feedback import, the two syncs, the platform model settings (V32) and a platform pipeline's template.
+- **Runs.** A cancelled run, a run awaiting the deletion decision and a running one are not finished and are skipped
+  when the last 3 finished runs are read; a later good run ends the degraded item. A paused source keeps its items
+  (`source_failing`, `run_degraded`), since its last runs still say what is wrong. The incomplete-traversal count is
+  `Settings.Crawl.incompleteRunsAlert` read as the worker reads it (the member in any case, 0 or less = 3).
+- **Evaluation.** A worse report is the latest finished report of a set, read from the last 29 days, so a worse
+  report with no newer run ages out. A median (recall@10, and the answer run's faithfulness and citation precision)
+  needs at least 3 earlier finished runs in the 28 days before the latest, so a new knowledge base or assistant is
+  not flagged on its second night.
+- **The syncs.** One failure shows on Health only; the item needs 3 in a row.
+- **Templates.** While no worker is live (a restart, or the admin API starting first) no template item is raised:
+  every pipeline would read as unsupported, and Health shows the outage.
+- **Platform model settings** (V32): `Settings.EvaluationModel`, `Settings.EvaluationJudgeModel`,
+  `Settings.Chat.condenseModel`, `Settings.Retrieval.rerankModel` and `Settings.Retrieval.gatewayRerankModel`; the
+  tools setting `Settings.Tools.SkillGateModel` joins them with the tools wave.
+- **The link** of each item is derived by the admin UI from its kind and object (the routes are the UI's); the API
+  sends the object and the figures. The personal-data item opens *Documents* with the flagged filter.
+
+**The gateway key item:** checked as V39 checks a key on save, for each active assistant and each knowledge base in
+scope that has a key: the key is not in the mirror, belongs to another department, is disabled, revoked or expired,
+has an inactive team or department, or is not usable by Källa; its model list no longer holds the object's own model
+(an assistant's answer model, the published version's, else the draft's; a knowledge base's embedding model); or
+none of its residencies is within the object's ceiling (an assistant's: the strictest of its level and its
+history-storing clients', as V39; a knowledge base's: its level's). The condense and rerank models of V39's full list
+are checked on save only. The item carries the reason, the key's id and name and the lost model, and links to the
+object (§4.10, V39; cost-attribution §4.2). The admin derives it from the mirror (§4.10), which holds no budgets, and
+stores no refusal of its own. A `402` or key refusal seen by chat or the worker shows in the turn outcomes (`unavailable`)
 and the run's reason (`gateway.budget_exhausted`, `gateway.key_unavailable`, engine §7.3).
 
 #### 5.5.2 Knowledge base
@@ -1184,7 +1214,13 @@ published, else **Add content** (the source drawer with its type cards: a websit
 - **Content**: the sources, with **Add source**, then the file list of an upload source (§5.5.7); with several upload
   sources a picker above the list names the source. On a knowledge base whose only source is an upload, *Content*
   opens straight onto the file list, with the source folded to one line above it.
-- **Documents**: every document that is not deleted, with its personal-data state.
+- **Documents**: every document that is not deleted, with its personal-data state. A document that needs a
+  personal-data decision (`piiHeld`, or flagged and not cleared) offers **Show highlights** (`pii-preview`: the
+  wait while the job runs, then the document's text with each match marked and labelled by type) and **Clear** (the
+  reason dialog, V26, saying what clearing does: the held set is released and later sets are covered while no count
+  rises, processing §9.5), to Manage holders on the department's own knowledge base, not on one shared with it.
+  *Cleared for public* shows on a cleared document that is not held again. A failed status read says so: for
+  *Clear*, that the outcome is unknown and a reload shows the state.
 - **Topics**: below.
 - **Quality**: the test questions and the latest evaluation (§7.1), then the search settings (§7.1's retrieval
   settings form) under *Tune the search*, as two short rows of number fields, with **Try without saving** beside the
@@ -1319,7 +1355,9 @@ for a crawl or address-list source and **Upload files** for an upload source, wh
 **Resume** is a secondary button beside it; the rest, *Delete* last, is in the ⋯ menu. The page reads top-down: what
 the source fetches (addresses, schedule, processing), its runs, its files (an upload source; the same card as the
 knowledge base's *Content*, without repeating the upload help), then **Held and quarantined** (the kept documents,
-the quarantine and the personal-data holds). Each section's title is inside its card.
+the quarantine and the personal-data holds). Each section's title is inside its card. In the personal-data report
+(§9.3) a held row, or a live flagged row not cleared, offers *Show highlights* and *Clear* to Manage holders as the
+knowledge base's *Documents* tab does (§5.5.2); *Cleared* shows only on a row that is not held.
 
 **JavaScript pages** (connectors design §8; Decisions "JavaScript rendering"): the URL-list and crawl forms have *Fetch
 pages with* *HTTP* (default) / *A browser (JavaScript)* (`fetchMode`) and, for the browser, an optional *Content is
@@ -2395,7 +2433,7 @@ No new runtime dependency: no Markdown renderer, no chart library (gateway SVG c
   kind}`, `rag.admin.sync{kind,outcome}`, `rag.admin.test_panel{outcome}` + `.duration`,
   `rag.admin.conversation_access{scope,level}`, `rag.admin.uploads{outcome}` + `.bytes`, `rag.admin.publish{kind,
   outcome}`, `rag.admin.config_lock.wait` (histogram, s; one per config write attempt, the two syncs included), `rag.admin.access_explain{allowed}`, `rag.admin.assistant_publish{kind}` (`publish`/`restore`),
-  `rag.admin.assistant_tests{outcome}`.
+  `rag.admin.assistant_tests{outcome}`, `rag.admin.answer_runs{outcome}` (processing §14.8).
 - Dashboard *Config & security* gains admin panels (refusals by code, access events, sync health, lock waits).
 
 ## 11. Tests

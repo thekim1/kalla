@@ -670,7 +670,7 @@ x-fors-on-behalf-of: <Assistants.GatewayKeyId>            (from gateway phase 2,
 x-fors-stream-cost: 1                                     (every streamed call; exactly "1"; features stream-cost, gateway-changes §5.4)
 x-fors-max-residency: Eu                                  (effective level, §8.2: public External; internal Eu; sensitive OnPrem)
 x-fors-run-id: <message id, N format>                     (opaque, gateway §7.1)
-x-fors-step: chat-answer | condense | condense-long | follow-ups | assistant-test   (assistant-test: P2 test runs in kalla-admin, admin design §7.4, whose judge call sends assistant-test-judge; query-embed and rerank on their own calls, knowledge §5.2, §6.7)
+x-fors-step: chat-answer | condense | condense-long | follow-ups | assistant-test | eval-answer-chat   (assistant-test: P2 test runs in kalla-admin, admin design §7.4, whose judge call sends assistant-test-judge; eval-answer-chat: the nightly answer run in kalla-admin, processing §14.8, whose judge call sends eval-answer; query-embed and rerank on their own calls, knowledge §5.2, §6.7)
 x-fors-session: <conversation id>                         (session affinity for on-prem prefix caches)
 traceparent: …
 
