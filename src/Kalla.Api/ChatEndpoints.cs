@@ -93,18 +93,21 @@ public static class ChatEndpoints
                 // §8.3, §12.1: every model call of the turn adds its usage record here; each record is written once, with the turn
                 // or, when the turn fails or breaks off after a call (or a call follows the turn's write), as a usage-only turn.
                 var usage = service.Usage();
+                ChatTurn? written = null; // the turn once enqueued: a call after it adds its usage to the turn's outcome
                 ValueTask Enqueue(ChatPlan plan, IReadOnlyList<PromptSource> cited, int prompt, int completion)
                 {
                     metrics.Completed(plan, who, parsed.Stream);
-                    return writer.EnqueueAsync(Turn(http, plan, who, conversation, cited, prompt, completion,
-                        (int)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds) with { Usage = usage.Take() });
+                    written = Turn(http, plan, who, conversation, cited, prompt, completion,
+                        (int)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds) with { Usage = usage.Take() };
+                    return writer.EnqueueAsync(written);
                 }
                 ValueTask EnqueueUsage(bool unavailable = false, bool error = false)
                 {
                     var records = usage.Take();
+                    // Decisions "Cost per outcome": calls after the turn's write add their cost to its outcome, not another turn.
                     return (records.Count > 0 || unavailable || error) && service.Assistant(parsed.Model) is { } assistant
                         ? writer.EnqueueAsync(ChatTurn.UsageOnlyOf(assistant.Id, assistant.DepartmentId, who.Client.Id, assistant.Classification, usage.Started, records)
-                            with { Unavailable = unavailable, Error = error })
+                            with { Unavailable = unavailable, Error = error, AfterTurn = written is not null, Outcome = written?.Outcome ?? "" })
                         : ValueTask.CompletedTask;
                 }
                 // B-48 (§8.3, §12): a stream that a disconnect or a timeout ended (cancelled), or a failure broke off (error), is

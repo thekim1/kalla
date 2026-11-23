@@ -45,6 +45,18 @@ public sealed record ChatTurn(
     /// <summary>A usage-only turn that ended in an error after the user's message was accepted (B-48): one more of the day's <c>Errors</c>.</summary>
     public bool Error { get; init; }
 
+    /// <summary>
+    /// A usage-only record of the calls made after the turn was written (§9.8, §9.9: the follow-up and escalation calls of a JSON
+    /// answer): its cost adds to the written turn's <see cref="Outcome"/>, and it is no turn of its own.
+    /// </summary>
+    public bool AfterTurn { get; init; }
+
+    /// <summary>
+    /// The outcome whose <c>AssistantDailyOutcomes</c> row the turn's cost adds to (Decisions "Cost per outcome", §12.2): its
+    /// <see cref="Outcome"/>; a usage-only turn's is <c>unavailable</c> or <c>error</c>, except <see cref="AfterTurn"/>'s.
+    /// </summary>
+    public string CostOutcome => !UsageOnly || AfterTurn ? Outcome : Unavailable ? Domain.Entities.MessageOutcomes.Unavailable : Domain.Entities.MessageOutcomes.Error;
+
     /// <summary><c>Messages.CostUsd</c>: the answer call's cost, the gateway's or the estimate (§12.2); null without an answer call.</summary>
     public decimal? AnswerCostUsd => Usage.FirstOrDefault(r => r.Step == GatewayChatClient.AnswerStep) is { } answer
         ? answer.Estimated ? answer.EstimatedCostUsd : answer.CostUsd
@@ -91,8 +103,8 @@ public sealed record ChatTurn(
 /// The background writer (chat design §12; adapted from the gateway's <c>UsageWriter</c>): a bounded channel the request
 /// path enqueues into after the answer, drained in batches of ≤ 200 turns or 250 ms, one transaction per batch: the
 /// conversation upsert, the messages with <c>Seq</c> under a row lock, their sources, then the <c>AssistantDailyTotals</c>
-/// deltas and the <c>AssistantDailyUsage</c> deltas per step (usage-only turns included) as the last statements, each in
-/// sorted key order. A failed batch is retried after 2 s; after three failures it
+/// deltas, the <c>AssistantDailyUsage</c> deltas per step and the <c>AssistantDailyOutcomes</c> deltas per outcome (usage-only
+/// turns included) as the last statements, each in sorted key order. A failed batch is retried after 2 s; after three failures it
 /// is split and each turn tried alone three times, then dropped (<c>rag.chat.writer.dropped{reason}</c>). No journal.
 /// </summary>
 public sealed partial class ConversationWriter : BackgroundService
@@ -305,6 +317,28 @@ public sealed partial class ConversationWriter : BackgroundService
         public decimal EstimatedCostUsd { get; set; }
     }
 
+    private sealed record OutcomeKey(DateOnly Day, Guid AssistantId, Guid ClientId, string Classification, string Outcome);
+
+    /// <summary>The sort order of the outcome upserts (§12.2), as <see cref="UsageOrder"/>.</summary>
+    private static readonly Comparer<OutcomeKey> OutcomeOrder = Comparer<OutcomeKey>.Create((a, b) =>
+    {
+        var order = (a.Day, a.AssistantId, a.ClientId).CompareTo((b.Day, b.AssistantId, b.ClientId));
+        if (order == 0)
+        {
+            order = string.CompareOrdinal(a.Classification, b.Classification);
+        }
+
+        return order != 0 ? order : string.CompareOrdinal(a.Outcome, b.Outcome);
+    });
+
+    private sealed class OutcomeSums
+    {
+        public Guid DepartmentId { get; init; }
+        public int Turns { get; set; }
+        public decimal CostUsd { get; set; }
+        public decimal EstimatedCostUsd { get; set; }
+    }
+
     private const string InsertConversationSql = """
         INSERT INTO chat."Conversations" AS c ("Id", "Classification", "AssistantId", "ClientId", "SubjectKind", "SubjectId", "ExternalChatId",
             "HistoryMode", "RetentionDays", "CreatedAt", "LastMessageAt", "ExpiresAt")
@@ -339,10 +373,12 @@ public sealed partial class ConversationWriter : BackgroundService
         var totals = new SortedDictionary<TotalsKey, Totals>(Comparer<TotalsKey>.Create((a, b) =>
             (a.Day, a.AssistantId, a.ClientId, a.Classification).CompareTo((b.Day, b.AssistantId, b.ClientId, b.Classification))));
         var usage = new SortedDictionary<UsageKey, UsageSums>(UsageOrder);
+        var outcomes = new SortedDictionary<OutcomeKey, OutcomeSums>(OutcomeOrder);
         foreach (var turn in turns.OrderBy(t => t.Key, StringComparer.Ordinal).ThenBy(t => t.At))
         {
-            // The calls were made and charged, whatever happens to the turn's rows below.
+            // The calls were made and charged, and the turn was asked, whatever happens to the turn's rows below.
             AddUsage(usage, turn);
+            AddOutcome(outcomes, turn);
             if (turn.UsageOnly)
             {
                 if (turn.Unavailable || turn.Error)
@@ -463,6 +499,20 @@ public sealed partial class ConversationWriter : BackgroundService
                 sums.CachedInputTokens, sums.OutputTokens, sums.CostUsd, sums.EstimatedCalls, sums.EstimatedCostUsd);
         }
 
+        // Then the turns and their full cost per outcome (Decisions "Cost per outcome"), also in key order.
+        foreach (var (key, sums) in outcomes)
+        {
+            await ExecuteAsync(connection, transaction, """
+                INSERT INTO chat."AssistantDailyOutcomes" AS o ("Day", "AssistantId", "ClientId", "Classification", "Outcome", "DepartmentId", "Turns", "CostUsd",
+                    "EstimatedCostUsd")
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                ON CONFLICT ("Day", "AssistantId", "ClientId", "Classification", "Outcome") DO UPDATE SET
+                    "Turns" = o."Turns" + excluded."Turns", "CostUsd" = o."CostUsd" + excluded."CostUsd",
+                    "EstimatedCostUsd" = o."EstimatedCostUsd" + excluded."EstimatedCostUsd"
+                """, ct, key.Day, key.AssistantId, key.ClientId, key.Classification, key.Outcome, sums.DepartmentId, sums.Turns, sums.CostUsd,
+                sums.EstimatedCostUsd);
+        }
+
         await transaction.CommitAsync(ct);
     }
 
@@ -486,6 +536,24 @@ public sealed partial class ConversationWriter : BackgroundService
             sums.EstimatedCalls += record.Estimated ? 1 : 0;
             sums.EstimatedCostUsd += record.EstimatedCostUsd;
         }
+    }
+
+    /// <summary>
+    /// Adds <paramref name="turn"/> to the batch's sums per (day, assistant, client, level, outcome): one turn (none for
+    /// <see cref="ChatTurn.AfterTurn"/>) under <see cref="ChatTurn.CostOutcome"/>, with the gateway's and the estimated cost of all
+    /// its usage records, so the rows' cost equals the usage rows' of the same day.
+    /// </summary>
+    private static void AddOutcome(SortedDictionary<OutcomeKey, OutcomeSums> outcomes, ChatTurn turn)
+    {
+        var key = new OutcomeKey(StockholmTime.DayOf(turn.At), turn.AssistantId, turn.ClientId, turn.Classification, turn.CostOutcome);
+        if (!outcomes.TryGetValue(key, out var sums))
+        {
+            outcomes[key] = sums = new OutcomeSums { DepartmentId = turn.DepartmentId };
+        }
+
+        sums.Turns += turn.AfterTurn ? 0 : 1;
+        sums.CostUsd += turn.Usage.Sum(r => r.CostUsd);
+        sums.EstimatedCostUsd += turn.Usage.Sum(r => r.EstimatedCostUsd);
     }
 
     private static object Db(object? value) => value ?? DBNull.Value;

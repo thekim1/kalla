@@ -23,7 +23,8 @@ namespace Kalla.AdminApi.Tests;
 /// The test panel's usage (admin design §4.9, cost-attribution §5 C2; B-39): every model call of a test turn is upserted into
 /// <c>AssistantDailyUsage</c> under the assistant and the <c>admin-console</c> client row with the FakeGateway's tokens and
 /// cost, never into <c>AssistantDailyTotals</c>; the response's <c>costUsd</c> is the sum of the turn's calls and
-/// <c>costEstimated</c> is true on <c>fake-no-cost</c>; a failed write leaves the answer intact.
+/// <c>costEstimated</c> is true on <c>fake-no-cost</c>; the turn and its cost under its outcome in <c>AssistantDailyOutcomes</c>
+/// (Decisions "Cost per outcome"); a failed write leaves the answer intact.
 /// </summary>
 [Collection(AdminDatabaseGroup4.Name)]
 public sealed class AssistantTestPanelUsageTests(AdminDatabaseFixture database)
@@ -63,7 +64,8 @@ public sealed class AssistantTestPanelUsageTests(AdminDatabaseFixture database)
         using (var response = await editor.PostAsJsonAsync(path, new { question = $"Hur komposterar jag {code}?" }, Ct))
         {
             response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
-            var call = (await response.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("gateway");
+            var result = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+            var call = result.GetProperty("gateway");
             var served = gateway.Services.GetRequiredService<FakeUsage>().Records.Where(r => PanelSteps.Contains(r.Step)).ToList();
             served.Select(r => r.Step).ShouldContain("query-embed");
             served.Select(r => r.Step).ShouldContain("chat-answer");
@@ -79,6 +81,12 @@ public sealed class AssistantTestPanelUsageTests(AdminDatabaseFixture database)
                 (row.Calls, row.InputTokens, row.OutputTokens, row.CostUsd, row.EstimatedCalls, row.EstimatedCostUsd)
                     .ShouldBe((step.Count, step.Sum(r => r.InputTokens), step.Sum(r => r.OutputTokens), step.Sum(r => r.CostUsd), 0, 0m), row.Step);
             }
+
+            // Decisions "Cost per outcome": one turn under the answer's outcome with the cost of all its calls, under admin-console.
+            var outcome = await db.AssistantDailyOutcomes.AsNoTracking().SingleAsync(o => o.AssistantId == assistant.Id, Ct);
+            (outcome.ClientId, outcome.Classification, outcome.DepartmentId, outcome.Outcome, outcome.Turns, outcome.CostUsd, outcome.EstimatedCostUsd)
+                .ShouldBe((adminConsole, Classification.Internal, assistant.DepartmentId, result.GetProperty("answer").GetProperty("outcome").GetString()!, 1,
+                    served.Sum(r => r.CostUsd), 0m));
         }
 
         (await db.AssistantDailyTotals.AsNoTracking().CountAsync(t => t.AssistantId == assistant.Id, Ct)).ShouldBe(0);
@@ -95,6 +103,13 @@ public sealed class AssistantTestPanelUsageTests(AdminDatabaseFixture database)
             (await db.AssistantDailyUsage.AsNoTracking().SingleAsync(u => u.AssistantId == assistant.Id && u.Step == "query-embed", Ct)).Calls.ShouldBe(1);
             var answer = await db.AssistantDailyUsage.AsNoTracking().SingleAsync(u => u.AssistantId == assistant.Id && u.Step == "chat-answer", Ct);
             (answer.Calls, answer.EstimatedCalls).ShouldBe((2, 1));
+
+            // The two turns' cost by outcome equals their usage, the estimate apart.
+            var outcomes = await db.AssistantDailyOutcomes.AsNoTracking().Where(o => o.AssistantId == assistant.Id).ToListAsync(Ct);
+            var usage = await db.AssistantDailyUsage.AsNoTracking().Where(u => u.AssistantId == assistant.Id).ToListAsync(Ct);
+            outcomes.Sum(o => o.Turns).ShouldBe(2);
+            (outcomes.Sum(o => o.CostUsd), outcomes.Sum(o => o.EstimatedCostUsd)).ShouldBe((usage.Sum(u => u.CostUsd), usage.Sum(u => u.EstimatedCostUsd)));
+            outcomes.Sum(o => o.EstimatedCostUsd).ShouldBe(answer.EstimatedCostUsd);
         }
 
         (await db.AssistantDailyTotals.AsNoTracking().CountAsync(t => t.AssistantId == assistant.Id, Ct)).ShouldBe(0);
@@ -130,6 +145,7 @@ public sealed class AssistantTestPanelUsageTests(AdminDatabaseFixture database)
             result.GetProperty("answer").GetProperty("delivered").GetString().ShouldNotBeNullOrWhiteSpace();
             result.GetProperty("gateway").GetProperty("costUsd").GetDecimal().ShouldBeGreaterThan(0m);
             (await db.AssistantDailyUsage.AsNoTracking().CountAsync(u => u.AssistantId == assistant.Id, Ct)).ShouldBe(0);
+            (await db.AssistantDailyOutcomes.AsNoTracking().CountAsync(o => o.AssistantId == assistant.Id, Ct)).ShouldBe(0); // one transaction
         }
         finally
         {
@@ -167,6 +183,8 @@ public sealed class AssistantTestPanelUsageTests(AdminDatabaseFixture database)
         problem.GetProperty("code").GetString().ShouldBe("test_assistant_unavailable");
         problem.GetProperty("params").GetProperty("reason").GetString().ShouldBe("The assistant is unavailable: its gateway key is disabled.");
         gateway.Services.GetRequiredService<FakeUsage>().Records.ShouldBeEmpty();
+        // A failed test turn counts only once it has paid for a model call (Decisions "Cost per outcome"): none here.
+        (await db.AssistantDailyOutcomes.AsNoTracking().CountAsync(o => o.AssistantId == assistant.Id, Ct)).ShouldBe(0);
     }
 
     private static WebApplicationFactory<FakeGatewayProgram> FakeGateway() => new WebApplicationFactory<FakeGatewayProgram>().WithWebHostBuilder(web =>

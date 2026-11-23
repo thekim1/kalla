@@ -1,25 +1,27 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
-import type { CostGranularity, CostQuery, GatewayKeyList, KeyUsage, ObjectCosts } from '@/api/types'
+import type { AssistantCosts, CostGranularity, CostQuery, GatewayKeyList, KeyUsage, ObjectCosts } from '@/api/types'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import FilterSelect from '@/components/ui/FilterSelect.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import { useLoadable } from '@/stores/loadable'
-import { clientLabel, groupTotals, INDEXING_STEPS, lastDays, stepLabel, sumTotals, totalCost } from '@/components/costs/costs'
+import {
+  clientLabel, costPerTurn, groupTotals, INDEXING_STEPS, lastDays, outcomeLabel, outcomeTotals, stepLabel, sumTotals, TEST_PANEL_CLIENT, totalCost,
+} from '@/components/costs/costs'
 import { formatNumber, formatUsdCost } from '@/utils/format'
 import { gatewayHref } from '@/utils/gateway'
 import { COSTS } from '@/utils/labels'
 import { COST_MESSAGES } from '@/utils/messages'
 
-// The Cost card of admin design §8.6: an assistant's (Statistics tab, with a period picker, by step and by client) or a
-// knowledge base's (Overview, the last 30 days, indexing and evaluation apart). The total shows the gateway's cost and the
-// estimate of the calls without one apart.
+// The Cost card of admin design §8.6: an assistant's (Statistics tab, with a period picker, by step, by client and by outcome,
+// real use and the test panel apart) or a knowledge base's (Overview, the last 30 days, indexing and evaluation apart). The
+// total shows the gateway's cost and the estimate of the calls without one apart.
 const props = defineProps<{
   kind: 'assistant' | 'collection'
-  source: (query: CostQuery) => Promise<ObjectCosts>
+  source: (query: CostQuery) => Promise<ObjectCosts | AssistantCosts>
   /** A route to the Costs page for those who see it (the knowledge base's card, admin §8.6). */
   costsLink?: { name: string; query: Record<string, string> } | null
   /** B-46: the object's gateway key, whose figures (the gateway's Integration API, B-45) are shown beside Källa's. */
@@ -28,7 +30,7 @@ const props = defineProps<{
   departmentId?: string
 }>()
 
-const costs = useLoadable<ObjectCosts | null>(null)
+const costs = useLoadable<ObjectCosts | AssistantCosts | null>(null)
 /** The gateway's figures for the key, same period; null without the read-back (then the gateway link is shown). */
 const gateway = ref<KeyUsage | null>(null)
 /** The department's keys, read once: the gateway link's address and how many objects hold the key (#642). */
@@ -81,6 +83,20 @@ const baseColumns: Column[] = [
 const stepColumns = computed<Column[]>(() => (gateway.value ? [...baseColumns, { key: 'gateway', label: COSTS.gatewayCounted, align: 'right' }] : baseColumns))
 const clientColumns: Column[] = [{ ...baseColumns[0]!, label: COSTS.client }, ...baseColumns.slice(1)]
 
+/** Decisions "Cost per outcome": an assistant's turns by outcome, real use and the test panel in tables of their own. */
+const outcomes = computed(() => (costs.data.value && 'outcomes' in costs.data.value ? costs.data.value.outcomes : []))
+const outcomeGroups = computed(() => [
+  { key: 'use', title: COSTS.byOutcome, rows: outcomeTotals(outcomes.value.filter((o) => o.clientName !== TEST_PANEL_CLIENT)) },
+  { key: 'test-panel', title: COSTS.byOutcomeTestPanel, rows: outcomeTotals(outcomes.value.filter((o) => o.clientName === TEST_PANEL_CLIENT)) },
+].filter((g) => g.rows.length > 0))
+const outcomeColumns: Column[] = [
+  { key: 'outcome', label: COSTS.outcome },
+  { key: 'turns', label: COSTS.turns, align: 'right' },
+  { key: 'gateway', label: COSTS.gateway, align: 'right' },
+  { key: 'estimated', label: COSTS.estimated, align: 'right' },
+  { key: 'per-turn', label: COSTS.costPerTurn, align: 'right' },
+]
+
 watch([days, granularity], () => void load())
 onMounted(load)
 </script>
@@ -121,6 +137,16 @@ onMounted(load)
             <template #cell-tokens="{ row }"><span class="tabular">{{ formatNumber(row.totals.inputTokens + row.totals.outputTokens) }}</span></template>
             <template #cell-cost="{ row }"><span class="tabular">{{ formatUsdCost(totalCost(row.totals)) }}</span></template>
           </DataTable>
+          <template v-for="group in outcomeGroups" :key="group.key">
+            <h3 class="mb-2 mt-4 font-medium">{{ group.title }}</h3>
+            <DataTable :columns="outcomeColumns" :rows="group.rows" :row-key="(r) => r.outcome" :caption="group.title" :data-test="`cost-outcomes-${group.key}`">
+              <template #cell-outcome="{ row }">{{ outcomeLabel(row.outcome) }}</template>
+              <template #cell-turns="{ row }"><span class="tabular">{{ formatNumber(row.turns) }}</span></template>
+              <template #cell-gateway="{ row }"><span class="tabular">{{ formatUsdCost(row.costUsd) }}</span></template>
+              <template #cell-estimated="{ row }"><span class="tabular">{{ formatUsdCost(row.estimatedCostUsd) }}</span></template>
+              <template #cell-per-turn="{ row }"><span class="tabular">{{ formatUsdCost(costPerTurn(row)) }}</span></template>
+            </DataTable>
+          </template>
         </template>
         <div v-if="gateway" class="mt-3 text-small" data-test="cost-gateway">
           <p>{{ COST_MESSAGES.gatewayFigures(formatUsdCost(gatewayTotal), formatNumber(gatewayRequests)) }}</p>

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
+import { type DOMWrapper, flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { api } from '@/api'
-import type { CostRow, GatewayKey, ObjectCosts } from '@/api/types'
+import type { AssistantCosts, CostRow, GatewayKey, ObjectCosts, OutcomeCostRow } from '@/api/types'
 import { formatUsdCost } from '@/utils/format'
 import { COSTS } from '@/utils/labels'
 import { COST_MESSAGES } from '@/utils/messages'
@@ -25,12 +25,21 @@ function costs(rows: CostRow[]): ObjectCosts {
   }
 }
 
+function outcome(overrides: Partial<OutcomeCostRow>): OutcomeCostRow {
+  return { period: '2026-11-10', outcome: 'answered', clientId: 'c1', clientName: 'Open WebUI (pilot)', turns: 1, costUsd: 0, estimatedCostUsd: 0, ...overrides }
+}
+
 function gatewayKey(id: string, usedBy: number): GatewayKey {
   return {
     id, name: id, teamId: 't1', teamName: null, departmentId: 'd1', status: 'Active', ownerActive: true, expiresAt: null, allowedModels: [], allowedResidencies: [],
     piiPolicy: 'Off', contentGuardPolicy: 'Off', requestsPerMinute: null, tokensPerMinute: null, maxConcurrentRequests: null, maxOutputTokens: null,
     hasSystemPrompt: false, usable: true, selectable: true, reason: null, syncedAt: '2026-11-12T10:00:00Z', usedBy,
   }
+}
+
+/** A table's body as text per row: the row header, then each cell's value (without the label narrow screens show). */
+function cells(table: Pick<DOMWrapper<Element>, 'findAll'>): string[][] {
+  return table.findAll('tbody tr').map((r) => [r.get('th').text(), ...r.findAll('td > span.min-w-0').map((c) => c.text())])
 }
 
 const mountCard = (props: InstanceType<typeof CostCard>['$props']) => mount(CostCard, { props, global: { stubs: { RouterLink: RouterLinkStub } } })
@@ -71,6 +80,49 @@ describe('Cost card (admin design §8.6; B-41)', () => {
     await wrapper.findAll('button').find((b) => b.text() === COSTS.granularities.month)!.trigger('click')
     await flushPromises()
     expect(source).toHaveBeenLastCalledWith(expect.objectContaining({ granularity: 'month' }))
+  })
+
+  it('shows the turns, the cost apart and the cost per turn by outcome, real use and the test panel in tables of their own (Decisions "Cost per outcome")', async () => {
+    const data: AssistantCosts = {
+      ...costs([row({ costUsd: 0.01 })]),
+      outcomes: [
+        outcome({ turns: 2, costUsd: 0.004 }),
+        outcome({ period: '2026-11-11', clientId: 'c2', clientName: 'Widget', turns: 2, costUsd: 0.002, estimatedCostUsd: 0.002 }),
+        outcome({ outcome: 'not-found', turns: 1, costUsd: 0.0005 }),
+        outcome({ outcome: 'error', turns: 1, costUsd: 0 }),
+        outcome({ clientId: 'c9', clientName: 'admin-console', outcome: 'answered-general', turns: 4, costUsd: 0.002 }),
+      ],
+    }
+    const wrapper = mountCard({ kind: 'assistant', source: vi.fn().mockResolvedValue(data) })
+    await flushPromises()
+
+    const use = wrapper.get('[data-test=cost-outcomes-use]')
+    const lines = cells(use)
+    // Answered first, then Not found, then Error (the outcomes' order), the clients and days of real use summed.
+    expect(lines.map((l) => l[0])).toEqual([COSTS.outcomes.answered, COSTS.outcomes['not-found'], COSTS.outcomes.error])
+    expect(lines[0]).toEqual([COSTS.outcomes.answered, '4', formatUsdCost(0.006), formatUsdCost(0.002), formatUsdCost(0.002)])
+    expect(lines[1]).toEqual([COSTS.outcomes['not-found'], '1', formatUsdCost(0.0005), formatUsdCost(0), formatUsdCost(0.0005)])
+    expect(lines[2]![4]).toBe(formatUsdCost(0))
+    expect(use.text()).not.toContain(COSTS.outcomes['answered-general'])
+
+    const panel = wrapper.get('[data-test=cost-outcomes-test-panel]')
+    expect(cells(panel)).toEqual([
+      [COSTS.outcomes['answered-general'], '4', formatUsdCost(0.002), formatUsdCost(0), formatUsdCost(0.0005)],
+    ])
+    expect(wrapper.text()).toContain(COSTS.byOutcome)
+    expect(wrapper.text()).toContain(COSTS.byOutcomeTestPanel)
+  })
+
+  it('leaves the test panel\'s outcome table out when the test panel was not used, and a knowledge base has none', async () => {
+    const data: AssistantCosts = { ...costs([row({ costUsd: 0.01 })]), outcomes: [outcome({ turns: 1, costUsd: 0.01 })] }
+    const wrapper = mountCard({ kind: 'assistant', source: vi.fn().mockResolvedValue(data) })
+    await flushPromises()
+    expect(wrapper.find('[data-test=cost-outcomes-use]').exists()).toBe(true)
+    expect(wrapper.find('[data-test=cost-outcomes-test-panel]').exists()).toBe(false)
+
+    const collection = mountCard({ kind: 'collection', source: vi.fn().mockResolvedValue(costs([row({ step: 'embed', clientId: null, clientName: null, costUsd: 0.02 })])) })
+    await flushPromises()
+    expect(collection.find('[data-test=cost-outcomes-use]').exists()).toBe(false)
   })
 
   it("splits a knowledge base's cost into indexing and evaluation and links to the Costs page", async () => {

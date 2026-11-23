@@ -26,7 +26,8 @@ namespace Kalla.Api.Tests;
 /// call of a turn (condense, query embedding, rerank, answer, follow-ups) writes its row of <c>AssistantDailyUsage</c> with the
 /// FakeGateway's tokens and cost, the streamed answer's cost from the comment that never reaches the client, the estimate on
 /// <c>fake-no-cost</c>, the usage of a turn whose answer call fails or whose stream breaks off, nothing for a cached query
-/// embedding, and the counters <c>rag.chat.tokens</c> and <c>rag.chat.cost</c>. The FakeGateway answers through a recorder
+/// embedding, and the counters <c>rag.chat.tokens</c> and <c>rag.chat.cost</c>; each turn's full cost under its outcome in
+/// <c>AssistantDailyOutcomes</c> (Decisions "Cost per outcome"). The FakeGateway answers through a recorder
 /// that reads each answer's tokens and cost as the gateway sent them.
 /// </summary>
 public sealed partial class ChatApiTests
@@ -199,6 +200,32 @@ public sealed partial class ChatApiTests
         return rows;
     }
 
+    /// <summary>Today's <c>AssistantDailyOutcomes</c> rows of the assistant, the integration client and its level by outcome, after the writer has flushed.</summary>
+    private async Task<Dictionary<string, (int Turns, decimal CostUsd, decimal EstimatedCostUsd)>> OutcomesAsync(WebApplicationFactory<Program> api)
+    {
+        await api.Services.GetRequiredService<ConversationWriter>().FlushAsync(Ct);
+        await using var connection = new Npgsql.NpgsqlConnection(db.Connection(RagDatabase.Api));
+        await connection.OpenAsync(Ct);
+        await using var command = new Npgsql.NpgsqlCommand("""
+            SELECT "Outcome", "Turns", "CostUsd", "EstimatedCostUsd" FROM chat."AssistantDailyOutcomes"
+            WHERE "AssistantId" = $1 AND "ClientId" = $2 AND "Classification" = 'internal' AND "Day" = (now() AT TIME ZONE 'Europe/Stockholm')::date
+            """, connection) { Parameters = { new() { Value = db.AssistantId }, new() { Value = db.IntegrationClient } } };
+        await using var reader = await command.ExecuteReaderAsync(Ct);
+        var rows = new Dictionary<string, (int, decimal, decimal)>(StringComparer.Ordinal);
+        while (await reader.ReadAsync(Ct))
+        {
+            rows[reader.GetString(0)] = (reader.GetInt32(1), reader.GetDecimal(2), reader.GetDecimal(3));
+        }
+
+        return rows;
+    }
+
+    /// <summary>The outcome rows added between <paramref name="before"/> and <paramref name="after"/>; outcomes that did not move are left out.</summary>
+    private static Dictionary<string, (int Turns, decimal CostUsd, decimal EstimatedCostUsd)> Added(
+        Dictionary<string, (int Turns, decimal CostUsd, decimal EstimatedCostUsd)> before, Dictionary<string, (int Turns, decimal CostUsd, decimal EstimatedCostUsd)> after) =>
+        after.Select(a => (a.Key, Row: before.TryGetValue(a.Key, out var b) ? (a.Value.Turns - b.Turns, a.Value.CostUsd - b.CostUsd, a.Value.EstimatedCostUsd - b.EstimatedCostUsd) : a.Value))
+            .Where(x => x.Row != (0, 0m, 0m)).ToDictionary(x => x.Key, x => x.Row, StringComparer.Ordinal);
+
     /// <summary>The rows added between <paramref name="before"/> and <paramref name="after"/>, by step; steps that did not move are left out.</summary>
     private static Dictionary<string, UsageRow> Added(Dictionary<string, UsageRow> before, Dictionary<string, UsageRow> after) =>
         after.Select(a => (a.Key, Row: a.Value.Minus(before.GetValueOrDefault(a.Key, UsageRow.None)))).Where(x => x.Row != UsageRow.None)
@@ -306,6 +333,7 @@ public sealed partial class ChatApiTests
         await using var api = CostHost(calls, gateway, rerank: false, failStep: GatewayChatClient.AnswerStep);
         using var client = Client(api, db.IntegrationKey);
         var before = await UsageAsync(api);
+        var outcomes = await OutcomesAsync(api);
         var messages = await TotalMessagesAsync();
 
         using var response = await AskFollowUp(client, stream, followUps: 0);
@@ -318,6 +346,31 @@ public sealed partial class ChatApiTests
         added[Condenser.Step].ShouldBe(Charged(calls.Single(c => c.Step == Condenser.Step)));
         added[GatewayQueryEmbedder.Step].ShouldBe(Charged(calls.Single(c => c.Step == GatewayQueryEmbedder.Step)));
         (await TotalMessagesAsync()).ShouldBe(messages);
+        // Decisions "Cost per outcome": one error turn with both calls' cost.
+        Added(outcomes, await OutcomesAsync(api)).ShouldBe(
+            new Dictionary<string, (int Turns, decimal CostUsd, decimal EstimatedCostUsd)> { ["error"] = (1, calls.Sum(c => c.CostUsd!.Value), 0m) }, ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task A_json_answers_follow_up_call_adds_its_cost_to_the_turns_outcome_and_no_turn()
+    {
+        // Decisions "Cost per outcome": the follow-up call of a JSON answer comes after the turn is enqueued (§9.8), and is still the
+        // turn's cost: one answered turn with every call's cost, equal to the usage rows the turn added.
+        var calls = new ConcurrentQueue<CostCall>();
+        await using var gateway = CostFake();
+        await using var api = CostHost(calls, gateway);
+        using var client = Client(api, db.IntegrationKey);
+        var usage = await UsageAsync(api);
+        var outcomes = await OutcomesAsync(api);
+
+        using var response = await AskFollowUp(client, stream: false);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
+
+        calls.Select(c => c.Step).ShouldContain(FollowUps.Step);
+        var added = Added(outcomes, await OutcomesAsync(api));
+        added.ShouldBe(
+            new Dictionary<string, (int Turns, decimal CostUsd, decimal EstimatedCostUsd)> { ["answered"] = (1, calls.Sum(c => c.CostUsd!.Value), 0m) }, ignoreOrder: true);
+        Added(usage, await UsageAsync(api)).Values.Sum(r => r.CostUsd).ShouldBe(added["answered"].CostUsd);
     }
 
     [Fact]

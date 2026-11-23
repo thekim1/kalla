@@ -50,7 +50,7 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
 
         // Chat (P1b item 1, data-model §2.3): the api owns it, the admin reads it (and marks feedback reviewed, a column
         // grant), the worker has no access.
-        string[] chat = [.. new[] { "Conversations", "DataKeys", "Messages", "MessageSources", "Feedback", "ToolCalls", "AssistantDailyTotals", "FeedbackImportState", "AssistantDailyUsage" }
+        string[] chat = [.. new[] { "Conversations", "DataKeys", "Messages", "MessageSources", "Feedback", "ToolCalls", "AssistantDailyTotals", "FeedbackImportState", "AssistantDailyUsage", "AssistantDailyOutcomes" }
             .Select(t => "chat." + t)];
 
         // Cost per step (data-model §1.2, §2.2, §2.3; cost-attribution §5): the worker writes its knowledge bases' usage, the
@@ -59,7 +59,7 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
 
         // Setup mode (identity design §19): only the admin has the setup sessions and test sign-ins, which hold candidate values.
         string[] setup = ["config.SetupSessions", "config.SetupTests"];
-        string[] assistantUsage = ["chat.AssistantDailyUsage"];
+        string[] assistantUsage = ["chat.AssistantDailyUsage", "chat.AssistantDailyOutcomes"]; // and the test panel's turns per outcome (Decisions "Cost per outcome")
 
         // config.Sources and content.Documents are column grants for the api (below), so they are not table privileges.
         (await PrivilegesAsync(Api, "SELECT")).ShouldBe([.. configRead, .. keys, "config.KeyLastUse", .. retrievalConfig, .. shares, .. apiServingConfig, .. gatewayKeys, "content.ChunkSets", "content.Chunks",

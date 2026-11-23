@@ -9,7 +9,8 @@ namespace Kalla.AdminApi;
 /// <summary>
 /// The cost report (admin design §8.6; cost-attribution §5 C4): what assistants and knowledge bases cost, read from
 /// <c>chat."AssistantDailyUsage"</c> and <c>content."CollectionDailyUsage"</c> per Europe/Stockholm day or calendar month,
-/// step and client, the gateway's cost always apart from the estimate. Scope is the row's <c>DepartmentId</c> (the object's
+/// step and client, the gateway's cost always apart from the estimate, and an assistant's turns per outcome from
+/// <c>chat."AssistantDailyOutcomes"</c> (Decisions "Cost per outcome"). Scope is the row's <c>DepartmentId</c> (the object's
 /// department when the call was made) among the caller's departments, as the feedback totals (§8.1); names are read from
 /// the config tables by id, never joined to the usage tables (§4.8). Reporting only, and not audited: no content.
 /// </summary>
@@ -49,12 +50,16 @@ public static class CostEndpoints
                 _ = await admin.Db.Assistants.IgnoreQueryFilters().AsNoTracking().Where(a => a.Id == id && departments.Contains(a.DepartmentId)).Select(a => (Guid?)a.Id)
                     .SingleOrDefaultAsync(ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
                 var rows = await AssistantUsageAsync(admin, period, departments, [id], ct);
-                var clients = await ClientNamesAsync(admin, rows, ct);
-                return ObjectCosts.Of(period, [.. rows.OrderBy(r => r.Period).ThenBy(r => r.Step, StringComparer.Ordinal).ThenBy(r => r.ClientId)
-                    .Select(r => CostRow.Of(r, r.ClientId, r.ClientId is { } c ? clients.GetValueOrDefault(c) : null))]);
+                var outcomes = await AssistantOutcomesAsync(admin, period, departments, id, ct);
+                var clients = await ClientNamesAsync(admin, rows.Select(r => r.ClientId).Concat(outcomes.Select(o => (Guid?)o.ClientId)), ct);
+                return AssistantCosts.Of(
+                    ObjectCosts.Of(period, [.. rows.OrderBy(r => r.Period).ThenBy(r => r.Step, StringComparer.Ordinal).ThenBy(r => r.ClientId)
+                        .Select(r => CostRow.Of(r, r.ClientId, r.ClientId is { } c ? clients.GetValueOrDefault(c) : null))]),
+                    [.. outcomes.OrderBy(o => o.Period).ThenBy(o => o.Outcome, StringComparer.Ordinal).ThenBy(o => o.ClientId)
+                        .Select(o => OutcomeCostRow.Of(o, clients.GetValueOrDefault(o.ClientId)))]);
             })
             .RequireAuthorization(AdminPolicies.Read).WithTags("Costs").WithName("GetAssistantCosts")
-            .WithSummary("An assistant's cost per period, step and client: tokens, the gateway's cost and the estimate apart, with totals");
+            .WithSummary("An assistant's cost per period, step and client, and its turns and their cost per outcome: the gateway's cost and the estimate apart, with totals");
 
         api.MapGet("/collections/{id:guid}/costs", async (Guid id, DateOnly? from, DateOnly? to, string? granularity, AdminContext admin, CancellationToken ct) =>
             {
@@ -92,7 +97,7 @@ public static class CostEndpoints
                     var usage = await AssistantUsageAsync(admin, period, departments, null, ct);
                     Guid[] ids = [.. usage.Select(u => u.ObjectId).Distinct()];
                     var names = await admin.Db.Assistants.AsNoTracking().Where(a => ids.Contains(a.Id)).Select(a => new { a.Id, a.Name }).ToDictionaryAsync(a => a.Id, a => a.Name, ct);
-                    var clients = await ClientNamesAsync(admin, usage, ct);
+                    var clients = await ClientNamesAsync(admin, usage.Select(u => u.ClientId), ct);
                     rows.AddRange(usage.Select(u => DepartmentCostRow.Of(u, AssistantKind, departmentNames.GetValueOrDefault(u.DepartmentId), names.GetValueOrDefault(u.ObjectId),
                         u.ClientId is { } c ? clients.GetValueOrDefault(c) : null)));
                 }
@@ -145,6 +150,19 @@ public static class CostEndpoints
             GROUP BY 1, 2, 3, 4, 5
             """).ToListAsync(ct);
 
+    /// <summary>
+    /// <c>AssistantDailyOutcomes</c> of <paramref name="assistant"/> summed per period, outcome and client within
+    /// <paramref name="departments"/> (the row's own department; Decisions "Cost per outcome").
+    /// </summary>
+    private static Task<List<OutcomeAggregate>> AssistantOutcomesAsync(AdminContext admin, CostPeriod period, Guid[] departments, Guid assistant, CancellationToken ct) =>
+        admin.Db.Database.SqlQuery<OutcomeAggregate>($"""
+            SELECT date_trunc({period.Granularity}, o."Day")::date AS "Period", o."Outcome", o."ClientId", sum(o."Turns")::bigint AS "Turns",
+                sum(o."CostUsd") AS "CostUsd", sum(o."EstimatedCostUsd") AS "EstimatedCostUsd"
+            FROM chat."AssistantDailyOutcomes" o
+            WHERE o."Day" BETWEEN {period.From} AND {period.To} AND o."DepartmentId" = ANY({departments}) AND o."AssistantId" = {assistant}
+            GROUP BY 1, 2, 3
+            """).ToListAsync(ct);
+
     /// <summary><c>CollectionDailyUsage</c> summed as <see cref="AssistantUsageAsync"/>, without a client.</summary>
     private static Task<List<UsageAggregate>> CollectionUsageAsync(AdminContext admin, CostPeriod period, Guid[] departments, Guid[]? objects, CancellationToken ct) =>
         admin.Db.Database.SqlQuery<UsageAggregate>($"""
@@ -158,10 +176,10 @@ public static class CostEndpoints
             GROUP BY 1, 2, 3, 4, 5
             """).ToListAsync(ct);
 
-    /// <summary>The names of the clients in <paramref name="rows"/> (<c>admin-console</c> is the test panel's, §4.9).</summary>
-    private static async Task<Dictionary<Guid, string>> ClientNamesAsync(AdminContext admin, IEnumerable<UsageAggregate> rows, CancellationToken ct)
+    /// <summary>The names of the clients <paramref name="clientIds"/> (<c>admin-console</c> is the test panel's, §4.9).</summary>
+    private static async Task<Dictionary<Guid, string>> ClientNamesAsync(AdminContext admin, IEnumerable<Guid?> clientIds, CancellationToken ct)
     {
-        Guid[] ids = [.. rows.Select(r => r.ClientId).OfType<Guid>().Distinct()];
+        Guid[] ids = [.. clientIds.OfType<Guid>().Distinct()];
         return ids.Length == 0
             ? []
             : await admin.Db.Clients.AsNoTracking().Where(c => ids.Contains(c.Id)).Select(c => new { c.Id, c.Name }).ToDictionaryAsync(c => c.Id, c => c.Name, ct);
@@ -227,6 +245,17 @@ public sealed class UsageAggregate
     public long EstimatedCalls { get; init; }
 }
 
+/// <summary>One summed group of <c>AssistantDailyOutcomes</c> (the SQL's columns).</summary>
+public sealed class OutcomeAggregate
+{
+    public DateOnly Period { get; init; }
+    public string Outcome { get; init; } = "";
+    public Guid ClientId { get; init; }
+    public long Turns { get; init; }
+    public decimal CostUsd { get; init; }
+    public decimal EstimatedCostUsd { get; init; }
+}
+
 /// <summary>The summed fields of §8.6: the gateway's cost (<see cref="CostUsd"/>) apart from the estimate of the calls without one.</summary>
 public sealed record CostTotals(long Calls, long InputTokens, long CachedInputTokens, long OutputTokens, decimal CostUsd, decimal EstimatedCostUsd, long EstimatedCalls)
 {
@@ -270,6 +299,29 @@ public sealed record ObjectCosts(DateOnly From, DateOnly To, string Granularity,
         ArgumentNullException.ThrowIfNull(rows);
         return new(period.From, period.To, period.Granularity, rows,
             CostTotals.Of(rows.Select(r => new CostTotals(r.Calls, r.InputTokens, r.CachedInputTokens, r.OutputTokens, r.CostUsd, r.EstimatedCostUsd, r.EstimatedCalls))));
+    }
+}
+
+/// <summary>
+/// An assistant's turns and their full cost per period, outcome and client (Decisions "Cost per outcome"); <see cref="ClientName"/>
+/// is <c>admin-console</c> for the test panel.
+/// </summary>
+public sealed record OutcomeCostRow(DateOnly Period, string Outcome, Guid ClientId, string? ClientName, long Turns, decimal CostUsd, decimal EstimatedCostUsd)
+{
+    public static OutcomeCostRow Of(OutcomeAggregate o, string? clientName)
+    {
+        ArgumentNullException.ThrowIfNull(o);
+        return new(o.Period, o.Outcome, o.ClientId, clientName, o.Turns, o.CostUsd, o.EstimatedCostUsd);
+    }
+}
+
+/// <summary>An assistant's cost report (admin §8.6): <see cref="ObjectCosts"/>'s fields and the <see cref="Outcomes"/> by outcome.</summary>
+public sealed record AssistantCosts(DateOnly From, DateOnly To, string Granularity, IReadOnlyList<CostRow> Rows, CostTotals Totals, IReadOnlyList<OutcomeCostRow> Outcomes)
+{
+    public static AssistantCosts Of(ObjectCosts costs, IReadOnlyList<OutcomeCostRow> outcomes)
+    {
+        ArgumentNullException.ThrowIfNull(costs);
+        return new(costs.From, costs.To, costs.Granularity, costs.Rows, costs.Totals, outcomes);
     }
 }
 

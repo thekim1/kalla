@@ -2,6 +2,8 @@ using System.Diagnostics.Metrics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Kalla.Answering.Chat;
+using Kalla.Domain;
+using Kalla.Infrastructure.Gateway;
 using Kalla.TestKit;
 
 namespace Kalla.Api.Tests;
@@ -10,6 +12,7 @@ namespace Kalla.Api.Tests;
 /// Conversation ids and the writer (chat design §11.1, §12; #266): an issued id is bound to client, assistant and subject;
 /// the writer refuses to append to a conversation of another owner or assistant on its own, whatever the MAC said; Open
 /// WebUI chats are one conversation per (user, chat id, assistant), and a resent user message id (a regeneration) is kept once.
+/// Every turn adds one turn and its full cost to its outcome's row of <c>AssistantDailyOutcomes</c> (Decisions "Cost per outcome").
 /// </summary>
 public sealed class ConversationWriterTests(KnowledgeFixture db) : IClassFixture<KnowledgeFixture>
 {
@@ -134,6 +137,98 @@ public sealed class ConversationWriterTests(KnowledgeFixture db) : IClassFixture
 
         (await CountAsync(api, $"""SELECT count(*) FROM chat."Messages" WHERE "Id" = '{good.MessageId}'""")).ShouldBe(1);
         (await CountAsync(api, $"""SELECT count(*) FROM chat."Messages" WHERE "Id" = '{bad.MessageId}'""")).ShouldBe(0);
+    }
+
+    private static UsageRecord Charged(string step, decimal cost) => new(step, "fors/chat-eu", 100, 0, 10, cost, 0m, Estimated: false);
+
+    private static UsageRecord Estimated(string step, decimal cost) => new(step, "fake-no-cost", 100, 0, 10, 0m, cost, Estimated: true);
+
+    [Fact]
+    public async Task Cost_per_outcome_counts_each_turn_under_its_outcome_with_its_usage_and_sums_to_the_days_usage()
+    {
+        // Chat design §18.9: two answered turns, a not-found turn and a usage-only error turn in one batch give AssistantDailyOutcomes
+        // rows answered 2, not-found 1, error 1, each with the summed cost of its turns' usage records; the rows' cost summed equals
+        // the day's AssistantDailyUsage cost summed, gateway and estimated apart.
+        await using var api = NpgsqlDataSource.Create(db.Connection(RagDatabase.Api));
+        using var meters = new Meters();
+        var writer = new ConversationWriter(api, meters, NullLogger<ConversationWriter>.Instance);
+        var (client, assistant, department) = (Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7());
+        var at = DateTimeOffset.UtcNow;
+        ChatTurn Asked(string outcome, params UsageRecord[] usage) =>
+            Turn(Guid.CreateVersion7(), null, assistant, client, "user-O", "internal") with { Outcome = outcome, DepartmentId = department, Usage = usage, At = at };
+
+        await writer.WriteAsync(
+        [
+            Asked("answered", Charged("query-embed", 0.0001m), Estimated("condense", 0.0003m), Charged("chat-answer", 0.002m)),
+            Asked("answered", Charged("query-embed", 0.0001m), Estimated("chat-answer", 0.0015m)),
+            Asked("not-found", Charged("query-embed", 0.0001m)),
+            ChatTurn.UsageOnlyOf(assistant, department, client, "internal", at, [Charged("condense", 0.0003m), Charged("query-embed", 0.0001m)]) with { Error = true },
+        ], Ct);
+
+        var rows = await OutcomesAsync(api, assistant);
+        rows.ShouldBe(new Dictionary<string, (int, decimal, decimal)>
+        {
+            ["answered"] = (2, 0.0022m, 0.0018m), ["not-found"] = (1, 0.0001m, 0m), ["error"] = (1, 0.0004m, 0m),
+        }, ignoreOrder: true);
+        (await CountAsync(api, $"""SELECT count(*) FROM chat."AssistantDailyOutcomes" WHERE "AssistantId" = '{assistant}' AND "DepartmentId" = '{department}'"""))
+            .ShouldBe(3);
+
+        await using var usage = api.CreateCommand("""
+            SELECT sum("CostUsd"), sum("EstimatedCostUsd") FROM chat."AssistantDailyUsage" WHERE "AssistantId" = $1 AND "Day" = $2
+            """);
+        usage.Parameters.Add(new NpgsqlParameter { Value = assistant });
+        usage.Parameters.Add(new NpgsqlParameter { Value = StockholmTime.DayOf(at) });
+        await using var reader = await usage.ExecuteReaderAsync(Ct);
+        (await reader.ReadAsync(Ct)).ShouldBeTrue();
+        (reader.GetDecimal(0), reader.GetDecimal(1)).ShouldBe((rows.Values.Sum(r => r.CostUsd), rows.Values.Sum(r => r.EstimatedCostUsd)));
+    }
+
+    [Fact]
+    public async Task Calls_after_a_turns_write_add_their_cost_to_its_outcome_and_a_failure_after_a_call_counts_as_an_error_turn()
+    {
+        // Decisions "Cost per outcome": the follow-up and escalation calls of a JSON answer come after its turn was enqueued (§9.8,
+        // §9.9): their cost is the turn's, under its outcome, with no turn of their own. A turn that fails after a model call
+        // without a 5xx or an unavailable key is still a usage-only turn, so it counts under error (§12.2); an unavailable one
+        // under unavailable.
+        await using var api = NpgsqlDataSource.Create(db.Connection(RagDatabase.Api));
+        using var meters = new Meters();
+        var writer = new ConversationWriter(api, meters, NullLogger<ConversationWriter>.Instance);
+        var (client, assistant, department) = (Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7());
+        var at = DateTimeOffset.UtcNow;
+        ChatTurn UsageOnly(params UsageRecord[] usage) => ChatTurn.UsageOnlyOf(assistant, department, client, "public", at, usage);
+
+        await writer.WriteAsync(
+        [
+            Turn(Guid.CreateVersion7(), null, assistant, client, "user-L") with { Outcome = "answered-general", DepartmentId = department, At = at, Usage = [Charged("chat-answer", 0.002m)] },
+        ], Ct);
+        await writer.WriteAsync(
+        [
+            UsageOnly(Charged("follow-ups", 0.0004m)) with { AfterTurn = true, Outcome = "answered-general" },
+            UsageOnly(Charged("condense", 0.0003m)),
+            UsageOnly() with { Unavailable = true },
+        ], Ct);
+
+        (await OutcomesAsync(api, assistant)).ShouldBe(new Dictionary<string, (int, decimal, decimal)>
+        {
+            ["answered-general"] = (1, 0.0024m, 0m), ["error"] = (1, 0.0003m, 0m), ["unavailable"] = (1, 0m, 0m),
+        }, ignoreOrder: true);
+    }
+
+    /// <summary>The assistant's <c>AssistantDailyOutcomes</c> rows by outcome: turns, the gateway's cost and the estimate.</summary>
+    private static async Task<Dictionary<string, (int Turns, decimal CostUsd, decimal EstimatedCostUsd)>> OutcomesAsync(NpgsqlDataSource data, Guid assistant)
+    {
+        await using var command = data.CreateCommand("""
+            SELECT "Outcome", "Turns", "CostUsd", "EstimatedCostUsd" FROM chat."AssistantDailyOutcomes" WHERE "AssistantId" = $1
+            """);
+        command.Parameters.Add(new NpgsqlParameter { Value = assistant });
+        await using var reader = await command.ExecuteReaderAsync(Ct);
+        var rows = new Dictionary<string, (int, decimal, decimal)>(StringComparer.Ordinal);
+        while (await reader.ReadAsync(Ct))
+        {
+            rows[reader.GetString(0)] = (reader.GetInt32(1), reader.GetDecimal(2), reader.GetDecimal(3));
+        }
+
+        return rows;
     }
 
     private static async Task<long> CountAsync(NpgsqlDataSource data, string sql)

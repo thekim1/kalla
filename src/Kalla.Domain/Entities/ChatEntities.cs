@@ -287,6 +287,36 @@ public sealed class AssistantDailyUsage
     public decimal EstimatedCostUsd { get; set; }
 }
 
+/// <summary>
+/// Turns and their full cost per Europe/Stockholm day, client, level and outcome (<c>chat."AssistantDailyOutcomes"</c>,
+/// data-model §2.3; Decisions "Cost per outcome"; chat design §12.2): the sums of the turns' usage records, the gateway's cost
+/// apart from the estimate, as <see cref="AssistantDailyUsage"/>. Written by the api's conversation writer and the admin's test panel.
+/// </summary>
+public sealed class AssistantDailyOutcome
+{
+    public DateOnly Day { get; set; }
+    public Guid AssistantId { get; set; }
+
+    /// <summary>The client the turns were made for; the test panel's are the <c>admin-console</c> row.</summary>
+    public Guid ClientId { get; set; }
+
+    public required string Classification { get; set; }
+
+    /// <summary>One of <see cref="MessageOutcomes.All"/>; a usage-only turn is <c>unavailable</c> or <c>error</c>.</summary>
+    public required string Outcome { get; set; }
+
+    /// <summary>The assistant's department at the time of the turns.</summary>
+    public Guid DepartmentId { get; set; }
+
+    public int Turns { get; set; }
+
+    /// <summary>The gateway's cost of the turns' calls.</summary>
+    public decimal CostUsd { get; set; }
+
+    /// <summary>The estimate of the turns' calls without a gateway cost.</summary>
+    public decimal EstimatedCostUsd { get; set; }
+}
+
 /// <summary>The watermark of the Open WebUI feedback import per client (<c>chat."FeedbackImportState"</c>, chat design §14.2).</summary>
 public sealed class FeedbackImportState
 {

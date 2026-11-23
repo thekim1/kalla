@@ -8,7 +8,8 @@ namespace Kalla.IntegrationTests;
 /// the api (and the admin's test panel), <c>content."CollectionDailyUsage"</c> by the worker; every column takes a value,
 /// the checks refuse a negative counter, more estimated calls than calls, more cached than input tokens, an empty step and
 /// an unknown level, the nightly chat step removes assistant usage older than 3 years, and the daily totals keep no token
-/// or cost column (B-38).
+/// or cost column (B-38). <c>chat."AssistantDailyOutcomes"</c> (Decisions "Cost per outcome") likewise: its checks, its grants
+/// and its 3 years.
 /// </summary>
 [Collection(RagDatabaseGroup.Name)]
 public sealed class DailyUsageSchemaTests(RagDatabaseFixture database)
@@ -111,6 +112,81 @@ public sealed class DailyUsageSchemaTests(RagDatabaseFixture database)
         }
 
         (await Sql.ListAsync(admin, $"""SELECT ("Day" > current_date - 7)::text FROM chat."AssistantDailyUsage" WHERE "AssistantId" = '{assistant}'"""))
+            .ShouldBe(["true"]);
+    }
+
+    [Fact]
+    public async Task An_assistant_outcome_row_takes_every_column_and_the_checks_refuse_what_they_forbid()
+    {
+        const string columns = """("Day", "AssistantId", "ClientId", "Classification", "Outcome", "DepartmentId", "Turns", "CostUsd", "EstimatedCostUsd")""";
+        var api = database.Connection(Api);
+        var assistant = Guid.NewGuid();
+        var client = Guid.NewGuid();
+        await Sql.ExecuteAsync(api, $"""
+            INSERT INTO chat."AssistantDailyOutcomes" {columns}
+            VALUES (current_date, '{assistant}', '{client}', 'internal', 'answered-general', gen_random_uuid(), 3, 0.00123456, 0.00004500)
+            """);
+        (await Sql.ScalarAsync<decimal>(api, $"""SELECT "CostUsd" + "EstimatedCostUsd" FROM chat."AssistantDailyOutcomes" WHERE "AssistantId" = '{assistant}'"""))
+            .ShouldBe(0.00127956m);
+
+        // The counters default to 0; every value of Messages.Outcome is taken.
+        foreach (var outcome in new[] { "answered", "not-found", "unavailable", "refused", "error", "cancelled" })
+        {
+            await Sql.ExecuteAsync(api, $"""
+                INSERT INTO chat."AssistantDailyOutcomes" ("Day", "AssistantId", "ClientId", "Classification", "Outcome", "DepartmentId")
+                VALUES (current_date, '{assistant}', '{client}', 'internal', '{outcome}', gen_random_uuid())
+                """);
+        }
+
+        (await Sql.ScalarAsync<long>(api, $"""SELECT count(*) FROM chat."AssistantDailyOutcomes" WHERE "AssistantId" = '{assistant}' AND "Turns" = 0""")).ShouldBe(6);
+
+        foreach (var (values, state) in new[]
+                 {
+                     ("'secret', 'answered', 1, 0, 0", PostgresErrorCodes.CheckViolation),
+                     ("'public', 'answered-later', 1, 0, 0", PostgresErrorCodes.CheckViolation),
+                     ("'public', 'answered', -1, 0, 0", PostgresErrorCodes.CheckViolation),
+                     ("'public', 'answered', 1, -0.1, 0", PostgresErrorCodes.CheckViolation),
+                     ("'public', 'answered', 1, 0, -0.1", PostgresErrorCodes.CheckViolation),
+                     ("'public', NULL, 1, 0, 0", PostgresErrorCodes.NotNullViolation),
+                 })
+        {
+            var sql = $"""
+                INSERT INTO chat."AssistantDailyOutcomes" ("Day", "AssistantId", "ClientId", "DepartmentId", "Classification", "Outcome", "Turns", "CostUsd", "EstimatedCostUsd")
+                VALUES (current_date, gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), {values})
+                """;
+            (await Should.ThrowAsync<PostgresException>(() => Sql.ExecuteAsync(api, sql))).SqlState.ShouldBe(state, sql);
+        }
+
+        // One row per (day, assistant, client, level, outcome): the writers' upsert key. The admin upserts the test panel's turns
+        // (admin design §4.9) but deletes nothing; the worker cannot see the schema.
+        var admin = database.Connection(Admin);
+        await Sql.ExecuteAsync(admin, $"""
+            INSERT INTO chat."AssistantDailyOutcomes" AS o ("Day", "AssistantId", "ClientId", "Classification", "Outcome", "DepartmentId", "Turns")
+            VALUES (current_date, '{assistant}', '{client}', 'internal', 'error', gen_random_uuid(), 1)
+            ON CONFLICT ("Day", "AssistantId", "ClientId", "Classification", "Outcome") DO UPDATE SET "Turns" = o."Turns" + excluded."Turns"
+            """);
+        (await Sql.ScalarAsync<int>(admin, $"""SELECT "Turns" FROM chat."AssistantDailyOutcomes" WHERE "AssistantId" = '{assistant}' AND "Outcome" = 'error'""")).ShouldBe(1);
+        await Sql.ShouldBeDeniedAsync(admin, $"""DELETE FROM chat."AssistantDailyOutcomes" WHERE "AssistantId" = '{assistant}'""");
+        await Sql.ShouldBeDeniedAsync(database.Connection(Worker), """SELECT count(*) FROM chat."AssistantDailyOutcomes" """);
+    }
+
+    [Fact]
+    public async Task The_chat_retention_step_removes_assistant_outcomes_older_than_three_years()
+    {
+        // Data-model §8: 3 years, as AssistantDailyUsage, by chat.rag_retention_chat_step.
+        var assistant = Guid.NewGuid();
+        await Sql.ExecuteAsync(database.Connection(Api), $"""
+            INSERT INTO chat."AssistantDailyOutcomes" ("Day", "AssistantId", "ClientId", "Classification", "Outcome", "DepartmentId", "Turns")
+            VALUES ((now() AT TIME ZONE 'Europe/Stockholm')::date - interval '3 years 1 day', '{assistant}', gen_random_uuid(), 'internal', 'answered', gen_random_uuid(), 1),
+                   ((now() AT TIME ZONE 'Europe/Stockholm')::date - interval '1 day', '{assistant}', gen_random_uuid(), 'internal', 'answered', gen_random_uuid(), 1)
+            """);
+
+        var admin = database.Connection(Admin);
+        for (var i = 0; i < 100 && await Sql.ScalarAsync<long>(admin, "SELECT chat.rag_retention_chat_step(1000)") > 0; i++)
+        {
+        }
+
+        (await Sql.ListAsync(admin, $"""SELECT ("Day" > current_date - 7)::text FROM chat."AssistantDailyOutcomes" WHERE "AssistantId" = '{assistant}'"""))
             .ShouldBe(["true"]);
     }
 

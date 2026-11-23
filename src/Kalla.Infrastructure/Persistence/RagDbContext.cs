@@ -101,6 +101,7 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
     public DbSet<ToolCall> ToolCalls => Set<ToolCall>();
     public DbSet<AssistantDailyTotal> AssistantDailyTotals => Set<AssistantDailyTotal>();
     public DbSet<AssistantDailyUsage> AssistantDailyUsage => Set<AssistantDailyUsage>();
+    public DbSet<AssistantDailyOutcome> AssistantDailyOutcomes => Set<AssistantDailyOutcome>();
     public DbSet<FeedbackImportState> FeedbackImportState => Set<FeedbackImportState>();
 
     /// <summary>Npgsql options every registration of the context uses (service, design time, tests).</summary>

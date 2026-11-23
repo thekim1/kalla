@@ -14,7 +14,8 @@ namespace Kalla.AdminApi.Tests;
 /// The cost report (admin design §8.6, §11.2; B-40) on seeded usage rows: sums by day and by month with the gateway's cost
 /// and the estimate apart; scope by the row's department (a department admin gets 404 for another department's assistant
 /// and no foreign rows from <c>/api/costs</c>, a platform admin sees all, a department a knowledge base is shared with sees
-/// no cost); deleted objects; the CSV's headers; <c>period_too_long</c>.
+/// no cost); deleted objects; the CSV's headers; <c>period_too_long</c>; an assistant's turns and cost by outcome
+/// (<c>AssistantDailyOutcomes</c>, Decisions "Cost per outcome") in the same scope.
 /// </summary>
 [Collection(AdminDatabaseGroup1.Name)]
 public sealed class CostEndpointsTests(AdminDatabaseFixture database, AdminHost host) : IClassFixture<AdminHost>
@@ -63,6 +64,20 @@ public sealed class CostEndpointsTests(AdminDatabaseFixture database, AdminHost 
             Day = new DateOnly(2025, 3, 10), AssistantId = deleted, ClientId = client.Id, Classification = Classification.Internal, Step = "chat-answer",
             DepartmentId = a.Id, Calls = 1, InputTokens = 10, OutputTokens = 5, CostUsd = 0.0001m,
         });
+        AssistantDailyOutcome Outcome(Assistant assistant, Guid department, string day, string outcome, int turns, decimal cost, decimal estimated = 0m) => new()
+        {
+            Day = DateOnly.Parse(day, System.Globalization.CultureInfo.InvariantCulture), AssistantId = assistant.Id, ClientId = client.Id,
+            Classification = Classification.Internal, Outcome = outcome, DepartmentId = department, Turns = turns, CostUsd = cost, EstimatedCostUsd = estimated,
+        };
+        db.AssistantDailyOutcomes.AddRange(
+            Outcome(ownA, a.Id, "2025-03-10", "answered", 2, 0.002m),
+            Outcome(ownA, a.Id, "2025-03-11", "answered", 1, 0m, 0.0005m),
+            Outcome(ownA, a.Id, "2025-03-11", "not-found", 1, 0.0000016m),
+            Outcome(ownA, a.Id, "2025-04-02", "error", 1, 0.001m),
+            // The assistant was in B when this turn was asked: it stays with B.
+            Outcome(ownA, b.Id, "2025-03-12", "answered", 1, 0.009m),
+            Outcome(ownB, b.Id, "2025-03-10", "answered", 1, 0.003m),
+            Outcome(ownA, a.Id, "2024-12-31", "answered", 1, 0.5m)); // outside the range
         db.CollectionDailyUsage.AddRange(
             new CollectionDailyUsage
             {
@@ -130,6 +145,49 @@ public sealed class CostEndpointsTests(AdminDatabaseFixture database, AdminHost 
         using var adminB = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, s.B.CostCenterCode);
         (await adminB.GetAsync($"/api/collections/{s.SharedA.Id}/costs?{Range}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await adminB.GetAsync($"/api/assistants/{s.OwnA.Id}/costs?{Range}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    private static (string Period, string Outcome, long Turns, decimal Cost, decimal Estimated) OutcomeRow(JsonElement r) =>
+        (r.GetProperty("period").GetString()!, r.GetProperty("outcome").GetString()!, r.GetProperty("turns").GetInt64(), r.GetProperty("costUsd").GetDecimal(),
+            r.GetProperty("estimatedCostUsd").GetDecimal());
+
+    [Fact]
+    public async Task An_assistants_outcomes_sum_by_period_outcome_and_client_within_the_callers_departments()
+    {
+        await using var db = TestPostgres.Context(database.Connection(null));
+        var s = await SeedAsync(db);
+        var factory = host.Factory;
+        using var viewerA = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, s.A.CostCenterCode);
+
+        // By day, the gateway's cost and the estimate apart; the turn asked while the assistant was in B and the day outside the range left out.
+        var byDay = await OkAsync(viewerA, $"/api/assistants/{s.OwnA.Id}/costs?{Range}");
+        byDay.GetProperty("outcomes").EnumerateArray().Select(OutcomeRow).ShouldBe(
+        [
+            ("2025-03-10", "answered", 2, 0.002m, 0m), ("2025-03-11", "answered", 1, 0m, 0.0005m), ("2025-03-11", "not-found", 1, 0.0000016m, 0m),
+            ("2025-04-02", "error", 1, 0.001m, 0m),
+        ]);
+        var first = byDay.GetProperty("outcomes")[0];
+        (first.GetProperty("clientId").GetGuid(), first.GetProperty("clientName").GetString()).ShouldBe((s.Client.Id, s.Client.Name));
+
+        // By month: a month's period is its first day.
+        (await OkAsync(viewerA, $"/api/assistants/{s.OwnA.Id}/costs?{Range}&granularity=month")).GetProperty("outcomes").EnumerateArray().Select(OutcomeRow).ShouldBe(
+        [
+            ("2025-03-01", "answered", 3, 0.002m, 0.0005m), ("2025-03-01", "not-found", 1, 0.0000016m, 0m), ("2025-04-01", "error", 1, 0.001m, 0m),
+        ]);
+
+        // Scope: another department's assistant is 404; B's own assistant shows B's rows only.
+        using var adminB = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, s.B.CostCenterCode);
+        (await adminB.GetAsync($"/api/assistants/{s.OwnA.Id}/costs?{Range}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await OkAsync(adminB, $"/api/assistants/{s.OwnB.Id}/costs?{Range}")).GetProperty("outcomes").EnumerateArray().Select(OutcomeRow)
+            .ShouldBe([("2025-03-10", "answered", 1, 0.003m, 0m)]);
+
+        // A platform admin's departments include B, so the turn of the assistant's time in B is counted too.
+        using var platform = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+        (await OkAsync(platform, $"/api/assistants/{s.OwnA.Id}/costs?{Range}")).GetProperty("outcomes").EnumerateArray().Select(OutcomeRow)
+            .ShouldContain(("2025-03-12", "answered", 1, 0.009m, 0m));
+
+        // A knowledge base's cost has no outcomes.
+        (await OkAsync(viewerA, $"/api/collections/{s.SharedA.Id}/costs?{Range}")).TryGetProperty("outcomes", out _).ShouldBeFalse();
     }
 
     [Fact]

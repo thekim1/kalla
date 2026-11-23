@@ -126,6 +126,8 @@ public sealed partial class AdminTestPanel(
         // B-39 (§4.9, chat §8.3): the turn's usage records as chat collects them, written under admin-console whatever the outcome.
         var usage = chat.Usage();
         var row = AdminConsoleRow(current);
+        // Decisions "Cost per outcome" (chat §12.2): a turn that fails after a model call counts under error, or unavailable.
+        var failed = Domain.Entities.MessageOutcomes.Error;
         // B-42 (cost-attribution §4.1): every call of the panel's turn, the answer included, runs as the assistant's gateway key.
         using var acting = GatewayCallScope.Begin(new GatewayCall(assistant.GatewayKeyId, AssistantId: assistant.Id));
         try
@@ -159,7 +161,7 @@ public sealed partial class AdminTestPanel(
                 .Select(c => new TestedCollectionRef(c.Id, c.Name, !notPublished.Contains(c.Id) && c.PublishedAt is not null)).ToList();
             var result = plan.Retrieval;
             var records = usage.Take();
-            await WriteUsageAsync(row, assistant, client.Ceiling, usage.Started, records);
+            await WriteUsageAsync(row, assistant, client.Ceiling, usage.Started, records, ChatOutcomes.Name(plan.Outcome));
             return new AssistantTestResult(
                 request.Target, version.Number,
                 new TestRetrieval(linked, result?.Coverage, result?.Degraded,
@@ -179,6 +181,7 @@ public sealed partial class AdminTestPanel(
         {
             // B-44 (chat §3.6): the same reason chat gives, the key's state or the gateway's budget message; never the key's name.
             _runs.Add(1, new KeyValuePair<string, object?>("outcome", "unavailable"));
+            failed = Domain.Entities.MessageOutcomes.Unavailable;
             throw AdminFaults.Of(ex.Status == 402 ? AdminErrorCodes.TestBudgetExceeded : AdminErrorCodes.TestAssistantUnavailable,
                 new Dictionary<string, string> { ["reason"] = ex.Message });
         }
@@ -196,7 +199,10 @@ public sealed partial class AdminTestPanel(
         finally
         {
             // A turn that failed after a model call still paid for it (chat §12.1); after an answer nothing is left to take.
-            await WriteUsageAsync(row, assistant, client.Ceiling, usage.Started, usage.Take());
+            if (usage.Take() is { Count: > 0 } paid)
+            {
+                await WriteUsageAsync(row, assistant, client.Ceiling, usage.Started, paid, failed);
+            }
         }
     }
 
@@ -235,12 +241,15 @@ public sealed partial class AdminTestPanel(
     /// <summary>
     /// Upserts <paramref name="records"/> into <c>chat."AssistantDailyUsage"</c> under the assistant and the <c>admin-console</c>
     /// row <paramref name="row"/> at <paramref name="level"/> (§4.9): one delta per step, in step order as the chat writer's key
-    /// order (chat §12.2), in one transaction. Without the row nothing is written and a warning is logged; a failed write is
-    /// logged and dropped, so the test answer is unaffected. Never <c>AssistantDailyTotals</c>: test turns are not chat statistics.
+    /// order (chat §12.2), then, for a test turn (<paramref name="outcome"/>; a judge call is none), one turn and the records' cost
+    /// into <c>chat."AssistantDailyOutcomes"</c> (Decisions "Cost per outcome"), in one transaction. Without the row nothing is
+    /// written and a warning is logged; a failed write is logged and dropped, so the test answer is unaffected. Never
+    /// <c>AssistantDailyTotals</c>: test turns are not chat statistics.
     /// </summary>
-    private async Task WriteUsageAsync(ClientEntry? row, Domain.Entities.Assistant assistant, string level, DateTimeOffset at, IReadOnlyList<UsageRecord> records)
+    private async Task WriteUsageAsync(ClientEntry? row, Domain.Entities.Assistant assistant, string level, DateTimeOffset at, IReadOnlyList<UsageRecord> records,
+        string? outcome = null)
     {
-        if (records.Count == 0)
+        if (records.Count == 0 && outcome is null)
         {
             return;
         }
@@ -276,6 +285,26 @@ public sealed partial class AdminTestPanel(
                         new() { Value = assistant.DepartmentId }, new() { Value = step.Count() }, new() { Value = step.Sum(r => r.InputTokens) },
                         new() { Value = step.Sum(r => r.CachedInputTokens) }, new() { Value = step.Sum(r => r.OutputTokens) },
                         new() { Value = step.Sum(r => r.CostUsd) }, new() { Value = step.Count(r => r.Estimated) }, new() { Value = step.Sum(r => r.EstimatedCostUsd) },
+                    },
+                };
+                await command.ExecuteNonQueryAsync(CancellationToken.None);
+            }
+
+            if (outcome is not null)
+            {
+                await using var command = new NpgsqlCommand("""
+                    INSERT INTO chat."AssistantDailyOutcomes" AS o ("Day", "AssistantId", "ClientId", "Classification", "Outcome", "DepartmentId", "Turns", "CostUsd",
+                        "EstimatedCostUsd")
+                    VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $8)
+                    ON CONFLICT ("Day", "AssistantId", "ClientId", "Classification", "Outcome") DO UPDATE SET
+                        "Turns" = o."Turns" + excluded."Turns", "CostUsd" = o."CostUsd" + excluded."CostUsd",
+                        "EstimatedCostUsd" = o."EstimatedCostUsd" + excluded."EstimatedCostUsd"
+                    """, connection, transaction)
+                {
+                    Parameters =
+                    {
+                        new() { Value = day }, new() { Value = assistant.Id }, new() { Value = row.Id }, new() { Value = level }, new() { Value = outcome },
+                        new() { Value = assistant.DepartmentId }, new() { Value = records.Sum(r => r.CostUsd) }, new() { Value = records.Sum(r => r.EstimatedCostUsd) },
                     },
                 };
                 await command.ExecuteNonQueryAsync(CancellationToken.None);

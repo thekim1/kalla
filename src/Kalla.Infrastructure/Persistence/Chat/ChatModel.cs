@@ -150,6 +150,24 @@ internal static class ChatModel
             UsageColumns(e);
         });
 
+        // Decisions "Cost per outcome": the turns and their full cost per outcome, the sums of their usage records.
+        modelBuilder.Entity<AssistantDailyOutcome>(e =>
+        {
+            e.ToTable("AssistantDailyOutcomes", ChatSchema, t =>
+            {
+                ClassificationCheck(t, "AssistantDailyOutcomes");
+                ValuesCheck(t, "AssistantDailyOutcomes", "Outcome", MessageOutcomes.All);
+                t.HasCheckConstraint("CK_AssistantDailyOutcomes_Counts", "\"Turns\" >= 0 AND \"CostUsd\" >= 0 AND \"EstimatedCostUsd\" >= 0");
+            });
+            e.HasKey(x => new { x.Day, x.AssistantId, x.ClientId, x.Classification, x.Outcome });
+            e.Property(x => x.Classification).HasMaxLength(20);
+            e.Property(x => x.Outcome).HasMaxLength(20);
+            e.Property(x => x.Turns).HasDefaultValue(0);
+            e.Property(x => x.CostUsd).HasPrecision(18, 8).HasDefaultValue(0m);
+            e.Property(x => x.EstimatedCostUsd).HasPrecision(18, 8).HasDefaultValue(0m);
+            e.HasIndex(x => new { x.DepartmentId, x.Day });
+        });
+
         modelBuilder.Entity<FeedbackImportState>(e =>
         {
             e.ToTable("FeedbackImportState", ChatSchema);
