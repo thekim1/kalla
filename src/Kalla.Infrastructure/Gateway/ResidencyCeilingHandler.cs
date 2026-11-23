@@ -56,7 +56,7 @@ public sealed partial class ResidencyCeilingHandler(
         // gateway acts as keys; the id goes in the D form, the gateway's own.
         request.Headers.Remove(GatewayHeaders.OnBehalfOf);
         var call = request.Options.TryGetValue(GatewayCall.OptionsKey, out var c) ? c : GatewayCallScope.Current;
-        if (call is { Step: null } && request.Headers.TryGetValues("x-fors-step", out var steps))
+        if (call is { Step: null } && request.Headers.TryGetValues(GatewayHeaders.Step, out var steps))
         {
             call = call with { Step = steps.FirstOrDefault() }; // event 5011 names the step the client sent
         }
@@ -237,6 +237,25 @@ public static class GatewayRequestExtensions
         ArgumentNullException.ThrowIfNull(request);
         request.Headers.Remove(GatewayHeaders.MaxResidency);
         request.Headers.Add(GatewayHeaders.MaxResidency, ResidencyCeiling.ToHeader(ceiling));
+        return request;
+    }
+
+    /// <summary>
+    /// <c>x-fors-step</c> <paramref name="step"/> and, when given, <c>x-fors-run-id</c> <paramref name="runId"/> (cost-attribution
+    /// §4.1): the gateway records both with the call's usage. A second call replaces the first one's headers.
+    /// </summary>
+    public static HttpRequestMessage WithCallTag(this HttpRequestMessage request, string step, Guid? runId)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(step);
+        request.Headers.Remove(GatewayHeaders.Step);
+        request.Headers.Remove(GatewayHeaders.RunId);
+        request.Headers.Add(GatewayHeaders.Step, step);
+        if (runId is { } id)
+        {
+            request.Headers.Add(GatewayHeaders.RunId, id.ToString());
+        }
+
         return request;
     }
 

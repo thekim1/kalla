@@ -168,14 +168,12 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
                 stream,
                 stream_options = stream ? new { include_usage = true } : null,
             }, options: RequestJson),
-        }.WithMaxResidency(ceiling);
+        }.WithMaxResidency(ceiling).WithCallTag(step, runId);
         if (stream)
         {
             request.WithStreamCost();
         }
 
-        request.Headers.Add("x-fors-step", step);
-        request.Headers.Add("x-fors-run-id", runId.ToString());
         using var headers = CancellationTokenSource.CreateLinkedTokenSource(ct);
         headers.CancelAfter(headersLimit);
         HttpResponseMessage response;
@@ -226,7 +224,7 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
         {
         }
 
-        LogRefused(logger, (int)response.StatusCode, Printable(code), Printable(response.Headers.TryGetValues("x-request-id", out var ids) ? ids.FirstOrDefault() : null));
+        LogRefused(logger, (int)response.StatusCode, Printable(code), Printable(response.Headers.TryGetValues(GatewayHeaders.RequestId, out var ids) ? ids.FirstOrDefault() : null));
         var retryAfter = response.Headers.RetryAfter?.Delta is { } delta ? (int?)Math.Ceiling(delta.TotalSeconds) : null;
         return (int)response.StatusCode switch
         {

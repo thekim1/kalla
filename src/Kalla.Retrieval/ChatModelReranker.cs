@@ -75,12 +75,7 @@ public sealed partial class ChatModelReranker(IHttpClientFactory clients, string
                 temperature = SendsTemperature(request.Model) ? 0.0 : (double?)null,
                 stream = false,
             }, options: RequestJson),
-        }.WithMaxResidency(request.Ceiling);
-        message.Headers.Add("x-fors-step", Step);
-        if (request.RunId is { } runId)
-        {
-            message.Headers.Add("x-fors-run-id", runId.ToString());
-        }
+        }.WithMaxResidency(request.Ceiling).WithCallTag(Step, request.RunId);
 
         using var response = await clients.CreateClient(httpClientName).SendAsync(message, cancellationToken);
         if (!response.IsSuccessStatusCode)

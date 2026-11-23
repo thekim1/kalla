@@ -56,9 +56,6 @@ public sealed record QueryEmbedding(ReadOnlyMemory<float> Vector, GatewayCallUsa
 public sealed partial class GatewayQueryEmbedder : IDisposable
 {
     public const string HttpClientName = "gateway-query";
-    public const string RunIdHeader = "x-fors-run-id";
-    public const string StepHeader = "x-fors-step";
-    public const string PiiHeader = "x-fors-pii";
 
     /// <summary>The <c>x-fors-step</c> of the call.</summary>
     public const string Step = "query-embed";
@@ -185,12 +182,7 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
             using var request = new HttpRequestMessage(HttpMethod.Post, new Uri("v1/embeddings", UriKind.Relative))
             {
                 Content = JsonContent.Create(new EmbeddingRequest(profile.GatewayModel, query, "float", profile.DimensionsParameter), options: Json),
-            }.WithMaxResidency(profile.MaxResidency);
-            request.Headers.Add(StepHeader, Step);
-            if (runId is { } id)
-            {
-                request.Headers.Add(RunIdHeader, id.ToString());
-            }
+            }.WithMaxResidency(profile.MaxResidency).WithCallTag(Step, runId);
 
             bool retryable;
             try
@@ -249,7 +241,7 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
     private static async Task<(float[] Vector, GatewayCallUsage Usage)> ReadAsync(HttpResponseMessage response, EmbeddingProfileEntry profile, CancellationToken cancellationToken)
     {
         // A redacted or blocked query would embed other text than asked (§5.2).
-        if (response.Headers.TryGetValues(PiiHeader, out var pii) && pii.Any(v => v is "redacted" or "blocked"))
+        if (response.Headers.TryGetValues(GatewayHeaders.Pii, out var pii) && pii.Any(v => v is "redacted" or "blocked"))
         {
             throw Unavailable("The gateway changed the query (x-fors-pii).");
         }
