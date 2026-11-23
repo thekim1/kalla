@@ -2741,7 +2741,8 @@ export const CONTENT_GAPS = {
   document: 'Nearest document',
   knowledgeBase: 'Knowledge base',
   notFound: 'Not found',
-  answeredGeneral: 'Answered from general knowledge',
+  /** Short, so the two count columns share the width: the card's sentence says it in full. */
+  answeredGeneral: 'General knowledge',
   /** The row of the turns whose search found nothing. */
   noHit: 'No hit',
   deleted: '(deleted)',

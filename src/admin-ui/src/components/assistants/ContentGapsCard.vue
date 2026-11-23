@@ -75,7 +75,10 @@ function key(row: ContentGapRow): string {
             >{{ row.documentTitle }}</RouterLink>
             <span v-else class="break-words">{{ row.documentTitle }}</span>
           </template>
-          <template #cell-knowledgeBase="{ row }">{{ row.noHit || row.notShared ? '' : (row.collectionName ?? L.deleted) }}</template>
+          <template #cell-knowledgeBase="{ row }">
+            <span v-if="row.noHit || row.notShared" class="text-fg-3" aria-hidden="true">–</span>
+            <template v-else>{{ row.collectionName ?? L.deleted }}</template>
+          </template>
           <template #cell-notFound="{ row }"><span class="tabular">{{ formatNumber(row.notFound) }}</span></template>
           <template #cell-answeredGeneral="{ row }"><span class="tabular">{{ formatNumber(row.answeredGeneral) }}</span></template>
         </DataTable>
