@@ -4,7 +4,7 @@
 github.com/thekim1/fors), copied unchanged: `/v1/fors/context`, `/v1/models` with the `fors` facts, and the parts
 of `/v1/chat/completions` and `/integration/v1` an integration uses.
 
-- **Taken from:** thekim1/fors#126, merged as `6c3c412` after `v0.12.2` (no release yet): adds only the
+- **Taken from:** release `v0.13.0` (`9dc9315`), unchanged since thekim1/fors#126 (`6c3c412`), which adds only the
   Integration API's `GET /integration/v1/branding/logo` and the feature `organisation-logo` in the context's feature
   list. Before that, release `v0.12.0` (`1032bf1`, the rename to Fors), unchanged in `v0.12.1` (`1e79093`). It renames `ume` to `fors` throughout (the context's `object` `fors.context`, the model facts
   under `fors`, the `x-fors-*` headers) and keeps a deprecated copy of the facts under `ume`. Release `v0.11.0`
