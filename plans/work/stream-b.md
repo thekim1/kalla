@@ -437,6 +437,18 @@ design meanwhile.
 - **Waits on:** B-59 (*Needs attention*); B-80; the code-quality fixes #3 and #5.
 - **Read:** admin §5.2, §5.5.1, §5.10, §5.12.
 
+### [ ] B-82 The Publish dialog: the diff, the warnings and the test run's cost (admin §5.5.4, §7.4)
+- **Do:** **Publish draft** opens a dialog before it publishes: the structured diff against the published version
+  (B-56's `GET …/versions/{n}/diff?against=draft`, the view of *Compare*), the draft's remaining warnings (a refusal
+  blocks the button) and the test run's estimated model calls when the assistant has test questions (B-57). V36's
+  confirmation joins this dialog instead of being a dialog of its own; the 409 `draft_base_changed` dialog stays. A
+  first publish (nothing published yet) shows the warnings and the cost only.
+- **Paths:** `src/admin-ui/**` (not `src/platform/**`), `tests/**`.
+- **Done when:** Vitest for the dialog (a diff shown, a refusal disables *Publish*, V36's line in the same dialog, a
+  first publish without a diff); shown at the three widths and themes; the local e2e specs that publish pass.
+- **Waits on:** B-76 (the header's primary action). Before B-78, which moves the dialog with the header.
+- **Read:** admin §5.5.4 (*Publish draft*), §7.4 (*Cost*), §4.5 (the diff); Decisions "Admin API and UI".
+
 ## Live (the live block, see the roadmap)
 
 
