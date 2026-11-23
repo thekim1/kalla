@@ -40,10 +40,10 @@ export const PLATFORM_ADMIN: Role[] = rolesFor('admin')
 /** The Manage policy (admin design §3.1), from the permission matrix. */
 export const MANAGE_ROLES: Role[] = rolesFor('manage')
 /**
- * Feedback (admin design §3.3): platform and department admins, reviewers and viewers; not the editor roles. No policy
- * holds exactly these roles (the feedback list is Read), so the page's roles stay a UI choice.
+ * The Feedback policy (admin design §3.3), from the permission matrix: platform and department admins, reviewers and
+ * viewers; not the editor roles.
  */
-export const FEEDBACK_ROLES: Role[] = ['rag-platform-admin', 'rag-department-admin', 'rag-reviewer', 'rag-viewer']
+export const FEEDBACK_ROLES: Role[] = rolesFor('feedback')
 
 /**
  * Grouped by the job people come to do (admin design §5.2), filtered by role: Home and Map; Knowledge bases and

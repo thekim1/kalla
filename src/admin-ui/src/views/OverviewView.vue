@@ -62,7 +62,7 @@ const syncs = computed(() => {
   if (!health) return []
   return [
     { key: 'organisation', label: OVERVIEW.organisationSync, sync: health.organisationSync, to: { name: 'organisation' } },
-    { key: 'models', label: OVERVIEW.modelSync, sync: health.modelSync, to: auth.isPlatformAdmin ? { name: 'platform-models' } : null },
+    { key: 'models', label: OVERVIEW.modelSync, sync: health.modelSync, to: auth.can('admin') ? { name: 'platform-models' } : null },
   ]
 })
 const lastSuccess = (sync: SyncHealth) => (sync.lastSuccessAt ? OVERVIEW.lastSuccess(formatRelative(sync.lastSuccessAt)) : OVERVIEW.noSuccess)

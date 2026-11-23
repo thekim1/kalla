@@ -39,7 +39,7 @@ const clearing = useJobPoll<unknown>()
 const sending = ref(false)
 
 const highlightsState = computed(() => {
-  // The poll's `failed`: the job ended without succeeding, or its state could not be read (never "still finding").
+  // The poll's `failed` is never "still finding".
   if (startError.value || outputError.value || highlights.failed.value) return 'failed'
   if (highlights.polling.value || !highlights.job.value) return 'running'
   return 'done'
@@ -127,7 +127,7 @@ watch(() => clearing.job.value?.state, (state) => {
   emit('cleared')
 })
 
-// The clearance failed, or its state could not be read: then the outcome is not known, so the admin checks the document.
+// A failed job could not clear; a failed status read leaves the outcome unknown.
 watch(() => clearing.failed.value, (failed) => {
   if (failed) clearNotice.value = clearing.error.value ? L.clearUnknown : L.clearFailed
 })

@@ -333,6 +333,34 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     }
   })
 
+  it('backs a long running run’s poll off to every 5 s after 30 s, though each read replaces its row (admin design §4.7; #803)', async () => {
+    setActivePinia(createPinia())
+    vi.useFakeTimers()
+    try {
+      const auth = useAuthStore()
+      auth.user = bffUser({ roles: ['rag-editor'] })
+      auth.status = 'authenticated'
+      vi.spyOn(api.sources, 'get').mockResolvedValue(source)
+      vi.spyOn(api.sources, 'piiReport').mockRejectedValue(new Error('x'))
+      const progress = { processed: 10, admitted: 40, maxPages: 2500, waiting: 30, seeds: 1, seedsFailed: 0, limitHit: false }
+      const running = run({ id: 'r2', state: 'running', phase: 'fetch', finishedAt: null, progress })
+      vi.spyOn(api.sources, 'runs').mockResolvedValue({ items: [running, run({})], next: null })
+      // Every read answers a new row that is still running, so the watch sees a new running run each time.
+      const get = vi.spyOn(api.runs, 'get').mockImplementation(async () => ({ run: { ...running } }) as never)
+
+      const wrapper = mount(SourceView, { props: { id: 's1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
+      await flushPromises()
+      await vi.advanceTimersByTimeAsync(40_000)
+      get.mockClear()
+      // From 40 s to 60 s: a read every 5 s, not every 2 s (a poll restarted by its own patch would not back off).
+      await vi.advanceTimersByTimeAsync(20_000)
+      expect(get).toHaveBeenCalledTimes(4)
+      wrapper.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('stops polling a running run when a read fails, and when the page is left (#803)', async () => {
     setActivePinia(createPinia())
     vi.useFakeTimers()

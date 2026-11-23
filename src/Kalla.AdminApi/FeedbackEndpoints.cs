@@ -9,7 +9,8 @@ namespace Kalla.AdminApi;
 /// Återkoppling (admin design §8.1, chat design §14.4; P1b item 13): ratings of the caller's departments' assistants,
 /// without content: rating, score, reason category, the answering message's outcome, coverage and language, the
 /// assistant version that answered, the cited documents' titles, assistant and client names, the review state and
-/// whether a comment is stored (in P1 never: mode <c>none</c>, weakness review §4). Totals from
+/// whether a comment is stored (in P1 never: mode <c>none</c>, weakness review §4); the list and the totals are
+/// <c>Feedback</c>, the page's four roles (admin design §3.3), not the editor roles. Totals from
 /// <c>AssistantDailyTotals</c>; import health per Open WebUI client from <c>FeedbackImportState</c>. Marking an item
 /// reviewed or dismissed is <c>FeedbackComments</c> and audited.
 /// </summary>
@@ -68,7 +69,7 @@ public static class FeedbackEndpoints
                     ],
                     next);
             })
-            .RequireAuthorization(AdminPolicies.Read).WithName("ListFeedback")
+            .RequireAuthorization(AdminPolicies.Feedback).WithName("ListFeedback")
             .WithSummary("Ratings of the caller's assistants, newest first (keyset; period, assistant, rating, outcome, has comment, review state); no content");
 
         feedback.MapGet("/summary", async (DateOnly? from, DateOnly? to, Guid? assistantId, AdminContext admin, CancellationToken ct) =>
@@ -107,7 +108,7 @@ public static class FeedbackEndpoints
                     .ToListAsync(ct);
                 return new FeedbackSummary(sums, imports);
             })
-            .RequireAuthorization(AdminPolicies.Read).WithName("GetFeedbackSummary")
+            .RequireAuthorization(AdminPolicies.Feedback).WithName("GetFeedbackSummary")
             .WithSummary("Totals of the period from AssistantDailyTotals (answers, not found, thumbs) and the Open WebUI import health");
 
         feedback.MapPut("/{id:guid}/review-state", async (Guid id, ReviewStateRequest request, AdminContext admin, CancellationToken ct) =>

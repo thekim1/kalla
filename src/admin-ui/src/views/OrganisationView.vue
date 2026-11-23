@@ -46,7 +46,7 @@ const failingSince = computed(() =>
 
 async function load(): Promise<void> {
   await departments.run(() => api.organisation.departments())
-  if (auth.isPlatformAdmin) status.value = await api.organisation.syncStatus().catch(() => null)
+  if (auth.can('admin')) status.value = await api.organisation.syncStatus().catch(() => null)
 }
 
 async function syncNow(): Promise<void> {
@@ -71,7 +71,7 @@ onMounted(load)
     <UiButton v-if="gatewayPageHref" :href="gatewayPageHref" target="_blank" rel="noopener noreferrer" icon="open_in_new" data-test="gateway-page">
       {{ PLATFORM.organisation.gatewayLink }} <span class="sr-only">{{ COMMON.opensInNewTab }}</span>
     </UiButton>
-    <template v-if="auth.isPlatformAdmin && status?.enabled">
+    <template v-if="auth.can('admin') && status?.enabled">
       <span v-if="status.lastSuccessAt" class="text-small text-fg-3">{{ ORGANISATION.lastRun(formatRelative(status.lastSuccessAt)) }}</span>
       <UiButton icon="sync" :loading="syncing" @click="syncNow">{{ ORGANISATION.syncNow }}</UiButton>
     </template>

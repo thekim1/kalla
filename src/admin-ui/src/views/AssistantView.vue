@@ -690,7 +690,7 @@ watch(() => props.id, () => {
         </fieldset>
         <div v-if="canManage && clients.length"><UiButton variant="primary" :loading="busy === 'audience'" data-test="save-audience" @click="saveAudience">{{ ASSISTANT.saveAudience }}</UiButton></div>
         <!-- Platform admins add apps; the wizard opens with this assistant ticked (admin design §5.9.1). -->
-        <p v-if="auth.isPlatformAdmin">
+        <p v-if="auth.can('admin')">
           <RouterLink :to="{ name: 'platform-clients', query: { connect: id } }" class="font-medium text-accent-ink underline" data-test="connect-app">
             {{ ASSISTANT.connectApp }}
           </RouterLink>

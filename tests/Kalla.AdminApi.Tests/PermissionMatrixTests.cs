@@ -97,6 +97,14 @@ public sealed class PermissionMatrixTests(AdminHost host) : IClassFixture<AdminH
     }
 
     [Fact]
+    public void Feedback_is_its_pages_four_roles_not_the_editors()
+    {
+        // Admin design §3.3: Feedback is R for PA, DA, RV and VW, hidden for PE, SE and ED.
+        PermissionMatrix.RolesFor(AdminPolicies.Feedback).ShouldBe(
+            [RagRoles.PlatformAdmin, RagRoles.DepartmentAdmin, RagRoles.Reviewer, RagRoles.Viewer], ignoreOrder: true);
+    }
+
+    [Fact]
     public void Every_role_reads_and_every_policy_has_a_role()
     {
         PermissionMatrix.PoliciesByRole.Keys.ShouldBe(RagRoles.All, ignoreOrder: true);
