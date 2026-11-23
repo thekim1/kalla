@@ -272,6 +272,59 @@ namespace Kalla.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Kalla.Domain.Entities.AssistantDailyOutcome", b =>
+                {
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("AssistantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal>("CostUsd")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<Guid>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("EstimatedCostUsd")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<int>("Turns")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.HasKey("Day", "AssistantId", "ClientId", "Classification", "Outcome");
+
+                    b.HasIndex("DepartmentId", "Day");
+
+                    b.ToTable("AssistantDailyOutcomes", "chat", t =>
+                        {
+                            t.HasCheckConstraint("CK_AssistantDailyOutcomes_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_AssistantDailyOutcomes_Counts", "\"Turns\" >= 0 AND \"CostUsd\" >= 0 AND \"EstimatedCostUsd\" >= 0");
+
+                            t.HasCheckConstraint("CK_AssistantDailyOutcomes_Outcome", "\"Outcome\" IN ('answered', 'answered-general', 'not-found', 'unavailable', 'refused', 'error', 'cancelled')");
+                        });
+                });
+
             modelBuilder.Entity("Kalla.Domain.Entities.AssistantDailyTotal", b =>
                 {
                     b.Property<DateOnly>("Day")

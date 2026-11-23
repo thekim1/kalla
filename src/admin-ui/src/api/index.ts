@@ -5,6 +5,7 @@ import type {
   CostQuery,
   CostReport,
   CostReportQuery,
+  AssistantCosts,
   ObjectCosts,
   CollectionLink,
   CollectionUpdate,
@@ -341,7 +342,7 @@ export const api = {
   },
   overview: () => http.get<Overview>('/api/overview'),
   costs: {
-    assistant: (id: string, query: CostQuery = {}) => http.get<ObjectCosts>(`/api/assistants/${id}/costs`, { ...query }),
+    assistant: (id: string, query: CostQuery = {}) => http.get<AssistantCosts>(`/api/assistants/${id}/costs`, { ...query }),
     collection: (id: string, query: CostQuery = {}) => http.get<ObjectCosts>(`/api/collections/${id}/costs`, { ...query }),
     report: (query: CostReportQuery = {}) => http.get<CostReport>('/api/costs', { ...query }),
     /** The report's CSV with the same filters (admin design §8.6). */

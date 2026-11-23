@@ -1793,6 +1793,27 @@ export interface ObjectCosts {
   totals: CostTotals
 }
 
+/**
+ * An assistant's turns and their full cost per period, outcome and client (Decisions "Cost per outcome"): the gateway's cost apart
+ * from the estimate; `clientName` is `admin-console` for the test panel.
+ */
+export interface OutcomeCostRow {
+  /** `yyyy-MM-dd`; a month's first day by month. */
+  period: string
+  /** `Messages.Outcome`: `answered`, `answered-general`, `not-found`, `unavailable`, `refused`, `error`, `cancelled`. */
+  outcome: string
+  clientId: string
+  clientName: string | null
+  turns: number
+  costUsd: number
+  estimatedCostUsd: number
+}
+
+/** `GET /api/assistants/{id}/costs`: the cost rows and the turns by outcome (admin design §8.6). */
+export interface AssistantCosts extends ObjectCosts {
+  outcomes: OutcomeCostRow[]
+}
+
 /** A row of `GET /api/costs`: per period, department, object, step and client; `deleted` when the object is gone. */
 export interface DepartmentCostRow extends CostTotals {
   period: string

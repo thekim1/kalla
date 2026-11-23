@@ -2692,6 +2692,22 @@ export const COSTS = {
   } as Record<string, string>,
   /** The test panel's client row (admin design §4.9). */
   testPanel: 'Test panel',
+  /** Decisions "Cost per outcome" (admin design §8.6): the turns and their cost by outcome, real use and the test panel apart. */
+  byOutcome: 'By outcome',
+  byOutcomeTestPanel: 'By outcome in the test panel',
+  outcome: 'Outcome',
+  turns: 'Turns',
+  costPerTurn: 'Cost per turn',
+  /** `Messages.Outcome`'s values, in the order the card lists them. */
+  outcomes: {
+    answered: 'Answered',
+    'answered-general': 'Answered from general knowledge',
+    'not-found': 'Not found',
+    unavailable: 'Unavailable',
+    refused: 'Refused',
+    error: 'Error',
+    cancelled: 'Cancelled',
+  } as Record<string, string>,
   /** B-46: the gateway's figures beside Källa's (admin design §8.6). */
   gatewayCounted: 'Gateway',
   gatewayReport: 'See the key’s usage in the AI gateway',
