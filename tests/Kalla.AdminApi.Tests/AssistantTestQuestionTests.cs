@@ -168,6 +168,133 @@ public sealed class AssistantTestQuestionTests(AdminDatabaseFixture database)
     }
 
     [Fact]
+    public async Task One_person_may_have_three_on_demand_runs_waiting_and_a_run_after_a_publish_is_not_counted()
+    {
+        // #999's follow-up: the rate policy counts a run as one request, but a run is up to 30 questions of model calls. A runner
+        // whose loop is not started keeps every run waiting.
+        var code = "R" + Random.Shared.Next(100_000, 999_999);
+        await using var db = TestPostgres.Context(database.Connection(null));
+        var department = new Department { Id = Guid.CreateVersion7(), Name = "Kö " + code, CostCenterCode = code, SyncedAt = DateTimeOffset.UtcNow };
+        db.Add(department);
+        await db.SaveChangesAsync(Ct);
+        async Task<(Assistant, AssistantVersion)> AssistantAsync(int n)
+        {
+            var assistant = new Assistant
+            {
+                Slug = $"ko-{n}-{code.ToLowerInvariant()}", Name = $"Kö {n} {code}", DepartmentId = department.Id, Classification = Classification.Internal,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            };
+            db.Add(assistant);
+            await db.SaveChangesAsync(Ct);
+            var version = new AssistantVersion
+            {
+                AssistantId = assistant.Id, Number = 1, GatewayModel = Model, SystemPrompt = "Svara kort.", CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+            };
+            db.Add(version);
+            db.Add(new AssistantTestQuestion
+            {
+                AssistantId = assistant.Id, Ordinal = 0, Question = "Fråga?", ExpectedBehaviour = "Svarar.", CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(Ct);
+            return (assistant, version);
+        }
+
+        await using var gateway = new WebApplicationFactory<FakeGatewayProgram>().WithWebHostBuilder(web => web.UseEnvironment("Development"));
+        await using var factory = Admin(gateway);
+        var runner = new AssistantTestRunner(factory.Services.GetRequiredService<IServiceScopeFactory>(), factory.Services.GetRequiredService<AdminTestPanel>(),
+            TimeProvider.System, Microsoft.Extensions.Logging.Abstractions.NullLogger<AssistantTestRunner>.Instance,
+            factory.Services.GetRequiredService<System.Diagnostics.Metrics.IMeterFactory>());
+        var actor = "kö-" + code + "@umea.se";
+        for (var n = 0; n < AssistantTestRunner.MaxWaitingPerActor; n++)
+        {
+            var (assistant, version) = await AssistantAsync(n);
+            (await runner.StartAsync(db, assistant, version, actor, Ct, onDemand: true)).ShouldNotBeNull();
+        }
+
+        var (fourth, fourthVersion) = await AssistantAsync(9);
+        var refused = await Should.ThrowAsync<Kalla.ServiceDefaults.ApiFaultException>(() => runner.StartAsync(db, fourth, fourthVersion, actor, Ct, onDemand: true));
+        refused.Status.ShouldBe(429);
+        // A run after a publish is never refused for this, and another person is not held up.
+        (await runner.StartAsync(db, fourth, fourthVersion, actor, Ct)).ShouldNotBeNull();
+        var (other, otherVersion) = await AssistantAsync(10);
+        (await runner.StartAsync(db, other, otherVersion, "annan-" + code + "@umea.se", Ct, onDemand: true)).ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task A_copy_into_another_department_tested_on_its_draft_finds_nothing_of_the_source_departments_knowledge_base()
+    {
+        // #999's follow-up, end to end: A's assistant links A's unshared knowledge base; its copy into B is tested on the draft.
+        var codeA = "C" + Random.Shared.Next(100_000, 999_999);
+        var codeB = "D" + Random.Shared.Next(100_000, 999_999);
+        var word = "c" + codeA.ToLowerInvariant() + "kompost";
+        await using var writer = new ContentFixtureWriter(database.Connection(RagDatabase.Worker), database.Connection(RagDatabase.Admin));
+        var profile = await writer.AddEmbeddingProfileAsync(8, Ct);
+        await using var db = TestPostgres.Context(database.Connection(null));
+        var a = new Department { Id = Guid.CreateVersion7(), Name = "Avdelning " + codeA, CostCenterCode = codeA, SyncedAt = DateTimeOffset.UtcNow };
+        var b = new Department { Id = Guid.CreateVersion7(), Name = "Avdelning " + codeB, CostCenterCode = codeB, SyncedAt = DateTimeOffset.UtcNow };
+        var own = new Collection
+        {
+            Slug = "egen-" + codeA.ToLowerInvariant(), Name = "Egen " + codeA, DepartmentId = a.Id, Classification = Classification.Internal, EmbeddingProfileId = profile,
+            PublishedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        var pipeline = new Pipeline { Name = "egen-" + codeA, TemplateId = "url-list", UpdatedAt = DateTimeOffset.UtcNow };
+        var source = new Source
+        {
+            CollectionId = own.Id, Type = SourceTypes.UrlList, Name = "Sidor", Classification = Classification.Internal, PipelineId = pipeline.Id, UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        db.AddRange(a, b, own, pipeline, source);
+        if (!await db.GatewayModels.AnyAsync(m => m.Name == Model, Ct))
+        {
+            db.GatewayModels.Add(new GatewayModel { Name = Model, Residencies = ["Eu"], Source = GatewayModelSources.Catalog });
+        }
+
+        await db.SaveChangesAsync(Ct);
+        await writer.AddDocumentAsync(new FixtureDocumentSpec
+        {
+            CollectionId = own.Id, EmbeddingProfileId = profile, SourceId = source.Id, Classification = Classification.Internal, Title = "Kompostering " + codeA,
+            Url = $"https://www.umea.se/{codeA}/kompost",
+        }, [new FixtureChunk($"Så komposterar du {word} hemma i Umeå.")], Ct);
+
+        await using var gateway = new WebApplicationFactory<FakeGatewayProgram>().WithWebHostBuilder(web =>
+        {
+            web.UseEnvironment("Development");
+            web.UseSetting("FakeGateway:CredentialKeys:admin:Key", AdminKey);
+        });
+        await using var factory = Admin(gateway);
+        using var both = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, $"{codeA},{codeB}");
+
+        using var created = await both.PostAsJsonAsync("/api/assistants", new
+        {
+            name = "Kompost " + codeA, departmentId = a.Id, classification = "internal", description = "Om kompost.", contactName = "Anna", contactEmail = "anna@umea.se",
+        }, Ct);
+        var createdBody = await Json(created);
+        var id = createdBody.GetProperty("id").GetGuid();
+        using (var draft = await both.PutAsJsonAsync($"/api/assistants/{id}/draft", new
+               {
+                   gatewayModel = Model, systemPrompt = "Svara kort.", collectionLinks = new[] { new { collectionId = own.Id, tags = Array.Empty<string>() } },
+                   version = createdBody.GetProperty("draft").GetProperty("version").GetString(),
+               }, Ct))
+        {
+            draft.StatusCode.ShouldBe(HttpStatusCode.OK, await draft.Content.ReadAsStringAsync(Ct));
+        }
+
+        async Task<int> CandidatesAsync(Guid assistant)
+        {
+            using var tested = await both.PostAsJsonAsync($"/api/assistants/{assistant}/test", new { question = $"Hur gör jag med {word}?", target = "Draft" }, Ct);
+            tested.StatusCode.ShouldBe(HttpStatusCode.OK, await tested.Content.ReadAsStringAsync(Ct));
+            return (await Json(tested)).GetProperty("retrieval").GetProperty("candidates").GetArrayLength();
+        }
+
+        (await CandidatesAsync(id)).ShouldBeGreaterThan(0); // A's own draft finds it
+
+        using var copied = await both.PostAsJsonAsync($"/api/assistants/{id}/copy", new { name = "Kompost kopia " + codeB, departmentId = b.Id }, Ct);
+        copied.StatusCode.ShouldBe(HttpStatusCode.Created, await copied.Content.ReadAsStringAsync(Ct));
+        var copy = await Json(copied);
+        copy.GetProperty("leftOut").GetProperty("links").GetInt32().ShouldBe(1);
+        (await CandidatesAsync(copy.GetProperty("assistant").GetProperty("id").GetGuid())).ShouldBe(0);
+    }
+
+    [Fact]
     public async Task A_publish_runs_the_questions_each_check_passes_or_fails_and_the_next_run_compares_with_the_previous_version()
     {
         var code = "Q" + Random.Shared.Next(100_000, 999_999);

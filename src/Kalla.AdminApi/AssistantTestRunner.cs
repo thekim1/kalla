@@ -123,19 +123,34 @@ public sealed partial class AssistantTestRunner(
     /// <summary>A run older than this without a finish no longer blocks a new one.</summary>
     public static readonly TimeSpan Stale = TimeSpan.FromHours(1);
 
-    private readonly Channel<(Guid RunId, string Actor)> _queue = Channel.CreateUnbounded<(Guid, string)>();
+    /// <summary>
+    /// The on-demand runs one person may have waiting or running in this instance (#983's follow-up): the rate policy counts
+    /// a run as one request, but a run is up to 30 questions of model calls, and the queue is shared with the runs after a
+    /// publish. The runs after a publish or restore are not counted.
+    /// </summary>
+    public const int MaxWaitingPerActor = 3;
+
+    private readonly Channel<(Guid RunId, string Actor, bool OnDemand)> _queue = Channel.CreateUnbounded<(Guid, string, bool)>();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _waiting = new(StringComparer.Ordinal);
     private readonly Counter<long> _outcomes = meters.Create("Kalla.AdminApi").CreateCounter<long>("rag.admin.assistant_tests");
 
     /// <summary>
     /// Starts a run of <paramref name="version"/>'s answers to the assistant's questions: the run row is written now (one at a
     /// time per assistant, under an advisory lock) and the questions run in the background. Null when the assistant has no
-    /// questions; <see cref="AdminErrorCodes.TestRunRunning"/> while a run is going.
+    /// questions; <see cref="AdminErrorCodes.TestRunRunning"/> while a run is going. An <paramref name="onDemand"/> run (Run test
+    /// questions) is refused with <see cref="AdminErrorCodes.TestRunsWaiting"/> while <paramref name="actor"/> has
+    /// <see cref="MaxWaitingPerActor"/> of them waiting or running.
     /// </summary>
-    public async Task<EvaluationRun?> StartAsync(RagDbContext db, Assistant assistant, AssistantVersion version, string actor, CancellationToken ct)
+    public async Task<EvaluationRun?> StartAsync(RagDbContext db, Assistant assistant, AssistantVersion version, string actor, CancellationToken ct, bool onDemand = false)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(assistant);
         ArgumentNullException.ThrowIfNull(version);
+        if (onDemand && _waiting.GetValueOrDefault(actor) >= MaxWaitingPerActor)
+        {
+            throw AdminFaults.Of(AdminErrorCodes.TestRunsWaiting);
+        }
+
         var strategy = db.Database.CreateExecutionStrategy();
         var run = await strategy.ExecuteAsync(async token =>
         {
@@ -167,7 +182,12 @@ public sealed partial class AssistantTestRunner(
         }, ct);
         if (run is not null)
         {
-            await _queue.Writer.WriteAsync((run.Id, actor), ct);
+            if (onDemand)
+            {
+                _waiting.AddOrUpdate(actor, 1, (_, n) => n + 1);
+            }
+
+            await _queue.Writer.WriteAsync((run.Id, actor, onDemand), ct);
         }
 
         return run;
@@ -202,7 +222,7 @@ public sealed partial class AssistantTestRunner(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var (runId, actor) in _queue.Reader.ReadAllAsync(stoppingToken))
+        await foreach (var (runId, actor, onDemand) in _queue.Reader.ReadAllAsync(stoppingToken))
         {
             try
             {
@@ -213,6 +233,13 @@ public sealed partial class AssistantTestRunner(
                 LogRunFailed(logger, ex, runId);
                 _outcomes.Add(1, new KeyValuePair<string, object?>("outcome", "failed"));
                 await FinishFailedAsync(runId);
+            }
+            finally
+            {
+                if (onDemand)
+                {
+                    _waiting.AddOrUpdate(actor, 0, (_, n) => Math.Max(0, n - 1));
+                }
             }
         }
     }

@@ -252,6 +252,9 @@ public static class AdminErrorCodes
     /// <summary>§7.4: one test-question run per assistant at a time.</summary>
     public static AdminErrorCode TestRunRunning { get; } = new("test_run_running", 409, "The test questions are already running. Wait for that run to finish.");
 
+    /// <summary>The caller has as many test-question runs waiting as one person may start (<c>AssistantTestRunner.MaxWaitingPerActor</c>).</summary>
+    public static AdminErrorCode TestRunsWaiting { get; } = new("test_runs_waiting", 429, "You already have test-question runs waiting. Start another when one has finished.");
+
     /// <summary>§7.4: an assistant without test questions gets no run.</summary>
     public static AdminErrorCode NoTestQuestions { get; } = new("no_test_questions", 409, "The assistant has no test questions to run.");
 
@@ -370,7 +373,7 @@ public static class AdminErrorCodes
             SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, ClientManagedByDeployment, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
             KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment,
             NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared, TopicInvalid, CollectionSharedInUse,
-            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgePublicUnconfirmed, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, TestQuestionInvalid, TestQuestionDocumentUnlinked, TestRunRunning, NoTestQuestions, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency, CrawlPolitenessInvalid, FileNotRestorable, ProfileInUse, ProfileTestFailed, PromptTextInvalid,
+            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgePublicUnconfirmed, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, TestQuestionInvalid, TestQuestionDocumentUnlinked, TestRunRunning, TestRunsWaiting, NoTestQuestions, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency, CrawlPolitenessInvalid, FileNotRestorable, ProfileInUse, ProfileTestFailed, PromptTextInvalid,
             GatewayKeyInvalid, GatewayKeyResidency, GatewayKeyModel, GatewayKeyModelResidency, GatewayKeyEmbeddingResidency, GatewayKeyRequired, GatewayKeySystemPrompt, PeriodTooLong, TestAssistantUnavailable, TestBudgetExceeded, SignInNotConfigured,
             SetupCodeInvalid, SetupAttemptsExhausted, SetupSessionRequired, SetupTestRefused, SetupTestRequired, MoveNotConfirmed, MovePipelineDepartment, RunNotContinuable];
 }

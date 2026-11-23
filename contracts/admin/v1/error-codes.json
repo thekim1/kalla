@@ -372,6 +372,11 @@
       "message": "The test questions are already running. Wait for that run to finish."
     },
     {
+      "code": "test_runs_waiting",
+      "status": 429,
+      "message": "You already have test-question runs waiting. Start another when one has finished."
+    },
+    {
       "code": "no_test_questions",
       "status": 409,
       "message": "The assistant has no test questions to run."
