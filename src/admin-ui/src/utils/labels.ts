@@ -981,7 +981,7 @@ export const PLATFORM = {
     isEnabled: 'Enabled',
     evaluationModel: 'Model for test questions',
     evaluationJudgeModel: 'Judge model',
-    evaluationAnswerQuestions: 'Nightly answer evaluation: questions per assistant and night',
+    evaluationAnswerQuestions: 'Nightly answer evaluation',
     condenseModel: 'Condense model',
     rerankModel: 'Rerank model (chat)',
     gatewayRerankModel: 'Rerank model (gateway)',
@@ -1015,7 +1015,7 @@ export const PLATFORM = {
   /** Hints under generic form fields, before the API schema's own description. */
   fieldHints: {
     evaluationAnswerQuestions:
-      'Each night every published assistant whose knowledge bases have test questions answers up to this many, and the judge model checks each answer: as many answers and judge calls, charged to the assistant’s gateway key. 0 switches the nightly run off for every assistant.',
+      'Each night every published assistant whose knowledge bases have test questions answers up to this many, and the judge model checks each answer: as many answers and judge calls, charged to the assistant’s gateway key. Switched off, no assistant gets a run.',
     notFound: 'The texts and links shown when the search finds nothing: sv, en and links [{ title, url }]. Empty: the platform’s texts.',
     querySteps: 'As an assistant’s query steps. Empty: the platform’s defaults.',
     platformAdmin:
@@ -2472,6 +2472,12 @@ export const PII_RULES = {
 
 /** The Settings page (admin design §5.10): every platform setting, a section at a time, grouped by what it affects. */
 export const SETTINGS_PAGE = {
+  /** The Evaluation section's nightly answer run (admin design §5.10): a switch over the one setting, and its count while on. */
+  answerRun: {
+    switch: 'Run the nightly answer evaluation',
+    count: 'Questions per assistant and night',
+    countHint: 'From 1 to 100.',
+  },
   title: 'Settings',
   lead: 'How the platform answers, fetches and keeps content. Each section is saved on its own.',
   sections: 'Sections',
