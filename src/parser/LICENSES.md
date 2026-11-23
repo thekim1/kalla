@@ -222,13 +222,13 @@ Image `runtime` is the parser image; `test` is the test image only (the dev grou
 
 ## Debian packages
 
-From Debian main (trixie) at snapshot `20261119T000000Z` and the `python:3.12.16-slim-trixie` base. Each package's licences are in `/usr/share/doc/<package>/copyright`; they include GPL-2.0/GPL-3.0 tools (bash, coreutils, ...), LGPL libraries (glibc, glib, pango, cairo, gnutls, ...), `libjbig0` (GPL-2.0-or-later, through libtiff6, Leptonica and Tesseract) and LibreOffice with its libraries (MPL-2.0, EPL, CPL-1.0, GPL and LGPL; see LibreOffice).
+From Debian main (trixie) at snapshot `20261123T000000Z` and the `python:3.12.16-slim-trixie` base. Each package's licences are in `/usr/share/doc/<package>/copyright`; they include GPL-2.0/GPL-3.0 tools (bash, coreutils, ...), LGPL libraries (glibc, glib, pango, cairo, gnutls, ...), `libjbig0` (GPL-2.0-or-later, through libtiff6, Leptonica and Tesseract) and LibreOffice with its libraries (MPL-2.0, EPL, CPL-1.0, GPL and LGPL; see LibreOffice).
 
 | Package | Version |
 |---|---|
 | adduser | 3.152 |
 | apt | 3.0.4 |
-| base-files | 13.8+deb13u7 |
+| base-files | 13.8+deb13u8 |
 | base-passwd | 3.6.7 |
 | bash | 5.2.37-2+b10 |
 | bsdutils | 1:2.41.5-0+deb13u1 |
@@ -287,8 +287,8 @@ From Debian main (trixie) at snapshot `20261119T000000Z` and the `python:3.12.16
 | libbrotli1 | 1.1.0-2+deb13u1 |
 | libbsd0 | 0.12.2-2 |
 | libbz2-1.0 | 1.0.8-6 |
-| libc-bin | 2.41-12+deb13u4 |
-| libc6 | 2.41-12+deb13u4 |
+| libc-bin | 2.41-12+deb13u5 |
+| libc6 | 2.41-12+deb13u5 |
 | libcairo2 | 1.18.4-1+b1 |
 | libcap-ng0 | 0.8.5-4+b1 |
 | libcap2 | 1:2.75-10+deb13u1+b3 |
@@ -308,7 +308,7 @@ From Debian main (trixie) at snapshot `20261119T000000Z` and the `python:3.12.16
 | libdebconfclient0 | 0.280 |
 | libdeflate0 | 1.23-2 |
 | libe-book-0.1-1 | 0.1.3-2+b4 |
-| libeot0 | 0.01-5+b2 |
+| libeot0 | 0.01-5+deb13u1 |
 | libepubgen-0.1-1 | 0.1.1-1+b2 |
 | libetonyek-0.1-1 | 0.1.12-1 |
 | libexpat1 | 2.9.0-1~deb13u1 |
@@ -317,7 +317,7 @@ From Debian main (trixie) at snapshot `20261119T000000Z` and the `python:3.12.16
 | libffi8 | 3.4.8-2 |
 | libfontconfig1 | 2.15.0-2.3 |
 | libfreehand-0.1-1 | 0.1.2-3 |
-| libfreetype6 | 2.13.3+dfsg-1+deb13u1 |
+| libfreetype6 | 2.13.3+dfsg-1+deb13u2 |
 | libfribidi0 | 1.0.16-1 |
 | libgcc-s1 | 14.2.0-19 |
 | libgcrypt20 | 1.11.0-7+deb13u1 |
@@ -329,10 +329,10 @@ From Debian main (trixie) at snapshot `20261119T000000Z` and the `python:3.12.16
 | libgnutls30t64 | 3.8.9-3+deb13u4 |
 | libgomp1 | 14.2.0-19 |
 | libgpg-error0 | 1.51-4 |
-| libgpgme11t64 | 1.24.2-3 |
-| libgpgmepp6t64 | 1.24.2-3 |
+| libgpgme11t64 | 1.24.2-3+deb13u1 |
+| libgpgmepp6t64 | 1.24.2-3+deb13u1 |
 | libgraphite2-3 | 1.3.14-2+deb13u1 |
-| libgssapi-krb5-2 | 1.21.3-5+deb13u1 |
+| libgssapi-krb5-2 | 1.21.3-5+deb13u2 |
 | libharfbuzz-icu0 | 10.2.0-1+deb13u1 |
 | libharfbuzz0b | 10.2.0-1+deb13u1 |
 | libhogweed6t64 | 3.10.1-1 |
@@ -342,10 +342,10 @@ From Debian main (trixie) at snapshot `20261119T000000Z` and the `python:3.12.16
 | libidn2-0 | 2.3.8-2 |
 | libjbig0 | 2.1-6.1+b2 |
 | libjpeg62-turbo | 1:2.1.5-4 |
-| libk5crypto3 | 1.21.3-5+deb13u1 |
+| libk5crypto3 | 1.21.3-5+deb13u2 |
 | libkeyutils1 | 1.6.3-6 |
-| libkrb5-3 | 1.21.3-5+deb13u1 |
-| libkrb5support0 | 1.21.3-5+deb13u1 |
+| libkrb5-3 | 1.21.3-5+deb13u2 |
+| libkrb5support0 | 1.21.3-5+deb13u2 |
 | libksba8 | 1.6.7-2+b1 |
 | liblangtag-common | 0.6.7-1 |
 | liblangtag1 | 0.6.7-1+b2 |
@@ -366,7 +366,7 @@ From Debian main (trixie) at snapshot `20261119T000000Z` and the `python:3.12.16
 | libmythes-1.2-0 | 2:1.2.5-1+b2 |
 | libncursesw6 | 6.5+20250216-2 |
 | libnettle8t64 | 3.10.1-1 |
-| libnghttp2-14 | 1.64.0-1.1+deb13u1 |
+| libnghttp2-14 | 1.64.0-1.1+deb13u2 |
 | libnghttp3-9 | 1.8.0-1 |
 | libngtcp2-16 | 1.11.0-1+deb13u1 |
 | libngtcp2-crypto-gnutls8 | 1.11.0-1+deb13u1 |
@@ -424,7 +424,7 @@ From Debian main (trixie) at snapshot `20261119T000000Z` and the `python:3.12.16
 | libsmartcols1 | 2.41.5-0+deb13u1 |
 | libsqlite3-0 | 3.46.1-7+deb13u2 |
 | libssh2-1t64 | 1.11.1-1+deb13u2 |
-| libssl3t64 | 3.5.7-1~deb13u3 |
+| libssl3t64 | 3.5.9-1~deb13u1 |
 | libstaroffice-0.0-0 | 0.0.7-1+b2 |
 | libstdc++6 | 14.2.0-19 |
 | libsuitesparseconfig7 | 1:7.10.1+dfsg-1 |
@@ -476,8 +476,8 @@ From Debian main (trixie) at snapshot `20261119T000000Z` and the `python:3.12.16
 | ncurses-base | 6.5+20250216-2 |
 | ncurses-bin | 6.5+20250216-2 |
 | netbase | 6.5 |
-| openssl | 3.5.7-1~deb13u3 |
-| openssl-provider-legacy | 3.5.7-1~deb13u3 |
+| openssl | 3.5.9-1~deb13u1 |
+| openssl-provider-legacy | 3.5.9-1~deb13u1 |
 | passwd | 1:4.17.4-2 |
 | perl-base | 5.40.1-6+deb13u1 |
 | pinentry-curses | 1.3.1-2 |
@@ -505,7 +505,7 @@ From Debian main (trixie) at snapshot `20261119T000000Z` and the `python:3.12.16
 The GPL, LGPL, MPL, EPL and CPL components of this image (the Debian packages above, among them LibreOffice and its
 libraries; the libraries bundled in the Python wheels; `certifi` and `tqdm`) are distributed unmodified. Their
 complete corresponding source is available from the upstream projects named above and, for the Debian packages,
-from `https://snapshot.debian.org/archive/debian/20261119T000000Z` and
-`https://snapshot.debian.org/archive/debian-security/20261119T000000Z`. For three years after we distribute an image,
+from `https://snapshot.debian.org/archive/debian/20261123T000000Z` and
+`https://snapshot.debian.org/archive/debian-security/20261123T000000Z`. For three years after we distribute an image,
 Umeå kommun provides that source on request, on a medium customarily used for software interchange, for no more than
 the cost of making the copy.

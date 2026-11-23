@@ -9,11 +9,8 @@
 # is reached only through cv2.VideoCapture/VideoWriter, which neither Docling nor ume_parser calls. The parser takes
 # document formats only and runs without egress.
 CVE-2026-107695 parser ffmpeg 2026-12-17 #818 FFmpeg in the opencv wheel, unreachable (no VideoCapture)
-CVE-2026-52296 parser ffmpeg 2026-12-17 #818 FFmpeg in the opencv wheel, unreachable (no VideoCapture)
-CVE-2026-52297 parser ffmpeg 2026-12-17 #818 FFmpeg in the opencv wheel, unreachable (no VideoCapture)
 CVE-2026-70628 parser ffmpeg 2026-12-17 #818 FFmpeg in the opencv wheel, unreachable (no VideoCapture)
 CVE-2026-70632 parser ffmpeg 2026-12-17 #818 FFmpeg in the opencv wheel, unreachable (no VideoCapture)
-CVE-2026-96611 parser ffmpeg 2026-12-17 #818 FFmpeg in the opencv wheel, unreachable (no VideoCapture)
 CVE-2026-125201 parser ffmpeg 2026-12-17 #818 FFmpeg in the opencv wheel, unreachable (no VideoCapture)
 CVE-2026-125203 parser ffmpeg 2026-12-17 #818 FFmpeg in the opencv wheel, unreachable (no VideoCapture)
 CVE-2026-125209 parser ffmpeg 2026-12-17 #818 FFmpeg in the opencv wheel, unreachable (no VideoCapture)

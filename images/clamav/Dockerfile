@@ -1,4 +1,4 @@
-# kalla/clamav: the official ClamAV 1.4 LTS image plus our clamd.conf and freshclam.conf, nothing else
+# kalla/clamav: the official ClamAV 1.4 LTS image plus our clamd.conf and freshclam.conf and the Debian fixes below
 # (plans/platform/repo-and-deployment.md §5.5). The AppHost builds it from this directory; by hand:
 #   docker build -t kalla/clamav:dev images/clamav
 # Mount a volume on /var/lib/clamav: the first start downloads the signatures from database.clamav.net (no mirror),
@@ -11,6 +11,17 @@
 # zlib fixes, issue #818), pinned on 2026-11-17: the 7-day rule does not apply during development (user, Decisions
 # table "7-day rule in development").
 FROM clamav/clamav-debian:1.4.6_base@sha256:3976f67ab16e8a96b802aedf7e6f930c38262b95fbcb571d2ec21aa62e547cbe
+
+# Base packages with a High fix the tag's last rebuild (2026-11-16) doesn't have yet, from the image scan of 0.9.2
+# (audit.yml): krb5 1.21.3-5+deb13u1, CVE-2026-112314, -112320 to -112323 and -119079, fixed in trixie-security's
+# deb13u2; glibc 2.41-12+deb13u4, CVE-2026-19499 and -5435, fixed in trixie's deb13u5. Nothing else of the base is
+# upgraded. The step goes when a rebuild of the tag has the fixes.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends --only-upgrade \
+        krb5-locales=1.21.3-5+deb13u2 libgssapi-krb5-2=1.21.3-5+deb13u2 libk5crypto3=1.21.3-5+deb13u2 \
+        libkrb5-3=1.21.3-5+deb13u2 libkrb5support0=1.21.3-5+deb13u2 \
+        libc6=2.41-12+deb13u5 libc-bin=2.41-12+deb13u5 \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --chmod=0644 clamd.conf freshclam.conf /etc/clamav/
 
