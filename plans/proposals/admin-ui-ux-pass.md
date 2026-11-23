@@ -18,7 +18,7 @@ proposal changes them. What makes pages feel busy is **how much asks for attenti
 - every header shows three to five buttons at the same weight, with a red *Delete* always in view;
 - filters are built as forms (six labelled fields stacked above the data on Feedback and the Audit log);
 - inputs stretch across 1,100 px for a number of two digits;
-- the knowledge base has eight tabs and the assistant six, some of them holding a single field;
+- the knowledge base has eight tabs and the assistant seven (with B-57's *Test questions*), some of them holding a single field;
 - the assistant's test is a separate tab from the draft it tests, so you switch tabs after every edit;
 - each form saves with a differently named button at its bottom, and nothing says that there are unsaved changes.
 
@@ -88,13 +88,17 @@ new page is reviewed against.
 
 1. *Publish draft* is the one primary action, beside *Compare with published* (B-56's diff); *Edit name and contact*,
    *Copy* (B-55), *Change department*, *Archive* and *Delete* move into the ⋯ menu.
-2. Six tabs become four: **Build** (the draft and its test), **Versions**, **Access** (today's *Audience* and
-   *Storage*, plus *Check access* and the model name apps call it by), **Usage** (today's *Statistics*: questions,
-   not found, feedback and cost).
-3. The test panel sits beside the draft, sticky, as a short chat with the cited documents and *Why this answer?*. You
-   edit, ask, and read the answer without switching tabs.
+2. Seven tabs become five: **Build** (the draft and its test), **Quality** (B-57's test questions, *Run test
+   questions* and the report card, and B-58's nightly answer figures: the same name and job as the knowledge base's
+   *Quality*), **Versions**, **Access** (today's *Audience* and *Storage*, plus *Check access* and the model name apps
+   call it by), **Usage** (today's *Statistics*: questions, not found, feedback and cost, with B-61's cost by outcome;
+   B-62's content gaps go to *Quality*).
+3. The test panel sits beside the draft, sticky, as a short chat with the cited documents. It keeps everything admin
+   §4.9 gives it today: the choice between the draft and the published version, the topic narrowing, the trace behind
+   *Why this answer?*, and B-57's *Save as test question*. You edit, ask, and read the answer without switching tabs.
 4. The four *General knowledge* levels become one scale (*Off → Open*) with the chosen level's description below it,
-   instead of four cards of near-identical text.
+   instead of four cards of near-identical text. Publishing a `public` assistant with general knowledge on keeps V36's
+   extra confirmation.
 5. The save bar replaces *Save draft* at the bottom of the form, and says what saving means.
 
 ### Knowledge base: answers first (UX2, UX4)
@@ -117,11 +121,21 @@ new page is reviewed against.
 |---|---|
 | ![Home now](admin-ui-ux-pass/img/before-home.png) | ![Home proposed](admin-ui-ux-pass/img/after-home.png) |
 
-1. *Needs attention* (B-59) on top, one row per item with its action button.
-2. *Assistants in use* as one table row per published assistant instead of a third-width tile each; it scales to
+Top to bottom; nothing on today's Home is dropped:
+
+- The secret reminders (§5.11) and deployment notices, as today, at the very top for a platform admin.
+- **1** *Needs attention* (B-59): one row per item with its action button. The items are §5.5.1's (the table #961 makes
+   of them); the mockup shows three of them. The order is §5.5.1's; this proposal adds no ranking rule.
+- *Get started*, the setup checklists, while any knowledge base in the caller's scope is unpublished (on a new
+   installation it is most of the page), with the embedding-profile first-run step first while it applies; folded
+   and hideable as §5.5.1 says.
+- **2** *Assistants in use* as one table row per published assistant instead of a third-width tile each; it scales to
    twenty assistants. Zeros are grey.
-3. *Health* is one line of four green states; an item that fails turns amber or red and moves into *Needs attention*.
+- **3** *Health* is one line of four green states; an item that fails turns amber or red and moves into *Needs attention*.
    *Your access* (roles and departments) becomes a link under the greeting and an entry in the user menu.
+
+On a new installation with no assistant, the page is the notices, *Get started* and *Health*: the same as today
+minus the empty Live card.
 
 ### Lists: filters as one row (UX5)
 
@@ -248,13 +262,16 @@ and Models share the `hub` icon (also the logo's).
 | **D.** Leave the eight tabs | Nothing to do | — |
 
 **Recommendation: C.** The source page keeps its files card for a deep link, but stops repeating the upload help.
+**A flag for the user:** this undoes the separate *Files* tab decided on 2026-11-09 (§5.5.7 point 2). It only works if
+*Content* opens straight onto the file list on a knowledge base whose only source is an upload, so that case has no
+extra click; that is part of the option.
 
 ### UX3: Assistant page
 
 | Option | Gain | Cost |
 |---|---|---|
-| **A.** Four tabs: *Build* (draft and test side by side), *Versions*, *Access* (audience, storage, *Check access*, the model name), *Usage*; *Publish draft* in the header | Edit, ask and publish without leaving the first tab | §5.5.4's wireframe and tab list; the test panel becomes a column (it already tests the draft) |
-| **B.** Only the test panel beside the draft; the six tabs stay | The biggest gain for the least change | *Audience* and *Storage* stay tabs with one or two fields |
+| **A.** Five tabs: *Build* (draft and test side by side), *Quality* (test questions, report card, answer evaluation), *Versions*, *Access* (audience, storage, *Check access*, the model name), *Usage*; *Publish draft* in the header | Edit, ask and publish without leaving the first tab | §5.5.4's wireframe and tab list; the test panel becomes a column (it already tests the draft) |
+| **B.** Only the test panel beside the draft; the seven tabs stay | The biggest gain for the least change | *Audience* and *Storage* stay tabs with one or two fields |
 | **C.** A, plus *General knowledge* as one scale with the chosen level's description, and the knowledge bases as rows with *Limit to topics* behind a button | The form fits on one screen beside the test | One small segmented control from the existing `SegmentedControl`; works with B-65's read-only Topics field |
 | **D.** Leave it | Nothing to do | — |
 
@@ -294,7 +311,7 @@ primary action.
 |---|---|---|
 | **A.** The save bar of rule 7 on every form (assistant draft, search settings, sharing, audience, storage, each Settings section); the buttons named *Save changes* and *Discard*; leaving a page with unsaved changes asks first | One way to save; nothing lost by a tab change | A `SaveBar` component and a dirty check per form; today's per-tab button names go from `labels.ts` |
 | **B.** Only the names made the same (*Save changes*), no bar | Cheap | Unsaved changes stay invisible |
-| **C.** A, plus Home as in the mockup: *Needs attention* (B-59) on top, *Assistants in use* as a table, *Health* as one line, *Your access* behind a link | Home shows what needs you, then what runs | Home's layout in §5.5.1 changes; the data is the existing `/api/overview` and B-59's list |
+| **C.** A, plus Home as in the mockup: the notices, *Needs attention* (B-59), *Get started* while a knowledge base is unpublished, *Assistants in use* as a table, *Health* as one line, *Your access* behind a link | Home shows what needs you, then what runs | Home's layout in §5.5.1 changes; the data is the existing `/api/overview` and B-59's list |
 | **D.** Leave them | Nothing to do | — |
 
 **Recommendation: C.**
@@ -407,15 +424,22 @@ groups* "No member groups" as a grey dash; *Fetched* drops the date when it is t
 - **Design:** Decisions "Admin API and UI" (the eleven rules, one line each); admin design §5.2 (menu), §5.3, §5.5.1
   (Home), §5.5.2 and §5.5.7 point 2 (knowledge base tabs), §5.5.4 (assistant), §5.7 (the renames), §5.10 (Settings
   groups).
-- **Code:** `src/admin-ui/src/**` (stream b's paths); four new Källa components in `components/ui/` (`MenuButton`,
-  `FilterChip` with `PeriodPicker`, `SaveBar`, `SummaryTile`), built from the existing tokens and not added to the
-  design-system lock.
+- **Code:** `src/admin-ui/src/**` (stream b's paths); four new components (`MenuButton`, `FilterChip` with
+  `PeriodPicker`, `SaveBar`, `SummaryTile`), built from the existing tokens. They are generic enough for Fors's console
+  too, so they are **proposed to Fors first** (Decisions "Admin API and UI" has the admin copy Fors's design system);
+  if Fors doesn't take them in time, Källa builds them and offers them upstream.
+- **Hand-offs:** `docs/` (stream a's) names pages by their tabs: a stream-a issue per step that renames one. The NVDA
+  pass (to-verify row 96, `plans/work/nvda-pass.md`) names today's pages; hold it until UX2 and UX3 have landed, then
+  rewrite its checklist once.
 - **Overlaps with queued work:** B-55 (*Copy* goes in the ⋯ menu), B-56 / #954 (*Compare* in the header and in
   *Versions*), B-59 (*Needs attention* is Home's top card), B-64 and B-65 (*Topics* keeps its tab), B-67 (the Map's
   switch in the filter row), B-68 (*Archive* and *Keep* in the ⋯ menu), #953 (the organisation logo in the menu's
   brand). None waits on this proposal; the later step adapts to what has landed.
-- **Order** (each a pull request of its own, smallest first):
-  0. The phone's bottom menu as §5.2 says (Assistants and Feedback added to `mobileTabs`): a bug fix, needs no decision.
+- **Order** (each a pull request of its own, smallest first), after the code-quality fixes of #960 that shrink the
+  same views (#1, #3, #5), and with UX2 and UX3 after the queue's cards for those pages (B-58, B-61, B-62, B-66) are in,
+  so each page is restructured once:
+  0. The phone's bottom menu as §5.2 says (Assistants and Feedback added to `mobileTabs`): a bug fix, needs no decision;
+     can go now.
   1. Rules 3, 5, 8 and the renames: field widths, grey zeros, repeated texts, radio-card selection (about a day).
   2. UX4: `MenuButton`, the headers and the file rows.
   3. UX6 A: `SaveBar` on every form.
@@ -424,8 +448,10 @@ groups* "No member groups" as a grey dash; *Fetched* drops the date when it is t
   6. UX5: filters and the address.
   7. UX1 and Home (UX6 C) once B-59 has landed.
 - **Checks:** each step shown in a browser at 1,440, 390 and 320 px in the three themes, with a keyboard-only and a
-  screen-reader pass; the accessibility spec
-  (`tests/e2e`) and the menu-structure test (`router/*.spec.ts`) updated with the step that changes them.
+  screen-reader pass; the accessibility spec (`tests/e2e`) and the menu-structure test (`router/*.spec.ts`) updated
+  with the step that changes them. **Every step also runs the browser specs it touches locally** (`tests/e2e`: every
+  renamed tab, button or filter is driven by `pilot.spec.ts` somewhere) and fixes them in the same pull request, since
+  `e2e.yml` runs only before a release.
 
 ## Sources
 
