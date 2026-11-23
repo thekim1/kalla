@@ -1533,6 +1533,10 @@ pages treat that as a first-class case, not as a crawl source without a crawl:
 5. **Folders are kept.** A dropped or picked folder sends each file's relative path (`HR/Policys/semester.pdf`) in
    `X-File-Name` (§4.5). The list groups by folder, and the list says that a topic rule on the path
    (`HR/**`, Topics tab) tags a folder's documents. Files picked one by one have no folder.
+6. **A file with a known name replaces by default** (user, 2026-11-23; support case SA-11). When an added file's name
+   and folder match a live file of the same source, the upload asks once for the batch: *Replace the existing files*
+   (the default: each is sent as that file's replacement, as the row's *Replace* does, so the document keeps its id)
+   or *Keep both*. The dialog lists the matching names. Byte-identical files stay skipped as today.
 6. **File details.** A row opens a panel: name and path, size, type, uploaded by and when, replaced when, state and
    reason, a download link, and for an indexed file the document's chunks (`/api/documents/{id}`, `/chunks`) and the
    assistants that use the knowledge base. *Replace* and *Delete* are there too.

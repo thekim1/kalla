@@ -29,7 +29,7 @@ sections keep only what was asked and what was built.
 | SA-8 | Crawling an intranet that needs a login | L | a + main | no: the intranet is readable without a login (user, 2026-11-06) |
 | SA-9 | Scripted upload API (service credential on the upload routes) | M | b | no |
 | SA-10 | Git/Markdown or file-share connector | M–L | a + main | no: **after the pilot**, when the Markdown moves to a Git repository (user, 2026-11-06) |
-| SA-11 | Replace an upload by file name | S | b | no, but the **main risk for an upload-only pilot** (below) |
+| SA-11 | Replace an upload by file name | S | b | no, but the **main risk for an upload-only pilot** (below); queued as B-83 |
 | SA-12 | A readable view of uploaded non-PDF documents | M | b + main | no |
 | SA-13 | `.markdown` extension refused on upload | S | b | no |
 | SA-14 | Push-triggered refresh (webhook or API "sync now") | M | b + a | no |
@@ -144,8 +144,8 @@ sections keep only what was asked and what was built.
   goes through an editor's upload, and one upload by habit instead of *Replace* puts two versions of the same
   instruction into the answers, the old one still citable, with no warning. Until SA-11 is built, the editors'
   routine is *Replace*, and the file list is checked for duplicate names after each round of edits.
-- **Sketch.** When an added file's name matches a live slot, the admin UI proposes *Replace*; the API offers an
-  explicit `replace-by-name` entry for scripts (SA-9).
+- **Queued** (user, 2026-11-23): B-83 in stream b's queue, admin §5.5.7 point 6. The API's `replace-by-name` entry for
+  scripts stays with SA-9.
 - **Size S.**
 
 ## SA-12 Readable view of uploaded non-PDF documents
