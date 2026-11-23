@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/api'
-import type { Run, RunItem } from '@/api/types'
+import type { Run } from '@/api/types'
 import CancelRunButton from '@/components/runs/CancelRunButton.vue'
 import ContinueRunButton from '@/components/runs/ContinueRunButton.vue'
 import DeletionDecision from '@/components/sources/DeletionDecision.vue'
@@ -16,6 +16,7 @@ import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import { pollDelay } from '@/composables/useJobPoll'
+import { useKeysetList } from '@/composables/useKeysetList'
 import { reportDifferences } from '@/platform/politeness'
 import { useLoadable } from '@/stores/loadable'
 import { formatDateTime, formatNumber } from '@/utils/format'
@@ -34,9 +35,8 @@ import { runProgressText } from '@/utils/runs'
 const props = defineProps<{ id: string }>()
 const router = useRouter()
 const run = useLoadable<Run | null>(null)
-const items = useLoadable<RunItem[]>([])
-const next = ref<number | null>(null)
 const onlyFailed = ref(false)
+const runItems = useKeysetList((after?: number) => api.runs.items(props.id, { outcome: onlyFailed.value ? 'failed' : undefined, after, limit: 50 }))
 // The user asked for more rows: a running poll no longer replaces the table's first page.
 const paged = ref(false)
 let timer: ReturnType<typeof setTimeout> | null = null
@@ -67,14 +67,9 @@ const verdictReasons = computed(() =>
   [run.data.value?.report?.verdict?.runFailure, run.data.value?.report?.verdict?.runDegradation].filter((r): r is string => !!r),
 )
 
-async function loadItems(append = false): Promise<void> {
-  if (append) paged.value = true
-  const previous = append ? items.data.value : []
-  await items.run(async () => {
-    const page = await api.runs.items(props.id, { outcome: onlyFailed.value ? 'failed' : undefined, after: append ? next.value ?? undefined : undefined, limit: 50 })
-    next.value = page.next
-    return [...previous, ...page.items]
-  })
+function moreItems(): void {
+  paged.value = true
+  void runItems.more()
 }
 
 async function load(): Promise<void> {
@@ -84,13 +79,13 @@ async function load(): Promise<void> {
   await run.run(() => api.runs.get(props.id))
   if (summary.value?.state === 'running') {
     timer = setTimeout(() => void load(), pollDelay(Date.now() - started))
-    if (!paged.value) void loadItems()
-  } else void loadItems()
+    if (!paged.value) void runItems.reload()
+  } else void runItems.reload()
 }
 
 watch(onlyFailed, () => {
   paged.value = false
-  void loadItems()
+  void runItems.reload()
 })
 onMounted(load)
 onBeforeUnmount(() => {
@@ -169,13 +164,13 @@ onBeforeUnmount(() => {
 
       <h2 class="mb-3 text-title-3">{{ RUN_PAGE.items }}</h2>
       <CheckField v-model="onlyFailed" :label="RUN_PAGE.onlyFailed" class="mb-4" />
-      <AsyncState :loading="items.loading.value && items.data.value.length === 0" :error="items.error.value" :empty="items.data.value.length === 0" :empty-text="RUN_PAGE.noItems" @retry="loadItems()">
-        <DataTable :columns="columns" :rows="items.data.value" :row-key="(i) => String(i.id)" :caption="RUN_PAGE.items">
+      <AsyncState :loading="runItems.loading.value && runItems.items.value.length === 0" :error="runItems.error.value" :empty="runItems.items.value.length === 0" :empty-text="RUN_PAGE.noItems" @retry="runItems.reload()">
+        <DataTable :columns="columns" :rows="runItems.items.value" :row-key="(i) => String(i.id)" :caption="RUN_PAGE.items">
           <template #cell-identity="{ row }"><span class="break-all font-mono text-small">{{ row.identity }}</span></template>
           <template #cell-outcome="{ row }">{{ RUN_OUTCOME_LABEL[row.outcome] ?? row.outcome }}</template>
           <template #cell-reason="{ row }"><span v-if="row.reason">{{ jobMessage(row.reason) }}</span></template>
         </DataTable>
-        <UiButton v-if="next" class="mt-4" :loading="items.loading.value" @click="loadItems(true)">{{ RUN_PAGE.more }}</UiButton>
+        <UiButton v-if="runItems.next.value" class="mt-4" :loading="runItems.loading.value" @click="moreItems">{{ RUN_PAGE.more }}</UiButton>
       </AsyncState>
     </template>
   </AsyncState>

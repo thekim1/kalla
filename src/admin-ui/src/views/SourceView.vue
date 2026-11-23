@@ -26,6 +26,7 @@ import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatNumber } from '@/utils/format'
 import { DELETE, LEVEL_LABEL, RUN_STATE_LABEL, SOURCE, SOURCE_EDIT, SOURCE_PAGE, SOURCE_TYPE_LABEL } from '@/utils/labels'
 import { pollDelay } from '@/composables/useJobPoll'
+import { useKeysetList } from '@/composables/useKeysetList'
 import { runProgressText, runStateTone } from '@/utils/runs'
 import { problemMessage } from '@/utils/problem'
 
@@ -36,9 +37,8 @@ const props = defineProps<{ id: string }>()
 const auth = useAuthStore()
 const ui = useUiStore()
 const source = useLoadable<Source | null>(null)
-const runs = useLoadable<RunSummary[]>([])
+const runs = useKeysetList((after?: string) => api.sources.runs(props.id, after))
 const pii = ref<PiiReport | null>(null)
-const next = ref<string | null>(null)
 const syncing = ref(false)
 const syncError = ref<unknown>(null)
 const editing = ref(false)
@@ -83,7 +83,7 @@ const piiColumns: Column[] = [
 ]
 const canEdit = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor']))
 // The run Cancel run stops (#488 part 3): the newest one still running or waiting for the deletion decision.
-const activeRun = computed(() => runs.data.value.find((r) => r.state === 'running' || r.state === 'awaiting-deletion-confirmation'))
+const activeRun = computed(() => runs.items.value.find((r) => r.state === 'running' || r.state === 'awaiting-deletion-confirmation'))
 const activeProgress = computed(() => runProgressText(activeRun.value))
 // #803: a running run is polled (admin design §4.7) and its row replaced in place, so paging through older runs is kept;
 // when it stops, the list is loaded again.
@@ -97,7 +97,7 @@ async function pollRun(id: string): Promise<void> {
   runTimer = null
   const fresh = await api.runs.get(id).then((r) => r.run).catch(() => null)
   if (!fresh) return
-  runs.data.value = runs.data.value.map((r) => (r.id === fresh.id ? fresh : r))
+  runs.items.value = runs.items.value.map((r) => (r.id === fresh.id ? fresh : r))
   if (fresh.state !== 'running') void loadRuns()
 }
 watch(
@@ -150,20 +150,15 @@ function saved(updated: Source): void {
   ui.notify(SOURCE_EDIT.saved)
 }
 
-async function loadRuns(append = false): Promise<void> {
-  const previous = append ? runs.data.value : []
-  await runs.run(async () => {
-    const page = await api.sources.runs(props.id, append ? next.value ?? undefined : undefined)
-    next.value = page.next
-    return [...previous, ...page.items]
-  })
-  if (!append) await loadContinuable()
+async function loadRuns(): Promise<void> {
+  await runs.reload()
+  await loadContinuable()
 }
 
 // Continue beside Sync now (#804): the latest run of a crawl source, when it ended with pages left or failed.
 const continuable = ref<string | null>(null)
 async function loadContinuable(): Promise<void> {
-  const latest = runs.data.value[0]
+  const latest = runs.items.value[0]
   continuable.value = null
   if (source.data.value?.type !== 'crawl' || !latest || latest.state === 'running' || latest.state === 'awaiting-deletion-confirmation') return
   continuable.value = (await api.runs.get(latest.id).catch(() => null))?.canContinue ? latest.id : null
@@ -243,8 +238,8 @@ onMounted(load)
       <PipelineCard :source="source.data.value" class="mb-6" />
 
       <h2 class="mb-3 text-title-3">{{ SOURCE_PAGE.runs }}</h2>
-      <AsyncState :loading="runs.loading.value && runs.data.value.length === 0" :error="runs.error.value" :empty="runs.data.value.length === 0" :empty-text="SOURCE_PAGE.noRuns" @retry="loadRuns()">
-        <DataTable :columns="runColumns" :rows="runs.data.value" :row-key="(r) => r.id" :caption="SOURCE_PAGE.runs" :row-to="runTo">
+      <AsyncState :loading="runs.loading.value && runs.items.value.length === 0" :error="runs.error.value" :empty="runs.items.value.length === 0" :empty-text="SOURCE_PAGE.noRuns" @retry="loadRuns()">
+        <DataTable :columns="runColumns" :rows="runs.items.value" :row-key="(r) => r.id" :caption="SOURCE_PAGE.runs" :row-to="runTo">
           <template #cell-started="{ row }"><span class="tabular">{{ formatDateTime(row.startedAt) }}</span></template>
           <template #cell-state="{ row }"><UiBadge :tone="runStateTone(row.state)" :label="RUN_STATE_LABEL[row.state] ?? row.state" /></template>
           <template #cell-counts="{ row }">
@@ -254,7 +249,7 @@ onMounted(load)
               SOURCE_PAGE.runFailed(formatNumber(row.failed)) }}</RouterLink></span></span>
           </template>
         </DataTable>
-        <UiButton v-if="next" class="mt-4" :loading="runs.loading.value" @click="loadRuns(true)">{{ SOURCE_PAGE.more }}</UiButton>
+        <UiButton v-if="runs.next.value" class="mt-4" :loading="runs.loading.value" @click="runs.more()">{{ SOURCE_PAGE.more }}</UiButton>
       </AsyncState>
 
       <!-- Folded by default, with the counts in the summary; flagged documents first (admin design §5.5.3). There is no
