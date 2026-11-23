@@ -1909,7 +1909,7 @@ export const ASSISTANT = {
   copyName: (name: string) => `${name} (copy)`,
   copyDepartment: 'Department of the copy',
   copied: (name: string) => `The copy ${name} has been created. Check its draft before publishing.`,
-  /** #983: what the copy left out, said after the copied notice. */
+  /** what the copy left out, said after the copied notice. */
   copyLeftOut: (links: number, documents: number) =>
     [
       links ? `${links === 1 ? '1 knowledge base' : `${links} knowledge bases`} not shared with its department ${links === 1 ? 'was' : 'were'} left out.` : '',

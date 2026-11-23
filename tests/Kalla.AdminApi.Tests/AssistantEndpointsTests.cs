@@ -117,7 +117,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database, Assis
     public async Task A_copy_into_another_department_is_a_draft_of_the_published_version_without_key_audience_or_an_unshared_collection()
     {
         // B-55 (admin design §4.5): the copy's only version is a draft equal to the source's published version; audiences,
-        // the key, the other versions and the statistics stay behind. #983: a knowledge base the target department may not link is
+        // the key, the other versions and the statistics stay behind.  a knowledge base the target department may not link is
         // left out (and counted), never carried over.
         var seed = await SeedAsync();
         var other = await SeedAsync();

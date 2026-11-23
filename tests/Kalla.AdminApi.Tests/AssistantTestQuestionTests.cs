@@ -77,7 +77,7 @@ public sealed class AssistantTestQuestionTests(AdminDatabaseFixture database)
     [Fact]
     public async Task A_draft_linking_another_departments_unshared_knowledge_base_searches_nothing_of_it_and_shows_none_of_its_titles()
     {
-        // #983: a draft can hold a link B's department may not make (a copy before the fix, or a share withdrawn since). The test
+        // A draft can hold a link B's department may not make (saved with V11's warning, or a share withdrawn since). The test
         // panel, the test runs and the nightly answer run search only what V11 allows; V33 refuses such a document as expected,
         // and a question that already names one shows no title.
         var codeA = "A" + Random.Shared.Next(100_000, 999_999);
@@ -148,7 +148,7 @@ public sealed class AssistantTestQuestionTests(AdminDatabaseFixture database)
             body.GetRawText().ShouldNotContain("Hemlig rutin");
         }
 
-        // V33 refuses its document as expected; a question that already names it (a copy before the fix) shows no title.
+        // V33 refuses its document as expected; a question that already names it shows no title.
         using (var refused = await editor.PostAsJsonAsync($"/api/assistants/{id}/test-questions", new
                {
                    question = $"Vad gäller för {word}?", expectedBehaviour = "Svarar.", expectedDocumentId = document.Id,

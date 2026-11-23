@@ -103,7 +103,7 @@ public sealed partial class AdminTestPanel(
         var current = await snapshots.LoadAsync(configVersion, ct);
         var audience = await db.AssistantAudiences.AsNoTracking().Where(a => a.AssistantId == id && a.Kind == Domain.Entities.AssistantAudienceKinds.Client)
             .Select(a => a.SubjectId).ToListAsync(ct);
-        // #983: only what the assistant's department may link (V11: its own collections and those shared with it). A draft can
+        // only what the assistant's department may link (V11: its own collections and those shared with it). A draft can
         // hold another department's link (a copy, or a share withdrawn since); the panel, the test runs and the nightly answer
         // run must not search it.
         var linkable = await CollectionSharing.LinkableAsync(db, assistant.DepartmentId, version.LinkedCollectionIds(), ct);
@@ -299,7 +299,7 @@ public sealed partial class AdminTestPanel(
     /// The snapshot as the panel sees it: the tested version as the assistant's published one (active), its collections
     /// live, and the <c>admin-console</c> client at the assistant's level, or with test history at the level of the audience's
     /// history-storing clients (chat design §8.2). A distinct negative version keeps the per-instance caches apart. Only the
-    /// links in <paramref name="linkable"/> are kept (#983: V11's own and shared collections of the assistant's department).
+    /// links in <paramref name="linkable"/> are kept (V11's own and shared collections of the assistant's department).
     /// </summary>
     private static (PolicySnapshot View, ClientEntry Client, HashSet<Guid> NotPublished) View(PolicySnapshot current, Domain.Entities.Assistant assistant,
         Domain.Entities.AssistantVersion version, HashSet<Guid> linkable, IReadOnlyList<Guid?> audience, bool withHistory)

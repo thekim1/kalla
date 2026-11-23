@@ -125,7 +125,7 @@ public static class AssistantTestQuestionEndpoints
                 }), ct);
                 return Results.Accepted($"/api/assistants/{id}/test-runs/{run.Id}", TestRunSummary.Of(run, null));
             })
-            // #983: the test panel's rate policy, so an editor cannot fill the runner's queue ahead of the runs after a publish.
+            // the test panel's rate policy, so an editor cannot fill the runner's queue ahead of the runs after a publish.
             .RequireAuthorization(AdminPolicies.Edit).RequireRateLimiting(AssistantTestEndpoints.RatePolicy).WithName("RunAssistantTestQuestions")
             .WithSummary("Run the test questions on the draft or the published version");
 
@@ -186,7 +186,7 @@ public static class AssistantTestQuestionEndpoints
 
     /// <summary>
     /// The collections the draft or the published version links that the assistant's department may link (V11: its own and
-    /// those shared with it). #983: another department's unshared collection, carried over by a copy, counts as unlinked, so
+    /// those shared with it).  another department's unshared collection, carried over by a copy, counts as unlinked, so
     /// V33 refuses its documents and their titles are not shown.
     /// </summary>
     internal static async Task<HashSet<Guid>> LinkedCollectionsAsync(AdminContext admin, Assistant assistant, CancellationToken ct)
@@ -228,7 +228,7 @@ public static class AssistantTestQuestionEndpoints
 
 /// <summary>
 /// A test question's expected document: its title, or <c>Deleted</c> when it is gone; <c>Unlinked</c>, without a title, when no
-/// collection the assistant links and may link holds it now (#983).
+/// collection the assistant links and may link holds it now.
 /// </summary>
 public sealed record ExpectedDocumentDto(Guid Id, string? Title, bool Deleted, bool Unlinked);
 
@@ -243,7 +243,7 @@ public sealed record TestQuestionDto(
     /// <summary>V33: an expected document no linked collection holds any more is marked, never refused.</summary>
     internal static ExpectedDocumentDto? Expected(Guid? id, IReadOnlyDictionary<Guid, (string Title, Guid CollectionId)> documents, IReadOnlySet<Guid> linked) =>
         id is not { } d ? null
-        // #983: a document no linkable collection holds shows no title (it may be another department's).
+        // a document no linkable collection holds shows no title (it may be another department's).
         : documents.TryGetValue(d, out var doc) ? linked.Contains(doc.CollectionId)
             ? new ExpectedDocumentDto(d, doc.Title, false, false)
             : new ExpectedDocumentDto(d, null, false, true)

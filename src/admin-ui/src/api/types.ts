@@ -1288,7 +1288,7 @@ export interface AssistantCopyRequest {
 export interface AssistantCopyResult {
   assistant: Assistant
   warnings: RuleWarning[]
-  /** #983: what a copy into another department left out: links that department may not make, expected documents no kept link holds. */
+  /** what a copy into another department left out: links that department may not make, expected documents no kept link holds. */
   leftOut: { links: number; expectedDocuments: number }
 }
 

@@ -60,7 +60,7 @@ describe('Copy an assistant (admin design §4.5, B-55)', () => {
     wrapper.unmount()
   })
 
-  it('says what a copy into another department left out, and nothing when it left out nothing (#983)', () => {
+  it('says what a copy into another department left out, and nothing when it left out nothing', () => {
     expect(ASSISTANT.copyLeftOut(0, 0)).toBe('')
     expect(ASSISTANT.copyLeftOut(1, 0)).toBe('1 knowledge base not shared with its department was left out.')
     expect(ASSISTANT.copyLeftOut(2, 3)).toBe('2 knowledge bases not shared with its department were left out. 3 test questions lost their expected document.')
