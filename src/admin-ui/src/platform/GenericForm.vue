@@ -60,15 +60,29 @@ function hint(field: FieldSpec): string | undefined {
   return [field.help, extra, picked].filter(Boolean).join(' ') || undefined
 }
 
-/** A `switchCount` field is on while its count is not 0 (admin design §5.10). */
+/**
+ * A `switchCount` field's switch (admin design §5.10), its own state, so editing the count never turns it off: on when the
+ * loaded value is a number other than 0, else off. Off sends 0; on sends the count, which must then be filled in.
+ */
+const switches = reactive<Record<string, boolean>>(Object.fromEntries(props.fields.filter((f) => f.kind === 'switchCount').map((f) => {
+  const value = startValue(f)
+  return [f.name, typeof value === 'number' && value !== 0]
+})))
+
 function switchOn(field: FieldSpec): boolean {
-  const value = String(values[field.name] ?? '').trim()
-  return value !== '' && Number(value) !== 0
+  return switches[field.name] === true
 }
 
-/** Off stores 0; on again starts the count at the field's `onValue`. */
+/** The switch's description: the field's help and, while off, an error on the field. */
+function switchDescribedBy(field: FieldSpec): string | undefined {
+  const ids = [field.help ? `${idOf(field.name)}-help` : '', !switchOn(field) && form.errors[field.name] ? `${idOf(field.name)}-switch-error` : '']
+  return ids.filter(Boolean).join(' ') || undefined
+}
+
+/** On again starts the count at the field's `onValue` (admin design §5.10: "on again brings back 100"). */
 function setSwitch(field: FieldSpec, on: boolean): void {
-  values[field.name] = on ? String(field.onValue ?? 1) : '0'
+  switches[field.name] = on
+  if (on) values[field.name] = String(field.onValue ?? 1)
 }
 
 /** A select option's text: an information class by its name in the UI (admin design §5.7), anything else as it is. */
@@ -89,8 +103,16 @@ function collect(): Record<string, unknown> | null {
   const problems: Record<string, string> = {}
   const members: Record<string, Record<string, unknown>> = {}
   for (const field of props.fields) {
+    if (field.kind === 'switchCount' && !switchOn(field)) {
+      body[field.name] = 0
+      continue
+    }
     try {
       const value = fromInput(field, values[field.name] ?? '')
+      if (field.kind === 'switchCount' && value === undefined) {
+        problems[field.name] = PLATFORM.form.required
+        continue
+      }
       // An unset member is left out: the section's reader treats a missing member as unset.
       if (field.parent) {
         if (value !== undefined && value !== null && !(Array.isArray(value) && value.length === 0)) (members[field.parent] ??= {})[field.name] = value
@@ -147,13 +169,13 @@ async function save(): Promise<void> {
           <div class="flex items-center gap-3">
             <UiSwitch
               :model-value="switchOn(field)" :labelledby="`${idOf(field.name)}-switch-label`"
-              :describedby="field.help ? `${idOf(field.name)}-help` : undefined" :disabled="readOnly.includes(field.name)"
+              :describedby="switchDescribedBy(field)" :disabled="readOnly.includes(field.name)"
               @update:model-value="setSwitch(field, $event)"
             />
             <span :id="`${idOf(field.name)}-switch-label`" class="font-medium">{{ field.switchLabel ?? field.label }}</span>
           </div>
           <p v-if="field.help" :id="`${idOf(field.name)}-help`" class="text-small text-fg-3">{{ field.help }}</p>
-          <p v-if="!switchOn(field) && form.errors[field.name]" class="text-small text-danger">{{ form.errors[field.name] }}</p>
+          <p v-if="!switchOn(field) && form.errors[field.name]" :id="`${idOf(field.name)}-switch-error`" class="text-small text-danger">{{ form.errors[field.name] }}</p>
         </div>
         <TextField
           v-if="switchOn(field)" :id="idOf(field.name)" v-model="values[field.name] as string" :label="field.label" :hint="field.countHint"
