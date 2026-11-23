@@ -451,4 +451,42 @@ public sealed partial class ChatApiTests
         estimates.ShouldContain((GatewayChatClient.AnswerStep, "estimate"));
         estimates.ShouldContain((GatewayQueryEmbedder.Step, "gateway"));
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Each_answer_records_the_prompt_estimate_over_the_reported_prompt_tokens_once(bool stream)
+    {
+        // Chat design §6.3, §17 (#986): rag.chat.prompt.estimate_ratio, one value per answer that reports prompt_tokens.
+        var calls = new ConcurrentQueue<CostCall>();
+        await using var gateway = CostFake();
+        await using var api = CostHost(calls, gateway, rerank: false);
+        var meters = api.Services.GetRequiredService<IMeterFactory>();
+        var ratios = new ConcurrentQueue<double>();
+        using var listener = new MeterListener
+        {
+            InstrumentPublished = (instrument, l) =>
+            {
+                if (instrument.Name == "rag.chat.prompt.estimate_ratio" && ReferenceEquals(instrument.Meter.Scope, meters))
+                {
+                    l.EnableMeasurementEvents(instrument);
+                }
+            },
+        };
+        listener.SetMeasurementEventCallback<double>((_, value, _, _) => ratios.Enqueue(value));
+        listener.Start();
+        using var client = Client(api, db.IntegrationKey);
+
+        using var answered = await AskCost(client, "Behöver jag bygglov för en altan?", stream);
+        answered.StatusCode.ShouldBe(HttpStatusCode.OK, await answered.Content.ReadAsStringAsync(Ct));
+        await answered.Content.ReadAsStringAsync(Ct);
+
+        var answer = calls.Single(c => c.Step == GatewayChatClient.AnswerStep);
+        answer.Tokens.InputTokens.ShouldBeGreaterThan(0);
+        var ratio = ratios.ShouldHaveSingleItem();
+        ratio.ShouldBeGreaterThan(0);
+        // The estimate is characters / 3 + 4 per message; the fake's prompt_tokens are its own count, so only the order of size.
+        ratio.ShouldBeLessThan(100);
+    }
 }
+

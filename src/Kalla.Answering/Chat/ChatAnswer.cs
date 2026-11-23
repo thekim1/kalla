@@ -113,6 +113,7 @@ public sealed class ChatAnswer : IDisposable
             yield return new AnswerEvent.Own(Plan.Trailer);
         }
 
+        _service.RecordPromptEstimate(Plan, promptTokens);
         yield return new AnswerEvent.End(finish, promptTokens, completionTokens);
     }
 
