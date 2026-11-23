@@ -12,7 +12,7 @@ import SelectField, { type SelectOption } from '@/components/ui/SelectField.vue'
 import TextField from '@/components/ui/TextField.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiDrawer from '@/components/ui/UiDrawer.vue'
-import { useLoadable } from '@/stores/loadable'
+import { useKeysetList } from '@/composables/useKeysetList'
 import { SETTINGS_SECTIONS, type SettingsSectionName } from '@/platform/settingsPage'
 import { formatDateTime } from '@/utils/format'
 import { AUDIT, AUDIT_EVENTS, AUDIT_OBJECT_TYPES, PAGE, PLATFORM } from '@/utils/labels'
@@ -22,8 +22,7 @@ import { problemMessage } from '@/utils/problem'
 // object and service; the detail shows the stored before/after snapshot as JSON text (the diff viewer is P2). Entries are
 // readable: the event in plain words (the code as its title), the object by name, linked to its page while it exists.
 // Manage: department admins see their departments' entries (the API scopes them). Each read emits 6007 server-side.
-const entries = useLoadable<AuditSummary[]>([])
-const next = ref<number | null>(null)
+const entries = useKeysetList((after?: number) => api.audit.list({ ...query.value, after, limit: 50 }))
 /** `event` is an `AUDIT_EVENTS` key (`entityType.action`); picking one sets the type of object to its type. */
 const filters = reactive({ from: '', to: '', actor: '', event: '', entityType: '', entityId: '', service: '' })
 const moreOpen = ref(false)
@@ -31,7 +30,6 @@ const selectedRow = ref<AuditSummary | null>(null)
 const selected = ref<AuditDetail | null>(null)
 const detailOpen = ref(false)
 const detailError = ref<unknown>(null)
-let request = 0
 let timer: ReturnType<typeof setTimeout> | null = null
 
 const columns: Column[] = [
@@ -115,17 +113,6 @@ function only(entry: AuditSummary): void {
   moreOpen.value = true
 }
 
-async function load(append = false): Promise<void> {
-  const mine = ++request
-  const previous = append ? entries.data.value : []
-  await entries.run(async () => {
-    const page = await api.audit.list({ ...query.value, after: append ? next.value ?? undefined : undefined, limit: 50 })
-    if (mine !== request) return entries.data.value
-    next.value = page.next
-    return [...previous, ...page.items]
-  })
-}
-
 async function open(entry: AuditSummary): Promise<void> {
   detailOpen.value = true
   selectedRow.value = entry
@@ -155,14 +142,14 @@ function clear(): void {
 
 watch(filters, () => {
   if (timer) clearTimeout(timer)
-  timer = setTimeout(() => void load(), 300)
+  timer = setTimeout(() => void entries.reload(), 300)
 })
-onMounted(() => load())
+onMounted(() => entries.reload())
 </script>
 
 <template>
   <PageHeader :title="PAGE.audit.title" :description="AUDIT.lead" />
-  <form class="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4" role="search" :aria-label="AUDIT.filters" @submit.prevent="load()">
+  <form class="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4" role="search" :aria-label="AUDIT.filters" @submit.prevent="entries.reload()">
     <TextField id="audit-from" v-model="filters.from" type="date" :label="AUDIT.from" />
     <TextField id="audit-to" v-model="filters.to" type="date" :label="AUDIT.to" />
     <TextField id="audit-actor" v-model="filters.actor" :label="AUDIT.actor" :hint="AUDIT.actorHint" />
@@ -179,10 +166,10 @@ onMounted(() => load())
   </form>
 
   <AsyncState
-    :loading="entries.loading.value && entries.data.value.length === 0" :error="entries.error.value"
-    :empty="entries.data.value.length === 0" :empty-text="AUDIT.empty" @retry="load()"
+    :loading="entries.loading.value && entries.items.value.length === 0" :error="entries.error.value"
+    :empty="entries.items.value.length === 0" :empty-text="AUDIT.empty" @retry="entries.reload()"
   >
-    <DataTable :columns="columns" :rows="entries.data.value" :row-key="(e) => String(e.id)" :caption="AUDIT.caption" clickable @row-click="open">
+    <DataTable :columns="columns" :rows="entries.items.value" :row-key="(e) => String(e.id)" :caption="AUDIT.caption" clickable @row-click="open">
       <template #cell-time="{ row }"><span class="tabular whitespace-nowrap">{{ formatDateTime(row.timestamp, true) }}</span></template>
       <template #cell-actor="{ row }">
         <span class="font-medium">{{ row.actorName ?? row.actor }}</span>
@@ -208,7 +195,7 @@ onMounted(() => load())
       </template>
       <template #cell-reason="{ row }"><span class="text-fg-2">{{ row.reason ?? '' }}</span></template>
     </DataTable>
-    <UiButton v-if="next" class="mt-4" :loading="entries.loading.value" data-test="more" @click="load(true)">{{ AUDIT.more }}</UiButton>
+    <UiButton v-if="entries.next.value" class="mt-4" :loading="entries.loading.value" data-test="more" @click="entries.more()">{{ AUDIT.more }}</UiButton>
   </AsyncState>
 
   <UiDrawer v-model:open="detailOpen" :title="AUDIT.detail" :subtitle="selected ? `#${selected.id}` : undefined" wide>

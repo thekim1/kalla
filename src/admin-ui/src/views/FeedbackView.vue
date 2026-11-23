@@ -12,8 +12,8 @@ import TextField from '@/components/ui/TextField.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
+import { useKeysetList } from '@/composables/useKeysetList'
 import { useAuthStore } from '@/stores/auth'
-import { useLoadable } from '@/stores/loadable'
 import { formatDateTime, formatNumber, formatRatio } from '@/utils/format'
 import { FEEDBACK, PAGE } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
@@ -24,15 +24,12 @@ import { problemMessage } from '@/utils/problem'
 // Without Open WebUI (`/bff/user` `openWebUi.enabled` false) nothing is imported: no import block, and the empty text
 // names the API's feedback endpoint; feedback already stored still shows.
 const auth = useAuthStore()
-const items = useLoadable<FeedbackItem[]>([])
 const summary = ref<FeedbackSummary | null>(null)
 const assistants = ref<AssistantSummary[]>([])
-const next = ref<string | null>(null)
 const filters = reactive({ from: '', to: '', assistantId: '', rating: '', outcome: '', state: 'open' })
 const busy = ref<string | null>(null)
 const markError = ref<unknown>(null)
 const canMark = computed(() => auth.hasAnyRole(['rag-department-admin', 'rag-reviewer']))
-let request = 0
 
 const columns = computed<Column[]>(() => [
   { key: 'time', label: FEEDBACK.time },
@@ -56,22 +53,15 @@ function day(value: string, next = false): string | undefined {
   return date.toISOString()
 }
 
-async function load(append = false): Promise<void> {
-  const mine = ++request
-  const previous = append ? items.data.value : []
-  await items.run(async () => {
-    const page = await api.feedback.list({
-      from: day(filters.from), to: day(filters.to, true), assistantId: filters.assistantId || undefined, rating: filters.rating || undefined,
-      outcome: filters.outcome || undefined, state: filters.state || undefined, after: append ? next.value ?? undefined : undefined, limit: 50,
-    })
-    if (mine !== request) return items.data.value
-    next.value = page.next
-    return [...previous, ...page.items]
-  })
-  if (!append) {
-    summary.value = await api.feedback.summary({ from: filters.from || undefined, to: filters.to || undefined, assistantId: filters.assistantId || undefined })
-      .catch(() => null)
-  }
+const feedback = useKeysetList((after?: string) => api.feedback.list({
+  from: day(filters.from), to: day(filters.to, true), assistantId: filters.assistantId || undefined, rating: filters.rating || undefined,
+  outcome: filters.outcome || undefined, state: filters.state || undefined, after, limit: 50,
+}))
+
+async function load(): Promise<void> {
+  await feedback.reload()
+  summary.value = await api.feedback.summary({ from: filters.from || undefined, to: filters.to || undefined, assistantId: filters.assistantId || undefined })
+    .catch(() => null)
 }
 
 async function mark(item: FeedbackItem, state: 'reviewed' | 'dismissed' | 'open'): Promise<void> {
@@ -131,8 +121,8 @@ onMounted(async () => {
   <p class="mb-4 text-small text-fg-2">{{ FEEDBACK.noContent }}</p>
   <InlineError v-if="markError" :message="problemMessage(markError)" class="mb-4" />
 
-  <AsyncState :loading="items.loading.value && items.data.value.length === 0" :error="items.error.value" :empty="items.data.value.length === 0" :empty-text="auth.openWebUiEnabled ? FEEDBACK.empty : FEEDBACK.emptyApi" @retry="load()">
-    <DataTable :columns="columns" :rows="items.data.value" :row-key="(r) => r.id" :caption="FEEDBACK.caption">
+  <AsyncState :loading="feedback.loading.value && feedback.items.value.length === 0" :error="feedback.error.value" :empty="feedback.items.value.length === 0" :empty-text="auth.openWebUiEnabled ? FEEDBACK.empty : FEEDBACK.emptyApi" @retry="load()">
+    <DataTable :columns="columns" :rows="feedback.items.value" :row-key="(r) => r.id" :caption="FEEDBACK.caption">
       <template #cell-time="{ row }"><span class="tabular whitespace-nowrap">{{ formatDateTime(row.createdAt) }}</span></template>
       <template #cell-rating="{ row }">
         <span class="flex items-center gap-1" :data-test="`rating-${row.id}`">
@@ -166,6 +156,6 @@ onMounted(async () => {
         </span>
       </template>
     </DataTable>
-    <UiButton v-if="next" class="mt-4" :loading="items.loading.value" data-test="more" @click="load(true)">{{ FEEDBACK.more }}</UiButton>
+    <UiButton v-if="feedback.next.value" class="mt-4" :loading="feedback.loading.value" data-test="more" @click="feedback.more()">{{ FEEDBACK.more }}</UiButton>
   </AsyncState>
 </template>

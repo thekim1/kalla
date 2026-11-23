@@ -2,8 +2,9 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/api'
+import { useKeysetList } from '@/composables/useKeysetList'
 import { useTabQuery } from '@/composables/useTabQuery'
-import type { Collection, CostQuery, CollectionRead, CollectionSetup, DocumentSummary, EvaluationOverview, Source, SourceListItem, SourceSummary } from '@/api/types'
+import type { Collection, CostQuery, CollectionRead, CollectionSetup, EvaluationOverview, Source, SourceListItem, SourceSummary } from '@/api/types'
 import CollectionSharing from '@/components/collections/CollectionSharing.vue'
 import CollectionTopics from '@/components/collections/CollectionTopics.vue'
 import SetupChecklist from '@/components/collections/SetupChecklist.vue'
@@ -54,9 +55,10 @@ const collection = { data: computed<Collection | null>(() => (read.data.value &&
 const shared = computed(() => (read.data.value?.shared ? read.data.value : null))
 const sources = useLoadable<SourceListItem[]>([])
 const evaluation = ref<EvaluationOverview | null>(null)
-const documents = useLoadable<DocumentSummary[]>([])
-const next = ref<string | null>(null)
 const onlyPii = ref(false)
+// The Documents tab; toggling the filter while a page loads keeps only the newest answer (#279 review).
+const documents = useKeysetList((after?: string) =>
+  api.documents.list({ collectionId: props.id, pii: onlyPii.value ? 'flagged' : undefined, after, limit: 50 }))
 const TABS: [Tab, ...Tab[]] = ['overview', 'files', 'sources', 'documents', 'topics', 'evaluation', 'retrieval', 'sharing']
 /** The tab is kept in `?tab=` (the setup checklist links to them; a reload keeps it). */
 const tab = useTabQuery(TABS)
@@ -110,7 +112,6 @@ async function deleteCollection(): Promise<void> {
   void router.push({ name: 'collections' })
 }
 const proposal = ref<{ coverageMaxDistance?: number; coverageMinKeywordScore?: number } | null>(null)
-let documentsRequest = 0
 
 const tabs = computed(() => shared.value ? [
   { value: 'overview' as const, label: COLLECTION.tabs.overview },
@@ -139,19 +140,6 @@ const documentColumns: Column[] = [
   { key: 'state', label: COLLECTION.documentState },
 ]
 
-async function loadDocuments(append = false): Promise<void> {
-  const after = append ? next.value ?? undefined : undefined
-  const previous = append ? documents.data.value : []
-  // Only the newest request's answer is kept (#279 review: toggling the filter while a page loads raced two requests).
-  const mine = ++documentsRequest
-  await documents.run(async () => {
-    const page = await api.documents.list({ collectionId: props.id, pii: onlyPii.value ? 'flagged' : undefined, after, limit: 50 })
-    if (mine !== documentsRequest) return documents.data.value
-    next.value = page.next
-    return [...previous, ...page.items]
-  })
-}
-
 async function load(): Promise<void> {
   const loaded = await read.run(() => api.collections.get(props.id))
   if (!loaded || loaded.shared) {
@@ -164,7 +152,7 @@ async function load(): Promise<void> {
   // Kom igång (§5.4): computed by the API; hidden once done or when it can't be read.
   setup.value = await api.collections.setup(props.id).catch(() => null)
   // Opened on Documents (a link or a reload): the tab watch below fires only on a change.
-  if (tab.value === 'documents' && !documents.loaded.value) void loadDocuments()
+  if (tab.value === 'documents' && !documents.loaded.value) void documents.reload()
 }
 
 /** The upload source the Files tab shows: the one picked while it still exists, else the first; none sends Files to Sources. */
@@ -251,9 +239,9 @@ function sharingSaved(saved: Collection): void {
 const sourceTo = (source: SourceSummary) => ({ name: 'source', params: { id: source.id } })
 
 watch(tab, (t) => {
-  if (t === 'documents' && !documents.loaded.value) void loadDocuments()
+  if (t === 'documents' && !documents.loaded.value) void documents.reload()
 })
-watch(onlyPii, () => void loadDocuments())
+watch(onlyPii, () => void documents.reload())
 watch([tab, fileSourceId], ([t]) => {
   if (t !== 'files') return
   if (sources.loaded.value && !fileSourceId.value) pickFileSource()
@@ -423,10 +411,10 @@ onMounted(load)
       <div v-else id="collection-panel-documents" role="tabpanel" aria-labelledby="collection-tab-documents">
         <CheckField v-model="onlyPii" :label="COLLECTION.onlyPii" class="mb-4" />
         <AsyncState
-          :loading="documents.loading.value && documents.data.value.length === 0" :error="documents.error.value"
-          :empty="documents.data.value.length === 0" :empty-text="COLLECTION.noDocuments" @retry="loadDocuments()"
+          :loading="documents.loading.value && documents.items.value.length === 0" :error="documents.error.value"
+          :empty="documents.items.value.length === 0" :empty-text="COLLECTION.noDocuments" @retry="documents.reload()"
         >
-          <DataTable :columns="documentColumns" :rows="documents.data.value" :row-key="(d) => d.id" :caption="COLLECTION.documents">
+          <DataTable :columns="documentColumns" :rows="documents.items.value" :row-key="(d) => d.id" :caption="COLLECTION.documents">
             <template #cell-title="{ row }">
               <span class="font-medium" lang="sv">{{ row.title ?? row.displayName ?? row.url }}</span>
               <span v-if="row.url" class="block text-small text-fg-3">{{ row.url }}</span>
@@ -441,7 +429,7 @@ onMounted(load)
               </span>
             </template>
           </DataTable>
-          <UiButton v-if="next" class="mt-4" :loading="documents.loading.value" @click="loadDocuments(true)">{{ COLLECTION.more }}</UiButton>
+          <UiButton v-if="documents.next.value" class="mt-4" :loading="documents.loading.value" @click="documents.more()">{{ COLLECTION.more }}</UiButton>
         </AsyncState>
       </div>
       <SourceDrawer v-model:open="adding" :collection="collection.data.value" @saved="sourceSaved" />

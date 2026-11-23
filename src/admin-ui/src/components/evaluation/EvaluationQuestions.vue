@@ -2,6 +2,7 @@
 import { onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
 import type { EvaluationQuestion } from '@/api/types'
+import { useKeysetList } from '@/composables/useKeysetList'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
@@ -10,7 +11,6 @@ import TextField from '@/components/ui/TextField.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
-import { useLoadable } from '@/stores/loadable'
 import { useUiStore } from '@/stores/ui'
 import { EVALUATION } from '@/utils/labels'
 import QuestionDialog from './QuestionDialog.vue'
@@ -22,15 +22,15 @@ import QuestionDialog from './QuestionDialog.vue'
 const props = defineProps<{ collectionId: string; canEdit: boolean; deleted?: number }>()
 const emit = defineEmits<{ (e: 'changed'): void }>()
 const ui = useUiStore()
-const questions = useLoadable<EvaluationQuestion[]>([])
-const next = ref<string | null>(null)
 const layer = ref('')
 const state = ref('active')
 const q = ref('')
+const questions = useKeysetList((after?: string) => api.evaluation.questions(props.collectionId, {
+  layer: layer.value || undefined, state: state.value || undefined, q: q.value.trim() || undefined, after, limit: 50,
+}))
 const editing = ref<EvaluationQuestion | null>(null)
 const dialogOpen = ref(false)
 const retiring = ref<EvaluationQuestion | null>(null)
-let request = 0
 let timer: ReturnType<typeof setTimeout> | null = null
 
 const columns: Column[] = [
@@ -49,19 +49,6 @@ const stateOptions = [
   { value: '', label: EVALUATION.allStates },
   ...['active', 'stale', 'retired'].map((s) => ({ value: s, label: EVALUATION.states[s]! })),
 ]
-
-async function load(append = false): Promise<void> {
-  const mine = ++request
-  const previous = append ? questions.data.value : []
-  await questions.run(async () => {
-    const page = await api.evaluation.questions(props.collectionId, {
-      layer: layer.value || undefined, state: state.value || undefined, q: q.value.trim() || undefined, after: append ? next.value ?? undefined : undefined, limit: 50,
-    })
-    if (mine !== request) return questions.data.value
-    next.value = page.next
-    return [...previous, ...page.items]
-  })
-}
 
 /** A human question whose expected document was deleted; a generated stale question is retired at its top-up. */
 const documentDeleted = (row: EvaluationQuestion) => row.layer === 'human' && row.state === 'stale' && row.retiredAt === null
@@ -88,13 +75,13 @@ async function retire(): Promise<void> {
   emit('changed')
 }
 
-watch([layer, state], () => void load())
+watch([layer, state], () => void questions.reload())
 watch(q, () => {
   if (timer) clearTimeout(timer)
-  timer = setTimeout(() => void load(), 300)
+  timer = setTimeout(() => void questions.reload(), 300)
 })
-onMounted(() => load())
-defineExpose({ reload: () => load() })
+onMounted(() => questions.reload())
+defineExpose({ reload: () => questions.reload() })
 </script>
 
 <template>
@@ -115,10 +102,10 @@ defineExpose({ reload: () => load() })
       <UiButton size="sm" data-test="show-deleted" @click="showDeleted">{{ EVALUATION.showDeleted }}</UiButton>
     </div>
     <AsyncState
-      :loading="questions.loading.value && questions.data.value.length === 0" :error="questions.error.value"
-      :empty="questions.data.value.length === 0" :empty-text="EVALUATION.noSet" @retry="load()"
+      :loading="questions.loading.value && questions.items.value.length === 0" :error="questions.error.value"
+      :empty="questions.items.value.length === 0" :empty-text="EVALUATION.noSet" @retry="questions.reload()"
     >
-      <DataTable :columns="columns" :rows="questions.data.value" :row-key="(r) => r.id" :caption="EVALUATION.questionsCaption">
+      <DataTable :columns="columns" :rows="questions.items.value" :row-key="(r) => r.id" :caption="EVALUATION.questionsCaption">
         <template #cell-question="{ row }">
           <span class="font-medium">{{ row.question }}</span>
           <span v-if="row.expectedAnswer" class="block text-small text-fg-3">{{ row.expectedAnswer }}</span>
@@ -138,7 +125,7 @@ defineExpose({ reload: () => load() })
           </span>
         </template>
       </DataTable>
-      <UiButton v-if="next" class="mt-4" :loading="questions.loading.value" @click="load(true)">{{ EVALUATION.more }}</UiButton>
+      <UiButton v-if="questions.next.value" class="mt-4" :loading="questions.loading.value" @click="questions.more()">{{ EVALUATION.more }}</UiButton>
     </AsyncState>
     <QuestionDialog v-model:open="dialogOpen" :collection-id="collectionId" :question="editing" @saved="saved" />
     <ConfirmDialog
