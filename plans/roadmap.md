@@ -100,6 +100,11 @@ P2 wave 1 (*P2 Broaden* below) is the code work. Beside it, what is open without
   topics on related documents and the nearest subject of a turn without an answer; adopted by the user on 2026-11-23
   (Decisions "Progress, timings and the nearest subject in the chat extension"), designed in chat §9.10 and §9.11 and
   queued as B-72 and B-73.
+- **The admin UI's UX pass** ([`proposals/admin-ui-ux-pass.md`](proposals/admin-ui-ux-pass.md), asked for by the user on
+  2026-11-23): eleven layout rules and six decisions (UX1 to UX6) that wait for the user's picks; nothing is built but
+  its step 0.
+- **Code quality** ([`proposals/code-quality-top7.md`](proposals/code-quality-top7.md), asked for by the user on
+  2026-11-23): seven DRY fixes, one pull request each; five are merged, #5 and #3 follow B-63.
 - **CI:** what the test collections of one `Kalla.AdminApi.Tests` process wait for (not CPU, thread pool, disk or
   GC; a profiler would say); the project runs as five processes meanwhile.
 
@@ -136,6 +141,8 @@ nearly done.
 | B-57 | Test questions per assistant: the set, the runner, the report, the run after publish | admin §7.4, V33; data-model `AssistantTestQuestions` |
 | B-58 | The nightly answer run (`answers`): faithfulness and citation precision per assistant; a platform setting turns it down or off (Decisions "Nightly answer run") | processing §14.8; admin §5.10, §7.2 |
 | B-59 | Home's *Needs attention*: the attention items of every design that names one | admin §5.5.1 |
+
+**Status (2026-11-23):** B-54 to B-57 are merged; B-58 and B-59 are in review.
 
 Each later item needs the earlier ones only where its row says so in the queue. The live check of wave 1 is the test
 chatbot's assistant (T4) once it exists; until then FakeGateway and the demo seed.
