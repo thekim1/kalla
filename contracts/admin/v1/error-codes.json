@@ -525,6 +525,11 @@
       "code": "run_not_continuable",
       "status": 409,
       "message": "Only the latest crawl run that ended with pages left or failed can be continued. Use Sync now."
+    },
+    {
+      "code": "source_not_pausable",
+      "status": 409,
+      "message": "An upload source has no schedule to pause."
     }
   ]
 }
