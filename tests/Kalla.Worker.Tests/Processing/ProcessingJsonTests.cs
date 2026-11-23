@@ -47,4 +47,15 @@ public sealed class ProcessingJsonTests
         JsonSerializer.Serialize(facts, ProcessingJson.Options).ShouldBe("""{"format":"pdf","pageCount":5,"rangeable":true,"pages":[]}""");
         ProcessingJson.OutputHash(RoundTrip(facts)).ShouldBe(ProcessingJson.OutputHash(facts));
     }
+
+    [Theory]
+    [InlineData("""{"mediaType":"application/pdf"}""")] // no route: not read as ParseRoute.Html (#998)
+    [InlineData("{}")]
+    public void A_detect_output_without_a_required_member_fails(string json) =>
+        Should.Throw<JsonException>(() => JsonSerializer.Deserialize<DetectResult>(json, ProcessingJson.Options));
+
+    [Fact]
+    public void Inspect_facts_without_their_format_fail() =>
+        Should.Throw<JsonException>(() =>
+            JsonSerializer.Deserialize<InspectFacts>("""{"pageCount":5,"rangeable":true,"pages":[]}""", ProcessingJson.Options));
 }

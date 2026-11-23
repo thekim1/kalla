@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using Kalla.Pipelines.Json;
 
 namespace Kalla.Worker.Processing;
@@ -204,17 +205,36 @@ public sealed record ChunkSetDraft
 public static class ProcessingJson
 {
     /// <summary>
-    /// The contract options, except that a constructor parameter left out reads as its default. Outputs are written without
-    /// their null members (<see cref="ContractJson"/>'s <c>WhenWritingNull</c>), so a nullable parameter that was null is
+    /// The contract options, except that a <em>nullable</em> constructor parameter left out reads as null. Outputs are
+    /// written without their null members (<see cref="ContractJson"/>'s <c>WhenWritingNull</c>), so such a parameter is
     /// absent when the output is read back: a Word document's page count, a section without pages. Required parameters made
-    /// that a "required property missing" failure, and a .docx's parse job went dead. Only reading changes: what is written,
-    /// and so every <see cref="OutputHash"/>, stays the same.
+    /// that a "required property missing" failure, and a .docx's parse job went dead. A non-nullable parameter left out
+    /// (a detect output without its route, inspect facts without their format) still fails, rather than reading as its
+    /// default (#998). Only reading changes: what is written, and so every <see cref="OutputHash"/>, stays the same.
     /// </summary>
     public static JsonSerializerOptions Options { get; } = ReadTolerant();
 
     private static JsonSerializerOptions ReadTolerant()
     {
-        var options = new JsonSerializerOptions(ContractJson.Options) { RespectRequiredConstructorParameters = false };
+        var options = new JsonSerializerOptions(ContractJson.Options)
+        {
+            TypeInfoResolver = new DefaultJsonTypeInfoResolver
+            {
+                Modifiers =
+                {
+                    static info =>
+                    {
+                        foreach (var property in info.Properties)
+                        {
+                            if (property.AssociatedParameter is { IsNullable: true })
+                            {
+                                property.IsRequired = false;
+                            }
+                        }
+                    },
+                },
+            },
+        };
         options.MakeReadOnly();
         return options;
     }
