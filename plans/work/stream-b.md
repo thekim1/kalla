@@ -78,8 +78,7 @@ tables in one migration of its own (no backward compatibility before production)
 - **Read:** admin §4.5 (publish, restore), §4.9, §7.2, §7.4, V33; data-model §2.2 (`EvaluationRuns`), §8;
   processing §14.8 (the judge prompt family).
 
-### [ ] B-58 The nightly answer run
-- **Taken:** 2026-11-23, thekim1's Claude Code session, branch `b/B-58-nightly-answer-run`.
+### [x] B-58 The nightly answer run (#PR)
 - **Do:** processing §14.8 *answers*: `AnswerEvaluationService` in kalla-admin, nightly per published assistant: the
   evaluation sets of its collections answered through `Kalla.Answering` with the published version's settings, the
   judge (`Settings.EvaluationJudgeModel` at the assistant's ceiling, `x-fors-step: eval-answer`) rating faithfulness

@@ -33,6 +33,7 @@ import VersionDiffView from '@/components/assistants/VersionDiffView.vue'
 import UiDrawer from '@/components/ui/UiDrawer.vue'
 import AssistantTestsTab from '@/components/assistants/AssistantTestsTab.vue'
 import TestQuestionDrawer from '@/components/assistants/TestQuestionDrawer.vue'
+import AnswerEvaluationCard from '@/components/assistants/AnswerEvaluationCard.vue'
 import CostCard from '@/components/costs/CostCard.vue'
 import KeyBudgetStatus from '@/components/gateway/KeyBudgetStatus.vue'
 import KeyUnavailableBadge from '@/components/gateway/KeyUnavailableBadge.vue'
@@ -668,6 +669,7 @@ watch(() => props.id, () => {
 
       <div v-else-if="tab === 'statistics'" id="assistant-panel-statistics" role="tabpanel" aria-labelledby="assistant-tab-statistics" class="grid max-w-3xl gap-5">
         <CostCard kind="assistant" :source="assistantCosts" :gateway-key-id="assistant.data.value.gatewayKeyId" :department-id="assistant.data.value.departmentId" />
+        <AnswerEvaluationCard :assistant-id="props.id" />
       </div>
 
       <div v-else id="assistant-panel-audience" role="tabpanel" aria-labelledby="assistant-tab-audience" class="grid max-w-3xl gap-4">

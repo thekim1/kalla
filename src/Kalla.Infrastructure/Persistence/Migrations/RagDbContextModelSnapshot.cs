@@ -2142,6 +2142,10 @@ namespace Kalla.Infrastructure.Persistence.Migrations
                     b.Property<float?>("BestKeywordScore")
                         .HasColumnType("real");
 
+                    b.Property<decimal?>("CitationPrecision")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)");
+
                     b.Property<string>("Classification")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -2153,6 +2157,10 @@ namespace Kalla.Infrastructure.Persistence.Migrations
 
                     b.Property<int?>("ExpectedRank")
                         .HasColumnType("integer");
+
+                    b.Property<decimal?>("Faithfulness")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)");
 
                     b.Property<bool?>("Hit")
                         .HasColumnType("boolean");
@@ -2178,6 +2186,8 @@ namespace Kalla.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_EvaluationResults_ExpectedRank", "\"ExpectedRank\" >= 1");
 
+                            t.HasCheckConstraint("CK_EvaluationResults_Metrics", "\"Faithfulness\" BETWEEN 0 AND 1 AND \"CitationPrecision\" BETWEEN 0 AND 1");
+
                             t.HasCheckConstraint("CK_EvaluationResults_Verdict", "\"Verdict\" IN ('pass', 'fail', 'unsure')");
                         });
                 });
@@ -2190,6 +2200,10 @@ namespace Kalla.Infrastructure.Persistence.Migrations
                     b.Property<bool>("Candidate")
                         .HasColumnType("boolean");
 
+                    b.Property<decimal?>("CitationPrecision")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)");
+
                     b.Property<string>("Classification")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -2197,6 +2211,10 @@ namespace Kalla.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("ComparedRunId")
                         .HasColumnType("uuid");
+
+                    b.Property<decimal?>("Faithfulness")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)");
 
                     b.Property<DateTimeOffset?>("FinishedAt")
                         .HasColumnType("timestamp with time zone");
@@ -2266,9 +2284,9 @@ namespace Kalla.Infrastructure.Persistence.Migrations
                     b.HasIndex("SetId", "StartedAt")
                         .IsDescending(false, true);
 
-                    b.HasIndex(new[] { "SubjectId", "StartedAt" }, "IX_EvaluationRuns_AssistantTests")
+                    b.HasIndex(new[] { "SubjectId", "StartedAt" }, "IX_EvaluationRuns_Assistant")
                         .IsDescending(false, true)
-                        .HasFilter("\"Kind\" = 'assistant-tests'");
+                        .HasFilter("\"Kind\" IN ('assistant-tests', 'answers')");
 
                     b.ToTable("EvaluationRuns", "content", t =>
                         {
@@ -2278,11 +2296,11 @@ namespace Kalla.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_EvaluationRuns_K", "\"K\" BETWEEN 1 AND 100");
 
-                            t.HasCheckConstraint("CK_EvaluationRuns_Kind", "\"Kind\" IN ('publish-report', 'nightly', 'on-demand', 'assistant-tests')");
+                            t.HasCheckConstraint("CK_EvaluationRuns_Kind", "\"Kind\" IN ('publish-report', 'nightly', 'on-demand', 'assistant-tests', 'answers')");
 
-                            t.HasCheckConstraint("CK_EvaluationRuns_Metrics", "\"RecallAtK\" BETWEEN 0 AND 1 AND \"Mrr\" BETWEEN 0 AND 1");
+                            t.HasCheckConstraint("CK_EvaluationRuns_Metrics", "\"RecallAtK\" BETWEEN 0 AND 1 AND \"Mrr\" BETWEEN 0 AND 1 AND \"Faithfulness\" BETWEEN 0 AND 1 AND \"CitationPrecision\" BETWEEN 0 AND 1");
 
-                            t.HasCheckConstraint("CK_EvaluationRuns_Set", "(\"Kind\" = 'assistant-tests') = (\"SetId\" IS NULL) AND (\"Kind\" <> 'assistant-tests' OR \"SubjectId\" IS NOT NULL)");
+                            t.HasCheckConstraint("CK_EvaluationRuns_Set", "(\"Kind\" IN ('assistant-tests', 'answers')) = (\"SetId\" IS NULL) AND (\"Kind\" NOT IN ('assistant-tests', 'answers') OR \"SubjectId\" IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_EvaluationRuns_Variant", "\"Variant\" IN ('hybrid', 'vector', 'hybrid-no-decompounder')");
                         });
@@ -3227,6 +3245,9 @@ namespace Kalla.Infrastructure.Persistence.Migrations
                     b.Property<short>("DeletionGuardPercent")
                         .HasColumnType("smallint");
 
+                    b.Property<int>("EvaluationAnswerQuestions")
+                        .HasColumnType("integer");
+
                     b.Property<string>("EvaluationJudgeModel")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -3341,6 +3362,8 @@ namespace Kalla.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_Settings_DeletionGuardCounts", "\"DeletionGuardMinCount\" >= 1 AND \"DeletionGuardMaxCount\" >= \"DeletionGuardMinCount\"");
 
                             t.HasCheckConstraint("CK_Settings_DeletionGuardPercent", "\"DeletionGuardPercent\" BETWEEN 1 AND 100");
+
+                            t.HasCheckConstraint("CK_Settings_EvaluationAnswerQuestions", "\"EvaluationAnswerQuestions\" BETWEEN 0 AND 100");
 
                             t.HasCheckConstraint("CK_Settings_EvaluationMaxQuestions", "\"EvaluationMaxQuestions\" BETWEEN 1 AND 10000");
 

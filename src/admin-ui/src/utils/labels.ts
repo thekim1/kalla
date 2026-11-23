@@ -981,6 +981,7 @@ export const PLATFORM = {
     isEnabled: 'Enabled',
     evaluationModel: 'Model for test questions',
     evaluationJudgeModel: 'Judge model',
+    evaluationAnswerQuestions: 'Nightly answer evaluation: questions per assistant and night',
     condenseModel: 'Condense model',
     rerankModel: 'Rerank model (chat)',
     gatewayRerankModel: 'Rerank model (gateway)',
@@ -1013,6 +1014,8 @@ export const PLATFORM = {
   } as Record<string, string>,
   /** Hints under generic form fields, before the API schema's own description. */
   fieldHints: {
+    evaluationAnswerQuestions:
+      'Each night every published assistant whose knowledge bases have test questions answers up to this many, and the judge model checks each answer: as many answers and judge calls, charged to the assistant’s gateway key. 0 switches the nightly run off for every assistant.',
     notFound: 'The texts and links shown when the search finds nothing: sv, en and links [{ title, url }]. Empty: the platform’s texts.',
     querySteps: 'As an assistant’s query steps. Empty: the platform’s defaults.',
     platformAdmin:
@@ -1574,6 +1577,27 @@ export const VERSION_DIFF = {
 } as const
 
 /** An assistant's test questions and their report (admin design §7.2, §7.4; B-57). */
+/** The Statistics tab's latest answer evaluation (admin design §5.5.4, processing §14.8; B-58). */
+export const ANSWER_EVALUATION = {
+  title: 'Answer evaluation',
+  lead: 'Each night the published version answers test questions of its knowledge bases, and a judge checks the answers against the sources they cite.',
+  off: 'The nightly answer evaluation is switched off on the Settings page. The figures below are from the last run.',
+  offNoRun: 'The nightly answer evaluation is switched off on the Settings page.',
+  noRun: 'No answer evaluation yet. It runs each night once the published version’s knowledge bases have test questions.',
+  ranOn: (date: string, version: number) => `Last run ${date}, version ${version}`,
+  faithfulness: 'Faithfulness',
+  faithfulnessHint: 'Claims in the answers that the cited sources support',
+  citationPrecision: 'Citation precision',
+  citationPrecisionHint: 'Cited sources that support a claim',
+  questions: 'Questions',
+  found: 'Expected source cited',
+  comparedTo: (value: string, date: string) => `${value} on ${date}`,
+  changes: (better: number, worse: number) => `${better} better, ${worse} worse than the run before`,
+  uncited: 'Answers without a citation in chat',
+  uncitedValue: (rate: string, uncited: number, answered: number, days: number) => `${rate} (${uncited} of ${answered} answers, last ${days} days)`,
+  uncitedNone: (days: number) => `No answers in chat in the last ${days} days`,
+} as const
+
 export const ASSISTANT_TESTS = {
   lead: 'Questions the assistant should answer in a certain way. They run after every publish, and when you run them. The result is advice: nothing is blocked.',
   empty: 'No test questions yet. Add a few questions people really ask, and say what a good answer does.',
@@ -2558,7 +2582,9 @@ export const COSTS = {
     'eval-judge': 'Answer judging',
     'eval-dedup': 'Test question de-duplication',
     'assistant-test': 'Assistant test',
-    'eval-answer': 'Evaluation answer',
+    'assistant-test-judge': 'Assistant test judging',
+    'eval-answer-chat': 'Nightly answer evaluation',
+    'eval-answer': 'Nightly answer judging',
   } as Record<string, string>,
   /** The test panel's client row (admin design §4.9). */
   testPanel: 'Test panel',

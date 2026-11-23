@@ -94,6 +94,12 @@ public sealed class PlatformSettings
     public string? EvaluationJudgeModel { get; set; }
     public int EvaluationMaxQuestions { get; set; } = 100;
 
+    /// <summary>
+    /// The nightly answer run's questions per assistant and night (0–100; 0 = the run is off for every assistant; Decisions
+    /// "Nightly answer run", processing design §14.8).
+    /// </summary>
+    public int EvaluationAnswerQuestions { get; set; } = 100;
+
     /// <summary>Platform <c>RetrievalSettings</c> defaults and platform-only retrieval values (<c>jsonb</c>, knowledge §12.1).</summary>
     public string Retrieval { get; set; } = "{}";
 

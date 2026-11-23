@@ -56,6 +56,7 @@ public static class SettingsEndpoints
             s.EvaluationModel = r.EvaluationModel;
             s.EvaluationJudgeModel = r.EvaluationJudgeModel;
             s.EvaluationMaxQuestions = r.EvaluationMaxQuestions;
+            s.EvaluationAnswerQuestions = r.EvaluationAnswerQuestions;
         }, (r, db, models, ct) => PlatformModelRules.EnsureAsync(db, models, [("Settings.EvaluationModel", r.EvaluationModel), ("Settings.EvaluationJudgeModel", r.EvaluationJudgeModel)], ct));
         Section(settings, "retrieval", s => new JsonSectionSettings(Json(s.Retrieval), Version(s)), (RetrievalSectionRequest r, PlatformSettings s) => s.Retrieval = r.Value.ToJsonString(),
             async (r, db, models, ct) =>
@@ -302,9 +303,10 @@ public sealed record DeletionGuardSettingsRequest : SettingsRequest, IValidatabl
     }
 }
 
-public sealed record EvaluationSettings(string? EvaluationModel, string? EvaluationJudgeModel, int EvaluationMaxQuestions, string Version)
+public sealed record EvaluationSettings(string? EvaluationModel, string? EvaluationJudgeModel, int EvaluationMaxQuestions, int EvaluationAnswerQuestions, string Version)
 {
-    public static EvaluationSettings Of(PlatformSettings s) => new(s.EvaluationModel, s.EvaluationJudgeModel, s.EvaluationMaxQuestions, SettingsEndpoints.Version(s));
+    public static EvaluationSettings Of(PlatformSettings s) =>
+        new(s.EvaluationModel, s.EvaluationJudgeModel, s.EvaluationMaxQuestions, s.EvaluationAnswerQuestions, SettingsEndpoints.Version(s));
 }
 
 public sealed record EvaluationSettingsRequest : SettingsRequest
@@ -318,6 +320,13 @@ public sealed record EvaluationSettingsRequest : SettingsRequest
 
     [Range(1, 10000)]
     public int EvaluationMaxQuestions { get; init; } = 100;
+
+    /// <summary>
+    /// The nightly answer run's questions per assistant and night; 0 switches the run off for every assistant (Decisions
+    /// "Nightly answer run", admin §5.10).
+    /// </summary>
+    [Range(0, 100)]
+    public int EvaluationAnswerQuestions { get; init; } = 100;
 }
 
 /// <summary>A <c>jsonb</c> section (crawl, chat): any JSON object; the reader (worker, chat role) applies its own defaults per key.</summary>

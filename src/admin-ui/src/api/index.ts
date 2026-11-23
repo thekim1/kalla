@@ -28,6 +28,7 @@ import type {
   TestQuestion,
   TestQuestionRequest,
   TestRunReport,
+  AnswerEvaluation,
   TestRunSummary,
   BffUser,
   OpenWebUiCompleteRequest,
@@ -221,6 +222,8 @@ export const api = {
     run: (id: string, target: 'Draft' | 'Published') => http.post<TestRunSummary>(`/api/assistants/${id}/test-runs`, { target }),
     runs: (id: string) => http.get<TestRunSummary[]>(`/api/assistants/${id}/test-runs`),
     report: (id: string, runId: string) => http.get<TestRunReport>(`/api/assistants/${id}/test-runs/${runId}`),
+    /** The latest nightly answer evaluation beside the live uncited rate (B-58). */
+    answerEvaluation: (id: string) => http.get<AnswerEvaluation>(`/api/assistants/${id}/answer-evaluation`),
   },
   assistants: {
     list: (query: { q?: string; page?: number; pageSize?: number } = {}) => http.get<Page<AssistantSummary>>('/api/assistants', query),

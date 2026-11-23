@@ -312,9 +312,9 @@ public sealed partial class AssistantTestRunner(
 
         try
         {
-            var text = await panel.JudgeAsync(assistant, judgeModel,
+            var judged = await panel.JudgeAsync(assistant, judgeModel,
                 AssistantTestJudge.Messages(question.Question, question.ExpectedBehaviour, delivered, [.. answered.Answer.Citations.Select(c => c.Title)]), ct);
-            (result.Verdict, result.JudgeNote) = AssistantTestJudge.Parse(text);
+            (result.Verdict, result.JudgeNote) = AssistantTestJudge.Parse(judged.Text);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
