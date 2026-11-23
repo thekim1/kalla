@@ -61,7 +61,7 @@ public static class SetupEndpoints
                     && !await admin.Db.EmbeddingProfiles.AsNoTracking().AnyAsync(p => p.IsDefault && p.State == EmbeddingProfileStates.Active, ct);
                 return new Overview(collections.Count > 0, [.. setups.Where(s => !s.Done)], needsProfile, await LiveAsync(admin, ct),
                     await HealthAsync(admin, organisation.Status, models.Status, ct), await SecretExpiryAsync(admin, signIn, openWebUi, ct),
-                    DeploymentNotices(admin, configuration));
+                    DeploymentNotices(admin, configuration), await AttentionList.ComputeAsync(admin, organisation.Status, models.Status, ct));
             })
             .RequireAuthorization(AdminPolicies.Read).WithTags("Overview").WithName("GetOverview")
             .WithSummary("Home: the caller's published assistants over the last 7 days, the runs, queue and syncs, the setup checklists not done yet, and for a platform admin whether the embedding profile is still to be created, the client secrets that expire soon and the deployment notices");
@@ -271,7 +271,7 @@ public sealed record CollectionSetup(
 /// </summary>
 public sealed record Overview(
     bool HasCollections, IReadOnlyList<CollectionSetup> Setup, bool NeedsEmbeddingProfile, IReadOnlyList<LiveAssistant> Live, OverviewHealth Health,
-    IReadOnlyList<SecretExpiry> SecretExpiry, IReadOnlyList<DeploymentNotice> DeploymentNotices);
+    IReadOnlyList<SecretExpiry> SecretExpiry, IReadOnlyList<DeploymentNotice> DeploymentNotices, IReadOnlyList<AttentionItem> Attention);
 
 /// <summary>A deployment notice on Home: <see cref="Code"/> is a <see cref="DeploymentNoticeCodes"/> value, <see cref="Names"/> what it is about.</summary>
 public sealed record DeploymentNotice(string Code, IReadOnlyList<string> Names);

@@ -382,6 +382,58 @@ export const NOT_FOUND = {
   home: 'Go to the overview',
 } as const
 
+/** Home's Needs attention (admin design §5.5.1, B-59): one line per item, by kind, with the figures it names. */
+export const ATTENTION = {
+  title: (count: number) => `Needs attention (${count})`,
+  open: 'Show',
+  review: 'Review',
+  kinds: {
+    deletion_waiting: (d: Record<string, string>, name: string) => `Removal waiting for a decision: ${name} in ${d.collectionName ?? ''}, ${d.proposed ?? '?'} documents`,
+    evaluation_worse: (d: Record<string, string>, name: string) =>
+      `The evaluation got worse ${d.runKind === 'publish-report' ? 'after publishing' : 'last night'}: ${name} (−${d.points ?? '?'} points)`,
+    recall_below_median: (d: Record<string, string>, name: string) => `Search quality last night is ${d.points ?? '?'} points below the usual: ${name}`,
+    personal_data_public: (d: Record<string, string>, name: string) =>
+      `${d.documents === '1' ? '1 document' : `${d.documents ?? '?'} documents`} with personal data cannot be shown in the public knowledge base ${name}`,
+    run_degraded: (d: Record<string, string>, name: string) => `The last fetch finished with remarks: ${name} in ${d.collectionName ?? ''}`,
+    source_failing: (d: Record<string, string>, name: string) => `The last ${d.failed ?? '3'} fetches failed: ${name} in ${d.collectionName ?? ''}`,
+    source_incomplete: (d: Record<string, string>, name: string) =>
+      `The last ${d.runs ?? '3'} crawls did not reach the whole site, so nothing is removed: ${name} in ${d.collectionName ?? ''}`,
+    feedback_import_failing: (d: Record<string, string>, name: string) => `Feedback import has failed ${d.failed ?? '4'} times in a row: ${name}`,
+    sync_failing: (d: Record<string, string>, name: string) =>
+      `The ${name === 'models' ? 'model' : 'organisation'} sync with the AI gateway has failed ${d.failures ?? '3'} times in a row`,
+    gateway_key: (d: Record<string, string>, name: string) => `${name}: ${ATTENTION_KEY_REASONS[d.reason ?? ''] ?? 'its gateway key cannot be used'}`,
+    platform_model: (d: Record<string, string>, name: string) =>
+      `The model ${d.model ?? ''} in ${ATTENTION_SETTINGS[name] ?? name} is no longer available at ${d.ceiling ?? 'Eu'} or below`,
+    template_unsupported: (d: Record<string, string>, name: string) =>
+      `No worker runs version ${d.templateVersion ?? '?'} of the ${d.template ?? ''} template, which ${name} publishes. Update the worker.`,
+    assistant_tests_worse: (d: Record<string, string>, name: string) =>
+      `Version ${d.version ?? '?'} of ${name} answers ${d.asExpected ?? '?'} test questions as expected, ${d.before ?? '?'} before`,
+    answers_below_median: (d: Record<string, string>, name: string) =>
+      `${d.metric === 'citationPrecision' ? 'Citation precision' : 'Faithfulness'} last night is ${d.points ?? '?'} points below the usual: ${name}`,
+  } as Record<string, (details: Record<string, string>, name: string) => string>,
+  unknown: (name: string) => `${name} needs attention`,
+} as const
+
+/** V32's platform model settings by the names the Settings page shows them under. */
+export const ATTENTION_SETTINGS: Record<string, string> = {
+  'Settings.EvaluationModel': 'Evaluation › Model for test questions',
+  'Settings.EvaluationJudgeModel': 'Evaluation › Judge model',
+  'Settings.Chat.CondenseModel': 'Chat › Condense model',
+  'Settings.Retrieval.rerankModel': 'Search › Rerank model (chat)',
+  'Settings.Retrieval.gatewayRerankModel': 'Search › Rerank model (gateway)',
+}
+
+/** Why a gateway key item is raised (`details.reason`, admin design §5.5.1). */
+export const ATTENTION_KEY_REASONS: Record<string, string> = {
+  unknown: 'its gateway key is not known to the AI gateway',
+  not_active: 'its gateway key is disabled, revoked or expired',
+  owner_inactive: 'the team or department of its gateway key is inactive',
+  not_usable: 'its gateway key has no residency in common with Källa’s',
+  other_department: 'its gateway key belongs to another department',
+  model_lost: 'its gateway key no longer allows the model it uses',
+  residency_lost: 'its gateway key no longer allows a residency at its information class',
+}
+
 export const OVERVIEW = {
   welcome: (name: string) => `Welcome, ${name}`,
   lead: 'Here you build knowledge bases and assistants for your department.',

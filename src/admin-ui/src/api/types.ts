@@ -1627,6 +1627,17 @@ export interface OverviewHealth {
   modelSync: SyncHealth
 }
 
+/** One Needs-attention item (admin design §5.5.1): its kind, the object it is about and the figures its text names. */
+export interface AttentionItem {
+  kind: string
+  objectType: 'collection' | 'source' | 'assistant' | 'client' | 'pipeline' | 'setting' | 'sync'
+  objectId: string | null
+  objectName: string
+  departmentId: string | null
+  since: IsoDateTime | null
+  details: Record<string, string>
+}
+
 /** `GET /api/overview`: Home (admin design §5.5.1): Live, Health, whether any collection is in scope, and the checklists not done yet. */
 export interface Overview {
   hasCollections: boolean
@@ -1640,6 +1651,8 @@ export interface Overview {
   secretExpiry: SecretExpiry[]
   /** A platform admin's deployment notices (admin design §5.5.1): what the person who runs the deployment should tidy. */
   deploymentNotices: DeploymentNotice[]
+  /** Needs attention (B-59): every item of the caller's scope. */
+  attention: AttentionItem[]
 }
 
 /** A deployment notice on Home (`DeploymentNotice`); a code this UI doesn't know is not shown. */
