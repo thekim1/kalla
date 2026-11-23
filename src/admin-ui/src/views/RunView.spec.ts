@@ -195,4 +195,25 @@ describe('Run (admin design §5.5.3; #278 slice 2)', () => {
     expect(wrapper.get('[data-test=deletions]').text()).toContain('212 documents were not found')
     expect(deletions).toHaveBeenCalledWith('r1', undefined)
   })
+
+  it('stops polling a running crawl when a refresh fails, and shows the error with Retry', async () => {
+    setActivePinia(createPinia())
+    vi.useFakeTimers()
+    try {
+      const running: Run = { ...run, report: null, run: { ...run.run, state: 'running', finishedAt: null } }
+      const get = vi.spyOn(api.runs, 'get').mockResolvedValueOnce(running).mockRejectedValueOnce(new Error('offline'))
+      vi.spyOn(api.runs, 'items').mockResolvedValue({ items: [], next: null })
+
+      const wrapper = mount(RunView, { props: { id: 'r1' }, global: { stubs: { RouterLink: true } } })
+      await flushPromises()
+      await vi.advanceTimersByTimeAsync(2_000)
+      await flushPromises()
+      expect(get).toHaveBeenCalledTimes(2)
+      expect(wrapper.find('[role=alert]').exists()).toBe(true)
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(get).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

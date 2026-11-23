@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import type { Run } from '@/api/types'
@@ -15,8 +15,8 @@ import PageHeader from '@/components/ui/PageHeader.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
-import { pollDelay } from '@/composables/useJobPoll'
 import { useKeysetList } from '@/composables/useKeysetList'
+import { usePoll } from '@/composables/usePoll'
 import { reportDifferences } from '@/platform/politeness'
 import { useLoadable } from '@/stores/loadable'
 import { formatDateTime, formatNumber } from '@/utils/format'
@@ -39,8 +39,6 @@ const onlyFailed = ref(false)
 const runItems = useKeysetList((after?: number) => api.runs.items(props.id, { outcome: onlyFailed.value ? 'failed' : undefined, after, limit: 50 }))
 // The user asked for more rows: a running poll no longer replaces the table's first page.
 const paged = ref(false)
-let timer: ReturnType<typeof setTimeout> | null = null
-const started = Date.now()
 
 const columns: Column[] = [
   { key: 'identity', label: RUN_PAGE.document },
@@ -72,15 +70,19 @@ function moreItems(): void {
   void runItems.more()
 }
 
-async function load(): Promise<void> {
-  // A reload after Cancel run replaces the running poll.
-  if (timer) clearTimeout(timer)
-  timer = null
+// Reads the run until it no longer runs; a failed read ends the poll and shows its error with Retry.
+const poll = usePoll(async (current) => {
   await run.run(() => api.runs.get(props.id))
-  if (summary.value?.state === 'running') {
-    timer = setTimeout(() => void load(), pollDelay(Date.now() - started))
-    if (!paged.value) void runItems.reload()
-  } else void runItems.reload()
+  if (!current()) return true
+  if (run.error.value) throw run.error.value
+  const running = summary.value?.state === 'running'
+  if (!running || !paged.value) void runItems.reload()
+  return !running
+})
+
+/** A reload after Cancel run or the deletion decision replaces the running poll. */
+function load(): void {
+  poll.start()
 }
 
 watch(onlyFailed, () => {
@@ -88,9 +90,6 @@ watch(onlyFailed, () => {
   void runItems.reload()
 })
 onMounted(load)
-onBeforeUnmount(() => {
-  if (timer) clearTimeout(timer)
-})
 </script>
 
 <template>

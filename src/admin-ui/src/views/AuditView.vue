@@ -12,6 +12,7 @@ import SelectField, { type SelectOption } from '@/components/ui/SelectField.vue'
 import TextField from '@/components/ui/TextField.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiDrawer from '@/components/ui/UiDrawer.vue'
+import { useDebouncedWatch } from '@/composables/useDebouncedWatch'
 import { useKeysetList } from '@/composables/useKeysetList'
 import { SETTINGS_SECTIONS, type SettingsSectionName } from '@/platform/settingsPage'
 import { formatDateTime } from '@/utils/format'
@@ -30,7 +31,6 @@ const selectedRow = ref<AuditSummary | null>(null)
 const selected = ref<AuditDetail | null>(null)
 const detailOpen = ref(false)
 const detailError = ref<unknown>(null)
-let timer: ReturnType<typeof setTimeout> | null = null
 
 const columns: Column[] = [
   { key: 'time', label: AUDIT.time },
@@ -140,10 +140,7 @@ function clear(): void {
   Object.assign(filters, { from: '', to: '', actor: '', event: '', entityType: '', entityId: '', service: '' })
 }
 
-watch(filters, () => {
-  if (timer) clearTimeout(timer)
-  timer = setTimeout(() => void entries.reload(), 300)
-})
+useDebouncedWatch(() => ({ ...filters }), () => void entries.reload(), 300)
 onMounted(() => entries.reload())
 </script>
 

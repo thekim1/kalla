@@ -5,7 +5,9 @@ import { api } from '@/api'
 import { ApiError } from '@/api/client'
 import type { EvaluationResult, EvaluationRun } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
+import { useUiStore } from '@/stores/ui'
 import { bffUser } from '@/test/fixtures'
+import { EVALUATION } from '@/utils/labels'
 import EvaluationTab from './EvaluationTab.vue'
 
 function signIn(roles: string[]) {
@@ -232,5 +234,27 @@ describe('Test questions and quality (admin design §7.1, §7.2)', () => {
     expect(wrapper.find('[data-test=report]').exists()).toBe(true)
     expect(wrapper.find('[data-test=document-gone]').exists()).toBe(false)
     expect(wrapper.find('[data-test=deleted-notice]').exists()).toBe(false)
+  })
+
+  it('says the evaluation failed when its job can no longer be read, instead of running for ever', async () => {
+    vi.useFakeTimers()
+    signIn(['rag-editor'])
+    vi.spyOn(api.collections, 'evaluation').mockResolvedValue({ hasSet: true, questions: [{ layer: 'human', state: 'active', count: 3 }], latestRuns: [] })
+    vi.spyOn(api.evaluation, 'questions').mockResolvedValue({ items: [], next: null })
+    vi.spyOn(api.evaluation, 'run').mockResolvedValue({ jobId: 'j1', alreadyQueued: false })
+    const get = vi.spyOn(api.jobs, 'get').mockRejectedValue(new ApiError(502, 'GET', null))
+    const ui = useUiStore()
+
+    const wrapper = mount(EvaluationTab, { props: { collectionId: 'c1', canEdit: true }, attachTo: document.body })
+    await flushPromises()
+    await wrapper.get('[data-test=run]').trigger('click')
+    await flushPromises()
+
+    expect(ui.toasts.map((t) => t.message)).toContain(EVALUATION.runFailed)
+    expect(wrapper.get('[data-test=run]').text()).toBe(EVALUATION.run)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(get).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+    vi.useRealTimers()
   })
 })

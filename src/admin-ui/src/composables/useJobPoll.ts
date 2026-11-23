@@ -1,62 +1,38 @@
-import { onBeforeUnmount, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { api } from '@/api'
 import type { Job } from '@/api/types'
+import { usePoll } from './usePoll'
+
+export { pollDelay } from './usePoll'
 
 /** Job states after which polling stops (admin design §4.7). */
 export const FINISHED_STATES = new Set(['succeeded', 'failed', 'dead', 'cancelled'])
 
-/** The poll delay after `elapsedMs` (admin design §4.7): every 2 s, every 5 s after 30 s, every 15 s after 5 minutes. */
-export function pollDelay(elapsedMs: number): number {
-  if (elapsedMs < 30_000) return 2_000
-  if (elapsedMs < 300_000) return 5_000
-  return 15_000
-}
-
 /**
- * Polls `GET /api/jobs/{id}` until the job finishes. `job` holds the latest state; `start` replaces a running poll; a
- * request error ends the poll with `error` set. Stops when the component unmounts.
+ * Polls `GET /api/jobs/{id}` until the job finishes (§4.7 delays). `job` holds the latest state; `start` replaces a
+ * running poll; a request error ends the poll with `error` set. `failed` says the poll ended without the job
+ * succeeding: a request failed (`job` may still be null) or the job ended failed, dead or cancelled. Stops when the
+ * component unmounts.
  */
 export function useJobPoll<T>() {
   const job = ref<Job<T> | null>(null)
-  const error = ref<unknown>(null)
-  const polling = ref(false)
-  let timer: ReturnType<typeof setTimeout> | null = null
-  let generation = 0
+  let id = ''
+  const poll = usePoll(async (current) => {
+    const latest = await api.jobs.get<T>(id)
+    if (!current()) return true
+    job.value = latest
+    return FINISHED_STATES.has(latest.state)
+  })
+  // From the job itself, so `job`, `polling` and `failed` change together when it finishes.
+  const finished = computed(() => !!job.value && FINISHED_STATES.has(job.value.state))
+  const polling = computed(() => poll.polling.value && !finished.value)
+  const failed = computed(() => poll.state.value === 'failed' || (finished.value && job.value?.state !== 'succeeded'))
 
-  function stop(): void {
-    if (timer) clearTimeout(timer)
-    timer = null
-    polling.value = false
-    generation++
-  }
-
-  function start(id: string): void {
-    stop()
-    const mine = generation
-    const started = Date.now()
+  function start(jobId: string): void {
+    id = jobId
     job.value = null
-    error.value = null
-    polling.value = true
-    const tick = async () => {
-      try {
-        const current = await api.jobs.get<T>(id)
-        if (mine !== generation) return
-        job.value = current
-        if (FINISHED_STATES.has(current.state)) {
-          polling.value = false
-          return
-        }
-      } catch (e) {
-        if (mine !== generation) return
-        error.value = e
-        polling.value = false
-        return
-      }
-      timer = setTimeout(tick, pollDelay(Date.now() - started))
-    }
-    void tick()
+    poll.start()
   }
 
-  onBeforeUnmount(stop)
-  return { job, error, polling, start, stop }
+  return { job, error: poll.error, polling, failed, start, stop: poll.stop }
 }

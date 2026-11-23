@@ -2,6 +2,7 @@
 import { onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
 import type { EvaluationQuestion } from '@/api/types'
+import { useDebouncedWatch } from '@/composables/useDebouncedWatch'
 import { useKeysetList } from '@/composables/useKeysetList'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
@@ -31,7 +32,6 @@ const questions = useKeysetList((after?: string) => api.evaluation.questions(pro
 const editing = ref<EvaluationQuestion | null>(null)
 const dialogOpen = ref(false)
 const retiring = ref<EvaluationQuestion | null>(null)
-let timer: ReturnType<typeof setTimeout> | null = null
 
 const columns: Column[] = [
   { key: 'question', label: EVALUATION.question },
@@ -76,10 +76,7 @@ async function retire(): Promise<void> {
 }
 
 watch([layer, state], () => void questions.reload())
-watch(q, () => {
-  if (timer) clearTimeout(timer)
-  timer = setTimeout(() => void questions.reload(), 300)
-})
+useDebouncedWatch(q, () => void questions.reload(), 300)
 onMounted(() => questions.reload())
 defineExpose({ reload: () => questions.reload() })
 </script>

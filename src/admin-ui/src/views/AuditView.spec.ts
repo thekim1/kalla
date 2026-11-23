@@ -161,4 +161,18 @@ describe('Granskningslogg (admin design §9.1)', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('No events match')
   })
+
+  it('loads nothing after the page is left while a filter change waits', async () => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    const list = vi.spyOn(api.audit, 'list').mockResolvedValue({ items: [], next: null })
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(list).toHaveBeenCalledTimes(1)
+
+    await wrapper.get('#audit-from').setValue('2026-11-01')
+    wrapper.unmount()
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(list).toHaveBeenCalledTimes(1)
+  })
 })
