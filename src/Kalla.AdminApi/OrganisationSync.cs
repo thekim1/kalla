@@ -1,6 +1,5 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.Metrics;
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
@@ -9,7 +8,6 @@ using Kalla.Domain.Entities;
 using Kalla.Infrastructure.Config;
 using Kalla.Infrastructure.Gateway;
 using Kalla.Infrastructure.Persistence;
-using Kalla.Infrastructure.Security;
 
 namespace Kalla.AdminApi;
 
@@ -26,7 +24,7 @@ public sealed class OrgSyncOptions
 }
 
 /// <summary>What one run changed: rows written per table (unchanged rows are not written; a removed key counts).</summary>
-public sealed record OrgSyncResult(int Departments, int Teams, int Keys)
+public sealed record OrgSyncResult(int Departments, int Teams, int Keys) : IMirrorSyncResult
 {
     public bool Changed => Departments + Teams + Keys > 0;
 }
@@ -66,23 +64,18 @@ public sealed partial class OrganisationSync(
     /// <summary>Advisory lock key of the sync ("RAG0" + 0x10), one writer across instances.</summary>
     public const long LockKey = 0x5241_4730_0010;
 
-    private readonly Counter<long> _runs = meters.Create(Microsoft.Extensions.Hosting.Extensions.TelemetryName)
-        .CreateCounter<long>("rag.admin.sync", description: "Organisation and model catalogue sync runs by kind and outcome");
-
+    private readonly MirrorSyncState _state = new("organisation", meters, gatewayOptions, time);
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private DateTimeOffset? _lastRunAt;
-    private DateTimeOffset? _lastSuccessAt;
-    private int _failures;
-    private string? _lastError;
     private OrgSyncResult? _lastResult;
     private GatewayContextInfo? _gateway;
     private string? _degraded;
     private string? _etag;
 
     /// <summary>On when the gateway and this service's credential key are configured.</summary>
-    public bool Enabled => !string.IsNullOrWhiteSpace(gatewayOptions.CurrentValue.BaseUrl) && !string.IsNullOrEmpty(gatewayOptions.CurrentValue.Key);
+    public bool Enabled => _state.Enabled;
 
-    public OrgSyncStatus Status => new(Enabled, _lastRunAt, _lastSuccessAt, Volatile.Read(ref _failures), _lastError, _lastResult, _gateway, _degraded, AdminUrl);
+    public OrgSyncStatus Status =>
+        new(Enabled, _state.LastRunAt, _state.LastSuccessAt, _state.ConsecutiveFailures, _state.LastError, _lastResult, _gateway, _degraded, AdminUrl);
 
     /// <summary>The gateway links' address (admin design §2.3): the last context's <c>admin_url</c>, else <c>Admin:GatewayAdminUrl</c>.</summary>
     public string? AdminUrl => _gateway?.AdminUrl is { Length: > 0 } url ? url : adminOptions?.Value.GatewayAdminUrl is { Length: > 0 } configured ? configured : null;
@@ -123,50 +116,18 @@ public sealed partial class OrganisationSync(
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            _lastRunAt = time.GetUtcNow();
+            _state.MarkStarted();
             var answer = await gateway.GetContextAsync(_etag, cancellationToken);
             if (answer.Context is not { } context)
             {
                 // 304: the context is as at the last run, which was written.
-                MarkSucceeded();
-                _runs.Add(1, new("kind", "organisation"), new("outcome", "unchanged"));
+                _state.MarkSucceeded("unchanged");
                 return new OrgSyncResult(0, 0, 0);
             }
 
             var degraded = DegradedReason(context);
-            await using var scope = scopes.CreateAsyncScope();
-            var db = scope.ServiceProvider.GetRequiredService<RagDbContext>();
-            var result = await db.ExecuteConfigWriteAsync(async (_, ct) =>
-            {
-                if (!await db.Database.SqlQuery<bool>($"""SELECT pg_try_advisory_xact_lock({LockKey}) AS "Value" """).SingleAsync(ct))
-                {
-                    return new RunOutcome(null, null); // another instance is syncing right now
-                }
-
-                var changed = await ApplyAsync(db, context, time.GetUtcNow(), ct);
-                if (!changed.Changed)
-                {
-                    return new RunOutcome(changed, null);
-                }
-
-                await db.SaveChangesAsync(ct);
-                var audit = new AuditLogEntry
-                {
-                    Timestamp = time.GetUtcNow(), Actor = SystemActor, Action = "sync", EntityType = "organisation", Service = AdminContext.ServiceName,
-                    ConfigVersion = await db.ConfigVersion.AsNoTracking().Select(v => v.Version).SingleAsync(ct),
-                    Details = JsonSerializer.Serialize(new AuditDetails(null, changed), AuditJson.Options),
-                };
-                actor?.Stamp(audit);
-                db.AuditLog.Add(audit);
-                await db.SaveChangesAsync(ct);
-                return new RunOutcome(changed, audit);
-            }, cancellationToken, lockMetrics);
-
-            if (result.Audit is { } entry)
-            {
-                SecurityEvents.AdminChange(SecurityEvents.CreateLogger(scope.ServiceProvider.GetRequiredService<ILoggerFactory>()), entry.Actor,
-                    entry.Action, entry.EntityType, entry.EntityId);
-            }
+            var result = await MirrorSync.WriteAsync(scopes, lockMetrics, time, LockKey, SystemActor, "organisation", actor,
+                (db, now, ct) => ApplyAsync(db, context, now, ct), cancellationToken);
 
             _gateway = context.Gateway;
             _degraded = degraded;
@@ -176,19 +137,15 @@ public sealed partial class OrganisationSync(
             }
 
             // Another instance's run (lock held) wrote this context or will: the next run asks again without an ETag.
-            _etag = result.Result is null ? null : answer.ETag;
-            MarkSucceeded();
-            _lastResult = result.Result ?? _lastResult;
-            _runs.Add(1, new("kind", "organisation"), new("outcome", result.Result is null ? "skipped" : result.Result.Changed ? "changed" : "unchanged"));
-            LogRun(logger, result.Result?.Departments ?? 0, result.Result?.Teams ?? 0, result.Result?.Keys ?? 0);
-            return result.Result ?? new OrgSyncResult(0, 0, 0);
+            _etag = result is null ? null : answer.ETag;
+            _state.MarkSucceeded(MirrorSyncState.Outcome(result));
+            _lastResult = result ?? _lastResult;
+            LogRun(logger, result?.Departments ?? 0, result?.Teams ?? 0, result?.Keys ?? 0);
+            return result ?? new OrgSyncResult(0, 0, 0);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            // Shown to platform admins: the type and SQL state, HTTP status or gateway code only, never connection details.
-            _lastError = GatewayModelSync.ErrorText(ex);
-            var failures = Interlocked.Increment(ref _failures);
-            _runs.Add(1, new("kind", "organisation"), new("outcome", "failed"));
+            var failures = _state.MarkFailed(ex);
             LogRunFailed(logger, GatewayModelSync.ErrorText(ex), ExceptionText.Types(ex), failures); // never the messages (#232)
             return null;
         }
@@ -359,25 +316,15 @@ public sealed partial class OrganisationSync(
     public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default) =>
         Task.FromResult(
             !Enabled ? HealthCheckResult.Healthy("The organisation sync is off.")
-            : Volatile.Read(ref _failures) >= FailuresBeforeDegraded ? HealthCheckResult.Degraded($"The organisation sync has failed {Volatile.Read(ref _failures)} times in a row.")
+            : _state.ConsecutiveFailures >= FailuresBeforeDegraded ? HealthCheckResult.Degraded($"The organisation sync has failed {_state.ConsecutiveFailures} times in a row.")
             : _degraded is { } reason ? HealthCheckResult.Degraded(reason)
             : HealthCheckResult.Healthy());
-
-    private void MarkSucceeded()
-    {
-        _lastSuccessAt = time.GetUtcNow();
-        _lastError = null;
-        Volatile.Write(ref _failures, 0);
-    }
 
     public override void Dispose()
     {
         _gate.Dispose();
         base.Dispose();
     }
-
-    /// <summary>A run's result (null: another instance held the lock) and its audit entry (null: nothing changed).</summary>
-    private sealed record RunOutcome(OrgSyncResult? Result, AuditLogEntry? Audit);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Organisation sync off: Gateway:BaseUrl or Gateway:Key is not set")]
     private static partial void LogDisabled(ILogger logger);
