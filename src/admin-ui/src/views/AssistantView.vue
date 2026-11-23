@@ -6,7 +6,7 @@ import { useTabQuery } from '@/composables/useTabQuery'
 import { ApiError } from '@/api/client'
 import type {
   CostQuery,
-  Assistant, AssistantDraft, AssistantTestResult, AssistantVersion, AssistantVersionSummary, ClientSummary, CollectionLink, CollectionSummary, DataProtectionPolicy,
+  Assistant, AssistantCopyResult, AssistantDraft, AssistantTestResult, AssistantVersion, AssistantVersionSummary, ClientSummary, CollectionLink, CollectionSummary, DataProtectionPolicy,
   GatewayModel, GeneralKnowledge,
 } from '@/api/types'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
@@ -27,6 +27,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import ExplainAccess from '@/components/assistants/ExplainAccess.vue'
 import KnowledgeLinks from '@/components/assistants/KnowledgeLinks.vue'
+import AssistantCopyDrawer from '@/components/assistants/AssistantCopyDrawer.vue'
 import AssistantEditDrawer from '@/components/assistants/AssistantEditDrawer.vue'
 import CostCard from '@/components/costs/CostCard.vue'
 import KeyBudgetStatus from '@/components/gateway/KeyBudgetStatus.vue'
@@ -434,6 +435,21 @@ const saveStorage = () => run('storage', async () => {
 })
 
 onMounted(load)
+
+// Copy (B-55): open the copy's draft. The route reuses this page, so a new id starts it over.
+const copying = ref(false)
+function copied(result: AssistantCopyResult): void {
+  ui.notify(ASSISTANT.copied(result.assistant.name))
+  void router.push({ name: 'assistant', params: { id: result.assistant.id }, query: { tab: 'draft' } })
+}
+
+watch(() => props.id, () => {
+  versions.value = null
+  policy.value = null
+  result.value = null
+  error.value = null
+  void load()
+})
 </script>
 
 <template>
@@ -456,6 +472,7 @@ onMounted(load)
           <UiButton v-if="canMove" data-test="move-department" @click="moving = true">{{ MOVE_DEPARTMENT.action }}</UiButton>
           <UiButton v-if="archived" :loading="busy === 'unarchive'" data-test="unarchive" @click="unarchive">{{ ASSISTANT.unarchive }}</UiButton>
           <UiButton v-else icon="archive" data-test="archive" @click="archiving = true">{{ ASSISTANT.archive }}</UiButton>
+          <UiButton icon="content_copy" data-test="copy" @click="copying = true">{{ ASSISTANT.copy }}</UiButton>
         </template>
         <UiButton v-if="canManage" variant="danger" icon="delete" data-test="delete" @click="openDelete">{{ DELETE.action }}</UiButton>
         <UiButton
@@ -640,6 +657,7 @@ onMounted(load)
         v-if="canMove" :id="assistant.data.value.id" v-model:open="moving" kind="assistant"
         :department-id="assistant.data.value.departmentId" :version="assistant.data.value.version" @moved-assistant="moved"
       />
+      <AssistantCopyDrawer v-if="canEdit" v-model:open="copying" :assistant="assistant.data.value" @copied="copied" />
       <AssistantEditDrawer
         v-if="canEdit" v-model:open="editing" :assistant="assistant.data.value"
         @saved="edited"

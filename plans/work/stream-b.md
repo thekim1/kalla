@@ -34,7 +34,7 @@ tables in one migration of its own (no backward compatibility before production)
 - **Read:** admin §3 (`Admin` row), §4.5, §5 step 9, §5.8; data-model `AssistantTemplates`; architecture plan §2
   item 3 and §3 *Presets make setup easier*.
 
-### [ ] B-55 Copy an assistant
+### [x] B-55 Copy an assistant (#952)
 - **Do:** admin §4.5 `POST /api/assistants/{id}/copy` `{ name, slug, departmentId, ownerTeamId }`: a new assistant
   whose only version is a draft equal to the source's published version (its draft when never published); audiences,
   keys, versions and statistics not copied; V11/V12 for the target department as warnings; audited `assistant.copy`;

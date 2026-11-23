@@ -15,6 +15,8 @@ import type {
   SharingLevel,
   Topic,
   Assistant,
+  AssistantCopyRequest,
+  AssistantCopyResult,
   AssistantCreate,
   AssistantTemplate,
   AssistantDraft,
@@ -230,6 +232,8 @@ export const api = {
     version: (id: string, number: number) => http.get<AssistantVersion>(`/api/assistants/${id}/versions/${number}`),
     restore: (id: string, number: number, version: string, confirmGeneralKnowledge = false) =>
       http.post<Assistant>(`/api/assistants/${id}/versions/${number}/restore`, { version, confirmGeneralKnowledge }),
+    /** A new assistant with a draft of this one's published version (B-55). */
+    copy: (id: string, body: AssistantCopyRequest) => http.post<AssistantCopyResult>(`/api/assistants/${id}/copy`, body),
     archive: (id: string, version: string) => http.post<Assistant>(`/api/assistants/${id}/archive`, { version }),
     unarchive: (id: string, version: string) => http.post<Assistant>(`/api/assistants/${id}/unarchive`, { version }),
     retention: (id: string, body: { historyMode: string; retentionDays: number; version: string }) => http.put<Assistant>(`/api/assistants/${id}/retention`, body),
