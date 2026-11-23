@@ -345,6 +345,44 @@
           }
         }
       }
+    },
+    "/integration/v1/branding/logo": {
+      "get": {
+        "summary": "The admin console's logo, for a platform that shows it beside organisation_name (feature organisation-logo; no scope)",
+        "parameters": [
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "description": "The ETag of a logo read before: 304 while it is still the logo.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The logo as uploaded (at most 256 KB; an SVG has no scripts, event handlers or embedded HTML), with an ETag that changes with it",
+            "content": {
+              "image/png": {},
+              "image/jpeg": {},
+              "image/webp": {},
+              "image/svg+xml": {}
+            }
+          },
+          "304": {
+            "description": "The logo is still the one If-None-Match names"
+          },
+          "401": {
+            "description": "As usage"
+          },
+          "404": {
+            "description": "No logo is set: the admin console shows its built-in icon"
+          },
+          "429": {
+            "description": "As usage"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -531,7 +569,7 @@
             "items": {
               "type": "string"
             },
-            "description": "Capabilities to test for instead of comparing versions; values are only added. Known: max-residency, model-facts, integrations, act-as-key, run-metadata, stream-cost, credential-residencies, organisation, member-groups, organisation-name, integration-api-url, oidc-authority."
+            "description": "Capabilities to test for instead of comparing versions; values are only added. Known: max-residency, model-facts, integrations, act-as-key, run-metadata, stream-cost, credential-residencies, organisation, member-groups, organisation-name, integration-api-url, oidc-authority, organisation-logo (the logo on the Integration API, GET /integration/v1/branding/logo)."
           }
         }
       },

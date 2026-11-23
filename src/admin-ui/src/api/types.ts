@@ -38,6 +38,8 @@ export interface BffUser {
   environment?: string
   /** The gateway's organisation name (its context's `organisation_name`), shown in the header and on the sign-in page; null when it has none. */
   organisationName?: string | null
+  /** The organisation's logo from the gateway's admin console, served by kalla-admin (`/bff/branding/logo?v=…`); null shows the built-in mark. */
+  logoUrl?: string | null
   name: string | null
   email: string | null
   roles: string[]

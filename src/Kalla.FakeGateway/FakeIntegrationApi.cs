@@ -7,7 +7,8 @@ namespace Kalla.FakeGateway;
 /// The gateway's Integration API (gateway phase 3; gateway-changes §5.6; repo-and-deployment §4.3), read-only:
 /// <c>GET /integration/v1/usage</c> from the requests this fake served (<see cref="FakeUsage"/>: the key each ran as, its
 /// <c>x-fors-step</c> and <c>x-fors-run-id</c>), and <c>GET /integration/v1/budgets</c> from
-/// <c>FakeGateway:AssignedKeys:&lt;n&gt;:Budgets</c>. <c>Authorization: Bearer</c> with a credential key holding the scope
+/// <c>FakeGateway:AssignedKeys:&lt;n&gt;:Budgets</c> (and <c>GET /integration/v1/branding/logo</c>, any credential key, see
+/// <c>BrandingLogo</c>). <c>Authorization: Bearer</c> with a credential key holding the scope
 /// <c>usage.read</c>: any other key or none is <c>401</c>, a credential key without the scope <c>403</c>. Errors are problem
 /// details, as the gateway's Admin API.
 /// </summary>
@@ -20,6 +21,7 @@ public static class FakeIntegrationApi
     public static void MapFakeIntegration(this WebApplication app)
     {
         ArgumentNullException.ThrowIfNull(app);
+        app.MapGet("/integration/v1/branding/logo", (HttpContext ctx, IOptionsSnapshot<FakeGatewayOptions> options) => BrandingLogo(ctx, options.Value));
         app.MapGet("/integration/v1/usage", (HttpContext ctx, IOptionsSnapshot<FakeGatewayOptions> options, FakeUsage served) =>
         {
             var o = options.Value;
@@ -141,6 +143,38 @@ public static class FakeIntegrationApi
     }
 
     /// <summary>401 for no key or one that is not a credential key; 403 for a credential key without <c>usage.read</c>; null when allowed.</summary>
+    /// <summary>
+    /// <c>GET /integration/v1/branding/logo</c> (feature <c>organisation-logo</c>): <c>FakeGateway:Gateway:OrganisationLogo</c> for any
+    /// credential key, no scope, with an <c>ETag</c> over the image (<c>304</c> on <c>If-None-Match</c>); <c>404</c> when none is set.
+    /// </summary>
+    private static IResult BrandingLogo(HttpContext ctx, FakeGatewayOptions o)
+    {
+        var presented = FakeAccess.BearerOrApiKey(ctx.Request);
+        if (presented is null || !o.CredentialKeys.Values.Any(c => c.Key == presented))
+        {
+            return Problem(401, "The key is missing, or is not an integration's credential key.");
+        }
+
+        if (string.IsNullOrEmpty(o.Gateway.OrganisationLogo))
+        {
+            return Results.NotFound();
+        }
+
+        var logo = Convert.FromBase64String(o.Gateway.OrganisationLogo);
+        var etag = "\"" + Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(logo))[..16] + "\"";
+        ctx.Response.Headers.ETag = etag;
+        if (ctx.Request.Headers.IfNoneMatch.Any(t => t is not null && t.Replace("W/", "", StringComparison.Ordinal) == etag))
+        {
+            return Results.StatusCode(StatusCodes.Status304NotModified);
+        }
+
+        var type = logo.AsSpan().StartsWith((ReadOnlySpan<byte>)[0x89, 0x50, 0x4E, 0x47]) ? "image/png"
+            : logo.AsSpan().StartsWith((ReadOnlySpan<byte>)[0xFF, 0xD8, 0xFF]) ? "image/jpeg"
+            : logo.Length >= 12 && logo.AsSpan(8, 4).SequenceEqual("WEBP"u8) ? "image/webp"
+            : "image/svg+xml";
+        return Results.Bytes(logo, type);
+    }
+
     private static IResult? Authorize(HttpContext ctx, FakeGatewayOptions o)
     {
         var presented = FakeAccess.BearerOrApiKey(ctx.Request);

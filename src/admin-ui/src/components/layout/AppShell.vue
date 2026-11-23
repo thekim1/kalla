@@ -7,6 +7,7 @@ import { isNavItemActive, navGroups, mobileTabs, type NavItem } from '@/router/n
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import AppIcon from '@/components/ui/AppIcon.vue'
+import BrandMark from './BrandMark.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import ToastRegion from '@/components/ui/ToastRegion.vue'
 import CommandPalette from './CommandPalette.vue'
@@ -88,9 +89,7 @@ async function signOut(): Promise<void> {
       class="sticky top-0 hidden h-screen bg-sidebar [backdrop-filter:var(--blur)] shrink-0 flex-col gap-4 overflow-hidden border-r border-border p-4 md:flex md:w-[72px] lg:w-sidebar lg:px-5"
     >
       <div class="flex items-center gap-3 px-1">
-        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-fg text-on-fg" aria-hidden="true">
-          <AppIcon name="hub" />
-        </span>
+        <BrandMark />
         <span class="hidden min-w-0 lg:block">
           <span class="block truncate text-body font-semibold text-fg">{{ APP.name }}</span>
           <span v-if="auth.user?.organisationName" class="block truncate text-caption text-fg-3">{{ auth.user.organisationName }}</span>
@@ -161,7 +160,7 @@ async function signOut(): Promise<void> {
     <div class="flex min-w-0 flex-1 flex-col">
       <header class="bg-canvas-fixed sticky top-0 z-topbar flex h-topbar items-center gap-3 border-b border-border px-4 md:px-10">
         <div class="flex items-center gap-2 md:hidden">
-          <AppIcon name="hub" />
+          <BrandMark size="sm" />
           <span class="text-body font-semibold">{{ APP.name }}</span>
         </div>
         <button

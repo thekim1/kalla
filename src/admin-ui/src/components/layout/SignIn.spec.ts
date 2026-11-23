@@ -7,10 +7,16 @@ import { bffUser } from '@/test/fixtures'
 import { SIGN_IN } from '@/utils/labels'
 import SignIn from './SignIn.vue'
 
-async function signInPage(flags: { configured: boolean; open: boolean }) {
+async function signInPage(flags: { configured: boolean; open: boolean; logoUrl?: string | null }) {
   setActivePinia(createPinia())
   const auth = useAuthStore()
-  auth.user = bffUser({ isAuthenticated: false, name: null, signIn: { configured: flags.configured }, setup: { open: flags.open } })
+  auth.user = bffUser({
+    isAuthenticated: false,
+    name: null,
+    logoUrl: flags.logoUrl ?? null,
+    signIn: { configured: flags.configured },
+    setup: { open: flags.open },
+  })
   auth.status = 'unauthenticated'
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: {} }, { path: '/setup', name: 'setup', component: {} }] })
   await router.push('/')
@@ -49,5 +55,15 @@ describe('the sign-in page in setup mode (identity design §19)', () => {
     expect(wrapper.find('[data-test=sign-in]').exists()).toBe(false)
     expect(wrapper.find('[data-test=set-up]').exists()).toBe(false)
     expect(wrapper.find('a').exists()).toBe(false)
+  })
+})
+
+describe('the sign-in page brand', () => {
+  it("shows the gateway organisation's logo before sign-in, else the built-in mark", async () => {
+    const withLogo = (await signInPage({ configured: true, open: false, logoUrl: '/bff/branding/logo?v=abc' })).wrapper
+    expect(withLogo.get('[data-test=brand-logo]').attributes('src')).toBe('/bff/branding/logo?v=abc')
+    const without = (await signInPage({ configured: true, open: false })).wrapper
+    expect(without.find('[data-test=brand-logo]').exists()).toBe(false)
+    expect(without.find('[data-test=brand-icon]').exists()).toBe(true)
   })
 })

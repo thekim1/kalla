@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import AppIcon from '@/components/ui/AppIcon.vue'
+import BrandMark from './BrandMark.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import { SIGN_IN } from '@/utils/labels'
 
@@ -35,7 +36,7 @@ function openSetup(event: MouseEvent): void {
 <template>
   <main id="main" tabindex="-1" class="flex min-h-screen items-center justify-center p-4 outline-none">
     <div class="material-overlay flex w-full max-w-md flex-col gap-5 rounded-dialog p-8">
-      <span class="flex h-11 w-11 items-center justify-center rounded-control bg-fg text-on-fg" aria-hidden="true"><AppIcon name="hub" /></span>
+      <BrandMark size="lg" />
       <div>
         <h1 id="page-title" tabindex="-1" class="text-title-2 text-fg outline-none">{{ SIGN_IN.title }}</h1>
         <p class="mt-1 text-body text-fg-2">{{ SIGN_IN.lead(organisation) }}</p>

@@ -188,6 +188,12 @@ public sealed class FakeGatewayInfo
     public string? IntegrationApiUrl { get; set; }
 
     /// <summary>
+    /// The admin console's logo, base64 (PNG, JPEG, WebP or SVG), as <c>GET /integration/v1/branding/logo</c> serves it (feature
+    /// <c>organisation-logo</c>). Not set or empty: <c>404</c>, a console that shows its built-in icon.
+    /// </summary>
+    public string? OrganisationLogo { get; set; }
+
+    /// <summary>
     /// The address of the sign-in provider the gateway's admin console uses (the context's <c>oidc_authority</c>, feature
     /// <c>oidc-authority</c>, gateway setup mode, llmgateway#99). Not set or empty: null in the context, as a gateway whose sign-in
     /// is not set up yet; a test sets it.
@@ -198,9 +204,10 @@ public sealed class FakeGatewayInfo
     /// The capabilities the fake implements, of the gateway's list (<c>ContextEndpoint.Features</c> at
     /// thekim1/fors <c>v0.10.2</c>), phase 2 included: <c>act-as-key</c> and <c>run-metadata</c> (B-42),
     /// <c>stream-cost</c> (B-38), <c>organisation-name</c> (M-17 C12), <c>integration-api-url</c> (M-17 C11) and
-    /// <c>oidc-authority</c> (M-20 S8, after <c>v0.10.3</c>).
+    /// <c>oidc-authority</c> (M-20 S8, after <c>v0.10.3</c>) and <c>organisation-logo</c> (the logo on the Integration API, after
+    /// <c>v0.12.2</c>).
     /// </summary>
-    public List<string> Features { get; set; } = ["max-residency", "model-facts", "integrations", "act-as-key", "run-metadata", "stream-cost", "credential-residencies", "organisation", "member-groups", "organisation-name", "integration-api-url", "oidc-authority"];
+    public List<string> Features { get; set; } = ["max-residency", "model-facts", "integrations", "act-as-key", "run-metadata", "stream-cost", "credential-residencies", "organisation", "member-groups", "organisation-name", "integration-api-url", "oidc-authority", "organisation-logo"];
 }
 
 /// <summary>The integration <c>Kalla</c>, owned by the pilot team.</summary>
