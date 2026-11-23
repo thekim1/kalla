@@ -351,6 +351,28 @@ public sealed class SourceEndpointsTests(AdminDatabaseFixture database, AdminHos
     }
 
     [Fact]
+    public async Task Pausing_an_upload_source_is_refused_and_leaves_it_active()
+    {
+        var (collection, code) = await CollectionAsync();
+        using var admin = await AdminDatabaseFixture.UserAsync(host.Factory, RagRoles.DepartmentAdmin, code);
+        using var created = await admin.PostAsJsonAsync($"/api/collections/{collection}/sources",
+            new { type = "url-list", name = "Files", classification = "internal", settings = UrlList("https://a.se/") }, Ct);
+        created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync(Ct));
+        var body = await Json(created);
+        var id = body.GetProperty("id").GetGuid();
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            await db.Sources.Where(s => s.Id == id).ExecuteUpdateAsync(u => u.SetProperty(s => s.Type, SourceTypes.Upload), Ct);
+        }
+
+        // Paused, it would take a batch whose sync job the worker then drops (#1007): it has no schedule to pause.
+        using var refused = await admin.PostAsJsonAsync($"/api/sources/{id}/pause", new { version = body.GetProperty("version").GetString() }, Ct);
+        refused.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await Json(refused)).GetProperty("code").GetString().ShouldBe("source_not_pausable");
+        (await admin.GetFromJsonAsync<JsonElement>($"/api/sources/{id}", Ct)).GetProperty("state").GetString().ShouldBe("active");
+    }
+
+    [Fact]
     public async Task Sync_now_enqueues_once_answers_the_running_run_and_runs_are_listed_and_cancelled()
     {
         var (collection, code) = await CollectionAsync();

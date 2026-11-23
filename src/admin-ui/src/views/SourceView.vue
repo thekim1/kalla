@@ -173,6 +173,8 @@ async function load(): Promise<void> {
 // Pause and resume (admin design §5.5.3; B-70): the source's version goes with the call; a version conflict reloads the
 // source and says so, so a second try acts on what is saved now.
 const paused = computed(() => source.data.value?.state === 'paused')
+// An upload source has no schedule, and the API refuses to pause one (source_not_pausable, #1007).
+const pausable = computed(() => source.data.value?.type !== 'upload')
 const pausing = ref(false)
 async function togglePause(): Promise<void> {
   const current = source.data.value
@@ -181,9 +183,9 @@ async function togglePause(): Promise<void> {
   syncError.value = null
   try {
     source.data.value = paused.value ? await api.sources.resume(current.id, current.version) : await api.sources.pause(current.id, current.version)
-    ui.notify(paused.value ? SOURCE_PAGE.paused : SOURCE_PAGE.resumed)
+    ui.notify(paused.value ? SOURCE_PAGE.pausedNotice : SOURCE_PAGE.resumed)
   } catch (e) {
-    if (isApiError(e) && e.status === 409) {
+    if (isApiError(e) && e.problem?.code === 'concurrent_change') {
       await source.run(() => api.sources.get(props.id))
       ui.notify(SOURCE_PAGE.pauseConflict)
     } else {
@@ -224,16 +226,18 @@ async function reloadPii(): Promise<void> {
         <UiBadge :label="SOURCE_TYPE_LABEL[source.data.value.type]" />
         <UiBadge :label="LEVEL_LABEL[source.data.value.classification]" />
         <UiBadge v-if="paused" tone="warn" :label="SOURCE_PAGE.pausedBadge" data-test="paused" />
-        <UiButton v-if="canEdit" variant="primary" icon="sync" :loading="syncing" data-test="sync" @click="syncNow">{{ SOURCE_PAGE.syncNow }}</UiButton>
-        <UiButton
-          v-if="canEdit" :icon="paused ? 'play_arrow' : undefined" :loading="pausing" :data-test="paused ? 'resume' : 'pause'" @click="togglePause"
-        >
-          {{ paused ? SOURCE_PAGE.resume : SOURCE_PAGE.pause }}
+        <!-- While paused, Resume is the primary action and Fetch now and Continue are not shown: the API refuses both with
+             source_paused (admin design §5.5.3, #1007). -->
+        <UiButton v-if="canEdit && paused" variant="primary" icon="play_arrow" :loading="pausing" data-test="resume" @click="togglePause">
+          {{ SOURCE_PAGE.resume }}
         </UiButton>
-        <ContinueRunButton v-if="continuable && !activeRun" :run-id="continuable" can-continue @started="loadRuns()" />
+        <UiButton v-if="canEdit && !paused" variant="primary" icon="sync" :loading="syncing" data-test="sync" @click="syncNow">{{ SOURCE_PAGE.syncNow }}</UiButton>
+        <UiButton v-if="canEdit && !paused && pausable" :loading="pausing" data-test="pause" @click="togglePause">{{ SOURCE_PAGE.pause }}</UiButton>
+        <ContinueRunButton v-if="continuable && !activeRun && !paused" :run-id="continuable" can-continue @started="loadRuns()" />
         <CancelRunButton v-if="activeRun" :run-id="activeRun.id" :state="activeRun.state" @cancelled="loadRuns()" />
         <UiButton v-if="canDelete" variant="danger" icon="delete" data-test="delete" @click="openDelete">{{ DELETE.action }}</UiButton>
       </PageHeader>
+      <p v-if="paused" role="status" class="mb-4 rounded-card bg-warn-soft p-4 text-warn" data-test="paused-banner">{{ SOURCE_PAGE.paused }}</p>
       <InlineError v-if="syncError" :message="problemMessage(syncError)" class="mb-4" />
       <p v-if="activeProgress && activeRun" class="mb-4 tabular" aria-live="polite" data-test="run-progress">
         <RouterLink :to="runTo(activeRun)" class="link">{{ activeProgress }}</RouterLink>

@@ -44,6 +44,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   upload_file_missing: 'File {n} has not been uploaded to the batch.',
   upload_batch_too_large: 'A batch holds 1 to 100 files and at most 500 MB.',
   source_paused: 'The source is paused. Resume it first.',
+  source_not_pausable: 'An upload source has no schedule to pause.',
   run_not_continuable: 'Only the latest crawl run that ended with pages left or failed can be continued. Use Sync now.',
   slug_taken: 'The short name {slug} is already in use. Try {suggestion}.',
   upload_batch_committed: 'The batch has already been saved with other files.',

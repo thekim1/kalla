@@ -129,6 +129,12 @@ public static class AdminErrorCodes
     public static AdminErrorCode SourcePaused { get; } = new("source_paused", 409, "The source is paused. Resume it first.");
 
     /// <summary>
+    /// Pause on an upload source: it has no schedule, and a paused upload source would take a batch its sync job then drops
+    /// (admin design §4.5, #1007).
+    /// </summary>
+    public static AdminErrorCode SourceNotPausable { get; } = new("source_not_pausable", 409, "An upload source has no schedule to pause.");
+
+    /// <summary>
     /// Continue on a run (#804) that cannot be continued: not a crawl, not the source's latest run, still running or waiting
     /// for a deletion decision, or it left no open pages and no failed ones.
     /// </summary>
@@ -375,5 +381,5 @@ public static class AdminErrorCodes
             NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared, TopicInvalid, CollectionSharedInUse,
             AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgePublicUnconfirmed, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, TestQuestionInvalid, TestQuestionDocumentUnlinked, TestRunRunning, TestRunsWaiting, NoTestQuestions, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency, CrawlPolitenessInvalid, FileNotRestorable, ProfileInUse, ProfileTestFailed, PromptTextInvalid,
             GatewayKeyInvalid, GatewayKeyResidency, GatewayKeyModel, GatewayKeyModelResidency, GatewayKeyEmbeddingResidency, GatewayKeyRequired, GatewayKeySystemPrompt, PeriodTooLong, TestAssistantUnavailable, TestBudgetExceeded, SignInNotConfigured,
-            SetupCodeInvalid, SetupAttemptsExhausted, SetupSessionRequired, SetupTestRefused, SetupTestRequired, MoveNotConfirmed, MovePipelineDepartment, RunNotContinuable];
+            SetupCodeInvalid, SetupAttemptsExhausted, SetupSessionRequired, SetupTestRefused, SetupTestRequired, MoveNotConfirmed, MovePipelineDepartment, RunNotContinuable, SourceNotPausable];
 }
