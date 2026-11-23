@@ -992,6 +992,21 @@ Detail: `ingestion-worker/design-processing.md` §13, §14.
 
 *From:* log rows 27, 42, 43, 55, 62, 100; decided by user, 2026-11-02.
 
+### Nightly answer run
+
+From P2 the answers of every published assistant are judged each night (run kind `answers`, in `kalla-admin`): the
+test questions of its knowledge bases are answered with the published version's settings, and the judge rates
+faithfulness and citation precision. The platform admin decides whether it runs and how much:
+`Settings.EvaluationAnswerQuestions` is the number of questions per assistant and night (0–100, default 100), and 0
+switches the run off for every assistant; the Settings page shows it as a switch and a count. There is no switch per
+assistant. The calls run as the assistant's gateway key and count as its cost; a refusal of the key or its budget ends
+that assistant's run for the night. Faithfulness or citation precision 5 points below its median of the last 28 days
+is an attention item on Home, the rule the nightly recall@10 has. The run is advisory and blocks nothing. Detail:
+`ingestion-worker/design-processing.md` §14.8; `admin/design.md` §2.2, §5.5.1, §5.10; `platform/data-model.md` §2.1,
+§2.2, §8.
+
+*From:* weakness review §1 (the run); the setting and the attention rule decided by user, 2026-11-23.
+
 ## Admin and assistants
 
 ### Admin API and UI

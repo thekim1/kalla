@@ -87,7 +87,7 @@ Moved to [`../archive/design-history/admin.md`](../archive/design-history/admin.
 | `RetentionService` | nightly, 03:00 Europe/Stockholm (batches of 5,000 rows; both constants, only `Admin:Retention` is a knob) | pilot: the one slot runs it; from P2 each step batch is idempotent under `pg_try_advisory_xact_lock(<step>)` on both slots (reasoning: [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.5); `Admin:Retention` (default `true`) stays an off switch | chat/audit/config deletions, expired admin sessions; **bucket-key destruction only when the shredding setting is on, which stays off until A1 is answered** (simplification pass §5) |
 | `DefinitionDriftMonitor` (P2) | 15 min | advisory lock (the one drift leader) | `Tools.State`, repins from pre-registrations (tools §4.4) |
 | `ConfigVersionMonitor` | `rag_config` + 2 s poll | every instance | none (keeps the admin's own snapshot for validators and the test panel) |
-| `AnswerEvaluationService` (P2, weakness review §1) | nightly | `pg_try_advisory_xact_lock` per assistant run | `EvaluationRuns` of kind `answers` (faithfulness, citation precision) through `Kalla.Answering` and the judge at the assistant's ceiling (processing §14.8) |
+| `AnswerEvaluationService` (P2, weakness review §1) | nightly, while `Settings.EvaluationAnswerQuestions` is above 0 (Decisions "Nightly answer run") | `pg_try_advisory_xact_lock` per assistant run | `EvaluationRuns` of kind `answers` (faithfulness, citation precision) through `Kalla.Answering` and the judge at the assistant's ceiling (processing §14.8) |
 | `AssistantTestRunner` (P2, weakness review §1) | on assistant publish/restore and **Run test questions** | `pg_try_advisory_xact_lock` on (assistant, version); an unfinished run is restarted after a restart | `EvaluationRuns` of kind `assistant-tests` and their `EvaluationResults` (§7.4) |
 | `SkillGateRunner` (P2) | on publish and **Run again** | `pg_try_advisory_xact_lock` on the version id; an unfinished run is restarted after a restart | `EvaluationRuns` with `Trigger = skill-publish` (tools §3.7) |
 
@@ -487,7 +487,7 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 | `POST /api/assistants/{id}/test` `{ target: draft \| published, … }` | Edit, EditSkills | §4.9; never stored |
 | `GET /api/assistants/{id}/stats?from=&to=` | Read | `AssistantDailyTotals` |
 | `PUT /api/assistants/{id}/limits` (P2) | Edit (≤ defaults) / Admin (≤ hard caps) | writes the draft's `QuerySteps.agent`; V14 |
-| `GET/POST/PUT/DELETE /api/assistant-templates[/{id}]` (P2, weakness review §1) | Read / Admin | platform-owned **assistant templates** through the generic form (§5.8): name, description, instructions, not-found texts sv/en with links, query steps; copied into a new assistant's draft at creation, never linked afterwards; audited `assistanttemplate.*`; **seeded** insert-if-absent by name (`AssistantTemplateSeeder` in `Kalla.MigrationService`, beside `PipelineTemplateSeeder`) with the three presets of the architecture plan's item 3: *Allmän rådgivning* (citizen service; its instructions are the text of `Settings.Chat.defaultSystemPrompt` at seeding, the code default when unset), *Intern policy* (internal policy questions from staff: answers only from the linked documents, names the document and its owner, says when a rule is unclear) and *Handläggningsstöd* (case-handling support: step-by-step guidance from the routines, never decides or predicts a case's outcome); a deleted seed stays deleted (seeded only into an empty table). Creating an assistant without a template (the template field emptied) keeps P1's start from `Settings.Chat.defaultSystemPrompt` |
+| `GET/POST/PUT/DELETE /api/assistant-templates[/{id}]` (P2, weakness review §1) | Read / Admin | platform-owned **assistant templates** through the generic form (§5.8): name, description, instructions, not-found texts sv/en with links, query steps; copied into a new assistant's draft at creation, never linked afterwards; audited `assistanttemplate.*`; **seeded** into an empty table only (`AssistantTemplateSeeder` in `Kalla.MigrationService`, beside `PipelineTemplateSeeder`) with the three presets of the architecture plan's item 3: *Allmän rådgivning* (citizen service; its instructions are the text of `Settings.Chat.defaultSystemPrompt` at seeding, the code default when unset), *Intern policy* (internal policy questions from staff: answers only from the linked documents, names the document and its owner, says when a rule is unclear) and *Handläggningsstöd* (case-handling support: step-by-step guidance from the routines, never decides or predicts a case's outcome); a deleted or renamed seed is not restored while any template remains (the seeder writes nothing into a table that has a row). Creating an assistant without a template (the template field emptied) keeps P1's start from `Settings.Chat.defaultSystemPrompt` |
 
 **Skills and tool servers (P2)** — rules as tools design §3.5–§3.7, §4.4–§4.5 and §9.2: `/api/skills` (draft, validate,
 publish → skill gate (run in the admin, tools §3.7), gate report, serve, rollback, retire, share list, re-run the gate), `/api/tool-servers`
@@ -1095,22 +1095,36 @@ upgrade adds a code here (or a card as the embedding profile's). They are not th
 
 **Attention items are P2** (user, 2026-11-07, M-3): P1's Home shows the setup checklists and sync health; the
 items below, and V32's Overview warning, come with `GET /api/overview`'s attention list in P2. Until then each signal is
-seen on its own page (run page, source page, feedback import state, gateway status). Attention item sources: runs
-`awaiting-deletion-confirmation`; evaluation reports ≥ 5 points worse than the previous run
-(after a publish or nightly); a nightly recall@10 5 points below its 28-day median (processing §14.8); an assistant
-test run with fewer questions as expected than the previous version's (§7.4); PII-flagged documents in `public`
-collections; degraded runs; sources with ≥ 3 failed
-runs; sources with N (default 3) runs without a complete traversal (simplification pass §2); feedback import failing ≥ 4
-runs; org or model sync failing; an assistant or knowledge base whose gateway key is unusable (disabled, revoked,
-expired, its team or department inactive), has lost a model or residency the object uses, or whose budget is spent,
-with the reason and a link to the key in the gateway (§4.10, V39; cost-attribution §4.2). The admin derives these from
-the mirror (§4.10) and, from gateway phase 3, the key's budgets (`exhausted`, §4.5); it stores no refusal of its own. A
-`402` or key refusal seen by chat or the worker shows in the turn outcomes (`unavailable`) and the run's reason
-(`gateway.budget_exhausted`, `gateway.key_unavailable`, engine §7.3); template versions without a supporting worker; from P2 (weakness review §1): site-profile proposals (platform
-admins) and published assistants without a message in 90 days (`AssistantDailyTotals`; published ≥ 90 days ago), with
-**Archive** (`…/archive`) and **Keep** (`…/keep`: not raised again while `UnusedKeptUntil` is ahead, 90 days) (simplification pass §15); a document cited in 3 or more downvoted answers in the last 7 days
-(`DocumentDailyFeedback`, §8.8), for the knowledge base's owning department, linked to its *Feedback on documents* card; a test report on an assistant's new
-version with more questions not as expected than the previous version's (P2); P2 drift and pending approvals.
+seen on its own page (run page, source page, feedback import state, gateway status). The items, and what each one
+comes with. **The list** means `GET /api/overview`'s attention list itself, built from data the admin already has; an
+item with another entry is added to the list by the work that entry names, and is not part of the list until then.
+
+| Attention item | Comes with |
+|---|---|
+| A run `awaiting-deletion-confirmation` | the list |
+| An evaluation report (after a publish or nightly) ≥ 5 points worse than the previous run | the list |
+| A nightly recall@10 5 points below its 28-day median (processing §14.8) | the list |
+| PII-flagged documents in a `public` collection | the list |
+| Degraded runs | the list |
+| A source with ≥ 3 failed runs | the list |
+| A source with N (default 3) runs without a complete traversal (simplification pass §2) | the list |
+| Feedback import failing ≥ 4 runs | the list |
+| Org or model sync failing | the list |
+| An assistant or knowledge base whose gateway key is unusable, has lost a model or residency the object uses, or whose budget is spent (*The gateway key item* below) | the list |
+| V32's Overview warning: a platform model setting whose model lost its residency | the list |
+| A template version without a supporting worker (`content."WorkerNodeSupport"`, engine design) | the list |
+| An assistant test run with fewer questions as expected than the previous version's (§7.4) | the assistant test questions (§7.4) |
+| The nightly `answers` run's faithfulness or citation precision 5 points below its median of the last 28 days (processing §14.8; Decisions "Nightly answer run") | the nightly answer run |
+| A document cited in 3 or more downvoted answers in the last 7 days (`DocumentDailyFeedback`, §8.8), for the knowledge base's owning department, linked to its *Feedback on documents* card | *Feedback on documents* (§8.8) |
+| A published assistant without a message in 90 days (`AssistantDailyTotals`; published ≥ 90 days ago), with **Archive** (`…/archive`) and **Keep** (`…/keep`: not raised again while `UnusedKeptUntil` is ahead, 90 days) (simplification pass §15) | P2 wave 2 |
+| Site-profile proposals (platform admins; weakness review §1) | site-profile learning (a later wave) |
+| Tool drift and pending approvals | tools (a later wave) |
+
+**The gateway key item:** the key is unusable when it is disabled, revoked or expired, or its team or department is
+inactive; the item carries the reason and a link to the key in the gateway (§4.10, V39; cost-attribution §4.2). The
+admin derives it from the mirror (§4.10) and, from gateway phase 3, the key's budgets (`exhausted`, §4.5); it stores
+no refusal of its own. A `402` or key refusal seen by chat or the worker shows in the turn outcomes (`unavailable`)
+and the run's reason (`gateway.budget_exhausted`, `gateway.key_unavailable`, engine §7.3).
 
 #### 5.5.2 Knowledge base
 
@@ -1355,7 +1369,8 @@ Draft  Test  Test questions (8)  Versions (3)  Audience  Storage  Statistics
 The *Statistics* tab shows the date of last use, the *Cost* card of §8.6 (by step, client and outcome, gateway and
 estimated cost apart), the *Content gaps* card of §8.7 and, from P2 (weakness review §1), the **latest answer evaluation**: faithfulness and citation precision of the last
 `answers` run with question counts, compared with the previous run, next to the live `uncited_answer` rate
-(processing §14.8, `AnswerEvaluationService` §2.2).
+(processing §14.8, `AnswerEvaluationService` §2.2). While the run is switched off (`Settings.EvaluationAnswerQuestions`
+= 0, §5.10) the card says so and keeps the last run's figures with their date.
 
 #### 5.5.5 Feedback
 
@@ -1667,6 +1682,13 @@ platform admin, department admin, pipeline editor, reviewer, editor, viewer. A g
 object id; groups are trimmed and de-duplicated case-insensitively, and a role without groups isn't stored. The hints say
 that a role in the sign-in token counts too, that the deployment's break-glass group (`KALLA_OIDC_GROUPS_PLATFORM_ADMIN`)
 always applies, and that a change applies at each user's next sign-in (identity §2.5, Decisions "Role groups as a setting").
+
+**Evaluation** has, from P2, the nightly answer run's control (Decisions "Nightly answer run"; processing §14.8): a
+switch *Run the nightly answer evaluation* and, while it is on, *Questions per assistant and night* (1–100). Both are
+the one value `Settings.EvaluationAnswerQuestions` (0–100, default 100; the switch off stores 0, and on again brings
+back 100). The hint says what a night costs: up to that many answers and as many judge calls for every published
+assistant whose knowledge bases have test questions, charged to the assistant's gateway key. There is no switch per
+assistant.
 
 A section's form is built in two steps:
 
