@@ -67,42 +67,28 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
   its pull request what you are about to write; review its pull requests as comments (claims checked against the code).
 - **A decision for the user is asked as four alternatives with one recommendation** (the question tool).
 
-**Open when this was written** (2026-11-23, about 12:00 UTC): `thekim1`'s #977 (B-58), #978 (B-59, stacked on
-#977), #984 (stream a's Settings switch for B-58, stacked on #977), #963 (B-63), Dependabot's #958 and this file's pull
-request. Every one of `thekim1`'s has a main-session review as a comment; none is approved. In order:
+**Open when this was written** (2026-11-23, about 13:15 UTC): Dependabot's #958 and the main session's #989 (this
+file), #990 (the support case, B-83) and #991 (B-58, B-59 and B-63's design deviations). `thekim1` merged #977 (B-58),
+#963 (B-63), #978 (B-59) and #984 (B-58's Settings switch) at about 13:00, each after the main session's review said it
+was ready. In order:
 
-1. **#977, B-58 the nightly answer run:** reviewed (session 55), not approved. Since then only a label commit
-   (43ee79c2). Still to fix:
-   - **an archived assistant still gets a run every night** (the service takes every assistant with a published
-     version): add `State == active`, and the main session writes "published and active" into processing §14.8;
-   - **the exception's message is stored in the judge's note** (#232: type and status only,
-     `GatewayModelSync.ErrorText`); the same two lines are on `main` in `AssistantTestRunner.cs:297` and `:322`
-     (#983 item 2);
-   - smaller: no run without a judge model; an `.upgrade.md` that says the run is on by default.
-   Merge order (thekim1 on #977): #977, then retarget #978 and #984 to `main`.
-2. **#978, B-59 Home's *Needs attention*:** reviewed (session 56). All twelve rows of admin §5.5.1's *the list* are
-   built, plus B-57's and B-58's items; scope is right. **To fix:** `Settings.Crawl.IncompleteRunsAlert` is read as
-   `"IncompleteRunsAlert"` with the case-sensitive `JsonObject` indexer (`AttentionList.cs:254`); the stored key is
-   `incompleteRunsAlert`, so Home stays at 3 when the setting changes. Smaller (follow-ups are fine): a worker outage
-   longer than 60 s flags every pipeline `template_unsupported`; the gateway key item is looser than V39 (audience
-   ceiling, another department's key); weak tests. **Once merged, the main session records** its seven listed
-   deviations and the unlisted ones from the review: "the last 3 finished runs all failed", `evaluation_worse` within
-   29 days, paused sources still raise `source_failing`, the roles (platform-only kinds; every `Read` role sees its
-   departments' items).
-3. **#984, the Evaluation section's switch (stream a):** reviewed (session 56). **To fix:** the switch's state is
-   derived from the count text (`GenericForm.vue:64-67`), so clearing the count to type a new one turns it off, unmounts
-   the field mid-edit, and a save then stores 100 (the request's default). Give the switch its own state.
-4. **#963, B-63 clear a personal-data hold:** reviewed (session 55), not updated since. It needs
-   `@cleared="documents.reload()"` (#964 removed `loadDocuments`; `vue-tsc` fails on the merged result), a rebase, and
-   the fault from the review: a document flagged again after a clearance gets no *Clear*. Code-quality #3 waits for it.
+1. **#990 and #991**, the main session's own: green or nearly so; they need the user's word.
+2. **B-58, B-59 and B-63 are merged; their design deviations are #991.** It also writes down thekim1's hand-off on
+   #963: the personal-data preview's output is read at `Edit` while starting it needs `Manage`. That is sound (the
+   spans hold positions, never values, `PreviewPiiSpan`; an editor already reads the text through the chunks); only
+   reading the output is not audited. If that read should be audited or raised to `Manage`, that is a stream-b change.
+3. **#981's follow-ups** (on #981, for #980): B-57's `TestQuestionDrawer.vue` has a hand-rolled debounce with no unmount
+   clear, `AssistantTestsTab` a fixed poll; `RunView` and `PublicationView` don't reload on a `props.id` change.
+4. **#978's smaller points not taken** (its review): weak tests for the key item on a knowledge base, `owner_inactive`
+   and `not_usable`; `ATTENTION.none` unused; the `personal_data_public` link now opens Documents with `?pii=flagged`.
 5. **#958, the parser's bumps:** `LICENSES.md` has to be regenerated on the branch; stream a's. Best taken with opencv
    5.1 (item 9).
 6. **#983, the security read of B-54 to B-57 (release blocker, stream b):** a draft's test panel and B-57's test runs
    search knowledge bases not shared with the assistant's department (`KnowledgeService.AssistantCollections` never
    checks sharing; the panel's snapshot confines only unpublished collections), and copying an assistant across
-   departments carries the links over, so it is the normal path; exception text in the judge note; copied test
-   questions keep the source department's documents; no rate policy on `POST /test-runs`. Fix before the next
-   release. When it is settled, the main session writes the copy's rule for links and expected documents into admin
+   departments carries the links over, so it is the normal path; copied test questions keep the source department's
+   documents; no rate policy on `POST /test-runs`. Item 2 (exception text in the judge note) is fixed by #977. Fix
+   before the next release. When it is settled, the main session writes the copy's rule for links and expected documents into admin
    §4.5 (copy row) and §4.9/§7.4 (the panel and the runs search only what V11 allows); #985 left them out on purpose.
 7. **Read of the never-read documents (handover 56's item 11):** read 1 is done (#988: `to-verify.md`,
    `postponed-decisions.md`, the gold-set README; issues #986, #987). Read 2 is #990 (the support-assistant case
@@ -110,13 +96,12 @@ request. Every one of `thekim1`'s has a main-session review as a comment; none i
    3 s, the rerank model is a deployment's choice, DoIT's key uses PII policy `Allow`; SA-11 queued as B-83). Read 3 is
    `docs/` (stream a's: findings become `stream-a` issues).
 8. **The code-quality plan** ([`plans/proposals/code-quality-top7.md`](plans/proposals/code-quality-top7.md), tracked
-   in #980): done are #1, #2, #4, #5 (#981), #6 and #7; #3 waits for #963; stream a's parts are #974. #981's follow-ups
-   (on #981): B-57's `TestQuestionDrawer.vue:57-60` has a hand-rolled debounce with no unmount clear, `AssistantTestsTab`
-   a fixed poll; `RunView` and `PublicationView` don't reload on a `props.id` change.
+   in #980): done are #1, #2, #4, #5 (#981), #6 and #7; #5b and #3 are `thekim1`'s next, now that #963 is in; stream
+   a's parts are #974.
 9. **opencv 5.1 from 2026-11-25** (*Watch*): try `opencv-python-headless` 5.1.0.95 in the parser once its uv cutoff
    lets it in; it may retire the eleven FFmpeg exceptions before 2026-12-17.
 10. **#925's steps 2 to 4** (personal-data verdicts, *reject*, the false-positive summary): the Decisions entry and the
-    design changes are `thekim1`'s session's (said on #925). Step 1 is B-63 (item 4).
+    design changes are `thekim1`'s session's (said on #925). Step 1 is B-63 (#963, merged).
 11. **The VM's upgrade is `thekim1`'s** (#920): 0.5.0 straight to 0.9.2. No report yet.
 12. **Repository variables:** the workflows read `vars.KALLA_TEST_HOST_RUNNER`, `vars.KALLA_TEST_HOST_DEPLOY_ENV`,
     `vars.KALLA_R1_*` and `secrets.KALLA_R1_API_KEY`, and none exist; `thekim1` was asked on #905 (2026-11-21), no
@@ -180,8 +165,9 @@ history. Reviews and reads ran as subagents, one at a time; their claims were ch
 - **The UX pass decided** (the user, six questions): UX1 A (B proposed to Fors), UX2 to UX6 C. **#982:** the eleven
   layout rules and the choices in Decisions "Admin API and UI", admin §5.12 (new) and §5.2 to §5.10 rewritten, the
   proposal marked decided, the build steps queued as **B-74 to B-81** in stream b's new section *Admin UI UX pass*.
-- **Reviews as comments:** #978 (B-59), #981 (CQ-5), #984 (stream a's switch). **Security read of B-54 to B-57**
-  filed as #983 (`release-blocker`).
+- **Reviews as comments:** #978 (B-59), #981 (CQ-5), #984 (stream a's switch), and the re-reviews of #977, #978, #984
+  and #963 once `thekim1` had fixed them (each claim checked, the touched tests run locally); `thekim1` merged all four.
+  **Security read of B-54 to B-57** filed as #983 (`release-blocker`).
 - **#985:** B-54 to B-57's design deviations recorded (admin §4.5, §5.5.4, §7.4; chat §8.1; data-model §2.3), and
   **B-82** queued (the general Publish dialog with the diff, the warnings and the cost; the design had it, nothing
   built it).
@@ -191,6 +177,8 @@ history. Reviews and reads ran as subagents, one at a time; their claims were ch
   SHA-pinned (a stale fact, not a new decision). Issues #986 (stream b) and #987 (stream a).
 - **#990:** the support-assistant case read through and brought up to date (four answers from the user, and SA-11
   queued as B-83: a known file's upload replaces it by default, admin §5.5.7 point 6).
+- **#991:** B-58, B-59 and B-63's design deviations (processing §14.8, admin §4.5, §5.2, §5.5.1, §5.5.2, §5.5.3,
+  §10.3, chat §8.1, data-model §2.2, §2.3).
 - **Approved as `Crotalus` on the user's word and merged:** #981, #982, then #985, #988.
 
 ## Known gaps, documented, not fixed
@@ -278,8 +266,8 @@ history. Reviews and reads ran as subagents, one at a time; their claims were ch
   favicon (#953); one path-rule matcher and one schedule rule in `Kalla.Pipelines` (A-42, A-43); the code-quality
   refactors (#964 to #973, #981). Plan files: #961, #975, #976, #982, #985, #988, the two proposals.
 - **Queues:** stream a: the live block (A-L1 to A-L10), A-34 and A-35 with only their live checks open, and issue
-  #974, #987; A-42 and A-43 are done. Stream b: B-58 (#977, with stream a's #984) and B-59 (#978) in review, B-63
-  (#963) in review, #983 (release blocker), then B-61, B-62 and B-66 (F10, F7, F6), B-64 and B-65 (the topics editor),
+  #974, #987; A-42 and A-43 are done. Stream b: B-58, B-59 and B-63 merged (#977, #984, #978, #963); #983 (release
+  blocker) first, then B-61, B-62 and B-66 (F10, F7, F6), B-64 and B-65 (the topics editor),
   B-67 to B-69 (P2 wave 2), B-70 and B-71 (a source's pause and next run), B-72 and B-73 (the chat extension), B-74 to
   B-82 (the UX pass and the Publish dialog; B-74 waits on nothing), B-83 (replace an upload by name, before T4; waits
   on nothing), B-42 to B-46 (the gateway phases' live checks) and
