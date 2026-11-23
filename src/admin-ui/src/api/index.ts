@@ -365,5 +365,9 @@ export const api = {
       http.get<KeysetPage<DocumentSummary>>('/api/documents', query),
     get: (id: string) => http.get<DocumentDetail>(`/api/documents/${id}`),
     chunks: (id: string) => http.get<DocumentChunks>(`/api/documents/${id}/chunks`),
+    /** The personal-data highlights (a preview up to the personal-data stage, audited pii.view; B-63). */
+    piiPreview: (id: string) => http.post<{ jobId: string }>(`/api/documents/${id}/pii-preview`),
+    /** Releases a flagged document (reason ≥ 10, V26; command clear-pii-flag). */
+    piiClear: (id: string, reason: string) => http.post<{ jobId: string }>(`/api/documents/${id}/pii-clear`, { reason }),
   },
 }

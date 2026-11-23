@@ -24,11 +24,12 @@ import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatNumber } from '@/utils/format'
-import { DELETE, LEVEL_LABEL, RUN_STATE_LABEL, SOURCE, SOURCE_EDIT, SOURCE_PAGE, SOURCE_TYPE_LABEL } from '@/utils/labels'
+import { DELETE, LEVEL_LABEL, PII_ACTIONS, RUN_STATE_LABEL, SOURCE, SOURCE_EDIT, SOURCE_PAGE, SOURCE_TYPE_LABEL } from '@/utils/labels'
 import { pollDelay } from '@/composables/useJobPoll'
 import { useKeysetList } from '@/composables/useKeysetList'
 import { runProgressText, runStateTone } from '@/utils/runs'
 import { problemMessage } from '@/utils/problem'
+import PiiActions from '@/components/documents/PiiActions.vue'
 
 // Källa (admin design §5.5.3, §5.4 step 6; #278 slice 2): the source's settings with Ändra (impact confirmation, V25),
 // Hämta nu, Avbryt körning on an active run (#488 part 3), the schedule in force with the next scheduled fetch (engine
@@ -80,7 +81,10 @@ const piiColumns: Column[] = [
   { key: 'fired', label: SOURCE_PAGE.piiFlaggedFor },
   { key: 'counts', label: SOURCE_PAGE.piiCounts },
   { key: 'state', label: SOURCE_PAGE.state },
+  { key: 'actions', label: PII_ACTIONS.clear, hideLabel: true, align: 'right' },
 ]
+// B-63: a flagged document's highlights and Clear are Manage's (V26; the API checks the source's department).
+const canManage = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']))
 const canEdit = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor']))
 // The run Cancel run stops (#488 part 3): the newest one still running or waiting for the deletion decision.
 const activeRun = computed(() => runs.items.value.find((r) => r.state === 'running' || r.state === 'awaiting-deletion-confirmation'))
@@ -187,6 +191,10 @@ async function syncNow(): Promise<void> {
 const runTo = (run: RunSummary) => ({ name: 'run', params: { id: run.id } })
 
 onMounted(load)
+
+async function reloadPii(): Promise<void> {
+  pii.value = await api.sources.piiReport(props.id).catch(() => pii.value)
+}
 </script>
 
 <template>
@@ -265,7 +273,16 @@ onMounted(load)
             <span v-if="Object.keys(row.counts).length" class="tabular text-small text-fg-2" data-test="pii-counts">{{ piiCountList(row.counts) }}</span>
           </template>
           <template #cell-state="{ row }">
-            <UiBadge :tone="row.state === 'held' ? 'warn' : 'neutral'" :label="row.state === 'held' ? SOURCE_PAGE.piiHeld : SOURCE_PAGE.piiLive" />
+            <span class="flex flex-wrap gap-1">
+              <UiBadge :tone="row.state === 'held' ? 'warn' : 'neutral'" :label="row.state === 'held' ? SOURCE_PAGE.piiHeld : SOURCE_PAGE.piiLive" />
+              <UiBadge v-if="row.piiClearedAt && row.state !== 'held'" tone="accent" :label="PII_ACTIONS.clearedBadge" data-test="pii-cleared" />
+            </span>
+          </template>
+          <template #cell-actions="{ row }">
+            <PiiActions
+              v-if="canManage && (row.state === 'held' || (row.typesFired.length && !row.piiClearedAt))" :document-id="row.documentId" :title="row.title ?? row.displayName ?? row.url ?? row.documentId"
+              @cleared="reloadPii"
+            />
           </template>
         </DataTable>
       </details>

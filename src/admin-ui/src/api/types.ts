@@ -508,6 +508,8 @@ export interface DocumentSummary {
   parseOutcome: string | null
   piiFlagged: boolean
   piiCleared: boolean
+  /** A flagged chunk set is held for personal data now, also after an earlier clearance (processing §9.5). */
+  piiHeld: boolean
   held: boolean
   live: boolean
   sourceModifiedAt: IsoDateTime | null
@@ -951,6 +953,8 @@ export interface PreviewPii {
   counts: Record<string, number | string | null>
   typesFired: string[]
   state: string
+  /** With `piiSpans` (the highlights): each match by chunk ordinal, type and offsets in the chunk's text; never the value. */
+  spans?: { ordinal: number; type: string; start: number; length: number }[] | null
 }
 
 export interface RunSummary {
@@ -1071,6 +1075,8 @@ export interface PiiReport {
     rulesFired: number
     /** The types whose flag rule fired, as the worker stored them (#217): type names only, never values. */
     typesFired: string[]
+    /** When an admin cleared the document (B-63); later versions stay covered while no count rises. */
+    piiClearedAt: IsoDateTime | null
   }[]
   truncated: boolean
 }

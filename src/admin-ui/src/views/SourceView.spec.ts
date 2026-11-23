@@ -35,10 +35,10 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     vi.spyOn(api.sources, 'piiReport').mockResolvedValue({
       applies: true, piiMode: 'hold', collectionClassification: 'public', truncated: false,
       documents: [
-        { documentId: 'e', title: 'Kontakt', url: null, displayName: null, state: 'live', previousVersionLive: false, counts: { phone: 4 }, rulesFired: 0, typesFired: [] },
+        { documentId: 'e', title: 'Kontakt', url: null, displayName: null, state: 'live', previousVersionLive: false, counts: { phone: 4 }, rulesFired: 0, typesFired: [], piiClearedAt: null },
         {
           documentId: 'd', title: 'Protokoll', url: null, displayName: null, state: 'held', previousVersionLive: false,
-          counts: { personnummer: 1, email: 3, emailExternal: 2 }, rulesFired: 2, typesFired: ['emailExternal', 'personnummer'],
+          counts: { personnummer: 1, email: 3, emailExternal: 2 }, rulesFired: 2, typesFired: ['emailExternal', 'personnummer'], piiClearedAt: null,
         },
       ],
     })
@@ -72,6 +72,8 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
       'Personal identity numbers: 1, Email addresses: 3, External email addresses: 2',
       'Phone numbers: 4',
     ])
+    // B-63: an editor (not Manage) gets no Show highlights or Clear.
+    expect(wrapper.find('[data-test=pii-clear]').exists()).toBe(false)
 
     await wrapper.get('[data-test=sync]').trigger('click')
     await flushPromises()
@@ -83,6 +85,31 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     expect(row.getComponent(RouterLinkStub).props('to')).toEqual({ name: 'run', params: { id: 'r1' } })
     await row.findAll('td')[0]!.trigger('click')
     expect(push).toHaveBeenCalledWith({ name: 'run', params: { id: 'r1' } })
+  })
+
+  it('offers Manage the highlights and Clear on a flagged document, and shows a cleared one as cleared (B-63)', async () => {
+    const auth = useAuthStore()
+    auth.user = bffUser({ roles: ['rag-department-admin'] })
+    auth.status = 'authenticated'
+    vi.spyOn(api.sources, 'get').mockResolvedValue(source)
+    vi.spyOn(api.sources, 'runs').mockResolvedValue({ items: [], next: null })
+    vi.spyOn(api.sources, 'piiReport').mockResolvedValue({
+      applies: true, piiMode: 'report', collectionClassification: 'public', truncated: false,
+      documents: [
+        { documentId: 'd', title: 'Protokoll', url: null, displayName: null, state: 'held', previousVersionLive: false, counts: { personnummer: 1 }, rulesFired: 1,
+          typesFired: ['personnummer'], piiClearedAt: null },
+        { documentId: 'c', title: 'Kontakt', url: null, displayName: null, state: 'live', previousVersionLive: false, counts: { emailExternal: 1 }, rulesFired: 1,
+          typesFired: ['emailExternal'], piiClearedAt: '2026-11-23T09:00:00Z' },
+        // Cleared once, then a later version flagged and held again (processing §9.5): it can be cleared again (#963 review).
+        { documentId: 'r', title: 'Nyhet', url: null, displayName: null, state: 'held', previousVersionLive: true, counts: { personnummer: 2 }, rulesFired: 1,
+          typesFired: ['personnummer'], piiClearedAt: '2026-11-20T09:00:00Z' },
+      ],
+    })
+    const wrapper = mount(SourceView, { props: { id: 's1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
+    await flushPromises()
+    expect(wrapper.findAll('[data-test=pii-clear]')).toHaveLength(2) // the held two; the cleared live one has none
+    expect(wrapper.findAll('[data-test=pii-cleared]')).toHaveLength(1) // not on the one held again
+    wrapper.unmount()
   })
 
   it('says a source’s own schedule as it is, and that a paused source has no next scheduled fetch (engine design §9.6)', async () => {

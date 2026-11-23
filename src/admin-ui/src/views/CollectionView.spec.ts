@@ -23,7 +23,7 @@ const base: Collection = collection({ usedBy: [collectionUser({ published: false
 function document(overrides: Partial<DocumentSummary>): DocumentSummary {
   return {
     id: 'doc', sourceId: 's1', title: 'Altan', url: 'https://www.umea.se/altan', displayName: null, mediaType: 'text/html', parseOutcome: 'ok',
-    piiFlagged: false, piiCleared: false, held: false, live: true, sourceModifiedAt: null, fetchedAt: '2026-11-01T02:14:00Z', lastSeenAt: '2026-11-01T02:14:00Z',
+    piiFlagged: false, piiCleared: false, piiHeld: false, held: false, live: true, sourceModifiedAt: null, fetchedAt: '2026-11-01T02:14:00Z', lastSeenAt: '2026-11-01T02:14:00Z',
     ...overrides,
   }
 }
