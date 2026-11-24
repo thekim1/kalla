@@ -68,17 +68,17 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
   its pull request what you are about to write; review its pull requests as comments (claims checked against the code).
 - **A decision for the user is asked as four alternatives with one recommendation** (the question tool).
 
-**Open when this was written** (2026-11-24, about 00:30 UTC): `thekim1`'s #1024 (the Pause follow-ups of #1007,
-reviewed: ready), #1025 (B-74, reviewed: ready), #1027 (B-75 part 1, reviewed: nine points, three before it merges)
-and #1029 (B-75 part 2, **not reviewed yet**); Dependabot's #958; and the main session's own pull request with this
-file, the handbook's lessons and the design deviations of session 57's six items. In order:
+**Open when this was written** (2026-11-24, about 06:30 UTC): `thekim1`'s stacked UX-pass pull requests #1032
+(B-76, on `main`), #1033 (B-82, on #1032's branch) and #1035 (B-77, on #1033's), none reviewed yet; Dependabot's
+#958; and the main session's own pull request with this file, the handbook's lessons and the design deviations of
+session 57's six items. `thekim1` merged #1024, #1025, #1027 and #1029 overnight. In order:
 
-1. **#1029 (B-75 part 2, the names of admin §5.7)** has no review yet; it renames tabs, buttons and filters, so
-   grep `tests/e2e/specs/` and `docs/` for every old name (the browser tests don't run on pull requests). **#1027's
-   review** asked for three things before it merges: the phone's *Knowledge bases* tab on detail pages (merging
-   #1025 first fixes it), the not-scanned summary's sentence (admin §5.5.7 point 4 now says "…were not scanned for
-   malware: the scan was off when they were stored"; the code still has the old text) and the docs hand-off (filed
-   since as #1030).
+1. **Review the stack #1032, #1033, #1035** (as comments; claims checked in the code). Mind the handbook's lesson
+   on stacked pull requests: merging the base with `--delete-branch` closes the one on top. **#1029 (B-75 part 2,
+   the names of admin §5.7) was merged without a review**: it renamed tabs, buttons and filters, and the browser
+   tests don't run on pull requests, so grep `tests/e2e/specs/` and `docs/` for every old name before the next
+   release (or run `e2e.yml` once with the runners idle). #1027 took all nine review points; the not-scanned
+   docs hand-off is #1030.
 2. **Session 57's design deviations are in this file's pull request** (admin §5.5.7, §8.6, §8.7, §8.8, §5.5.1;
    chat §9.10, §12.2, §17, §18.9; data-model §8). Two things in it are still to build, neither queued yet:
    **the chat stage metrics of chat §17** (`rag.chat.stage.duration`, `rag.chat.ttft`, `rag.chat.overhead` were
@@ -264,18 +264,18 @@ On `~/research/rag` (the user's machine), as the main session, while `thekim1`'s
   ([run 45197573594](https://github.com/thekim1/kalla/actions/runs/45197573594), #1009); 0.10.0 has the fixes
   (#1010) and is scanned from the next run. The dated exceptions are in *Watch*.
 - **What a deployer types in Portainer:** 1 value since 0.7.0 (`FORS_DOMAIN`, no secret).
-- **On `main`, unreleased** (six notes in `changes/`, no upgrade note; three migrations, each adding one `chat`
+- **On `main`, unreleased** (session 57's six items, B-74, B-75 and #1007's follow-ups; no upgrade note; three migrations, each adding one `chat`
   table with its grants: `AssistantDailyOutcomes`, `AssistantDailyGaps`, `DocumentDailyFeedback`): cost per outcome
   on the *Cost* card (B-61), the content-gap report (B-62), downvotes per document with its attention item (B-66),
   `kalla.progress` and `kalla.timings` (B-72), `topics` on related documents and `kalla.nearest` (B-73), an upload
   with a known name replaces the file (B-83).
 - **Queues:** stream a: the live block (A-L1 to A-L10), A-34 and A-35 with only their live checks open, and its
-  issues (*Start here*, 3, 7 and 8, and #974, #987). Stream b: the UX pass, in `thekim1`'s hands (B-74 #1025, B-75
-  #1027 and #1029, then B-76, B-82, B-77, B-78, B-79, B-80, B-81; B-78 and B-79 no longer wait on anything of
-  session 57's), B-64 and B-65 (the topics editor), B-67 to B-69 (P2 wave 2), B-71, B-42 to B-46 (the gateway
+  issues (*Start here*, 3, 7 and 8, and #974, #987). Stream b: the UX pass, in `thekim1`'s hands (B-74 and B-75 merged;
+  B-76 #1032, B-82 #1033 and B-77 #1035 open; then B-78, B-79, B-80, B-81; B-78 and B-79 no longer wait on anything
+  of session 57's), B-64 and B-65 (the topics editor), B-67 to B-69 (P2 wave 2), B-71, B-42 to B-46 (the gateway
   phases' live checks) and its live items. An item someone has started says **Taken** in the queue. Main: M-4.
 - **Open issues that matter:** #992 to #995, #1028 and #1030 (the docs and the platform pages, stream a's), #1009
-  (the Audit), #1007 (closes with #1024), #987 (the grading script), #980 (code quality's tracker), #974 (code
+  (the Audit), #987 (the grading script), #980 (code quality's tracker), #974 (code
   quality, stream a's part), #781 and #921 (watch), #920 (the VM's upgrade, `thekim1`'s), #929 (topics; closes with
   B-65), #667 (M-16's issue: the work is done, `thekim1`'s to close), #1015, #333, #511, #580 and #550. In Fors: no
   open pull request; proposals #108 and #109, #99, #91, and a flaky test #124.
