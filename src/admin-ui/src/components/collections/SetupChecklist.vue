@@ -28,15 +28,15 @@ const steps = computed<Step[]>(() => {
   const assistant: RouteLocationRaw = s.assistantId ? { name: 'assistant', params: { id: s.assistantId } } : { name: 'assistants' }
   const state = (done: boolean, active = false): State => (done ? 'done' : active ? 'active' : 'todo')
   return [
-    { key: 'source', label: s.sources ? SETUP.steps.sourceDone(s.sources) : SETUP.steps.source, state: state(s.sources > 0), to: tab('sources') },
+    { key: 'source', label: s.sources ? SETUP.steps.sourceDone(s.sources) : SETUP.steps.source, state: state(s.sources > 0), to: tab('content') },
     {
       key: 'sync', label: s.firstSyncDone ? SETUP.steps.syncDone : s.syncRunning ? SETUP.steps.syncRunning : SETUP.steps.sync,
-      state: state(s.firstSyncDone, s.syncRunning), to: tab('sources'),
+      state: state(s.firstSyncDone, s.syncRunning), to: tab('content'),
     },
-    { key: 'questions', label: s.testQuestions ? SETUP.steps.questionsDone(s.testQuestions) : SETUP.steps.questions, state: state(s.testQuestions > 0), to: tab('evaluation') },
+    { key: 'questions', label: s.testQuestions ? SETUP.steps.questionsDone(s.testQuestions) : SETUP.steps.questions, state: state(s.testQuestions > 0), to: tab('quality') },
     {
       key: 'evaluation', label: s.evaluated ? SETUP.steps.evaluated : s.evaluating ? SETUP.steps.evaluating : SETUP.steps.evaluation,
-      state: state(s.evaluated, s.evaluating), to: tab('evaluation'),
+      state: state(s.evaluated, s.evaluating), to: tab('quality'),
     },
     { key: 'publish', label: s.published ? SETUP.steps.published : SETUP.steps.publish, state: state(s.published), to: tab('overview') },
     { key: 'assistant', label: s.assistantId ? SETUP.steps.assistantDone : SETUP.steps.assistant, state: state(!!s.assistantId), to: assistant },

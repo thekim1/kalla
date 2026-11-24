@@ -7,11 +7,12 @@ import type { Collection, DocumentSummary, Source, SourceListItem } from '@/api/
 import { useAuthStore } from '@/stores/auth'
 import { bffUser, collection, collectionSummary, collectionUser } from '@/test/fixtures'
 import { button, openMenu } from '@/test/helpers'
-import { UNSAVED } from '@/utils/labels'
+import { formatNumber } from '@/utils/format'
+import { COLLECTION, UNSAVED } from '@/utils/labels'
 import CollectionEditDrawer from '@/components/collections/CollectionEditDrawer.vue'
 import CollectionView from './CollectionView.vue'
 
-// `?tab=` (the Files tab's `?tab=files`, §5.5.7) through a route the tests set.
+// `?tab=` (old values too, such as `?tab=files`, §5.5.7) through a route the tests set.
 const route = vi.hoisted(() => ({ query: {} as Record<string, string> }))
 const push = vi.hoisted(() => vi.fn())
 vi.mock('vue-router', async (original) => ({ ...(await original<typeof import('vue-router')>()), useRoute: () => route, useRouter: () => ({ push }) }))
@@ -84,7 +85,7 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     expect(wrapper.get('[data-test=used-by]').text()).toBe('Bygglovsassistenten (draft)')
     expect(wrapper.find('[data-test=publish]').exists()).toBe(false) // publishing is Manage
 
-    await button(wrapper, 'Sources (1)').trigger('click')
+    await button(wrapper, 'Content (1)').trigger('click')
     expect(wrapper.text()).toContain('umea.se/bygga')
     expect(wrapper.text()).toContain('Website')
 
@@ -139,10 +140,15 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     const wrapper = mount(CollectionView, { props: { id: 'c1' } })
     await flushPromises()
 
-    expect(wrapper.get('[data-test=document-count]').text().replace(/\s/g, '')).toBe('0') // the detail's live count, not the sources' sum
-    expect(wrapper.get('[data-test=last-fetch]').text()).toContain('Failed')
-    expect(wrapper.text()).toContain('Latest quality (recall@10)')
-    expect(wrapper.get('[data-test=quality]').text()).toContain('0,91')
+    // The four tiles (§5.5.2): the detail's live count (not the sources' sum), the last fetch, the quality and the users.
+    const tile = (t: string) => wrapper.get(`[data-test=tile-${t}]`)
+    expect(tile('documents').get('[data-test=summary-tile-value]').text().replace(/\s/g, '')).toBe('0')
+    expect(tile('last-fetch').text()).toContain('Failed')
+    // Only a tile that needs action is marked, and it says so in text.
+    expect(tile('last-fetch').get('[data-test=summary-tile-attention]').text()).toBe(COLLECTION.tiles.fetchFailed)
+    expect(tile('documents').find('[data-test=summary-tile-attention]').exists()).toBe(false)
+    expect(tile('quality').text()).toContain('Quality (recall@10)')
+    expect(tile('quality').get('[data-test=summary-tile-value]').text()).toBe('0,91')
   })
 
   it('lists each source with its last run and document count on the Sources tab (§5.5.2)', async () => {
@@ -159,7 +165,7 @@ describe('Knowledge base (admin design §5.5.2)', () => {
 
     const wrapper = mount(CollectionView, { props: { id: 'c1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
-    await button(wrapper, 'Sources (2)').trigger('click')
+    await button(wrapper, 'Content (2)').trigger('click')
 
     const headers = wrapper.findAll('th').map((h) => h.text())
     expect(headers).toEqual(expect.arrayContaining(['Last run', 'Documents']))
@@ -184,7 +190,7 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     const wrapper = mount(CollectionView, { props: { id: 'c1' } })
     await flushPromises()
 
-    expect(wrapper.get('[data-test=document-count]').text()).toMatch(/^1\s166$/)
+    expect(wrapper.get('[data-test=tile-documents] [data-test=summary-tile-value]').text()).toMatch(/^1\s166$/)
   })
 
   it('marks an archived assistant in Used by on the overview and the Sharing tab (#374)', async () => {
@@ -318,7 +324,7 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     expect(wrapper.get('[data-test=state]').text()).toBe('Published')
   })
 
-  it('takes the evaluation report threshold proposal to Search settings, filled in', async () => {
+  it('takes the evaluation report threshold proposal to Tune the search on the same Quality tab, filled in', async () => {
     signIn(['rag-editor'])
     vi.spyOn(api.collections, 'get').mockResolvedValue(base)
     vi.spyOn(api.collections, 'sources').mockResolvedValue([])
@@ -336,12 +342,14 @@ describe('Knowledge base (admin design §5.5.2)', () => {
 
     const wrapper = mount(CollectionView, { props: { id: 'c1' } })
     await flushPromises()
-    await button(wrapper, 'Test questions and quality').trigger('click')
+    await button(wrapper, 'Quality').trigger('click')
     await flushPromises()
+    // The evaluation and the search settings are on one tab, the settings under Tune the search.
+    expect(wrapper.get('[data-test=tune-search] h2').text()).toBe(COLLECTION.tuneSearch)
     await wrapper.get('[data-test=use-proposal]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('[data-test=retrieval]').exists()).toBe(true)
+    expect(wrapper.find('#collection-panel-quality [data-test=retrieval]').exists()).toBe(true)
     expect((wrapper.get('#rs-coverageMaxDistance').element as HTMLInputElement).value).toBe('0,4')
   })
 
@@ -486,7 +494,7 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     expect(wrapper.text()).toContain('Only a department administrator can change the sharing.')
   })
 
-  describe('Files tab (§5.5.7)', () => {
+  describe('the file list on Content (§5.5.2, §5.5.7)', () => {
     const upload = (id: string, name: string): SourceListItem =>
       ({ id, collectionId: 'c1', type: 'upload', name, classification: 'internal', state: 'active', documents: 0, lastRun: null })
     const crawl: SourceListItem = { id: 's1', collectionId: 'c1', type: 'crawl', name: 'umea.se', classification: 'internal', state: 'active', documents: 0, lastRun: null }
@@ -497,7 +505,7 @@ describe('Knowledge base (admin design §5.5.2)', () => {
       return vi.spyOn(api.sources, 'files').mockResolvedValue({ items: [], next: null })
     }
 
-    it('is shown for an upload source, opens from ?tab=files, and shows a reader the list without the drop zone', async () => {
+    it('is under the sources on Content, opens from the old ?tab=files, and shows a reader the list without the drop zone', async () => {
       signIn(['rag-viewer'])
       route.query = { tab: 'files' }
       vi.spyOn(api.collections, 'get').mockResolvedValue(base)
@@ -508,8 +516,11 @@ describe('Knowledge base (admin design §5.5.2)', () => {
       const wrapper = mount(CollectionView, { props: { id: 'c1' } })
       await flushPromises()
 
-      expect(wrapper.findAll('[role=tab]').map((t) => t.text())).toEqual(expect.arrayContaining(['Files']))
-      expect(wrapper.get('[role=tab][aria-selected=true]').text()).toBe('Files')
+      expect(wrapper.findAll('[role=tab]').map((t) => t.text())).not.toContain('Files')
+      expect(wrapper.get('[role=tab][aria-selected=true]').text()).toBe('Content (2)')
+      // Two sources: the table, then the upload source's file list.
+      expect(wrapper.find('#collection-panel-content table').exists()).toBe(true)
+      expect(wrapper.find('[data-test=upload-only]').exists()).toBe(false)
       expect(get).toHaveBeenCalledWith('s2')
       expect(files).toHaveBeenCalledWith('s2', expect.anything())
       expect(wrapper.find('[data-test=files]').exists()).toBe(true)
@@ -539,7 +550,7 @@ describe('Knowledge base (admin design §5.5.2)', () => {
       expect(wrapper.get('[role=tab][aria-selected=true]').text()).toBe('Topics')
     })
 
-    it('is not shown without an upload source; Add files on Sources creates one and opens the tab', async () => {
+    it('says so without an upload source; Add files on Content creates one and shows its file list', async () => {
       signIn(['rag-editor'])
       route.query = { tab: 'files' } // e.g. after the source failed in the create drawer
       vi.spyOn(api.collections, 'get').mockResolvedValue({ ...base, classification: 'public' })
@@ -550,15 +561,30 @@ describe('Knowledge base (admin design §5.5.2)', () => {
 
       const wrapper = mount(CollectionView, { props: { id: 'c1' } })
       await flushPromises()
-      expect(wrapper.findAll('[role=tab]').map((t) => t.text())).not.toContain('Files')
-      expect(wrapper.get('[role=tab][aria-selected=true]').text()).toContain('Sources')
+      expect(wrapper.get('[role=tab][aria-selected=true]').text()).toContain('Content')
       expect(wrapper.get('[data-test=no-files-source]').text()).toContain('Add files creates it.')
 
       await wrapper.get('[data-test=add-files]').trigger('click')
       await flushPromises()
       expect(addSource).toHaveBeenCalledWith('c1', { type: 'upload', name: 'Files', classification: 'public', settings: { piiMode: 'hold' } })
       expect(list).toHaveBeenCalledTimes(2)
-      expect(wrapper.get('[role=tab][aria-selected=true]').text()).toBe('Files')
+      expect(wrapper.get('[role=tab][aria-selected=true]').text()).toContain('Content')
+      expect(wrapper.find('[data-test=files]').exists()).toBe(true)
+    })
+
+    it('opens straight onto the file list when an upload is the only source, the source folded to one line above it', async () => {
+      signIn(['rag-editor'])
+      route.query = { tab: 'content' }
+      vi.spyOn(api.collections, 'get').mockResolvedValue(base)
+      vi.spyOn(api.collections, 'sources').mockResolvedValue([{ ...upload('s2', 'Blanketter'), documents: 41 }])
+      vi.spyOn(api.sources, 'get').mockResolvedValue(full('s2', 'Blanketter'))
+      mockFiles()
+      const wrapper = mount(CollectionView, { props: { id: 'c1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
+      await flushPromises()
+      const line = wrapper.get('[data-test=upload-only]')
+      expect(line.text()).toContain(COLLECTION.uploadOnly('Blanketter', '41'))
+      expect(line.getComponent(RouterLinkStub).props('to')).toEqual({ name: 'source', params: { id: 's2' } })
+      expect(wrapper.find('#collection-panel-content table[aria-describedby], #collection-panel-content caption').exists()).toBe(false) // no sources table
       expect(wrapper.find('[data-test=files]').exists()).toBe(true)
     })
 
@@ -568,7 +594,7 @@ describe('Knowledge base (admin design §5.5.2)', () => {
       vi.spyOn(api.collections, 'sources').mockResolvedValue([crawl])
       const reader = mount(CollectionView, { props: { id: 'c1' } })
       await flushPromises()
-      await button(reader, 'Sources (1)').trigger('click')
+      await button(reader, 'Content (1)').trigger('click')
       expect(reader.find('[data-test=add-files]').exists()).toBe(false)
 
       signIn(['rag-editor'])
@@ -576,7 +602,7 @@ describe('Knowledge base (admin design §5.5.2)', () => {
       vi.spyOn(api.collections, 'sources').mockResolvedValue([crawl, upload('s2', 'Files')])
       const editor = mount(CollectionView, { props: { id: 'c1' } })
       await flushPromises()
-      await button(editor, 'Sources (2)').trigger('click')
+      await button(editor, 'Content (2)').trigger('click')
       expect(editor.find('[data-test=add-files]').exists()).toBe(false)
       expect(editor.find('[data-test=add-source]').exists()).toBe(true)
     })
@@ -608,5 +634,82 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     await flushPromises()
     await button(wrapper, 'Overview').trigger('click')
     expect(confirm).not.toHaveBeenCalled()
+  })
+
+  describe('six tabs, the tab dots and the Overview tiles (admin design §5.5.2, B-79)', () => {
+    const failedCrawl: SourceListItem = {
+      id: 's1', collectionId: 'c1', type: 'crawl', name: 'umea.se/bygga', classification: 'internal', state: 'active', documents: 840,
+      lastRun: { id: 'r1', state: 'failed', startedAt: '2026-10-30T01:00:00Z', finishedAt: '2026-10-30T01:12:00Z' },
+    }
+
+    it('has Overview, Content, Documents, Topics, Quality and Sharing, with the counts, each in ?tab=', async () => {
+      signIn(['rag-editor'])
+      vi.spyOn(api.collections, 'get').mockResolvedValue({ ...base, documentCount: 1204 })
+      vi.spyOn(api.collections, 'sources').mockResolvedValue([{ ...failedCrawl, lastRun: null }])
+      vi.spyOn(api.collections, 'evaluation').mockResolvedValue({ hasSet: false, questions: [], latestRuns: [] })
+      const wrapper = mount(CollectionView, { props: { id: 'c1' } })
+      await flushPromises()
+      // (Quality carries its dot: no evaluation yet; the icon's name is its text in jsdom.)
+      expect(wrapper.findAll('[role=tab]').map((t) => t.text().replace('fiber_manual_record', '').replace(/\s/g, ' '))).toEqual([
+        'Overview', 'Content (1)', `Documents (${formatNumber(1204)})`, 'Topics', 'Quality', 'Sharing',
+      ].map((t) => t.replace(/\s/g, ' ')))
+      await button(wrapper, 'Quality').trigger('click')
+      expect(push).not.toHaveBeenCalled() // the tab is kept by replace, not a navigation
+      expect(wrapper.find('#collection-panel-quality').attributes('aria-labelledby')).toBe('collection-tab-quality')
+    })
+
+    it('opens the tab an old ?tab= value moved to, so bookmarks keep working', async () => {
+      signIn(['rag-editor'])
+      vi.spyOn(api.collections, 'get').mockResolvedValue(base)
+      vi.spyOn(api.collections, 'sources').mockResolvedValue([])
+      vi.spyOn(api.collections, 'evaluation').mockResolvedValue({ hasSet: false, questions: [], latestRuns: [] })
+      vi.spyOn(api.evaluation, 'questions').mockResolvedValue({ items: [], next: null })
+      for (const [old, now] of [['sources', 'content'], ['files', 'content'], ['evaluation', 'quality'], ['retrieval', 'quality'], ['nonsense', 'overview']]) {
+        route.query = { tab: old! }
+        const wrapper = mount(CollectionView, { props: { id: 'c1' } })
+        await flushPromises()
+        expect(wrapper.find(`#collection-panel-${now}`).exists(), old).toBe(true)
+        wrapper.unmount()
+      }
+    })
+
+    it('puts a dot on Content after a failed fetch and on Quality without an evaluation, named for assistive technology', async () => {
+      signIn(['rag-editor'])
+      vi.spyOn(api.collections, 'get').mockResolvedValue({ ...base, documentCount: 840 })
+      vi.spyOn(api.collections, 'sources').mockResolvedValue([failedCrawl])
+      vi.spyOn(api.collections, 'evaluation').mockResolvedValue({ hasSet: false, questions: [], latestRuns: [] })
+      const wrapper = mount(CollectionView, { props: { id: 'c1' }, attachTo: globalThis.document.body })
+      await flushPromises()
+      const content = wrapper.get('#collection-tab-content')
+      expect(content.find('.icon').text()).toBe('fiber_manual_record')
+      expect(content.find('.icon').attributes('aria-hidden')).toBe('true')
+      expect(content.attributes('aria-label')).toBe(COLLECTION.needsAttention('Content (1)'))
+      expect(wrapper.get('#collection-tab-quality').attributes('aria-label')).toBe('Quality, needs attention')
+      expect(wrapper.get('#collection-tab-topics').attributes('aria-label')).toBeUndefined()
+      wrapper.unmount()
+    })
+
+    it('has no dot on a healthy knowledge base, and marks only the tile that needs action', async () => {
+      signIn(['rag-editor'])
+      vi.spyOn(api.collections, 'get').mockResolvedValue({ ...base, documentCount: 840 })
+      vi.spyOn(api.collections, 'sources').mockResolvedValue([{ ...failedCrawl, lastRun: { ...failedCrawl.lastRun!, state: 'succeeded' } }])
+      vi.spyOn(api.collections, 'evaluation').mockResolvedValue({
+        hasSet: true, questions: [], latestRuns: [{
+          id: 'e1', kind: 'nightly', variant: 'hybrid', questionCount: 40, k: 10, found: 30, recallAtK: 0.75, mrr: 0.7, wins: 1, losses: 6, comparedRunId: 'e0',
+          candidate: false, thresholdProposal: null, startedAt: '2026-11-01T02:00:00Z', finishedAt: '2026-11-01T02:05:00Z', documentGone: null,
+        }],
+      })
+      const wrapper = mount(CollectionView, { props: { id: 'c1' }, attachTo: globalThis.document.body })
+      await flushPromises()
+      expect(wrapper.get('#collection-tab-content').find('.icon').exists()).toBe(false)
+      // Worse than the run before: Quality's dot, and the Quality tile says so.
+      expect(wrapper.get('#collection-tab-quality').attributes('aria-label')).toBe('Quality, needs attention')
+      expect(wrapper.get('[data-test=tile-quality] [data-test=summary-tile-attention]').text()).toBe(COLLECTION.tiles.qualityWorse)
+      expect(wrapper.findAll('[data-test=summary-tile-attention]')).toHaveLength(1)
+      // Used by: the count and the departments, the names linking to the assistants.
+      expect(wrapper.get('[data-test=tile-used-by] [data-test=summary-tile-value]').text()).toBe('1 assistant')
+      expect(wrapper.get('[data-test=tile-used-by] [data-test=summary-tile-detail]').text()).toBe('1 department')
+      wrapper.unmount()
+    })
   })
 })

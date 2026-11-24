@@ -61,7 +61,7 @@ test('drawers and dialogs pass axe', async ({ page }) => {
   const collection = ((await getJson(page, '/api/collections')).items ?? [])[0]
   if (collection) {
     await ready(page, `/collections/${collection.id}`)
-    await page.getByRole('tab', { name: /^Sources/ }).click()
+    await page.getByRole('tab', { name: /^Content/ }).click()
     await open('add source drawer', () => page.getByRole('main').getByRole('button', { name: 'Add source' }).click(), 'Add source')
   }
 })
@@ -154,6 +154,25 @@ test('the assistant page passes axe on each of its five tabs, and the test as a 
   await scan(page, 'the test sheet at 390px')
   await page.keyboard.press('Escape')
   await expect(page.getByRole('button', { name: 'Try the draft' })).toBeFocused()
+})
+
+test('the knowledge base page passes axe on each of its six tabs, and names a tab\'s dot (admin design §5.5.2, B-79)', async ({ page }) => {
+  await login(page, 'rag-department-admin')
+  const collection = ((await getJson(page, '/api/collections')).items ?? []).find((c: { shared?: boolean }) => !c.shared)
+  test.skip(!collection, 'needs a knowledge base (the pilot journey makes one)')
+  await page.setViewportSize({ width: 1280, height: 900 })
+  for (const tab of ['Overview', 'Content', 'Documents', 'Topics', 'Quality', 'Sharing']) {
+    await ready(page, `/collections/${collection.id}${tab === 'Overview' ? '' : `?tab=${tab.toLowerCase()}`}`)
+    await expect(page.getByRole('tab', { name: new RegExp(`^${tab}`) })).toHaveAttribute('aria-selected', 'true')
+    await page.waitForLoadState('networkidle')
+    await scan(page, `the knowledge base's ${tab} tab`)
+  }
+  // A tab with a dot says so in its name; one without has no such name.
+  for (const t of await page.getByRole('tab').all()) {
+    const name = (await t.getAttribute('aria-label')) ?? ''
+    const dot = await t.locator('.icon').count()
+    expect(name.endsWith(', needs attention'), `${await t.innerText()}: the name and the dot agree`).toBe(dot > 0)
+  }
 })
 
 test('all pages reflow at 320px and at 200 percent text size', async ({ page }) => {

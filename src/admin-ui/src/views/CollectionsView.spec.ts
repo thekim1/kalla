@@ -82,7 +82,7 @@ describe('Knowledge bases (admin design §5.2, §4.5 view=)', () => {
     expect(wrapper.text()).toContain('No other department shares a knowledge base with yours yet.')
   })
 
-  it('opens a new knowledge base of files on its Files tab, also when its source could not be made (§5.5.7)', async () => {
+  it('opens a new knowledge base of files on the file list of Content, also when its source could not be made (§5.5.7)', async () => {
     setActivePinia(createPinia())
     useAuthStore().user = bffUser({ roles: ['rag-editor'] })
     vi.spyOn(api.organisation, 'departments').mockResolvedValue([])

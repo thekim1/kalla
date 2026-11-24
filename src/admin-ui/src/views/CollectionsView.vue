@@ -54,9 +54,10 @@ async function load(): Promise<void> {
 
 const rowTo = (row: CollectionSummary) => ({ name: 'collection', params: { id: row.id } })
 
-/** A knowledge base of files opens on its Files tab (§5.5.7); without its source (it failed) the tab offers Add files. */
+/** A knowledge base of files opens on Content's file list (§5.5.7); without its source (it failed) Content offers Add files. */
 function created(collection: Collection, content: 'files' | 'web', filesError: unknown): void {
   ui.notify(filesError ? COLLECTIONS.createdNoFiles(collection.name, problemMessage(filesError)) : COLLECTIONS.created(collection.name))
+  // `?tab=files` opens Content and asks for the file list: it says so there when the upload source could not be made.
   void router.push({ name: 'collection', params: { id: collection.id }, ...(content === 'files' ? { query: { tab: 'files' } } : {}) })
 }
 

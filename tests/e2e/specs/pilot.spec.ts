@@ -43,8 +43,8 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await expect(create).toBeHidden()
     await expect(page.locator('#page-title')).toHaveText(collection)
 
-    // 3 Add a website source.
-    await act.press(page.getByRole('tab', { name: 'Sources' }))
+    // 3 Add a website source, on Content (admin design §5.5.2).
+    await act.press(page.getByRole('tab', { name: /^Content/ }))
     await act.press(page.getByRole('main').getByRole('button', { name: 'Add source' }))
     const source = page.getByRole('dialog', { name: 'Add source' })
     await act.check(source.getByRole('radio', { name: /^Website/ }))
@@ -83,7 +83,9 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     // 7 Test questions: one of our own, with the document that answers it.
     const collectionPage = await collectionUrl(page, collection)
     await ready(page, collectionPage)
-    await act.press(page.getByRole('tab', { name: 'Test questions and quality' }))
+    // On Quality: the test questions and the evaluation, then Tune the search (admin design §5.5.2). Its name says when
+    // its dot is on ("Quality, needs attention").
+    await act.press(page.getByRole('tab', { name: /^Quality/ }))
     await act.press(page.getByRole('button', { name: 'Add question' }))
     const question = page.getByRole('dialog', { name: 'New test question' })
     await act.fill(question.getByRole('textbox', { name: 'Question', exact: true }), 'Vad kostar det att hyra en isyta?')
@@ -93,16 +95,15 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await expect(question).toBeHidden()
     await eventually(async () => {
       await ready(page)
-      await page.getByRole('tab', { name: 'Test questions and quality' }).click()
+      await page.getByRole('tab', { name: /^Quality/ }).click()
       return visibleSoon(page.getByRole('rowheader', { name: 'Vad kostar det att hyra en isyta?' }))
     }, 'the test question is saved')
     await accepted(page, /\/evaluation\/run$/, () => act.press(page.getByRole('button', { name: 'Run evaluation' })))
     // The tab follows the job and shows the report when it is done; a reload here would only hide that.
     await expect(page.getByText(/^Evaluation · /)).toBeVisible({ timeout: 180_000 })
 
-    // Search settings: the FakeGateway's embeddings are hashes, so every distance is large; the widest coverage threshold
-    // lets the draft answer instead of "found nothing" (a real model would not need this).
-    await act.press(page.getByRole('tab', { name: 'Search settings' }))
+    // Tune the search, on the same tab: the FakeGateway's embeddings are hashes, so every distance is large; the widest
+    // coverage threshold lets the draft answer instead of "found nothing" (a real model would not need this).
     await act.fill(page.getByRole('textbox', { name: 'Largest distance' }), '1')
     await act.press(page.getByRole('region', { name: 'Unsaved changes' }).getByRole('button', { name: 'Save changes' }))
     await expect(page.getByText(/The search settings have been saved/)).toBeVisible()
