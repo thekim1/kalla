@@ -313,7 +313,7 @@ design meanwhile.
 - **Waits on:** B-79; the code-quality fixes #3 and #5.
 - **Read:** admin §5.5.5, §5.5.6, §8.1, §8.6, §9.1, §5.12.
 
-### [ ] B-81 The side menu and Home (UX pass step 7, UX1 A and UX6 C)
+### [x] B-81 The side menu and Home (UX pass step 7, UX1 A and UX6 C) (#1056)
 - **Do:** admin §5.2: Home alone at the top with its badge, the groups *Build*, *Follow-up* (Map moved in) and
   *Administration* (`NAV_GROUP`), Models with the icon `memory`; admin §5.5.1: Home's order (greeting with *Your
   access*, the notices, *Needs attention*, *Get started*, *Assistants in use* as a table, *Health* as one line), the
