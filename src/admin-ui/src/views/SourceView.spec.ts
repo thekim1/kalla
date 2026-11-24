@@ -10,6 +10,7 @@ import { useUiStore } from '@/stores/ui'
 import { SOURCE_PAGE } from '@/utils/labels'
 import { bffUser } from '@/test/fixtures'
 import SourceView from './SourceView.vue'
+import { openMenu } from '@/test/helpers'
 
 const push = vi.fn()
 vi.mock('vue-router', async (original) => ({ ...(await original<typeof import('vue-router')>()), useRouter: () => ({ push }) }))
@@ -400,7 +401,7 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     const wrapper = mount(SourceView, { props: { id: 's1' }, attachTo: document.body, global: { stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
     await wrapper.get('[data-test=menu-button]').trigger('click')
-    await wrapper.get('[data-test=menu-delete]').trigger('click')
+    await openMenu().get('[data-test=menu-delete]').trigger('click')
     await flushPromises()
     expect(document.body.textContent).toMatch(/Its 1\s234 documents leave the search at once/)
     const confirm = document.body.querySelector<HTMLButtonElement>('[data-test=confirm]')!

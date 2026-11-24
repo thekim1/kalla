@@ -9,6 +9,7 @@ import { useUiStore } from '@/stores/ui'
 import { bffUser } from '@/test/fixtures'
 import { FILES } from '@/utils/labels'
 import FilesPanel from './FilesPanel.vue'
+import { openMenu } from '@/test/helpers'
 
 const source = { id: 's1', type: 'upload', name: 'Blanketter', settings: { maxFileSizeMb: 20 } } as unknown as Source
 const slot = (id: string, fileName: string, state: string, reason: string | null = null): UploadFile => ({
@@ -198,7 +199,7 @@ describe('Files (admin design §4.5, §5.5.7, connectors §9)', () => {
     expect(wrapper.text()).toContain('Refused')
     expect(wrapper.text()).toContain('This file format is not supported yet.')
     await wrapper.get('[data-test=row-menu-u1] [data-test=menu-button]').trigger('click')
-    await wrapper.get('[data-test=row-menu-u1] [data-test=menu-replace]').trigger('click')
+    await openMenu().get('[data-test=menu-replace]').trigger('click')
     const replacement = new File(['new'], 'taxa-2027.pdf')
     await pick(wrapper, 'replace-input', [replacement])
     await flushPromises()
@@ -227,8 +228,8 @@ describe('Files (admin design §4.5, §5.5.7, connectors §9)', () => {
     const menu = wrapper.get('[data-test=row-menu-u1] [data-test=menu-button]')
     expect(menu.attributes('aria-label')).toBe('Actions for taxa.pdf')
     await menu.trigger('click')
-    expect(wrapper.findAll('[data-test=row-menu-u1] [role=menuitem]').map((i) => i.text().replace(/^[a-z_]+/, ''))).toEqual(['Replace', 'Remove…'])
-    await wrapper.get('[data-test=row-menu-u1] [data-test=menu-delete]').trigger('click')
+    expect(openMenu().findAll('[role=menuitem]').map((i) => i.text().replace(/^[a-z_]+/, ''))).toEqual(['Replace', 'Remove…'])
+    await openMenu().get('[data-test=menu-delete]').trigger('click')
     await flushPromises()
     confirm('Remove 1 file')
     await flushPromises()

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
 import type { FileSort, FileStateFilter, Source, UploadFile, UploadSummary } from '@/api/types'
 import CheckField from '@/components/ui/CheckField.vue'
@@ -233,8 +233,19 @@ onBeforeUnmount(() => {
   stopPolling()
   document.removeEventListener('visibilitychange', visibilityChanged)
 })
-// The source page's header action Upload files (admin design §5.5.3): the upload area's own file picker.
-defineExpose({ upload: () => uploader.value?.pick() })
+// The source page's header action Upload files (admin design §5.5.3): the upload area's own file picker. With Show
+// removed on, the upload area is hidden, so the list goes back to the current files first (the reload is not awaited,
+// so the picker still opens within the click's user activation).
+async function upload(): Promise<void> {
+  if (showDeleted.value) {
+    showDeleted.value = false
+    selected.value = []
+    void load()
+    await nextTick()
+  }
+  uploader.value?.pick()
+}
+defineExpose({ upload })
 </script>
 
 <template>

@@ -6,7 +6,7 @@ import { ApiError } from '@/api/client'
 import type { Collection, DocumentSummary, Source, SourceListItem } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { bffUser, collection, collectionSummary, collectionUser } from '@/test/fixtures'
-import { button } from '@/test/helpers'
+import { button, openMenu } from '@/test/helpers'
 import CollectionEditDrawer from '@/components/collections/CollectionEditDrawer.vue'
 import CollectionView from './CollectionView.vue'
 
@@ -50,7 +50,7 @@ describe('Knowledge base (admin design §5.5.2)', () => {
       if (menu.exists()) {
         expect(menu.attributes('aria-label')).toBe(`More actions for ${base.name}`)
         await menu.trigger('click')
-        items = wrapper.findAll('[role=menuitem]').map((i) => i.text())
+        items = openMenu().findAll('[role=menuitem]').map((i) => i.text())
       }
       wrapper.unmount()
       return { primary, items }
@@ -227,7 +227,7 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     const wrapper = mount(CollectionView, { props: { id: 'c1' }, attachTo: window.document.body, global: { stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
     await wrapper.get('[data-test=menu-button]').trigger('click')
-    await wrapper.get('[data-test=menu-delete]').trigger('click')
+    await openMenu().get('[data-test=menu-delete]').trigger('click')
     await flushPromises()
     expect(window.document.body.textContent).toContain('This cannot be undone. Its name is free for a new knowledge base.')
     const confirm = window.document.body.querySelector<HTMLButtonElement>('[data-test=confirm]')!
@@ -256,7 +256,7 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     const wrapper = mount(CollectionView, { props: { id: 'c1' }, attachTo: window.document.body, global: { stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
     await wrapper.get('[data-test=menu-button]').trigger('click')
-    await wrapper.get('[data-test=menu-delete]').trigger('click')
+    await openMenu().get('[data-test=menu-delete]').trigger('click')
     await flushPromises()
     expect(window.document.body.querySelector('[data-test=in-use-assistants]')!.textContent).toBe('Used by: GK check (archived). Delete or unlink them first.')
     expect(window.document.body.querySelector('[data-test=in-use-sources]')!.textContent).toBe('It has 1 source. Delete its sources first.')
@@ -268,7 +268,7 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     const editor = mount(CollectionView, { props: { id: 'c1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
     await editor.get('[data-test=menu-button]').trigger('click')
-    expect(editor.find('[data-test=menu-delete]').exists()).toBe(false)
+    expect(openMenu().find('[data-test=menu-delete]').exists()).toBe(false)
   })
 
   it('offers Add contact on an empty contact, which opens the Edit drawer; a reader sees no button (§5.5.2)', async () => {
