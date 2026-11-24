@@ -266,7 +266,7 @@ async function reloadPii(): Promise<void> {
       <p v-if="paused" role="status" class="mb-4 rounded-card bg-warn-soft p-4 text-warn" data-test="paused-banner">{{ SOURCE_PAGE.paused }}</p>
       <InlineError v-if="syncError" :message="problemMessage(syncError)" class="mb-4" />
       <p v-if="activeProgress && activeRun" class="mb-4 tabular" aria-live="polite" data-test="run-progress">
-        <RouterLink :to="runTo(activeRun)" class="link">{{ activeProgress }}</RouterLink>
+        <RouterLink :to="runTo(activeRun)" class="text-accent-ink underline">{{ activeProgress }}</RouterLink>
       </p>
 
       <UiCard v-if="source.data.value.type !== 'upload'" :title="SOURCE_PAGE.settings" class="mb-6">
@@ -309,7 +309,7 @@ async function reloadPii(): Promise<void> {
           <template #cell-counts="{ row }">
             <span class="tabular text-small">{{ SOURCE_PAGE.runCounts(formatNumber(row.added), formatNumber(row.updated), formatNumber(row.deleted)) }}<span
               v-if="row.failed" class="text-danger"
-            >, <RouterLink :to="{ name: 'run', params: { id: row.id } }" class="link text-danger" data-test="run-failed" @click.stop>{{
+            >, <RouterLink :to="{ name: 'run', params: { id: row.id } }" class="text-danger text-accent-ink underline" data-test="run-failed" @click.stop>{{
               SOURCE_PAGE.runFailed(formatNumber(row.failed)) }}</RouterLink></span></span>
           </template>
         </DataTable>

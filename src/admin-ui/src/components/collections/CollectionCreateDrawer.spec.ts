@@ -105,4 +105,29 @@ describe('Create knowledge base (admin design §5.4 step 2)', () => {
     expect(wrapper.emitted('update:open')?.at(-1)).toEqual([false])
     wrapper.unmount()
   })
+
+  it('asks in the order of the decision, the contact pre-filled and folded into one line until Change (§5.12, Drawers)', async () => {
+    setActivePinia(createPinia())
+    useAuthStore().user = bffUser({ name: 'Anna Andersson', email: 'anna@umea.se' })
+    const wrapper = mount(CollectionCreateDrawer, {
+      props: { open: false, departments: [department({ id: 'd1', name: 'Stadsbyggnad' })] },
+      attachTo: document.body,
+    })
+    await wrapper.setProps({ open: true })
+    await flushPromises()
+    const form = document.body.querySelector('#collection-create')!
+    // name → what goes in → who may read it → department and contact
+    const order = ['#collection-name', '#collection-content-files', '#collection-level-public', '#collection-department', '[data-test=contact-line]']
+      .map((sel) => form.querySelector(sel)!)
+    for (let i = 1; i < order.length; i++) {
+      expect(order[i - 1]!.compareDocumentPosition(order[i]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    }
+    expect(form.querySelector('[data-test=contact-line]')!.textContent).toContain('Contact: Anna Andersson, anna@umea.se')
+    expect(form.querySelector('#collection-contact')).toBeNull()
+    ;(form.querySelector('[data-test=change-contact]') as HTMLButtonElement).click()
+    await flushPromises()
+    expect(form.querySelector<HTMLInputElement>('#collection-contact')!.value).toBe('Anna Andersson')
+    expect(form.querySelector('[data-test=contact-line]')).toBeNull()
+    wrapper.unmount()
+  })
 })

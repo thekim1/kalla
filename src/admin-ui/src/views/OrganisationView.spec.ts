@@ -63,8 +63,9 @@ describe('Organisation: synced departments (P0 checklist #11)', () => {
     await flushPromises()
     const [first, second] = wrapper.findAll('tbody tr')
     expect(first!.text()).toContain('Kommunstyrelsen, KLK-alla')
-    // One phrase (admin design §5.7): kept to the department, and shared with selected departments or everyone (1 + 3).
-    expect(first!.get('[data-test=knowledge-bases]').text()).toBe('2 own · 4 shared')
+    // One phrase (admin design §5.7; #1036): every knowledge base the department owns (2 kept to it + 4 shared), and how
+    // many of those reach other departments (selected or everyone, 1 + 3). The API's three counts are disjoint.
+    expect(first!.get('[data-test=knowledge-bases]').text()).toBe('6 own · 4 shared')
     expect(first!.text()).toContain(`${PLATFORM.organisation.sharedWith}: 4`)
     // No member groups is a grey dash, with the words for a screen reader.
     expect(second!.get('[data-test=no-member-groups] [aria-hidden=true]').text()).toBe('–')

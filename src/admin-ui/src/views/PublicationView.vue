@@ -152,11 +152,11 @@ onMounted(load)
             <h3 class="mb-1 mt-4 font-medium">{{ PUBLICATION.affected }}</h3>
             <ul class="grid gap-1" data-test="affected">
               <li v-for="s in plan.sources" :key="s.sourceId">
-                <RouterLink :to="{ name: 'source', params: { id: s.sourceId } }" class="link">{{ sources[s.sourceId]?.name ?? s.sourceId }}</RouterLink>
+                <RouterLink :to="{ name: 'source', params: { id: s.sourceId } }" class="text-accent-ink underline">{{ sources[s.sourceId]?.name ?? s.sourceId }}</RouterLink>
                 <span class="text-fg-2"> · {{ PUBLICATION.documents(formatNumber(s.documents)) }}</span>
                 <span v-if="published" class="ml-2">
                   <UiBadge :tone="runStateTone(runs[s.sourceId]?.state)" :label="runs[s.sourceId] ? (RUN_STATE_LABEL[runs[s.sourceId]!.state] ?? runs[s.sourceId]!.state) : PUBLICATION.waiting" />
-                  <RouterLink v-if="runs[s.sourceId]" :to="{ name: 'run', params: { id: runs[s.sourceId]!.id } }" class="link ml-2 text-small">{{ PUBLICATION.openRun }}</RouterLink>
+                  <RouterLink v-if="runs[s.sourceId]" :to="{ name: 'run', params: { id: runs[s.sourceId]!.id } }" class="ml-2 text-small text-accent-ink underline">{{ PUBLICATION.openRun }}</RouterLink>
                 </span>
               </li>
             </ul>

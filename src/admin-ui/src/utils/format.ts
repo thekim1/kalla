@@ -218,3 +218,9 @@ export function actorText(actor: string | null | undefined, name?: string | null
   if (!actor) return ''
   return ACTOR_LABEL[actor] ?? actor
 }
+
+/** The part of the day in Europe/Stockholm for the greeting (admin design §5.7): morning 05–12, afternoon 12–18, else evening. */
+export function partOfDay(now: Date = new Date()): 'morning' | 'afternoon' | 'evening' {
+  const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: TIME_ZONE, hour: '2-digit', hour12: false }).format(now)) % 24
+  return hour >= 5 && hour < 12 ? 'morning' : hour >= 12 && hour < 18 ? 'afternoon' : 'evening'
+}

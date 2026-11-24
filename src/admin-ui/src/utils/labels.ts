@@ -546,7 +546,8 @@ export const COLLECTIONS = {
   lead: 'A knowledge base gathers sources, for example a website or files, that the assistants can search.',
   empty: 'Here you build knowledge bases and assistants for your department.',
   create: 'Create knowledge base',
-  search: 'Search knowledge bases',
+  /** Contains the placeholder's words, so the visible text is in the accessible name (WCAG 2.5.3; #1036). */
+  search: 'Search knowledge bases by name',
   /** The search field's placeholder; it has no label above it, the aria-label is `search` (admin design §5.7). */
   searchPlaceholder: 'Search by name',
   name: 'Name',
@@ -560,6 +561,10 @@ export const COLLECTIONS = {
   departmentRequired: 'Choose a department.',
   contactName: 'Contact person',
   contactEmail: 'Contact email',
+  /** The pre-filled contact folded into one line (admin design §5.12, Drawers). */
+  contactLine: 'Contact',
+  change: 'Change',
+  changeContact: 'Change the contact',
   contactHint: 'Shown to the departments that may use the knowledge base. A person or a functional mailbox.',
   state: 'State',
   published: 'Published',
@@ -601,7 +606,32 @@ export const SHARING_LABEL: Record<SharingLevel, string> = {
 export const COLLECTION = {
   /** The header's primary action once the knowledge base is published (admin design §5.5.2). */
   addContent: 'Add content',
-  tabs: { overview: 'Overview', files: 'Files', sources: 'Sources', documents: 'Documents', topics: 'Topics', sharing: 'Sharing' },
+  /** The six tabs (admin design §5.5.2, UX pass UX2 C), each named in `?tab=`. */
+  tabs: { overview: 'Overview', content: 'Content', documents: 'Documents', topics: 'Topics', quality: 'Quality', sharing: 'Sharing' },
+  /** A tab's dot, for assistive technology (§5.5.2): a failed fetch on Content, a worse or missing evaluation on Quality. */
+  needsAttention: (tab: string) => `${tab}, needs attention`,
+  /** Quality's search settings (§7.1), below the evaluation. */
+  tuneSearch: 'Tune the search',
+  /** The Overview's four tiles (§5.5.2). */
+  tiles: {
+    documents: 'Documents',
+    searchable: 'searchable',
+    noneSearchable: 'none searchable yet',
+    lastFetch: 'Last fetch',
+    never: 'Never',
+    openRun: 'Open the run',
+    fetchFailed: 'Needs attention: the last fetch failed.',
+    quality: (k: number) => `Quality (recall@${k})`,
+    notMeasured: 'Not measured',
+    createQuestions: 'Create test questions',
+    qualityWorse: 'Needs attention: worse than the run before.',
+    usedBy: 'Used by',
+    assistants: (n: number) => `${n} ${n === 1 ? 'assistant' : 'assistants'}`,
+    departments: (n: number) => `${n} ${n === 1 ? 'department' : 'departments'}`,
+  },
+  /** Content when an upload is the only source: the source folded to one line above the file list (§5.5.2). */
+  uploadOnly: (name: string, documents: string) => `${name} · Files · ${documents} documents`,
+  openSource: 'Open the source',
   filesSource: 'Upload source',
   addFiles: 'Add files',
   noFilesSource: 'This knowledge base has no files source yet. Add files creates it.',
@@ -730,7 +760,8 @@ export const SOURCE = {
   sitemaps: 'Sitemaps',
   sitemapsHint: 'Optional, one address per line, for example https://www.example.org/sitemap.xml or a compressed …/sitemap.xml.gz. Use it when the check finds no sitemap: the website’s robots.txt and /sitemap.xml are always tried.',
   sitemapsInvalid: 'Each sitemap address must start with http:// or https://. At most 20.',
-  advanced: 'More settings',
+  /** The Add source drawer's fold: the sitemaps and the advanced crawl fields (admin design §5.12, Drawers). */
+  advanced: 'More options',
   include: 'Only include',
   includeHint: 'Patterns, one per line, for example www.example.org/building* for that page (also when its address goes on, as in building.4.1a2b.html) and www.example.org/building/** for every page under it. * stays within one part of the path, ** crosses parts. A leading https:// is ignored. Empty means the whole website.',
   exclude: 'Skip',

@@ -40,11 +40,17 @@ describe('Add source (admin design §5.4 steps 3, 4, 6)', () => {
 
     input('#source-urls', 'https://www.umea.se/bygga')
     // #801: a sitemap the check would not find; a line that is not an address is refused first.
+    // Sitemaps are under More options (§5.12, Drawers), which opens itself on their error.
+    const more = document.body.querySelector<HTMLDetailsElement>('[data-test=more-options]')!
+    expect(more.querySelector('summary')!.textContent).toBe('More options')
+    expect(more.querySelector('#source-sitemaps')).not.toBeNull()
+    expect(more.open).toBe(false)
     input('#source-sitemaps', 'www.umea.se/sitemap.xml')
     click('check')
     await flushPromises()
     expect(preflight).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain('Each sitemap address must start with http:// or https://.')
+    expect(more.open).toBe(true)
     input('#source-sitemaps', 'https://www.umea.se/sitemap1.xml.gz')
     click('check')
     await flushPromises()

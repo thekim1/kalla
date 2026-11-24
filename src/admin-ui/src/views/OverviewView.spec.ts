@@ -69,6 +69,8 @@ describe('Overview: your access (P0 checklist #9)', () => {
     // The greeting (admin design §5.7): the first name, and under it the departments and the roles.
     expect(wrapper.get('#page-title').text()).toMatch(/^Good (morning|afternoon|evening), Anna$/)
     expect(wrapper.get('header p').text()).toBe('Bygg och miljö, 3000 · Read access')
+    // A synced department name is Swedish; a code is not (admin design §5.7; #1036).
+    expect(wrapper.findAll('[data-test=identity] [lang=sv]').map((e) => e.text())).toEqual(['Bygg och miljö'])
   })
 
   it('tells a user without a rag-* role to ask for access', () => {

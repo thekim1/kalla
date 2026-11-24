@@ -67,6 +67,9 @@ const form = useFormErrors({
   name: 'source-name', urls: 'source-urls', sitemaps: 'source-sitemaps', maxPages: 'source-max-pages', maxDepth: 'source-max-depth', readySelector: 'source-ready-selector', schedule: 'source-schedule-custom',
 })
 
+/** More options opens itself when one of its fields has an error, so the error is seen. */
+const moreOpen = computed(() => !!(form.errors.sitemaps || form.errors.maxPages || form.errors.maxDepth))
+
 const levelOptions = computed(() =>
   LEVELS.slice(0, LEVELS.indexOf(props.collection.classification) + 1).map((l) => ({ value: l, label: LEVEL_LABEL[l] })),
 )
@@ -235,18 +238,19 @@ async function save(): Promise<void> {
           id="source-urls" v-model="urls" :label="type === 'crawl' ? SOURCE.startUrls : SOURCE.urls"
           :hint="type === 'crawl' ? SOURCE.startUrlsHint : SOURCE.urlsHint" :error="form.errors.urls" mono
         />
-        <TextAreaField
-          v-if="type === 'crawl'" id="source-sitemaps" v-model="sitemaps" :label="SOURCE.sitemaps" :hint="SOURCE.sitemapsHint"
-          :error="form.errors.sitemaps" mono
-        />
         <FetchModeFields
           v-model:fetch-mode="fetchMode" v-model:ready-selector="readySelector" v-model:scroll-to-load="scrollToLoad" id-prefix="source"
           :ready-selector-error="form.errors.readySelector"
         />
         <ScheduleField v-model:preset="schedulePreset" v-model:custom="scheduleCustom" id-prefix="source" :error="form.errors.schedule" />
-        <details v-if="type === 'crawl'" class="rounded-card border border-border p-4">
+        <!-- More options (§5.12, Drawers): the sitemaps and the advanced crawl fields; open when one of them has an error. -->
+        <details v-if="type === 'crawl'" class="rounded-card border border-border p-4" :open="moreOpen" data-test="more-options">
           <summary class="cursor-pointer font-medium">{{ SOURCE.advanced }}</summary>
           <div class="mt-4 grid gap-5">
+            <TextAreaField
+              id="source-sitemaps" v-model="sitemaps" :label="SOURCE.sitemaps" :hint="SOURCE.sitemapsHint"
+              :error="form.errors.sitemaps" mono
+            />
             <TextAreaField id="source-include" v-model="include" :label="SOURCE.include" :hint="SOURCE.includeHint" mono />
             <TextAreaField id="source-exclude" v-model="exclude" :label="SOURCE.exclude" :hint="SOURCE.excludeHint" mono />
             <TextField id="source-max-pages" v-model="maxPages" :label="SOURCE.maxPages" inputmode="numeric" short :error="form.errors.maxPages" />
