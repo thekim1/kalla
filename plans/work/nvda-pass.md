@@ -30,26 +30,43 @@ record it in `results-main.md` under row 96.
 8. **Dialogs and drawers:** focus moves into them and NVDA reads their title. `Esc` closes them, and focus returns to
    the button that opened them.
 9. **No information by colour alone:** a state (failed, published, flagged) is also said in words.
+10. **Tabs:** arrow keys move between tabs, and NVDA reads each tab's name and "selected". A tab with a dot says so in
+    its name ("Quality, needs attention"); a tab without one doesn't.
+11. **The save bar:** after the first change on a form, NVDA says once that there are unsaved changes, and *Save* is
+    reachable. A focused field is never hidden behind the bar (also on a narrow window). Leaving the page or the tab
+    with unsaved changes opens a dialog that is read; *Discard* asks once.
+12. **Menus:** a row's or a header's ⋯ button is named ("More actions for …"); its menu opens with `Enter`, arrow keys
+    move through the items, `Esc` closes it and focus returns to the ⋯ button.
 
 ## The journey (§5.4's steps)
 
 | # | Do | Check especially |
 |---|---|---|
-| 1 | Sign in; land on Home | the empty state and **Create knowledge base** are read |
-| 2 | Create a knowledge base in the drawer | the information-class choice: each option and its explanation are read |
-| 3 | Add a website source (type cards) | the type cards are reachable and named; the address field's hint |
+| 1 | Sign in; land on Home | the greeting and the empty state; **Create knowledge base** is read |
+| 2 | Create a knowledge base in the drawer | the order: name, what goes in, who may read it, department and contact; each reading level and its explanation are read, none preselected; the folded line "Contact: … · Change" and its button "Change the contact" |
+| 3 | Add a website source (type cards) | the type cards are reachable and named; only that type's fields follow; *More options* says whether it is open, and opens by itself on an error in it |
 | 4 | Run the check | the check's results are read, including a warning |
 | 5 | Preview two pages | *Before* and *After* are two named regions; the stage strip's states are words |
 | 6 | Save and fetch; follow the run | progress is spoken as it changes; *failed only* filter; a document's reason |
-| 7 | Test questions: add one of your own | the expected-document picker (search, choose, remove) |
-| 8 | Publish the knowledge base | the evaluation report is read as text before the button |
-| 9 | Create an assistant | the template field; the collapsed *Advanced* section opens and is announced |
-| 10 | Test tab: ask a question | "The answer is ready" is spoken once; sources and coverage can be read |
-| 11 | Publish the assistant | a refusal (V-rule) is read with its reason |
-| 12 | Audience: add Open WebUI | a residency refusal's sentence is read |
-| 13 | Follow **Open in** | the link says where it goes |
+| 7 | The knowledge base page | its six tabs (*Overview*, *Content*, *Documents*, *Topics*, *Quality*, *Sharing*) and their counts; the Overview's four tiles (*Documents*, *Last fetch*, *Quality*, *Used by*), and a tile that needs action says so in words |
+| 8 | *Quality* tab: add a test question of your own | the expected-document picker (search, choose, remove); then *Tune the search*: *Try without saving* says the run started, and the run is read when it shows |
+| 9 | Publish the knowledge base | the evaluation report is read as text before the button; the Publish dialog's title, its warnings and the test run's cost |
+| 10 | Create an assistant | the *Start from* cards are a group with a name, and a refused template's error is read; the collapsed *Advanced* section opens and is announced |
+| 11 | *Build* tab: the knowledge rows and general knowledge | a row's knowledge base, department and topics; *Limit to topics* opens a field that reads its label; *General knowledge* is a radio group of four, each level's description read |
+| 12 | *Build* tab: ask a question in the test panel | at full width beside the draft; in a narrower window as *Try the draft* under the form; at phone width from *Try the draft* in the save bar, as a full-height sheet that is read as a dialog. "The answer is ready" is spoken once; sources and coverage can be read |
+| 13 | Publish the assistant | the Publish dialog (the diff, the warnings, the cost); a refusal (V-rule) is read with its reason |
+| 14 | *Access* tab: add Open WebUI | one story top-down (who can use it, the apps, storage, the model name, *Check access* folded at the end) with one save bar; a residency refusal's sentence is read |
+| 15 | Follow **Open in** | the link says where it goes |
+| 16 | *Quality* and *Usage* tabs | test questions and the latest report on *Quality*; on *Usage* the last use, questions, not found and ratings, and the *Cost* card's tables |
 
-Then, briefly: the **Feedback** page, the **Topics** tab, the **Map** table and **Settings**, with the checks above.
+Then, briefly, with the checks above:
+- the **Feedback** and **Costs** pages: each filter chip reads its name and value ("Rating:, Thumbs down"); a set chip's
+  × is named ("Remove the rating filter") and focus stays on the chip after it; *Clear filters*; the count is spoken
+  once after a change; *Custom…* adds two labelled date fields;
+- the **Audit log** (chips and *More filters*) and the **Map** table;
+- the knowledge base's **Topics** tab;
+- **Settings**: a section's save bar and the leave guard;
+- the side menu: its groups are named, and the current page is marked.
 
 ## Recording
 
