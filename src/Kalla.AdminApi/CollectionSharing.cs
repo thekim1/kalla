@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Kalla.Domain.Admin;
 using Kalla.Domain.Entities;
 using Kalla.Infrastructure.Persistence;
+using Kalla.Pipelines.Processing;
 
 namespace Kalla.AdminApi;
 
@@ -96,13 +97,27 @@ public static class CollectionSharing
                 var collection = await Visible(admin).AsNoTracking().SingleOrDefaultAsync(c => c.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
                 var owner = await admin.Departments().AnyAsync(d => d.Id == collection.DepartmentId, ct);
                 var counts = await TopicCountsAsync(admin.Db, [id], ct);
-                // The path rules are the sources' settings: only the owning department sees them (admin design §3.2).
-                var rules = owner ? await PathRulesAsync(admin.Db, id, ct) : [];
-                return new TopicsDto(id, [.. counts.Where(c => c.CollectionId == id).Select(c => new TopicDto(c.Tag, c.Documents,
-                    owner ? [.. rules.Where(r => r.Tags.Contains(c.Tag, StringComparer.Ordinal)).Select(r => new TopicRuleDto(r.SourceId, r.SourceName, r.On, r.Match))] : null))]);
+                var live = counts.Where(c => c.CollectionId == id).ToList();
+                if (!owner)
+                {
+                    // The path rules are the sources' settings: only the owning department sees them (admin design §3.2).
+                    return new TopicsDto(id, [.. live.Select(c => new TopicDto(c.Tag, c.Documents, null))]);
+                }
+
+                var rules = await PathRulesAsync(admin.Db, id, ct);
+                var reprocessing = await ReprocessingAsync(admin.Db, [.. rules.Select(r => r.SourceId).Distinct()], ct);
+                List<TopicRuleDto> RulesOf(string tag) =>
+                    [.. rules.Where(r => r.Tags.Contains(tag, StringComparer.Ordinal)).Select(r => new TopicRuleDto(r.SourceId, r.SourceName, r.On, r.Match))];
+                // A tag a published rule sets while its source is processed again, and that no live chunk carries yet (§5.5.2).
+                var pending = rules.Where(r => reprocessing.Contains(r.SourceId)).SelectMany(r => r.Tags)
+                    .Except(live.Select(c => c.Tag), StringComparer.Ordinal).Distinct(StringComparer.Ordinal);
+                return new TopicsDto(id, [.. live.Select(c => new TopicDto(c.Tag, c.Documents, RulesOf(c.Tag)))
+                    .Concat(pending.Select(t => new TopicDto(t, null, RulesOf(t)) { Pending = true }))
+                    .OrderBy(t => t.Tag, StringComparer.Ordinal)]);
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("GetCollectionTopics")
-            .WithSummary("The tags on a collection's live chunks with document counts (and, for the owner, the path rules that set them)");
+            .WithSummary("The tags on a collection's live chunks with document counts (and, for the owner, the path rules that set them and the tags still pending)");
+        collections.MapTopicSuggestions();
 
         return api;
     }
@@ -177,6 +192,28 @@ public static class CollectionSharing
             """).ToListAsync(ct);
     }
 
+    /// <summary>
+    /// The sources of <paramref name="sourceIds"/> being processed again: a <c>reprocess</c> sync job queued or running, or a
+    /// <c>reprocess</c> run still running between its jobs.
+    /// </summary>
+    private static async Task<HashSet<Guid>> ReprocessingAsync(RagDbContext db, Guid[] sourceIds, CancellationToken ct)
+    {
+        if (sourceIds.Length == 0)
+        {
+            return [];
+        }
+
+        var keys = sourceIds.Select(s => s.ToString()).ToArray();
+        var jobs = await db.Database.SqlQuery<Guid>($"""
+            SELECT ("Payload"::jsonb ->> 'sourceId')::uuid AS "Value" FROM content."Jobs"
+            WHERE "Class" = {JobClasses.Sync} AND "State" IN ({JobStates.Queued}, {JobStates.Running})
+              AND "Payload"::jsonb ->> 'kind' = 'reprocess' AND "Payload"::jsonb ->> 'sourceId' = ANY ({keys})
+            """).ToListAsync(ct);
+        var runs = await db.Runs.AsNoTracking().Where(r => sourceIds.Contains(r.SourceId) && r.Kind == RunKinds.Reprocess && r.State == RunStates.Running)
+            .Select(r => r.SourceId).ToListAsync(ct);
+        return [.. jobs, .. runs];
+    }
+
     /// <summary>The path rules (processing design §7) of the collection's live sources' published pipelines that set tags.</summary>
     private static async Task<List<PathRuleTags>> PathRulesAsync(RagDbContext db, Guid collectionId, CancellationToken ct)
     {
@@ -199,7 +236,7 @@ public static class CollectionSharing
                 if (rule["tags"] is JsonArray tags && tags.Count > 0)
                 {
                     rules.Add(new PathRuleTags(row.Id, row.Name, rule["on"]?.GetValue<string>() ?? "", rule["match"]?.GetValue<string>() ?? "",
-                        [.. tags.Select(t => t?.GetValue<string>()).OfType<string>()]));
+                        [.. tags.Select(t => t?.GetValue<string>()).OfType<string>().Select(PathRules.NormaliseTag).OfType<string>().Distinct(StringComparer.Ordinal)]));
                 }
             }
         }
@@ -223,8 +260,15 @@ public sealed record SharedLinker(Guid Id, string Name, Guid DepartmentId, strin
 
 public sealed record TopicsDto(Guid CollectionId, IReadOnlyList<TopicDto> Topics);
 
-/// <summary><see cref="Rules"/>: the path rules that set the tag; null for a department the collection is only shared with.</summary>
-public sealed record TopicDto(string Tag, int Documents, IReadOnlyList<TopicRuleDto>? Rules);
+/// <summary>
+/// <see cref="Rules"/>: the path rules that set the tag; null for a department the collection is only shared with.
+/// <see cref="Pending"/>: a published rule sets the tag while its source is processed again, and no live chunk carries it yet;
+/// <see cref="Documents"/> is then null (admin design §4.5). Only the owning department sees pending tags.
+/// </summary>
+public sealed record TopicDto(string Tag, int? Documents, IReadOnlyList<TopicRuleDto>? Rules)
+{
+    public bool Pending { get; init; }
+}
 
 public sealed record TopicRuleDto(Guid SourceId, string SourceName, string On, string Match);
 

@@ -457,11 +457,36 @@ export interface CollectionCreate {
   contactEmail: string | null
 }
 
-/** `GET /api/collections/{id}/topics`: `rules` only for the owning department. */
+/**
+ * `GET /api/collections/{id}/topics`: `rules` only for the owning department. `pending`: a published rule sets the tag while
+ * its source is processed again and no live chunk carries it yet; `documents` is then null (admin design §4.5).
+ */
 export interface Topic {
   tag: string
-  documents: number
+  documents: number | null
   rules: { sourceId: string; sourceName: string; on: string; match: string }[] | null
+  pending: boolean
+}
+
+/** One section to pick on the Topics tab (`GET /api/collections/{id}/topic-suggestions`, admin design §4.5). */
+export interface TopicSection {
+  /** `/bygga-bo-och-miljo/` on a website, `HR/` for an upload's folder. */
+  path: string
+  documents: number
+  title: string | null
+  /** null when the segment has no letter or digit to make a tag of. */
+  suggestedTag: string | null
+  /** The topics whose path rules already cover the section. */
+  coveredBy: string[]
+}
+
+/** One source's sections; `under` is the section whose next level this is, null for the first level. */
+export interface SourceTopicSuggestions {
+  sourceId: string
+  sourceName: string
+  kind: 'website' | 'upload'
+  under: string | null
+  sections: TopicSection[]
 }
 
 /** One row of the Map (admin design §5.5.6): department → knowledge base → assistant → audience. */

@@ -110,6 +110,7 @@ import type {
   SourceImpact,
   SourceUpdate,
   SourceListItem,
+  SourceTopicSuggestions,
   SyncStarted,
 } from './types'
 import { encodeFileName } from '@/utils/uploads'
@@ -147,6 +148,9 @@ export const api = {
     list: (query: { q?: string; page?: number; pageSize?: number; view?: CollectionView } = {}) => http.get<Page<CollectionSummary>>('/api/collections', query),
     get: (id: string) => http.get<CollectionRead>(`/api/collections/${id}`),
     topics: (id: string) => http.get<{ collectionId: string; topics: Topic[] }>(`/api/collections/${id}/topics`),
+    /** Owning department only (404 for a department it is shared with); `under` needs `sourceId`. */
+    topicSuggestions: (id: string, query: { sourceId?: string; under?: string } = {}) =>
+      http.get<{ collectionId: string; sources: SourceTopicSuggestions[] }>(buildUrl(`/api/collections/${id}/topic-suggestions`, query)),
     sharing: (id: string, body: { sharedWith: SharingLevel; departmentIds: string[]; version: string }) =>
       http.put<Collection>(`/api/collections/${id}/sharing`, body),
     create: (body: CollectionCreate) => http.post<Collection>('/api/collections', body),
