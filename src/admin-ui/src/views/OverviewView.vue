@@ -11,6 +11,8 @@ import PageHeader from '@/components/ui/PageHeader.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
+import UiDrawer from '@/components/ui/UiDrawer.vue'
+import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useLoadable } from '@/stores/loadable'
 import { useUiStore } from '@/stores/ui'
@@ -54,6 +56,30 @@ const departmentNames = computed(() => departments.value.map((d) => ({ text: d.n
 const roleNames = computed(() => roles.value.map((r) => ROLE_LABEL[r]))
 const identity = computed(() => OVERVIEW.identity(departmentNames.value.map((d) => d.text), roleNames.value))
 const live = computed(() => overview.data.value?.live ?? [])
+/** Assistants in use, most asked first; a row opens the assistant's Usage tab. */
+const liveRows = computed(() => [...live.value].sort((a, b) => b.questions - a.questions || a.name.localeCompare(b.name)))
+const liveColumns: Column[] = [
+  { key: 'name', label: OVERVIEW.assistant },
+  { key: 'questions', label: OVERVIEW.questions, align: 'right' },
+  { key: 'notFound', label: OVERVIEW.notFound, align: 'right' },
+  { key: 'thumbsUp', label: OVERVIEW.thumbsUp, align: 'right' },
+  { key: 'thumbsDown', label: OVERVIEW.thumbsDown, align: 'right' },
+  { key: 'cost', label: OVERVIEW.cost, align: 'right' },
+]
+const usageOf = (a: { assistantId: string }) => ({ name: 'assistant', params: { id: a.assistantId }, query: { tab: 'usage' } })
+const accessOpen = ref(false)
+/** Health's dots: green while fine, amber with remarks, red on a failure (the words say it too). */
+const DOT: Record<'ok' | 'warn' | 'danger', string> = { ok: 'bg-ok', warn: 'bg-warn', danger: 'bg-danger' }
+const runTotals = computed(() => {
+  const t = { succeeded: 0, degraded: 0, failed: 0, running: 0 }
+  for (const d of overview.data.value?.health.departments ?? []) for (const k of Object.keys(t) as (keyof typeof t)[]) t[k] += d.runs[k] ?? 0
+  return t
+})
+const runsTone = computed(() => (runTotals.value.failed ? 'danger' : runTotals.value.degraded ? 'warn' : 'ok'))
+const runsSummary = computed(() => {
+  const parts = RUN_OUTCOMES.filter((o) => runTotals.value[o.key]).map((o) => o.label(runTotals.value[o.key]))
+  return parts.length ? parts.join(', ') : OVERVIEW.noRunsShort
+})
 const quiet = computed(() => live.value.every((a) => a.questions === 0))
 
 const RUN_OUTCOMES = [
@@ -93,99 +119,33 @@ function showHidden(): void {
 </script>
 
 <template>
+  <!-- Home (admin design §5.5.1, UX pass UX6 C), top to bottom: the greeting with Your access, the notices, Needs
+       attention, Get started, Assistants in use and Health; what needs the person comes before what runs. -->
   <PageHeader :title="greeting">
     <!-- The departments and roles under the greeting; the department names are Swedish (admin design §5.7; #1036). -->
-    <template v-if="identity" #description>
+    <template #description>
       <span data-test="identity"><template v-for="(d, i) in departmentNames" :key="i"><template v-if="i > 0">, </template><span :lang="d.sv ? 'sv' : undefined">{{ d.text }}</span></template><template v-if="departmentNames.length && roleNames.length"> · </template>{{ roleNames.join(', ') }}</span>
+      <template v-if="identity"> · </template>
+      <button type="button" class="text-accent-ink underline" aria-haspopup="dialog" data-test="your-access" @click="accessOpen = true">{{ OVERVIEW.access }}</button>
     </template>
   </PageHeader>
+  <!-- Without a Källa role there is nothing else on the page: say so here, not only in Your access. -->
+  <p v-if="!hasRole" class="mb-6" data-test="no-role">{{ OVERVIEW.noRoles }}</p>
   <template v-if="overview.data.value">
-    <NeedsAttention :items="overview.data.value.attention" class="mb-6" />
     <SecretExpiryNotices v-if="auth.isPlatformAdmin && overview.data.value.secretExpiry.length" :entries="overview.data.value.secretExpiry" class="mb-6" />
     <DeploymentNotices v-if="auth.isPlatformAdmin && overview.data.value.deploymentNotices.length" :notices="overview.data.value.deploymentNotices" class="mb-6" />
+    <NeedsAttention :items="overview.data.value.attention" class="mb-6" />
+
+    <!-- Get started: the embedding profile's first-run step first while it applies, then the checklists. -->
     <UiCard v-if="overview.data.value.needsEmbeddingProfile" :title="OVERVIEW.profileTitle" class="mb-6" data-test="needs-profile">
       <p class="mb-4">{{ OVERVIEW.profileText }}</p>
       <UiButton variant="primary" icon="add" data-test="create-profile" @click="router.push({ name: 'platform-models' })">{{ OVERVIEW.profileAction }}</UiButton>
-    </UiCard>
-    <UiCard v-if="live.length" :title="OVERVIEW.live" :meta="OVERVIEW.liveMeta" heading-id="live-h" class="mb-6" data-test="live">
-      <p v-if="quiet" class="mb-4 text-fg-2" data-test="live-empty">{{ OVERVIEW.liveEmpty }}</p>
-      <ul class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <li v-for="a in live" :key="a.assistantId">
-          <RouterLink
-            :to="{ name: 'assistant', params: { id: a.assistantId }, query: { tab: 'usage' } }"
-            class="block h-full rounded-control bg-sunken p-4 hover:bg-hover"
-            data-test="live-card"
-          >
-            <span class="flex flex-wrap items-baseline justify-between gap-x-2">
-              <span class="min-w-0 break-words font-medium">{{ a.name }}</span>
-              <span class="text-small text-fg-3">{{ OVERVIEW.liveVersion(a.publishedVersion) }}</span>
-            </span>
-            <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-small">
-              <div>
-                <dt class="text-fg-3">{{ OVERVIEW.questions }}</dt>
-                <dd class="tabular font-medium" :class="quietZero(a.questions)" data-test="live-questions">{{ formatNumber(a.questions) }}</dd>
-              </div>
-              <div>
-                <dt class="text-fg-3">{{ OVERVIEW.notFound }}</dt>
-                <dd class="tabular font-medium" :class="quietZero(a.notFound)">{{ formatNumber(a.notFound) }}</dd>
-              </div>
-              <div>
-                <dt class="text-fg-3">{{ OVERVIEW.thumbsUp }}</dt>
-                <dd class="tabular font-medium" :class="quietZero(a.thumbsUp)">{{ formatNumber(a.thumbsUp) }}</dd>
-              </div>
-              <div>
-                <dt class="text-fg-3">{{ OVERVIEW.thumbsDown }}</dt>
-                <dd class="tabular font-medium" :class="quietZero(a.thumbsDown)">{{ formatNumber(a.thumbsDown) }}</dd>
-              </div>
-              <div class="col-span-2">
-                <dt class="text-fg-3">{{ OVERVIEW.cost }}</dt>
-                <dd class="tabular font-medium" :class="quietZero(a.costUsd)" data-test="live-cost">{{ formatUsdCost(a.costUsd) }}</dd>
-              </div>
-            </dl>
-          </RouterLink>
-        </li>
-      </ul>
-    </UiCard>
-    <UiCard :title="OVERVIEW.health" heading-id="health-h" class="mb-6" data-test="health">
-      <div class="grid gap-5 md:grid-cols-2">
-        <section aria-labelledby="health-runs-h">
-          <h3 id="health-runs-h" class="text-small font-medium text-fg-2">{{ OVERVIEW.runs }}</h3>
-          <ul v-if="overview.data.value.health.departments.length" class="mt-2 flex flex-col gap-2" data-test="health-runs">
-            <li v-for="d in overview.data.value.health.departments" :key="d.departmentId" class="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <RouterLink :to="{ name: 'collections' }" class="min-w-0 break-words font-medium underline-offset-2 hover:underline">{{ d.departmentName }}</RouterLink>
-              <template v-for="o in RUN_OUTCOMES" :key="o.key">
-                <UiBadge v-if="d.runs[o.key]" :tone="o.tone" :label="o.label(d.runs[o.key])" :data-test="`runs-${o.key}`" />
-              </template>
-            </li>
-          </ul>
-          <p v-else class="mt-2 text-fg-2">{{ OVERVIEW.noRuns }}</p>
-        </section>
-        <section aria-labelledby="health-queue-h">
-          <h3 id="health-queue-h" class="text-small font-medium text-fg-2">{{ OVERVIEW.queue }}</h3>
-          <p class="mt-2" data-test="health-queue">
-            <span class="font-medium">{{ OVERVIEW.queueWaiting(overview.data.value.health.queue.waiting) }}</span>
-            <span v-if="overview.data.value.health.queue.oldestQueuedAt" class="text-fg-2">
-              · {{ OVERVIEW.queueOldest(formatRelative(overview.data.value.health.queue.oldestQueuedAt)) }}
-            </span>
-          </p>
-        </section>
-        <section v-for="s in syncs" :key="s.key" :aria-labelledby="`health-${s.key}-h`" :data-test="`health-${s.key}`">
-          <h3 :id="`health-${s.key}-h`" class="text-small font-medium text-fg-2">
-            <RouterLink v-if="s.to" :to="s.to" class="underline-offset-2 hover:underline">{{ s.label }}</RouterLink>
-            <template v-else>{{ s.label }}</template>
-          </h3>
-          <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span>{{ lastSuccess(s.sync) }}</span>
-            <UiBadge v-if="s.sync.consecutiveFailures" tone="danger" :label="OVERVIEW.failures(s.sync.consecutiveFailures)" data-test="sync-failures" />
-          </p>
-        </section>
-      </div>
     </UiCard>
     <UiCard v-if="!overview.data.value.hasCollections" :title="SETUP.title" class="mb-6" data-test="empty">
       <p class="mb-4">{{ SETUP.empty }}</p>
       <UiButton v-if="canCreate" variant="primary" icon="add" data-test="create" @click="router.push({ name: 'collections' })">{{ SETUP.create }}</UiButton>
     </UiCard>
-    <div v-else-if="setups.length" class="mb-6 grid gap-6">
+    <div v-else-if="setups.length" class="mb-6 grid gap-6" data-test="get-started">
       <SetupChecklist v-for="s in shownSetups" :key="s.collectionId" :setup="s" show-name foldable>
         <template #actions>
           <UiButton variant="quiet" size="sm" :aria-label="OVERVIEW.hideFor(s.name)" data-test="hide" @click="hide(s.collectionId)">{{ OVERVIEW.hide }}</UiButton>
@@ -195,9 +155,60 @@ function showHidden(): void {
         <UiButton variant="quiet" size="sm" data-test="show-hidden" @click="showHidden">{{ OVERVIEW.showHidden(hiddenCount) }}</UiButton>
       </div>
     </div>
+
+    <!-- Assistants in use, the last 7 days: a table, the most asked first, zeros grey (rule 8); cards on a phone. -->
+    <section v-if="live.length" class="mb-6 grid gap-3" aria-labelledby="live-h" data-test="live">
+      <h2 id="live-h" class="text-heading">{{ OVERVIEW.live }} <span class="text-small font-normal text-fg-3">· {{ OVERVIEW.liveMeta }}</span></h2>
+      <p v-if="quiet" class="text-fg-2" data-test="live-empty">{{ OVERVIEW.liveEmpty }}</p>
+      <DataTable :columns="liveColumns" :rows="liveRows" :row-key="(a) => a.assistantId" :caption="OVERVIEW.liveCaption" :row-to="usageOf">
+        <template #cell-name="{ row }"><span class="font-medium">{{ row.name }}</span></template>
+        <template #cell-questions="{ row }"><span class="tabular" :class="quietZero(row.questions)" data-test="live-questions">{{ formatNumber(row.questions) }}</span></template>
+        <template #cell-notFound="{ row }"><span class="tabular" :class="quietZero(row.notFound)">{{ formatNumber(row.notFound) }}</span></template>
+        <template #cell-thumbsUp="{ row }"><span class="tabular" :class="quietZero(row.thumbsUp)">{{ formatNumber(row.thumbsUp) }}</span></template>
+        <template #cell-thumbsDown="{ row }"><span class="tabular" :class="quietZero(row.thumbsDown)">{{ formatNumber(row.thumbsDown) }}</span></template>
+        <template #cell-cost="{ row }"><span class="tabular" :class="quietZero(row.costUsd)" data-test="live-cost">{{ formatUsdCost(row.costUsd) }}</span></template>
+      </DataTable>
+    </section>
+
+    <!-- Health: one line of four states; a state that fails turns amber or red, in words as well as colour. -->
+    <section class="mb-6" aria-labelledby="health-h" data-test="health">
+      <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <h2 id="health-h" class="font-medium">{{ OVERVIEW.health }}</h2>
+        <span class="inline-flex items-center gap-1.5" data-test="health-runs-total">
+          <span class="size-2 rounded-full" :class="DOT[runsTone]" aria-hidden="true" />
+          <RouterLink :to="{ name: 'collections' }" class="text-accent-ink underline">{{ OVERVIEW.fetches24h }}</RouterLink>: {{ runsSummary }}
+        </span>
+        <span class="inline-flex items-center gap-1.5" data-test="health-queue">
+          <span class="size-2 rounded-full" :class="DOT.ok" aria-hidden="true" />
+          <span>{{ OVERVIEW.queue }}: {{ OVERVIEW.queueWaiting(overview.data.value.health.queue.waiting) }}</span>
+          <span v-if="overview.data.value.health.queue.oldestQueuedAt" class="text-fg-2">· {{ OVERVIEW.queueOldest(formatRelative(overview.data.value.health.queue.oldestQueuedAt)) }}</span>
+        </span>
+        <span v-for="s in syncs" :key="s.key" class="inline-flex flex-wrap items-center gap-1.5" :data-test="`health-${s.key}`">
+          <span class="size-2 rounded-full" :class="DOT[s.sync.consecutiveFailures ? 'danger' : 'ok']" aria-hidden="true" />
+          <RouterLink v-if="s.to" :to="s.to" class="text-accent-ink underline">{{ s.label }}</RouterLink>
+          <span v-else>{{ s.label }}</span>
+          <span>{{ lastSuccess(s.sync) }}</span>
+          <UiBadge v-if="s.sync.consecutiveFailures" tone="danger" :label="OVERVIEW.failures(s.sync.consecutiveFailures)" data-test="sync-failures" />
+        </span>
+      </div>
+      <!-- The per-department counts behind the fetches. -->
+      <details v-if="overview.data.value.health.departments.length" class="mt-2 text-small" data-test="health-by-department">
+        <summary class="cursor-pointer text-fg-2">{{ OVERVIEW.byDepartment }}</summary>
+        <ul class="mt-2 flex flex-col gap-2" data-test="health-runs">
+          <li v-for="d in overview.data.value.health.departments" :key="d.departmentId" class="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span class="min-w-0 break-words font-medium">{{ d.departmentName }}</span>
+            <template v-for="o in RUN_OUTCOMES" :key="o.key">
+              <UiBadge v-if="d.runs[o.key]" :tone="o.tone" :label="o.label(d.runs[o.key])" :data-test="`runs-${o.key}`" />
+            </template>
+          </li>
+        </ul>
+      </details>
+    </section>
   </template>
-  <UiCard :title="OVERVIEW.access" heading-id="access-h">
-    <dl class="grid gap-5 md:grid-cols-2">
+
+  <!-- Your access (§5.5.1 item 1): the roles and departments the sign-in gave, and where each came from. -->
+  <UiDrawer v-model:open="accessOpen" :title="OVERVIEW.access" data-test="access-drawer">
+    <dl class="grid gap-5">
       <div>
         <dt class="text-small font-medium text-fg-2">{{ OVERVIEW.roles }}</dt>
         <dd class="mt-2">
@@ -213,7 +224,7 @@ function showHidden(): void {
           <p v-if="auth.isPlatformAdmin" class="mb-2 text-small text-fg-3">{{ OVERVIEW.allDepartments }}</p>
           <ul v-if="departments.length" class="flex flex-col gap-1.5" data-test="departments">
             <li v-for="d in departments" :key="d.code" class="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span v-if="d.name" class="font-medium">{{ d.name }} <span class="tabular text-small font-normal text-fg-3">{{ d.code }}</span></span>
+              <span v-if="d.name" class="font-medium" lang="sv">{{ d.name }} <span class="tabular text-small font-normal text-fg-3">{{ d.code }}</span></span>
               <span v-else-if="d.name === null" class="font-medium">{{ OVERVIEW.unknownDepartment(d.code) }}</span>
               <span v-else class="tabular font-medium">{{ d.code }}</span>
               <UiBadge :tone="d.source === 'group' ? 'ok' : 'neutral'" :label="DEPARTMENT_SOURCE_LABEL[d.source]" />
@@ -223,5 +234,5 @@ function showHidden(): void {
         </dd>
       </div>
     </dl>
-  </UiCard>
+  </UiDrawer>
 </template>

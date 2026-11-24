@@ -111,7 +111,8 @@ async function signOut(): Promise<void> {
           class="flex flex-col gap-0.5"
           :class="{ 'max-lg:border-t max-lg:border-border max-lg:pt-3': gi > 0 }"
         >
-          <h2 :id="`nav-${g.id}`" class="px-2 pb-1 text-caption font-medium uppercase tracking-wide text-fg-3 max-lg:sr-only">{{ g.label }}</h2>
+          <!-- Home's group has no visible heading: Home stands alone at the top (admin design §5.2). -->
+          <h2 :id="`nav-${g.id}`" class="px-2 pb-1 text-caption font-medium uppercase tracking-wide text-fg-3 max-lg:sr-only" :class="{ 'sr-only': g.hideLabel }">{{ g.label }}</h2>
           <RouterLink
             v-for="item in g.items"
             :key="item.name"

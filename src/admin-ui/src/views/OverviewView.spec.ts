@@ -57,10 +57,16 @@ describe('Overview: your access (P0 checklist #9)', () => {
     vi.spyOn(api.organisation, 'departments').mockResolvedValue([
       { id: 'd1', name: 'Bygg och miljö', costCenterCode: '1000', isActive: true, syncedAt: '2026-11-01T10:00:00Z', teams: [] },
     ])
-    const wrapper = mount(OverviewView, { global: { stubs: { RouterLink: true } } })
+    const wrapper = mount(OverviewView, { attachTo: document.body, global: { stubs: { RouterLink: true } } })
     await flushPromises()
-    expect(wrapper.get('[data-test=roles]').text()).toBe('Read access')
-    const items = wrapper.findAll('[data-test=departments] li').map((li) => li.text())
+    // The roles and departments are behind Your access, beside the greeting (§5.5.1 item 1): the card is gone.
+    expect(document.body.querySelector('[data-test=roles]')).toBeNull()
+    HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) { this.open = true }
+    HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) { this.open = false }
+    await wrapper.get('[data-test=your-access]').trigger('click')
+    await flushPromises()
+    expect(document.body.querySelector('[data-test=roles]')!.textContent).toBe('Read access')
+    const items = [...document.body.querySelectorAll('[data-test=departments] li')].map((li) => li.textContent ?? '')
     expect(items[0]).toContain('Bygg och miljö')
     expect(items[0]).toContain('1000')
     expect(items[0]).toContain('From your account')
@@ -68,9 +74,10 @@ describe('Overview: your access (P0 checklist #9)', () => {
     expect(items[1]).toContain('Through a member group')
     // The greeting (admin design §5.7): the first name, and under it the departments and the roles.
     expect(wrapper.get('#page-title').text()).toMatch(/^Good (morning|afternoon|evening), Anna$/)
-    expect(wrapper.get('header p').text()).toBe('Bygg och miljö, 3000 · Read access')
+    expect(wrapper.get('header p').text()).toBe('Bygg och miljö, 3000 · Read access · Your access')
     // A synced department name is Swedish; a code is not (admin design §5.7; #1036).
     expect(wrapper.findAll('[data-test=identity] [lang=sv]').map((e) => e.text())).toEqual(['Bygg och miljö'])
+    wrapper.unmount()
   })
 
   it('tells a user without a rag-* role to ask for access', () => {
@@ -165,12 +172,16 @@ describe('Home: Live, Health and Get started (admin design §5.5.1)', () => {
     const overview = vi.spyOn(api, 'overview').mockResolvedValue(overviewOf({ live: [assistant, { ...assistant, assistantId: 'a2', name: 'Tyst', questions: 0 }] }))
     const wrapper = mount(OverviewView, { global: { stubs: { RouterLink: LinkStub } } })
     await flushPromises()
-    const cards = wrapper.findAll('[data-test=live-card]')
-    expect(cards.map((c) => c.find('.font-medium').text())).toEqual(['Bygglovsassistenten', 'Tyst'])
-    expect(JSON.parse(cards[0]!.attributes('data-to')!)).toEqual({ name: 'assistant', params: { id: 'a1' }, query: { tab: 'usage' } })
-    expect(cards[0]!.text()).toContain(OVERVIEW.liveVersion(3))
-    expect(cards[0]!.get('[data-test=live-questions]').text()).toBe('42')
-    expect(cards[0]!.get('[data-test=live-cost]').text()).toContain('1,50')
+    // A table (§5.5.1 item 5), the most asked first, each name a link to the assistant's Usage tab.
+    const rows = wrapper.findAll('[data-test=live] tbody tr')
+    expect(rows.map((r) => r.find('.font-medium').text())).toEqual(['Bygglovsassistenten', 'Tyst'])
+    expect(wrapper.findAll('[data-test=live] thead th').map((h) => h.text())).toEqual(
+      [OVERVIEW.assistant, OVERVIEW.questions, OVERVIEW.notFound, OVERVIEW.thumbsUp, OVERVIEW.thumbsDown, OVERVIEW.cost])
+    expect(JSON.parse(rows[0]!.get('[data-to]').attributes('data-to')!)).toEqual({ name: 'assistant', params: { id: 'a1' }, query: { tab: 'usage' } })
+    expect(rows[0]!.get('[data-test=live-questions]').text()).toBe('42')
+    expect(rows[0]!.get('[data-test=live-cost]').text()).toContain('1,50')
+    // Zeros grey (rule 8).
+    expect(rows[1]!.get('[data-test=live-questions]').classes()).toContain('text-fg-3')
     expect(wrapper.find('[data-test=live-empty]').exists()).toBe(false)
 
     overview.mockResolvedValue(overviewOf({ live: [{ ...assistant, questions: 0 }] }))
@@ -195,9 +206,14 @@ describe('Home: Live, Health and Get started (admin design §5.5.1)', () => {
     vi.spyOn(api, 'overview').mockResolvedValue(overviewOf({ health }))
     const wrapper = mount(OverviewView, { global: { stubs: { RouterLink: LinkStub } } })
     await flushPromises()
+    // One line (§5.5.1 item 6): the fetches of 24 h summed and linked to the knowledge bases, amber with remarks.
+    const total = wrapper.get('[data-test=health-runs-total]')
+    expect(total.text()).toContain(`${OVERVIEW.fetches24h}: ${OVERVIEW.runsSucceeded(3)}, ${OVERVIEW.runsDegraded(1)}, ${OVERVIEW.runsRunning(2)}`)
+    expect(JSON.parse(total.get('a').attributes('data-to')!)).toEqual({ name: 'collections' })
+    expect(total.get('[aria-hidden=true]').classes()).toContain('bg-warn')
+    // The per-department counts behind it.
     const runs = wrapper.get('[data-test=health-runs] li')
     expect(runs.text()).toContain('Bygg och miljö')
-    expect(JSON.parse(runs.get('a').attributes('data-to')!)).toEqual({ name: 'collections' })
     expect(runs.get('[data-test=runs-succeeded]').text()).toBe(OVERVIEW.runsSucceeded(3))
     expect(runs.get('[data-test=runs-degraded]').text()).toBe(OVERVIEW.runsDegraded(1))
     expect(runs.find('[data-test=runs-failed]').exists()).toBe(false)
@@ -411,5 +427,43 @@ describe('Home: the deployment notices (admin design §5.5.1)', () => {
     wrapper = mountHome()
     await flushPromises()
     expect(wrapper.find('[data-test=deployment-notices]').exists()).toBe(false)
+  })
+
+  describe('the order of Home (admin design §5.5.1, B-81)', () => {
+    const order = (wrapper: ReturnType<typeof mount>, tests: string[]) => {
+      const nodes = tests.map((t) => wrapper.get(`[data-test=${t}]`).element)
+      return nodes.every((n, i) => i === 0 || !!(nodes[i - 1]!.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING))
+    }
+
+    it('is on a new installation the notices, Get started and Health, nothing else', async () => {
+      signIn({ roles: ['rag-platform-admin'], departmentCodes: [], departmentSources: [] })
+      vi.spyOn(api, 'overview').mockResolvedValue(overviewOf({
+        hasCollections: false, needsEmbeddingProfile: true, deploymentNotices: [{ code: 'retired_variables', names: ['OLD_VAR'] }],
+      }))
+      const wrapper = mount(OverviewView, { global: { stubs: { RouterLink: LinkStub } } })
+      await flushPromises()
+      expect(order(wrapper, ['deployment-notices', 'needs-profile', 'empty', 'health'])).toBe(true)
+      expect(wrapper.find('[data-test=needs-attention]').exists()).toBe(false)
+      expect(wrapper.find('[data-test=live]').exists()).toBe(false)
+      // The Your access card is gone; the link beside the greeting opens it.
+      expect(wrapper.find('[data-test=roles]').exists()).toBe(false)
+      expect(wrapper.get('[data-test=your-access]').attributes('aria-haspopup')).toBe('dialog')
+    })
+
+    it('puts what needs the person before what runs: attention, Get started, Assistants in use, then Health', async () => {
+      signIn({ roles: ['rag-editor'], departmentCodes: ['1000'], departmentSources: [{ code: '1000', source: 'claim' }] })
+      vi.spyOn(api.organisation, 'departments').mockResolvedValue([])
+      vi.spyOn(api, 'overview').mockResolvedValue(overviewOf({
+        attention: [{
+          kind: 'deletion_waiting', objectType: 'source', objectId: 's1', objectName: 'umea.se/bygga', departmentId: 'd1', since: null,
+          details: { runId: 'r1', collectionName: 'Bygglov', proposed: '212' },
+        }],
+        setup: [{ collectionId: 'c1', name: 'Bygglov', sources: 1, firstSyncDone: true, syncRunning: false, testQuestions: 0, evaluated: false, evaluating: false, published: false, assistantId: null, assistantPublished: false, available: false, done: false }],
+        live: [{ assistantId: 'a1', name: 'Bygglovsassistenten', departmentId: 'd1', publishedVersion: 3, questions: 42, notFound: 5, thumbsUp: 7, thumbsDown: 2, costUsd: 1.5 }],
+      }))
+      const wrapper = mount(OverviewView, { global: { stubs: { RouterLink: LinkStub } } })
+      await flushPromises()
+      expect(order(wrapper, ['needs-attention', 'get-started', 'live', 'health'])).toBe(true)
+    })
   })
 })

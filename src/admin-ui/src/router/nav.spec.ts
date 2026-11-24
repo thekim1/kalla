@@ -67,15 +67,42 @@ describe('search', () => {
 
   it('lists only pages without a query', () => {
     expect(filterEntries(entries, '').map((e) => e.id)).toEqual([
-      'overview', 'map', 'collections', 'assistants', 'feedback', 'costs', 'platform-clients', 'platform-models', 'platform-settings', 'organisation', 'audit',
+      'overview', 'collections', 'assistants', 'feedback', 'costs', 'map', 'platform-clients', 'platform-models', 'platform-settings', 'organisation', 'audit',
     ])
   })
 
-  it('groups the menu as Home and Map, Knowledge bases and Assistants, Feedback and Costs, then the platform pages, Organisation and Audit log (admin design §5.2, §5.10)', () => {
-    expect(navGroups.map((g) => g.items.map((i) => i.label))).toEqual([
-      ['Home', 'Map'], ['Knowledge bases', 'Assistants'], ['Feedback', 'Costs'], ['Apps and keys', 'Models', 'Settings', 'Organisation', 'Audit log'],
+  it('has Home alone at the top, then Build, Follow-up with the Map, and Administration (admin design §5.2, §5.10; B-81)', () => {
+    expect(navGroups.map((g) => [g.label, g.hideLabel ?? false, g.items.map((i) => i.label)])).toEqual([
+      ['Home', true, ['Home']],
+      ['Build', false, ['Knowledge bases', 'Assistants']],
+      ['Follow-up', false, ['Feedback', 'Costs', 'Map']],
+      ['Administration', false, ['Apps and keys', 'Models', 'Settings', 'Organisation', 'Audit log']],
     ])
+    expect(navGroups[0]!.items[0]!.badge).toBe('attention')
     expect(filterEntries(entries, 'responsible').map((e) => e.id)).toEqual(['map'])
+  })
+
+  it('shows each role its groups in that order, without an empty group (B-81)', () => {
+    const groupsFor = (roles: string[]) => {
+      setActivePinia(createPinia())
+      const auth = useAuthStore()
+      auth.user = { isAuthenticated: true, name: 'A', email: null, roles, departmentCodes: [], departmentSources: [], sessionExpiresAt: null, signIn: { configured: true }, setup: { open: false }, openWebUi: { enabled: true } }
+      auth.status = 'authenticated'
+      // As the shell filters it (AppShell.vue): the items a role may open, and only the groups left with any.
+      return navGroups.map((g) => [g.label, g.items.filter((i) => auth.canOpen(i)).map((i) => i.label)] as const).filter(([, items]) => items.length)
+    }
+    expect(groupsFor(['rag-platform-admin'])).toEqual([
+      ['Home', ['Home']], ['Build', ['Knowledge bases', 'Assistants']], ['Follow-up', ['Feedback', 'Costs', 'Map']],
+      ['Administration', ['Apps and keys', 'Models', 'Settings', 'Organisation', 'Audit log']],
+    ])
+    expect(groupsFor(['rag-department-admin'])).toEqual([
+      ['Home', ['Home']], ['Build', ['Knowledge bases', 'Assistants']], ['Follow-up', ['Feedback', 'Costs', 'Map']],
+      ['Administration', ['Organisation', 'Audit log']],
+    ])
+    // An editor has no Feedback policy and no Manage: Follow-up keeps the Map only.
+    expect(groupsFor(['rag-editor'])).toEqual([
+      ['Home', ['Home']], ['Build', ['Knowledge bases', 'Assistants']], ['Follow-up', ['Map']], ['Administration', ['Organisation']],
+    ])
   })
 })
 
