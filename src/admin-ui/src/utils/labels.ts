@@ -1716,6 +1716,20 @@ export const ANSWER_EVALUATION = {
   uncitedNone: (days: number) => `No answers in chat in the last ${days} days`,
 } as const
 
+/** Publish draft's dialog (admin design §5.5.4, B-82). */
+export const PUBLISH_DIALOG = {
+  title: (n: number) => `Publish the draft over version ${n}?`,
+  titleFirst: 'Publish the assistant?',
+  first: 'Nothing is published yet: the draft becomes version 1 and the apps that offer the assistant start using it.',
+  changes: (n: number) => `What changes against version ${n}`,
+  refusals: 'Fix these before you publish',
+  notes: 'Worth knowing',
+  confirmGeneralKnowledge: 'Publish with general knowledge on this public assistant',
+  confirmGeneralKnowledgeHint: 'The public may get general answers that are wrong for your organisation.',
+  testRun: (cost: string) => `Publishing runs the test questions. ${cost}`,
+  publish: 'Publish',
+} as const
+
 export const ASSISTANT_TESTS = {
   lead: 'Questions the assistant should answer in a certain way. They run after every publish, and when you run them. The result is advice: nothing is blocked.',
   empty: 'No test questions yet. Add a few questions people really ask, and say what a good answer does.',

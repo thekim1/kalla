@@ -156,6 +156,10 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await act.press(details.getByRole('button', { name: 'Save', exact: true }))
     await expect(details).toBeHidden()
     await act.press(page.getByRole('button', { name: 'Publish draft', exact: true }))
+    // The Publish dialog (B-82): a first publish shows what it does and any refusal; its Publish publishes.
+    const publishDialog = page.getByRole('dialog', { name: 'Publish the assistant?' })
+    await expect(publishDialog.getByText(/the draft becomes version 1/)).toBeVisible()
+    await act.press(publishDialog.getByRole('button', { name: 'Publish', exact: true }))
     await expect(page.getByText('Published: version 1')).toBeVisible()
 
     // 12 Make it available in Open WebUI.
