@@ -70,6 +70,8 @@ const planned = ref<Planned[]>([])
 const planning = ref(false)
 const saveError = ref<string | null>(null)
 const confirming = ref(false)
+/** The number of topics being saved, kept from Add until the confirm ends (the picks are cleared on confirm). */
+const saving = ref(0)
 const sourceNames = computed(() => new Map((props.sources ?? []).map((s) => [s.id, s.name])))
 
 async function add(): Promise<void> {
@@ -77,6 +79,7 @@ async function add(): Promise<void> {
   planning.value = true
   saveError.value = null
   planned.value = []
+  saving.value = newTopics.value
   try {
     const bySource = Object.entries(picks).filter(([, paths]) => Object.keys(paths).length > 0)
     const loaded = await Promise.all(bySource.map(([sourceId]) => api.sources.get(sourceId)))
@@ -126,10 +129,8 @@ function affected(p: Planned): string {
 
 async function confirm(): Promise<void> {
   for (const p of planned.value) await api.publications.confirm(p.id, p.publication!.version)
-  const n = newTopics.value
   for (const sourceId of Object.keys(picks)) delete picks[sourceId]
-  planned.value = []
-  ui.notify(TOPICS.saved(n))
+  ui.notify(TOPICS.saved(saving.value))
   load()
 }
 
@@ -187,7 +188,7 @@ onMounted(load)
           </div>
         </div>
       </AsyncState>
-      <ConfirmDialog v-model:open="confirming" :title="TOPICS.saveTitle(newTopics)" :confirm-label="TOPICS.saveConfirm" :action="confirm">
+      <ConfirmDialog v-model:open="confirming" :title="TOPICS.saveTitle(saving)" :confirm-label="TOPICS.saveConfirm" :action="confirm">
         <div class="grid gap-3" data-test="topics-plan">
           <p class="m-0">{{ TOPICS.saveLead }}</p>
           <ul class="m-0 grid gap-2 pl-5">

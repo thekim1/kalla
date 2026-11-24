@@ -749,7 +749,8 @@ export const TOPICS = {
   noSuggestions: 'No section of this source has 5 documents or more yet.',
   tagRequired: 'Write a topic.',
   tagInvalid: 'Use lower-case letters, digits and hyphens, at most 50.',
-  add: (n: number) => `Add ${n} ${n === 1 ? 'topic' : 'topics'}`,
+  /** "Add topics" until a section is ticked. */
+  add: (n: number) => (n === 0 ? 'Add topics' : `Add ${n} ${n === 1 ? 'topic' : 'topics'}`),
   /** Saving: one publication plan per processing, confirmed as one (§6.6). */
   planning: 'Working out what needs processing again…',
   saveTitle: (n: number) => `Add ${n} ${n === 1 ? 'topic' : 'topics'}?`,

@@ -101,6 +101,7 @@ describe('The Topics tab (admin design §5.5.2; Decisions "Topics editor")', () 
     expect(covered.element.disabled).toBe(true) // removed in the list, not here
     expect(row(wrapper, '/bygga/').get('[data-test=topic-covered]').text()).toBe('Already a topic: bygga')
     expect(wrapper.get('[data-test=add-topics]').attributes('aria-disabled')).toBe('true')
+    expect(wrapper.get('[data-test=add-topics]').text()).toContain('Add topics') // no count until a section is ticked
 
     await tick(wrapper, '/utbildning/')
     const tag = row(wrapper, '/utbildning/').get<HTMLInputElement>('[data-test=topic-tag]')
