@@ -638,18 +638,24 @@ watch(() => props.id, () => {
           </UiCard>
           <TextAreaField id="assistant-prompt" v-model="prompt" :label="ASSISTANT.prompt" :hint="ASSISTANT.promptHint" :rows="8" />
           <KnowledgeLinks v-model="links" :collections="collections" :department-id="assistant.data.value.departmentId" :disabled="!canEdit" />
-          <fieldset class="grid gap-2" data-test="general-knowledge" aria-describedby="assistant-general-knowledge-hint">
+          <!-- One scale of four (§5.5.4, UX pass UX3 C): the chosen level's line of help under it, tied to the group. -->
+          <fieldset class="grid gap-2" data-test="general-knowledge" aria-describedby="assistant-general-knowledge-help">
             <legend class="mb-1 font-medium">{{ ASSISTANT.generalKnowledge }}</legend>
-            <p id="assistant-general-knowledge-hint" class="text-small text-fg-2">{{ ASSISTANT.generalKnowledgeHint }}</p>
-            <label v-for="g in GENERAL_KNOWLEDGE_LEVELS" :key="g" class="flex cursor-pointer gap-3 rounded-card border border-border p-3 has-checked:bg-accent-soft has-checked:shadow-inset-selected">
-              <input
-                :id="`assistant-general-knowledge-${g}`" v-model="generalKnowledge" type="radio" name="assistant-general-knowledge" :value="g" class="mt-1"
-              />
-              <span>
-                <span class="block font-medium">{{ ASSISTANT.generalKnowledgeLevels[g]!.label }}</span>
-                <span class="block text-small text-fg-2">{{ ASSISTANT.generalKnowledgeLevels[g]!.help }}</span>
-              </span>
-            </label>
+            <div class="flex flex-wrap gap-1 rounded-control bg-sunken p-1 max-sm:grid max-sm:grid-cols-2" data-test="general-knowledge-scale">
+              <label
+                v-for="g in GENERAL_KNOWLEDGE_LEVELS" :key="g"
+                class="flex min-h-9 flex-1 cursor-pointer items-center justify-center gap-2 rounded-control px-3 text-center max-md:min-h-11 has-checked:bg-surface has-checked:font-medium has-checked:shadow-inset-selected"
+              >
+                <input
+                  :id="`assistant-general-knowledge-${g}`" v-model="generalKnowledge" type="radio" name="assistant-general-knowledge" :value="g"
+                  :disabled="!canEdit"
+                />
+                {{ ASSISTANT.generalKnowledgeNames[g] }}
+              </label>
+            </div>
+            <p id="assistant-general-knowledge-help" class="text-small text-fg-2" data-test="general-knowledge-help">
+              {{ ASSISTANT.generalKnowledgeLevels[generalKnowledge]!.help }}
+            </p>
             <p v-if="publicLevel && generalKnowledge !== 'off'" class="text-small text-warn" role="status" data-test="general-knowledge-public-warning">
               {{ ASSISTANT.generalKnowledgePublicWarning }}
             </p>

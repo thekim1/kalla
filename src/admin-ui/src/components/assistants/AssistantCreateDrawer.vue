@@ -21,11 +21,11 @@ const LEVELS: Level[] = ['public', 'internal', 'sensitive']
 const GENERAL_ADVICE = 'Allmän rådgivning'
 const templates = ref<AssistantTemplate[]>([])
 const templateId = ref('')
+/** The cards: each template with its description's first line, then the platform's default instructions. */
 const templateOptions = computed(() => [
-  ...templates.value.map((t) => ({ value: t.id, label: t.name })),
-  { value: '', label: ASSISTANTS.templateNone },
+  ...templates.value.map((t) => ({ value: t.id, label: t.name, line: t.description.split('\n')[0]?.trim() ?? '' })),
+  { value: '', label: ASSISTANTS.templateNone, line: '' },
 ])
-const chosenTemplate = computed(() => templates.value.find((t) => t.id === templateId.value))
 const name = ref('')
 const departmentId = ref('')
 const level = ref<Level | ''>('')
@@ -88,12 +88,32 @@ async function save(): Promise<void> {
 <template>
   <UiDrawer :open="open" :title="ASSISTANTS.create" @update:open="emit('update:open', $event)">
     <form id="assistant-create" class="grid gap-5" novalidate @submit.prevent="save">
-      <SelectField
-        v-if="templates.length" id="assistant-template" v-model="templateId" :label="ASSISTANTS.template" :options="templateOptions"
-        :hint="[chosenTemplate?.description, ASSISTANTS.templateHint].filter(Boolean).join(' ')" :error="form.errors.templateId"
-      />
+      <!-- Start from as template cards, one line each (admin design §5.12, Drawers); the hint says what is copied. -->
+      <fieldset
+        v-if="templates.length" id="assistant-template" tabindex="-1" class="grid gap-2"
+        :aria-describedby="form.errors.templateId ? 'assistant-template-error assistant-template-hint' : 'assistant-template-hint'"
+        data-test="start-from"
+      >
+        <legend class="mb-1 font-medium">{{ ASSISTANTS.template }}</legend>
+        <label
+          v-for="t in templateOptions" :key="t.value"
+          class="flex cursor-pointer gap-3 rounded-card border border-border p-3 has-checked:bg-accent-soft has-checked:shadow-inset-selected"
+          :data-test="`start-from-${t.value || 'none'}`"
+        >
+          <input :id="`assistant-template-${t.value || 'none'}`" v-model="templateId" type="radio" name="assistant-template" :value="t.value" class="mt-1" />
+          <span class="min-w-0">
+            <span class="block font-medium">{{ t.label }}</span>
+            <span v-if="t.line" class="block text-small text-fg-2" data-test="start-from-line">{{ t.line }}</span>
+          </span>
+        </label>
+        <p id="assistant-template-hint" class="text-small text-fg-2">{{ ASSISTANTS.templateHint }}</p>
+        <p v-if="form.errors.templateId" id="assistant-template-error" class="text-small text-danger">{{ form.errors.templateId }}</p>
+      </fieldset>
       <TextField id="assistant-name" v-model="name" :label="ASSISTANTS.name" :error="form.errors.name" autocomplete="off" />
-      <SelectField id="assistant-department" v-model="departmentId" :label="ASSISTANTS.department" :options="departmentOptions" :error="form.errors.departmentId" />
+      <SelectField
+        id="assistant-department" v-model="departmentId" :label="ASSISTANTS.department" :options="departmentOptions" :placeholder="ASSISTANTS.chooseDepartment"
+        :error="form.errors.departmentId"
+      />
       <fieldset class="grid gap-2">
         <legend class="mb-1 font-medium">{{ ASSISTANTS.level }}</legend>
         <label v-for="l in LEVELS" :key="l" class="flex cursor-pointer gap-3 rounded-card border border-border p-3 has-checked:bg-accent-soft has-checked:shadow-inset-selected">

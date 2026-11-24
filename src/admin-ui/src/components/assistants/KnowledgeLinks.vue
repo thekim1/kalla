@@ -2,16 +2,18 @@
 import { computed, ref, useId } from 'vue'
 import type { CollectionLink, CollectionSummary } from '@/api/types'
 import UiBadge from '@/components/ui/UiBadge.vue'
+import MenuButton from '@/components/ui/MenuButton.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiDrawer from '@/components/ui/UiDrawer.vue'
 import UiTabs from '@/components/ui/UiTabs.vue'
 import { formatNumber } from '@/utils/format'
 import { ASSISTANT, LEVEL_LABEL } from '@/utils/labels'
 
-// Knowledge on the Build tab (admin design §5.5.4): each link shows the knowledge base, its owning department when it is
-// shared, and its topics (chips and a field labelled "Limit to topics (empty: all topics)"; read-only, "All topics" when
-// there are none); Add knowledge base opens a picker with Ours, Shared with us and All, showing level, document count and
-// topics. "Ours" is the assistant's own department.
+// Knowledge on the Build tab (admin design §5.5.4): one row per link with the knowledge base, its owning department when
+// it is shared, and its topics ("all topics", or the count, with the topics as chips); Limit to topics opens the topic
+// field ("Limit to topics (empty: all topics)", the knowledge base's topics as suggestions) and the row's ⋯ menu holds
+// Remove. Add knowledge base opens a picker with Ours, Shared with us and All, showing level, document count and topics.
+// "Ours" is the assistant's own department.
 type View = 'mine' | 'shared' | 'all'
 const props = defineProps<{ modelValue: CollectionLink[]; collections: CollectionSummary[]; departmentId: string; disabled?: boolean }>()
 const emit = defineEmits<{ (e: 'update:modelValue', value: CollectionLink[]): void }>()
@@ -19,6 +21,13 @@ const uid = useId()
 const picking = ref(false)
 const view = ref<View>('mine')
 const draftTopic = ref<Record<string, string>>({})
+/** The links whose topic field is open (Limit to topics). */
+const limiting = ref(new Set<string>())
+function toggleLimit(id: string): void {
+  const next = new Set(limiting.value)
+  if (!next.delete(id)) next.add(id)
+  limiting.value = next
+}
 const views = [
   { value: 'mine' as const, label: ASSISTANT.pickerViews.mine },
   { value: 'shared' as const, label: ASSISTANT.pickerViews.shared },
@@ -48,6 +57,12 @@ function add(c: CollectionSummary): void {
 
 function remove(id: string): void {
   emit('update:modelValue', props.modelValue.filter((l) => l.collectionId !== id))
+  // Added again later, the link starts folded.
+  if (limiting.value.has(id)) {
+    const next = new Set(limiting.value)
+    next.delete(id)
+    limiting.value = next
+  }
 }
 
 function addTopic(id: string): void {
@@ -67,18 +82,29 @@ function removeTopic(id: string, topic: string): void {
     <legend class="mb-1 font-medium">{{ ASSISTANT.collections }}</legend>
     <p class="text-small text-fg-2">{{ ASSISTANT.collectionsHint }}</p>
     <p v-if="modelValue.length === 0" class="text-fg-3">{{ ASSISTANT.noCollections }}</p>
-    <ul v-else class="grid gap-2">
-      <li v-for="link in modelValue" :key="link.collectionId" class="grid gap-2 rounded-card border border-border p-3" :data-test="`link-${link.collectionId}`">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <span>
+    <ul v-else class="divide-y divide-border rounded-card border border-border">
+      <li v-for="link in modelValue" :key="link.collectionId" class="grid gap-2 px-3 py-2.5" :data-test="`link-${link.collectionId}`">
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span class="min-w-0 flex-1">
             <span class="font-medium">{{ nameOf(link.collectionId) }}</span>
             <span v-if="sharedIn(byId.get(link.collectionId))" class="text-fg-2"> ({{ ASSISTANT.sharedFrom(byId.get(link.collectionId)!.departmentName) }})</span>
             <span v-if="byId.get(link.collectionId) && !byId.get(link.collectionId)!.publishedAt" class="text-fg-3"> ({{ ASSISTANT.notPublished }})</span>
           </span>
-          <UiButton v-if="!disabled" size="sm" variant="quiet" icon="close" :aria-label="ASSISTANT.removeCollection(nameOf(link.collectionId))" @click="remove(link.collectionId)" />
+          <span class="text-small text-fg-2" data-test="topics-summary">{{ link.tags.length ? ASSISTANT.topicCount(link.tags.length) : ASSISTANT.allTopicsShort }}</span>
+          <template v-if="!disabled">
+            <UiButton
+              size="sm" :aria-expanded="limiting.has(link.collectionId) ? 'true' : 'false'" :aria-controls="`${uid}-limit-${link.collectionId}`"
+              data-test="limit-topics" @click="toggleLimit(link.collectionId)"
+            >
+              {{ ASSISTANT.limitTopicsAction }}
+            </UiButton>
+            <MenuButton
+              size="sm" :label="ASSISTANT.linkMenu(nameOf(link.collectionId))"
+              :items="[{ key: 'remove', label: ASSISTANT.removeLink, icon: 'close', danger: true }]" @select="remove(link.collectionId)"
+            />
+          </template>
         </div>
-        <div v-if="disabled || link.tags.length" class="flex flex-wrap items-center gap-2">
-          <span v-if="link.tags.length === 0" class="text-small text-fg-2">{{ ASSISTANT.allTopics }}</span>
+        <div v-if="link.tags.length" class="flex flex-wrap items-center gap-2">
           <span v-for="t in link.tags" :key="t" class="inline-flex items-center gap-1 rounded-control bg-sunken px-2 py-0.5 text-small">
             <span class="font-mono">{{ t }}</span>
             <button
@@ -89,7 +115,10 @@ function removeTopic(id: string, topic: string): void {
             </button>
           </span>
         </div>
-        <form v-if="!disabled" class="flex flex-wrap items-end gap-2" @submit.prevent="addTopic(link.collectionId)">
+        <form
+          v-if="!disabled && limiting.has(link.collectionId)" :id="`${uid}-limit-${link.collectionId}`" class="flex flex-wrap items-end gap-2"
+          @submit.prevent="addTopic(link.collectionId)"
+        >
           <label class="grid gap-1 text-small">
             <span>{{ ASSISTANT.limitTopics }}</span>
             <input

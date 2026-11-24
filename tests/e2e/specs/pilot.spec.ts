@@ -207,6 +207,7 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await expect(otherPicker).toBeHidden()
     const link = other.getByRole('listitem').filter({ hasText: collection })
     await expect(link.getByText('(Kommunledningskontoret, shared)')).toBeVisible()
+    await otherAct.press(link.getByRole('button', { name: 'Limit to topics', exact: true }))
     await otherAct.fill(link.getByRole('combobox', { name: /^Limit to topics/ }), 'isytor')
     await otherAct.press(link.getByRole('button', { name: 'Add topic' }))
     await expect(link.getByText('isytor', { exact: true })).toBeVisible()

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { api } from '@/api'
+import { ApiError } from '@/api/client'
 import type { Assistant, AssistantTemplate, Department } from '@/api/types'
 import { ASSISTANTS } from '@/utils/labels'
 import AssistantCreateDrawer from './AssistantCreateDrawer.vue'
@@ -21,7 +22,14 @@ async function open() {
   return wrapper
 }
 
-const select = () => document.body.querySelector<HTMLSelectElement>('#assistant-template')
+/** The Start from cards (admin design §5.12, Drawers). */
+const cards = () => document.body.querySelector<HTMLFieldSetElement>('#assistant-template')
+const radios = () => [...document.body.querySelectorAll<HTMLInputElement>('input[name=assistant-template]')]
+function choose(value: string): void {
+  const radio = radios().find((r) => r.value === value)!
+  radio.checked = true
+  radio.dispatchEvent(new Event('change'))
+}
 
 async function fillAndSave() {
   const name = document.body.querySelector<HTMLInputElement>('#assistant-name')!
@@ -46,13 +54,18 @@ describe('Create assistant: the template (admin design §5 step 9, B-54)', () =>
     const create = vi.spyOn(api.assistants, 'create').mockResolvedValue(created)
     const wrapper = await open()
 
-    const options = [...select()!.options].map((o) => o.text)
-    expect(options).toEqual(['Handläggningsstöd', 'Allmän rådgivning', 'Intern policy', ASSISTANTS.templateNone])
-    expect(select()!.value).toBe('t2')
-    expect(document.body.textContent).toContain('Allmän rådgivning: beskrivning.')
+    expect(cards()!.tagName).toBe('FIELDSET')
+    expect(cards()!.querySelector('legend')!.textContent).toBe(ASSISTANTS.template)
+    const labels = [...cards()!.querySelectorAll('label')].map((l) => l.querySelector('.font-medium')!.textContent)
+    expect(labels).toEqual(['Handläggningsstöd', 'Allmän rådgivning', 'Intern policy', ASSISTANTS.templateNone])
+    expect(radios().find((r) => r.checked)!.value).toBe('t2')
+    // One line each: the template's description.
+    expect(document.body.querySelector('[data-test=start-from-t2] [data-test=start-from-line]')!.textContent).toBe('Allmän rådgivning: beskrivning.')
+    expect(cards()!.getAttribute('aria-describedby')).toBe('assistant-template-hint')
+    // The department select asks for a choice.
+    expect(document.body.querySelector('#assistant-department option[disabled]')?.textContent).toBe(ASSISTANTS.chooseDepartment)
 
-    select()!.value = 't3'
-    select()!.dispatchEvent(new Event('change'))
+    choose('t3')
     await fillAndSave()
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ name: 'Policyhjälpen', departmentId: 'd1', classification: 'internal', templateId: 't3' }))
     expect(wrapper.emitted('created')?.[0]?.[0]).toEqual(created)
@@ -63,10 +76,21 @@ describe('Create assistant: the template (admin design §5 step 9, B-54)', () =>
     vi.spyOn(api.assistantTemplates, 'list').mockResolvedValue([template('t2', 'Allmän rådgivning')])
     const create = vi.spyOn(api.assistants, 'create').mockResolvedValue(created)
     const wrapper = await open()
-    select()!.value = ''
-    select()!.dispatchEvent(new Event('change'))
+    choose('')
     await fillAndSave()
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ templateId: null }))
+    wrapper.unmount()
+  })
+
+  it('reads out a server error on the template with the Start from group, and focuses the group', async () => {
+    vi.spyOn(api.assistantTemplates, 'list').mockResolvedValue([template('t2', 'Allmän rådgivning')])
+    vi.spyOn(api.assistants, 'create').mockRejectedValue(new ApiError(400, 'POST', { errors: { templateId: ['The template is no longer active.'] } }))
+    const wrapper = await open()
+    await fillAndSave()
+    const group = cards()!
+    expect(group.getAttribute('aria-describedby')).toBe('assistant-template-error assistant-template-hint')
+    expect(document.getElementById('assistant-template-error')!.textContent).toContain('no longer active')
+    expect(document.activeElement).toBe(group)
     wrapper.unmount()
   })
 
@@ -74,7 +98,7 @@ describe('Create assistant: the template (admin design §5 step 9, B-54)', () =>
     vi.spyOn(api.assistantTemplates, 'list').mockRejectedValue(new Error('offline'))
     const create = vi.spyOn(api.assistants, 'create').mockResolvedValue(created)
     const wrapper = await open()
-    expect(select()).toBeNull()
+    expect(cards()).toBeNull()
     await fillAndSave()
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ templateId: null }))
     wrapper.unmount()

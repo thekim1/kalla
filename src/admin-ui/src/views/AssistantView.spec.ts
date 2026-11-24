@@ -144,15 +144,22 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     document.body.querySelector<HTMLButtonElement>('[aria-label="Add Bygglov"]')!.click()
     await flushPromises()
 
+    // One row per link (§5.5.4): the knowledge base, "all topics" or the count, Limit to topics and the row's ⋯ menu.
     const link = wrapper.get('[data-test=link-c1]')
     expect(link.text()).toContain('Bygglov (not published)')
-    // The topic field says what empty means, so no separate "All topics" line while it can be edited (UI4 B).
+    expect(link.get('[data-test=topics-summary]').text()).toBe('all topics')
+    expect(link.find('form').exists()).toBe(false)
+    expect(link.get('[data-test=menu-button]').attributes('aria-label')).toBe('Actions for Bygglov')
+    const limit = link.get('[data-test=limit-topics]')
+    expect(limit.attributes('aria-expanded')).toBe('false')
+    await limit.trigger('click')
+    expect(limit.attributes('aria-expanded')).toBe('true')
+    expect(link.get('form').attributes('id')).toBe(limit.attributes('aria-controls'))
     expect(link.get('label').text()).toBe('Limit to topics (empty: all topics)')
-    expect(link.text()).not.toContain('All topics')
-    expect(link.text()).not.toContain('Topics of')
     await link.get('input').setValue('bygglov')
     await link.get('form').trigger('submit')
     expect(link.find('.font-mono').text()).toBe('bygglov')
+    expect(link.get('[data-test=topics-summary]').text()).toBe('1 topic')
 
     await wrapper.get('#assistant-model').setValue('fors/chat-eu')
     await wrapper.get('#assistant-prompt').setValue('Svara kort.')
@@ -176,8 +183,10 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     await flushPromises()
 
     expect(wrapper.get('[data-test=link-c2]').text()).toContain('Annan förvaltning (Annan, shared)')
+    expect(wrapper.get('[data-test=link-c2] [data-test=topics-summary]').text()).toBe('2 topics')
     await wrapper.get('[aria-label="Remove the topic avfall"]').trigger('click')
-    await wrapper.get('[aria-label="Remove Bygglov"]').trigger('click')
+    await wrapper.get('[data-test=link-c1] [data-test=menu-button]').trigger('click')
+    await openMenu().get('[data-test=menu-remove]').trigger('click')
     await wrapper.get('[data-test=save-bar-save]').trigger('click')
     await flushPromises()
 
@@ -210,16 +219,21 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(await lead({ ...assistant, publishedVersion: 2 })).toBe('Draft changed since version 2.')
   })
 
-  it('gives each general knowledge level its own help line (UI4 B)', async () => {
+  it('shows general knowledge as one scale with the chosen level\'s help under it, tied to the group (UI4 B, B-78)', async () => {
     signIn(['rag-editor'])
     mocks()
     const wrapper = mount(AssistantView, { props: { id: 'a1' } })
     await flushPromises()
 
-    const helps = wrapper.findAll('[data-test=general-knowledge] label .text-small').map((h) => h.text())
-    expect(helps).toHaveLength(4)
-    expect(new Set(helps).size).toBe(4)
-    expect(helps[0]).toBe('Answers only from the knowledge bases; when they have nothing, it says so and shows the contact links.')
+    const group = wrapper.get('[data-test=general-knowledge]')
+    expect(group.findAll('[data-test=general-knowledge-scale] label').map((l) => l.text())).toEqual(['Off', 'Supplement', 'Fallback', 'Open'])
+    expect(group.attributes('aria-describedby')).toBe('assistant-general-knowledge-help')
+    const help = () => wrapper.get('#assistant-general-knowledge-help').text()
+    expect(help()).toBe(ASSISTANT.generalKnowledgeLevels.off!.help)
+    for (const g of ['supplement', 'fallback', 'open'] as const) {
+      await wrapper.get(`#assistant-general-knowledge-${g}`).setValue(true)
+      expect(help()).toBe(ASSISTANT.generalKnowledgeLevels[g]!.help) // one line, the chosen level's
+    }
   })
 
   it('discards the draft\'s changes back to the saved values, and says before the first publish what saving does (B-77)', async () => {
@@ -778,7 +792,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(group.get('legend').text()).toBe('General knowledge')
     expect(group.findAll('input[type=radio]').map((r) => (r.element as HTMLInputElement).value)).toEqual(['off', 'supplement', 'fallback', 'open'])
     expect((wrapper.get('#assistant-general-knowledge-off').element as HTMLInputElement).checked).toBe(true) // unset reads as off
-    expect(group.text()).toContain('Fallback: as Supplement, and answer from general knowledge when nothing is found')
+    expect(group.text()).toContain('Fallback')
 
     await wrapper.get('#assistant-general-knowledge-fallback').setValue(true)
     await wrapper.get('[data-test=save-bar-save]').trigger('click')

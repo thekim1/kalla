@@ -1814,6 +1814,7 @@ export const ASSISTANTS = {
   contactEmail: 'Contact person’s email',
   template: 'Start from',
   templateNone: 'No template: the platform’s default instructions',
+  chooseDepartment: 'Choose a department',
   templateHint: 'The template’s instructions and not-found texts are copied into the first draft, where you can change them. A later change to the template does not change this assistant.',
   published: 'Published',
   draftOnly: 'Draft only',
@@ -1893,12 +1894,15 @@ export const ASSISTANT = {
   pickerDocuments: (n: string) => `${n} documents`,
   pickerAdd: (name: string) => `Add ${name}`,
   sharedFrom: (owner: string) => `${owner}, shared`,
-  allTopics: 'All topics',
   limitTopics: 'Limit to topics (empty: all topics)',
+  limitTopicsAction: 'Limit to topics',
+  allTopicsShort: 'all topics',
+  topicCount: (n: number) => `${n} ${n === 1 ? 'topic' : 'topics'}`,
+  linkMenu: (name: string) => `Actions for ${name}`,
+  removeLink: 'Remove',
   addTopic: 'Add topic',
   noTopicChoice: 'Choose a topic',
   removeTopic: (topic: string) => `Remove the topic ${topic}`,
-  removeCollection: (name: string) => `Remove ${name}`,
   /** The draft form's lead on Build (admin design §5.5.4 Wording, UI4 B): what saving does. */
   draftLead: {
     unpublished: 'Saving keeps a draft; publish it to make the assistant available.',
@@ -1934,7 +1938,6 @@ export const ASSISTANT = {
     answered: 'Answered', answeredgeneral: 'Answered from general knowledge', notfound: 'Found nothing', unavailable: 'The search was not available',
   } as Record<string, string>,
   generalKnowledge: 'General knowledge',
-  generalKnowledgeHint: 'How far the assistant may use the language model’s own knowledge besides the knowledge bases.',
   generalKnowledgeLevels: {
     off: { label: 'Off: only the knowledge bases', help: 'Answers only from the knowledge bases; when they have nothing, it says so and shows the contact links.' },
     supplement: {
