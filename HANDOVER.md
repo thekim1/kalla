@@ -68,27 +68,27 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
   its pull request what you are about to write; review its pull requests as comments (claims checked against the code).
 - **A decision for the user is asked as four alternatives with one recommendation** (the question tool).
 
-**Open when this was written** (2026-11-24, about 10:30 UTC): `thekim1`'s #1041 (B-78 part 1, the assistant page's
-five tabs), **reviewed as a comment with points to fix before it merges**; Dependabot's #958. Nothing of the main
-session's is open. The UX stack is merged: #1032 (B-76), #1033 (B-82) and #1035 (B-77), each after its review's points
-were fixed; so are #1038 (admin §3.4's `Feedback` policy, the user's decision on #1014) and #1037 (the previous
-version of this file). In order:
+**Open when this was written** (2026-11-24, about 17:00 UTC): the main session's #1048 (drops the `node_modules`
+symlink #1047 committed; approved by the user, merges once `backend` is green), #1052 (admin design: today's
+deviations settled) and this file's #1042; Dependabot's #958. `thekim1` merged B-78 (#1041, #1043), B-79 (#1044,
+#1045), #1046 (#1036's follow-ups) and B-80 part 1 (#1047) during the day, the last four before the main session's
+reviews were done, so those reviews are follow-up issues. In order:
 
-1. **#1041, B-78 part 1.** The review (comment of 2026-11-24, from the main session on `~/git/ume-rag-platform`)
-   asks, before merging: **`answers_below_median` links to *Usage*** but the answer evaluation is on *Quality*
-   (`attention.ts:31-32`, and `OverviewView.spec.ts:136` asserts the wrong tab); **a dead *Try the draft* at 760 to
-   767 px** (`AssistantView.vue:120` uses `max-width: 759px`, the SaveBar's phone slot `md:hidden`, 768 px); **no
-   hint that the test panel tests the saved draft** while the form has unsaved changes. Smaller: no `role="log"` live
-   region in the panel (§5.12's accessibility table), the phone strip can hide a focused field, old `?tab=` values
-   open *Build* (an alias map is optional), comments that name the old tabs. Re-review each fix against the comment.
-   Its hand-offs: #1039 (stream a, the runbook's *Usage → Cost*) and #1040 (the main session: the NVDA checklist,
-   once B-78 and B-79 have both landed).
-2. **#1036, #1029's follow-ups** (reviewed after its merge; no browser spec broke, no `docs/` page names an old
-   text): "N own · M shared" on Organisation reads "0 own · 3 shared" when every knowledge base is shared. The main
-   session proposed own = everything the department owns, shared = how many of those reach other departments
-   ("3 own · 3 shared"); **write that into admin §5.7** unless `thekim1` objects on #1036. Also the search field's
-   accessible name (WCAG 2.5.3), the raw `<input>` without `TextField`'s password-manager attributes, and a
-   clock-independent test of the greeting.
+1. **#1048 and #1052.** Merge #1048 first: until it does, pulling `main` on any machine but `thekim1`'s replaces the
+   ignored `src/admin-ui/node_modules` with a dangling symlink and deletes the installed packages (*Watch*). #1052
+   needs an approval; it writes into the admin design: §5.7's "own · shared" (the reading #1046 built), §5.12's
+   scroll padding (sticky: the bar's height; fixed on a phone: to the window's bottom) and filters replacing the
+   address without a history entry, the assistant's one-turn test panel and tabs without counts, the knowledge base's
+   dot before the tab name and *Topics* without a count.
+2. **Stream b's follow-ups from the post-merge reviews:** **#1049** (#1044 and #1046: *Try without saving* never
+   shows its run, since nothing reloads `EvaluationTab`; UI text naming the old tabs; *Quality*'s "worse" is
+   losses > wins while Home's `evaluation_worse` is a 5-point recall drop; the search name's WCAG 2.5.3 phrase; a
+   summer-time test that doesn't test summer time) and **#1051** (#1047: *Show the ratings* opens 30 days only; focus
+   lost on a chip's × and *Clear filters*; stale `from`/`to` after leaving *Custom…*). Re-check each fix against the
+   issue. B-80 part 2 (the Audit log, the Map, the lists' search) is still to come.
+   **#1040, the NVDA checklist** (the main session's): B-78 and B-79 have both landed, so rewrite
+   `plans/work/nvda-pass.md` for the assistant's five tabs and the knowledge base's six, then tell the user it is
+   ready for the team.
 3. **Not queued yet, decide and queue** (design is on `main`): **the chat stage metrics of chat §17**
    (`rag.chat.stage.duration`, `rag.chat.ttft`, `rag.chat.overhead`, marked not built; B-72 takes its own
    timestamps), and **a filter for files not scanned for malware** in the file list (the row mark is gone since
@@ -123,15 +123,15 @@ version of this file). In order:
 14. **Repository variables:** the workflows read `vars.KALLA_TEST_HOST_RUNNER`, `vars.KALLA_TEST_HOST_DEPLOY_ENV`,
     `vars.KALLA_R1_*` and `secrets.KALLA_R1_API_KEY`, and none exist; `thekim1` was asked on #905 (2026-11-21), no
     answer yet.
-15. **#1015** (the release's merge hold) is still open though `v0.10.0` is published: `thekim1`'s to close.
+15. **#1015** (the release's merge hold) is closed (session 59): `v0.10.0` is tagged.
 
 ### Waiting on the user
 
 - **The umea.se inventory (A-L1):** the first input of the live block (`plans/roadmap.md`); every live item waits on an
   input, A-L1 first.
 - **The NVDA pass (to-verify row 96):** the user's team runs it on Windows with `plans/work/nvda-pass.md`. Its
-  checklist names today's tabs, so hold it until B-78 (UX3) and B-79 (UX2) have landed; the main session then rewrites
-  the checklist once; the result goes in `results-main.md`.
+  checklist names the old tabs; B-78 and B-79 have landed, so the main session rewrites it first (#1040, item 2); the
+  result goes in `results-main.md`.
 - **The gold set's scope:** the draft covers the 1,166-page "Kommun och politik" slice; whether DoIT extends it to the
   full umea.se crawl or accepts the slice is open (`plans/gold-set/README.md`).
 - **The support-chatbot proposal:** F3, F4, F8 built; F10, F7, F6 queued (B-61, B-62, B-66); F1, F2, F5, F9 are the
@@ -144,6 +144,11 @@ version of this file). In order:
 
 ### Watch
 
+- **Never commit a `node_modules` symlink.** #1047's merge of `main` into its branch added
+  `src/admin-ui/node_modules` as a link to its author's checkout (`.gitignore`'s `node_modules/` matches directories
+  only; #1048 adds `node_modules`). A pull then deletes the local packages, since git treats ignored files as
+  expendable, and stops half-way: compare the leftovers with `origin/main`, finish the fast-forward, `npm ci`. A
+  worktree that needs packages gets its own `npm ci`, not a link.
 - **The runners give way under load.** Three backend test runs at once started 44 Testcontainers and took
   `thekim1`'s WSL VM down (2026-11-23); that session now runs its items one at a time. The signs: a `backend` job red
   with no failed step and no log (#970), or many unrelated test classes failing in the same second (#969). Re-run the
