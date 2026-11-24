@@ -50,3 +50,5 @@ deploy/upload-backup/
 deploy/openwebui-data/
 # The gateway CA certificate that init-deployment.sh --gateway-ca-file copies.
 deploy/gateway-ca/
+# node_modules/ matches a directory only; this also catches a node_modules symlink (one was committed in #1047)
+node_modules
