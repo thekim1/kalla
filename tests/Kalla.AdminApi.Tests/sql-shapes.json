@@ -2,6 +2,7 @@
   "AdminApi.AnswerEvaluationService.StartAsync#1": ["Value boolean"],
   "AdminApi.AssistantTestRunner.CreateRunAsync#1": ["pg_advisory_xact_lock void"],
   "AdminApi.AuditEndpoints.SnapshotNamesAsync#1": ["Id bigint", "Name text"],
+  "AdminApi.CollectionSharing.ReprocessingAsync#1": ["Value uuid"],
   "AdminApi.CollectionSharing.TopicCountsAsync#1": ["CollectionId uuid", "Tag text", "Documents integer"],
   "AdminApi.CostEndpoints.AssistantOutcomesAsync#1": ["Period date", "Outcome character varying", "ClientId uuid", "Turns bigint", "CostUsd numeric", "EstimatedCostUsd numeric"],
   "AdminApi.CostEndpoints.AssistantUsageAsync#1": ["Period date", "ObjectId uuid", "DepartmentId uuid", "Step character varying", "ClientId uuid", "Calls bigint", "InputTokens bigint", "CachedInputTokens bigint", "OutputTokens bigint", "CostUsd numeric", "EstimatedCostUsd numeric", "EstimatedCalls bigint"],
@@ -21,5 +22,6 @@
   "AdminApi.RetentionService.RunOnceAsync#1": ["Value bigint"],
   "AdminApi.RetentionService.RunOnceAsync#2": ["Value bigint"],
   "AdminApi.RunLive.WithProgressAsync#1": ["Added integer", "Updated integer", "Unchanged integer", "Deleted integer", "Failed integer", "Processed integer", "CostUsd numeric"],
-  "AdminApi.SiteProfileEndpoints.DepartmentForAsync#1": ["Value uuid"]
+  "AdminApi.SiteProfileEndpoints.DepartmentForAsync#1": ["Value uuid"],
+  "AdminApi.TopicSuggestions.SectionsAsync#1": ["Prefix text", "Host text", "Documents integer", "Title text"]
 }
