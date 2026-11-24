@@ -111,7 +111,14 @@ const quality = computed(() => {
   return finished.find((r) => r.variant === 'hybrid') ?? finished[0] ?? null
 })
 /** Quality's latest finished run did worse than the one it was compared with (more losses than wins). */
-const qualityWorse = computed(() => !!quality.value && (quality.value.losses ?? 0) > (quality.value.wins ?? 0))
+/** Home's rule (`evaluation_worse`, AttentionList.Points): recall@k 5 points or more below the run it was compared with. */
+const WORSE_POINTS = 0.05
+const qualityWorse = computed(() => {
+  const q = quality.value
+  return !!q && q.recallAtK != null && q.comparedRecallAtK != null && q.recallAtK <= q.comparedRecallAtK - WORSE_POINTS + 1e-9
+})
+/** Test questions exist (generated or written): the Quality tile asks for a run, not for questions. */
+const hasQuestions = computed(() => (evaluation.value?.questions ?? []).some((q) => q.count > 0))
 /** The assistants' departments, for the Used by tile. */
 const userDepartments = computed(() => new Set((collection.data.value?.usedBy ?? []).map((u) => u.departmentId)).size)
 /** The tabs that need action (§5.5.2): a failed fetch on Content, a worse or missing evaluation on Quality. */
@@ -299,8 +306,10 @@ async function useProposal(values: { coverageMaxDistance?: number; coverageMinKe
   document.getElementById('collection-tune')?.scrollIntoView?.({ block: 'start' })
 }
 
-/** Try without saving started a run: back up to the evaluation, where it shows. */
-function tried(): void {
+const evaluationTab = ref<InstanceType<typeof EvaluationTab> | null>(null)
+/** Try without saving started a run: the evaluation follows it and shows it when it ends; back up to it (#1049). */
+function tried(jobId: string): void {
+  evaluationTab.value?.follow(jobId)
   document.getElementById('collection-panel-quality')?.scrollIntoView?.({ block: 'start' })
 }
 
@@ -379,14 +388,17 @@ onMounted(load)
            and Feedback on documents cards. A tile that needs action has a coloured border and says so. -->
       <div v-if="tab === 'overview'" id="collection-panel-overview" role="tabpanel" aria-labelledby="collection-tab-overview" class="grid gap-6">
         <p v-if="!collection.data.value.publishedAt" class="text-fg-2">{{ COLLECTIONS.notPublishedHint }}</p>
-        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" data-test="tiles">
+        <!-- Two by two on a phone (§5.12 On a phone), four in a row on a wide screen. -->
+        <div class="grid grid-cols-2 gap-4 xl:grid-cols-4" data-test="tiles">
           <SummaryTile
             :title="COLLECTION.tiles.documents" :value="formatNumber(collection.data.value.documentCount)" :quiet="collection.data.value.documentCount === 0"
             :detail="collection.data.value.documentCount ? COLLECTION.tiles.searchable : COLLECTION.tiles.noneSearchable" data-test="tile-documents"
           />
           <SummaryTile
-            :title="COLLECTION.tiles.lastFetch" :value="lastRun ? formatDateTime(lastRun.finishedAt ?? lastRun.startedAt) : COLLECTION.tiles.never"
-            :quiet="!lastRun" :detail="lastRun ? (RUN_STATE_LABEL[lastRun.state] ?? lastRun.state) : undefined"
+            :title="COLLECTION.tiles.lastFetch"
+            :value="!sources.loaded.value ? '–' : lastRun ? formatDateTime(lastRun.finishedAt ?? lastRun.startedAt) : COLLECTION.tiles.never"
+            :quiet="!lastRun"
+            :detail="sources.error.value ? COLLECTION.tiles.unread : lastRun ? (RUN_STATE_LABEL[lastRun.state] ?? lastRun.state) : undefined"
             :attention="lastRun?.state === 'failed' ? COLLECTION.tiles.fetchFailed : null" data-test="tile-last-fetch"
           >
             <RouterLink v-if="lastRun" :to="{ name: 'run', params: { id: lastRun.id } }" class="text-accent-ink underline">{{ COLLECTION.tiles.openRun }}</RouterLink>
@@ -396,7 +408,9 @@ onMounted(load)
             :quiet="!quality" :detail="quality ? formatDateTime(quality.finishedAt) : undefined"
             :attention="qualityWorse ? COLLECTION.tiles.qualityWorse : null" data-test="tile-quality"
           >
-            <button v-if="!quality && canEdit" type="button" class="text-accent-ink underline" data-test="create-questions" @click="switchTab('quality')">{{ COLLECTION.tiles.createQuestions }}</button>
+            <button v-if="!quality && canEdit" type="button" class="text-accent-ink underline" :data-test="hasQuestions ? 'run-evaluation' : 'create-questions'" @click="switchTab('quality')">
+              {{ hasQuestions ? COLLECTION.tiles.runEvaluation : COLLECTION.tiles.createQuestions }}
+            </button>
           </SummaryTile>
           <SummaryTile
             :title="COLLECTION.tiles.usedBy" :value="COLLECTION.tiles.assistants(users.length)" :quiet="users.length === 0"
@@ -423,7 +437,7 @@ onMounted(load)
         <SetupChecklist v-if="setup && !setup.done" :setup="setup" />
         <section v-if="sources.data.value.length" class="grid gap-3" aria-labelledby="collection-overview-sources" data-test="overview-sources">
           <h2 id="collection-overview-sources" class="text-heading">{{ COLLECTION.sources }}</h2>
-          <DataTable :columns="sourceColumns" :rows="sources.data.value" :row-key="(s) => s.id" :caption="COLLECTION.sources" :row-to="sourceTo">
+          <DataTable :columns="sourceColumns" :rows="sources.data.value" :row-key="(s) => s.id" :caption="COLLECTION.sourcesCaption" :row-to="sourceTo">
             <template #cell-name="{ row }"><span class="font-medium">{{ row.name }}</span></template>
             <template #cell-type="{ row }">{{ SOURCE_TYPE_LABEL[row.type as SourceSummary['type']] }}</template>
             <template #cell-lastRun="{ row }">
@@ -450,7 +464,7 @@ onMounted(load)
            when an upload is the only source, the source folded to one line above the file list. -->
       <div v-else-if="tab === 'content'" id="collection-panel-content" role="tabpanel" aria-labelledby="collection-tab-content" class="grid gap-4">
         <div v-if="uploadOnly" class="flex flex-wrap items-center gap-3" data-test="upload-only">
-          <span class="min-w-0 flex-1">{{ COLLECTION.uploadOnly(sources.data.value[0]!.name, formatNumber(sources.data.value[0]!.documents)) }}</span>
+          <span class="min-w-0 flex-1">{{ COLLECTION.uploadOnly(sources.data.value[0]!.name, sources.data.value[0]!.documents, formatNumber(sources.data.value[0]!.documents)) }}</span>
           <RouterLink :to="sourceTo(sources.data.value[0]!)" class="text-small text-accent-ink underline">{{ COLLECTION.openSource }}</RouterLink>
           <UiButton v-if="canEdit" icon="add" data-test="add-source" @click="adding = true">{{ SOURCE.add }}</UiButton>
         </div>
@@ -510,14 +524,14 @@ onMounted(load)
 
       <!-- Quality (§5.5.2, §7.1): the test questions and the latest evaluation, then the search settings under Tune the search. -->
       <div v-else-if="tab === 'quality'" id="collection-panel-quality" role="tabpanel" aria-labelledby="collection-tab-quality" class="grid gap-8">
-        <EvaluationTab :collection-id="collection.data.value.id" :can-edit="canEdit" @use-proposal="useProposal" />
-        <section id="collection-tune" aria-labelledby="collection-tune-title" class="grid gap-4" data-test="tune-search">
-          <h2 id="collection-tune-title" class="text-heading">{{ COLLECTION.tuneSearch }}</h2>
+        <EvaluationTab ref="evaluationTab" :collection-id="collection.data.value.id" :can-edit="canEdit" @use-proposal="useProposal" />
+        <!-- Tune the search: the card's own title (§5.12: the title inside the card). -->
+        <div id="collection-tune" data-test="tune-search">
           <RetrievalSettingsForm
             :collection="collection.data.value" :can-edit="canEdit" :proposal="proposal" @saved="retrievalSaved" @tried="tried"
             @dirty="unsaved.search = $event"
           />
-        </section>
+        </div>
       </div>
 
       <div v-else id="collection-panel-documents" role="tabpanel" aria-labelledby="collection-tab-documents">

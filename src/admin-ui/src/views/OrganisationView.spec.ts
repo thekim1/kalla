@@ -66,6 +66,9 @@ describe('Organisation: synced departments (P0 checklist #11)', () => {
     // One phrase (admin design §5.7; #1036): every knowledge base the department owns (2 kept to it + 4 shared), and how
     // many of those reach other departments (selected or everyone, 1 + 3). The API's three counts are disjoint.
     expect(first!.get('[data-test=knowledge-bases]').text()).toBe('6 own · 4 shared')
+    // All shared and none shared (#1049): 0 kept + 1 + 2 reads 3 own · 3 shared; 2 kept + 0 + 0 reads 2 own · 0 shared.
+    expect(PLATFORM.organisation.summary(0 + 1 + 2, 1 + 2)).toBe('3 own · 3 shared')
+    expect(PLATFORM.organisation.summary(2 + 0 + 0, 0)).toBe('2 own · 0 shared')
     expect(first!.text()).toContain(`${PLATFORM.organisation.sharedWith}: 4`)
     // No member groups is a grey dash, with the words for a screen reader.
     expect(second!.get('[data-test=no-member-groups] [aria-hidden=true]').text()).toBe('–')

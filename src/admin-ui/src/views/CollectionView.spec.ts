@@ -8,7 +8,7 @@ import { useAuthStore } from '@/stores/auth'
 import { bffUser, collection, collectionSummary, collectionUser } from '@/test/fixtures'
 import { button, openMenu } from '@/test/helpers'
 import { formatNumber } from '@/utils/format'
-import { COLLECTION, UNSAVED } from '@/utils/labels'
+import { COLLECTION, RETRIEVAL, UNSAVED } from '@/utils/labels'
 import CollectionEditDrawer from '@/components/collections/CollectionEditDrawer.vue'
 import CollectionView from './CollectionView.vue'
 
@@ -344,8 +344,8 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     await flushPromises()
     await button(wrapper, 'Quality').trigger('click')
     await flushPromises()
-    // The evaluation and the search settings are on one tab, the settings under Tune the search.
-    expect(wrapper.get('[data-test=tune-search] h2').text()).toBe(COLLECTION.tuneSearch)
+    // The evaluation and the search settings are on one tab; Tune the search is the card's own title (§5.12; #1049).
+    expect(wrapper.get('[data-test=tune-search] [data-test=retrieval]').text()).toContain(RETRIEVAL.title)
     await wrapper.get('[data-test=use-proposal]').trigger('click')
     await flushPromises()
 
@@ -585,7 +585,7 @@ describe('Knowledge base (admin design §5.5.2)', () => {
       const wrapper = mount(CollectionView, { props: { id: 'c1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
       await flushPromises()
       const line = wrapper.get('[data-test=upload-only]')
-      expect(line.text()).toContain(COLLECTION.uploadOnly('Blanketter', '41'))
+      expect(line.text()).toContain(COLLECTION.uploadOnly('Blanketter', 41, '41'))
       expect(line.getComponent(RouterLinkStub).props('to')).toEqual({ name: 'source', params: { id: 's2' } })
       expect(wrapper.find('#collection-panel-content table[aria-describedby], #collection-panel-content caption').exists()).toBe(false) // no sources table
       expect(wrapper.find('[data-test=files]').exists()).toBe(true)
@@ -692,27 +692,85 @@ describe('Knowledge base (admin design §5.5.2)', () => {
       wrapper.unmount()
     })
 
-    it('has no dot on a healthy knowledge base, and marks only the tile that needs action', async () => {
+    const run = (over: Record<string, unknown> = {}) => ({
+      id: 'e1', kind: 'nightly', variant: 'hybrid', questionCount: 40, k: 10, found: 30, recallAtK: 0.75, mrr: 0.7, wins: 1, losses: 6, comparedRunId: 'e0',
+      comparedRecallAtK: 0.78, candidate: false, thresholdProposal: null, startedAt: '2026-11-01T02:00:00Z', finishedAt: '2026-11-01T02:05:00Z',
+      documentGone: null, ...over,
+    })
+
+    it('has no dot on a healthy knowledge base: a run less than 5 points below the one before is not worse (Home\'s rule)', async () => {
       signIn(['rag-editor'])
       vi.spyOn(api.collections, 'get').mockResolvedValue({ ...base, documentCount: 840 })
       vi.spyOn(api.collections, 'sources').mockResolvedValue([{ ...failedCrawl, lastRun: { ...failedCrawl.lastRun!, state: 'succeeded' } }])
-      vi.spyOn(api.collections, 'evaluation').mockResolvedValue({
-        hasSet: true, questions: [], latestRuns: [{
-          id: 'e1', kind: 'nightly', variant: 'hybrid', questionCount: 40, k: 10, found: 30, recallAtK: 0.75, mrr: 0.7, wins: 1, losses: 6, comparedRunId: 'e0',
-          candidate: false, thresholdProposal: null, startedAt: '2026-11-01T02:00:00Z', finishedAt: '2026-11-01T02:05:00Z', documentGone: null,
-        }],
-      })
+      // More losses than wins, but recall 3 points down: Home lists nothing, so neither does the page (#1049).
+      vi.spyOn(api.collections, 'evaluation').mockResolvedValue({ hasSet: true, questions: [], latestRuns: [run()] })
       const wrapper = mount(CollectionView, { props: { id: 'c1' }, attachTo: globalThis.document.body })
       await flushPromises()
       expect(wrapper.get('#collection-tab-content').find('.icon').exists()).toBe(false)
-      // Worse than the run before: Quality's dot, and the Quality tile says so.
-      expect(wrapper.get('#collection-tab-quality').attributes('aria-label')).toBe('Quality, needs attention')
-      expect(wrapper.get('[data-test=tile-quality] [data-test=summary-tile-attention]').text()).toBe(COLLECTION.tiles.qualityWorse)
-      expect(wrapper.findAll('[data-test=summary-tile-attention]')).toHaveLength(1)
+      expect(wrapper.get('#collection-tab-quality').find('.icon').exists()).toBe(false)
+      expect(wrapper.get('#collection-tab-quality').attributes('aria-label')).toBeUndefined()
+      expect(wrapper.findAll('[data-test=summary-tile-attention]')).toHaveLength(0)
       // Used by: the count and the departments, the names linking to the assistants.
       expect(wrapper.get('[data-test=tile-used-by] [data-test=summary-tile-value]').text()).toBe('1 assistant')
       expect(wrapper.get('[data-test=tile-used-by] [data-test=summary-tile-detail]').text()).toBe('1 department')
       wrapper.unmount()
+    })
+
+    it('marks Quality worse, the tab and only its tile, at 5 points or more below the run before, as Home does', async () => {
+      signIn(['rag-editor'])
+      vi.spyOn(api.collections, 'get').mockResolvedValue({ ...base, documentCount: 840 })
+      vi.spyOn(api.collections, 'sources').mockResolvedValue([{ ...failedCrawl, lastRun: { ...failedCrawl.lastRun!, state: 'succeeded' } }])
+      // Even wins and losses, but recall 5 points down: worse (AttentionList.Points).
+      vi.spyOn(api.collections, 'evaluation').mockResolvedValue({ hasSet: true, questions: [], latestRuns: [run({ wins: 3, losses: 3, comparedRecallAtK: 0.8 })] })
+      const wrapper = mount(CollectionView, { props: { id: 'c1' }, attachTo: globalThis.document.body })
+      await flushPromises()
+      expect(wrapper.get('#collection-tab-quality').attributes('aria-label')).toBe('Quality, needs attention')
+      expect(wrapper.get('[data-test=tile-quality] [data-test=summary-tile-attention]').text()).toBe(COLLECTION.tiles.qualityWorse)
+      expect(wrapper.findAll('[data-test=summary-tile-attention]')).toHaveLength(1)
+      wrapper.unmount()
+    })
+
+    it('waits for the sources before saying Never, says so when they cannot be read, and asks for a run once questions exist', async () => {
+      signIn(['rag-editor'])
+      vi.spyOn(api.collections, 'get').mockResolvedValue(base)
+      let answer: (v: SourceListItem[]) => void = () => undefined
+      vi.spyOn(api.collections, 'sources').mockReturnValue(new Promise((resolve) => (answer = resolve)))
+      vi.spyOn(api.collections, 'evaluation').mockResolvedValue({ hasSet: true, questions: [{ layer: 'generated', state: 'active', count: 12 }], latestRuns: [] })
+      const wrapper = mount(CollectionView, { props: { id: 'c1' } })
+      await flushPromises()
+      expect(wrapper.get('[data-test=tile-last-fetch] [data-test=summary-tile-value]').text()).toBe('–')
+      answer([])
+      await flushPromises()
+      expect(wrapper.get('[data-test=tile-last-fetch] [data-test=summary-tile-value]').text()).toBe(COLLECTION.tiles.never)
+      // Questions exist, no run yet: the tile asks for a run, not for questions.
+      expect(wrapper.get('[data-test=tile-quality] [data-test=run-evaluation]').text()).toBe(COLLECTION.tiles.runEvaluation)
+      expect(wrapper.find('[data-test=create-questions]').exists()).toBe(false)
+      // Tiles are groups named by their title, not landmarks (#1049).
+      const tile = wrapper.get('[data-test=tile-documents]')
+      expect(tile.attributes('role')).toBe('group')
+      expect(tile.element.tagName).toBe('DIV')
+      expect(tile.find('h2, h3').exists()).toBe(false)
+    })
+
+    it('shows the run Try without saving starts once it ends, without a reload (#1049)', async () => {
+      signIn(['rag-editor'])
+      vi.spyOn(api.collections, 'get').mockResolvedValue(base)
+      vi.spyOn(api.collections, 'sources').mockResolvedValue([])
+      const overview = vi.spyOn(api.collections, 'evaluation').mockResolvedValue({ hasSet: true, questions: [], latestRuns: [] })
+      vi.spyOn(api.evaluation, 'questions').mockResolvedValue({ items: [], next: null })
+      vi.spyOn(api.evaluation, 'run').mockResolvedValue({ jobId: 'j7', alreadyQueued: false })
+      const job = vi.spyOn(api.jobs, 'get').mockResolvedValue({ id: 'j7', state: 'succeeded' } as never)
+      route.query = { tab: 'quality' }
+      const wrapper = mount(CollectionView, { props: { id: 'c1' } })
+      await flushPromises()
+      const before = overview.mock.calls.length
+      await wrapper.get('#rs-candidates').setValue('120')
+      await wrapper.get('[data-test=try-retrieval]').trigger('click')
+      await flushPromises()
+      await new Promise((r) => setTimeout(r, 0))
+      await flushPromises()
+      expect(job).toHaveBeenCalledWith('j7')
+      await vi.waitFor(() => expect(overview.mock.calls.length).toBeGreaterThan(before))
     })
   })
 })

@@ -92,6 +92,12 @@ watch(
   },
 )
 
+/** A run started elsewhere on the page (Try without saving): followed like Run now's, so its report shows when it ends. */
+function follow(jobId: string): void {
+  runPoll.start(jobId)
+}
+defineExpose({ follow })
+
 async function openGenerate(): Promise<void> {
   generateOpen.value = true
   forecast.value = null
