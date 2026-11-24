@@ -124,8 +124,8 @@ function showHidden(): void {
   <PageHeader :title="greeting">
     <!-- The departments and roles under the greeting; the department names are Swedish (admin design §5.7; #1036). -->
     <template #description>
-      <span data-test="identity"><template v-for="(d, i) in departmentNames" :key="i"><template v-if="i > 0">, </template><span :lang="d.sv ? 'sv' : undefined">{{ d.text }}</span></template><template v-if="departmentNames.length && roleNames.length"> · </template>{{ roleNames.join(', ') }}</span>
-      <template v-if="identity"> · </template>
+      <span data-test="identity"><template v-for="(d, i) in departmentNames" :key="i"><template v-if="i > 0">{{ OVERVIEW.listSeparator }}</template><span :lang="d.sv ? 'sv' : undefined">{{ d.text }}</span></template><template v-if="departmentNames.length && roleNames.length">{{ OVERVIEW.partSeparator }}</template>{{ roleNames.join(OVERVIEW.listSeparator) }}</span>
+      <template v-if="identity">{{ OVERVIEW.partSeparator }}</template>
       <button type="button" class="text-accent-ink underline" aria-haspopup="dialog" data-test="your-access" @click="accessOpen = true">{{ OVERVIEW.access }}</button>
     </template>
   </PageHeader>

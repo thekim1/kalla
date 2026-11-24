@@ -309,7 +309,7 @@ async function reloadPii(): Promise<void> {
           <template #cell-counts="{ row }">
             <span class="tabular text-small">{{ SOURCE_PAGE.runCounts(formatNumber(row.added), formatNumber(row.updated), formatNumber(row.deleted)) }}<span
               v-if="row.failed" class="text-danger"
-            >, <RouterLink :to="{ name: 'run', params: { id: row.id } }" class="text-danger text-accent-ink underline" data-test="run-failed" @click.stop>{{
+            >, <RouterLink :to="{ name: 'run', params: { id: row.id } }" class="text-danger underline" data-test="run-failed" @click.stop>{{
               SOURCE_PAGE.runFailed(formatNumber(row.failed)) }}</RouterLink></span></span>
           </template>
         </DataTable>

@@ -85,7 +85,7 @@ describe('Search settings (admin design §7.1, V16)', () => {
     await wrapper.get('#rs-candidates').setValue('100')
     await flushPromises()
     expect(onDirty.mock.calls.at(-1)).toEqual([true])
-    wrapper.unmount() // another tab, or Try without saving
+    wrapper.unmount() // another tab
     expect(onDirty.mock.calls.at(-1)).toEqual([false])
   })
 })
