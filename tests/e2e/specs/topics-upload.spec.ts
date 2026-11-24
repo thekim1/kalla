@@ -22,7 +22,8 @@ async function shot(page: Page, name: string): Promise<void> {
 
 test('two folders picked as topics are saved through one plan, pending, then counted after the re-chunk', async ({ page }) => {
   test.setTimeout(8 * 60_000)
-  const collection = `Ämnen ${crypto.randomUUID().slice(0, 8)}`
+  // Not first by name: the accessibility spec scans the first knowledge base of the list (#1064).
+  const collection = `Topics ${crypto.randomUUID().slice(0, 8)}`
   await login(page, 'rag-department-admin')
 
   await page.getByRole('navigation', { name: 'Main menu' }).getByRole('link', { name: 'Knowledge bases' }).click()
