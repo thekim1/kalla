@@ -1,4 +1,5 @@
 import { afterEach, vi } from 'vitest'
+import { enableAutoUnmount } from '@vue/test-utils'
 
 // jsdom lacks a few browser APIs used by the app.
 if (!window.matchMedia) {
@@ -35,6 +36,10 @@ if (!Element.prototype.hasPointerCapture) {
   Element.prototype.hasPointerCapture = () => false
   Element.prototype.releasePointerCapture = () => undefined
 }
+
+// Unmount every wrapper before the body is emptied: a component left mounted would otherwise keep patching into nodes
+// that are gone (a teleport's anchors in the body, for one).
+enableAutoUnmount(afterEach)
 
 afterEach(() => {
   document.body.innerHTML = ''

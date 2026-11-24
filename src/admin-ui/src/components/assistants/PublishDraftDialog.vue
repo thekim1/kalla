@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { api } from '@/api'
+import { ApiError } from '@/api/client'
 import type { RuleWarning, VersionDiff } from '@/api/types'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import CheckField from '@/components/ui/CheckField.vue'
@@ -19,12 +20,17 @@ import VersionDiffView from './VersionDiffView.vue'
  * public assistant with general knowledge as a checkbox here rather than a dialog of its own, and the test run's
  * estimated model calls when the assistant has test questions (B-57, §7.4). The server stays the judge: a refusal it
  * still answers shows inline.
+ *
+ * The warnings are read again from the draft when the dialog opens, since a fix in *Edit name and contact* or the
+ * audience changes the assistant, not the draft, and the page's copy is from the draft's last load or save. *Publish*
+ * waits for that read; the diff and the cost don't hold it up.
  */
 const props = defineProps<{
   open: boolean
   assistantId: string
   /** The published version's number; null before the first publish. */
   publishedVersion: number | null
+  /** The page's copy of the draft's warnings, shown until the dialog's own read of the draft answers. */
   warnings: RuleWarning[]
   /** V36 (#445): a public assistant whose draft uses general knowledge. */
   needsGeneralKnowledgeConfirmation: boolean
@@ -35,17 +41,47 @@ const emit = defineEmits<{ (e: 'update:open', value: boolean): void }>()
 
 /** Warnings that do not stop a publish: the gateway key's (V39, a draft-save note) and V36, confirmed below. */
 const NOT_REFUSALS = new Set(['gateway_key_required', 'gateway_key_system_prompt', 'general_knowledge_public_unconfirmed'])
+const GENERAL_KNOWLEDGE = 'general_knowledge_public_unconfirmed'
+
+/**
+ * Which warnings refuse a publish. The draft's warnings are the publish check's problems followed by V39's notes, so
+ * `gateway_key_required` comes twice once the gateway acts as keys (B-43): one is the publish check's refusal, one the
+ * note. A note code seen twice is therefore a refusal, shown once.
+ */
+function classify(warnings: RuleWarning[]): { refusals: RuleWarning[]; notes: RuleWarning[] } {
+  const refusals: RuleWarning[] = []
+  const notes: RuleWarning[] = []
+  const seen = new Set<string>()
+  for (const w of warnings) {
+    if (w.code === GENERAL_KNOWLEDGE) continue
+    if (!NOT_REFUSALS.has(w.code)) refusals.push(w)
+    else if (warnings.filter((o) => o.code === w.code).length > 1) {
+      if (!seen.has(w.code)) refusals.push(w)
+    } else notes.push(w)
+    seen.add(w.code)
+  }
+  return { refusals, notes }
+}
 
 const diff = useLoadable<VersionDiff | null>(null)
 const questions = ref<number | null>(null)
 const confirmed = ref(false)
 const busy = ref(false)
 const error = ref<unknown>(null)
+/** The draft's warnings as of opening the dialog; null while that read runs (or when it failed: the page's copy). */
+const fresh = ref<RuleWarning[] | null>(null)
+const checking = ref(false)
+/** The server asked for V36's confirmation although the page did not expect it. */
+const askedForConfirmation = ref(false)
 
 const text = (w: RuleWarning) => formatMessage(ERROR_MESSAGES[w.code] ?? w.code, w.params ?? undefined) + (w.affected.length ? ` (${w.affected.join(', ')})` : '')
-const refusals = computed(() => props.warnings.filter((w) => !NOT_REFUSALS.has(w.code)))
-const notes = computed(() => props.warnings.filter((w) => NOT_REFUSALS.has(w.code) && w.code !== 'general_knowledge_public_unconfirmed'))
-const blocked = computed(() => refusals.value.length > 0 || (props.needsGeneralKnowledgeConfirmation && !confirmed.value))
+const warnings = computed(() => fresh.value ?? props.warnings)
+const classified = computed(() => classify(warnings.value))
+const refusals = computed(() => classified.value.refusals)
+const notes = computed(() => classified.value.notes)
+const needsConfirmation = computed(() =>
+  props.needsGeneralKnowledgeConfirmation || askedForConfirmation.value || warnings.value.some((w) => w.code === GENERAL_KNOWLEDGE))
+const blocked = computed(() => checking.value || refusals.value.length > 0 || (needsConfirmation.value && !confirmed.value))
 
 watch(
   () => props.open,
@@ -54,6 +90,13 @@ watch(
     confirmed.value = false
     error.value = null
     questions.value = null
+    fresh.value = null
+    askedForConfirmation.value = false
+    checking.value = true
+    void api.assistants.draft(props.assistantId)
+      .then((d) => (fresh.value = d.warnings ?? []))
+      .catch(() => undefined) // the page's copy stands; the server judges the publish
+      .finally(() => (checking.value = false))
     if (props.publishedVersion !== null) void diff.run(() => api.assistants.diff(props.assistantId, props.publishedVersion!, 'draft'))
     void api.assistantTests.questions(props.assistantId).then((q) => (questions.value = q.length)).catch(() => (questions.value = null))
   },
@@ -69,6 +112,8 @@ async function publish(): Promise<void> {
     emit('update:open', false)
   } catch (e) {
     error.value = e
+    // V36 refused although the page did not expect it (its copy of the draft was stale or missing): ask here.
+    if (e instanceof ApiError && e.problem?.code === GENERAL_KNOWLEDGE) askedForConfirmation.value = true
   } finally {
     busy.value = false
   }
@@ -94,7 +139,7 @@ async function publish(): Promise<void> {
     </section>
 
     <CheckField
-      v-if="needsGeneralKnowledgeConfirmation" v-model="confirmed" :label="L.confirmGeneralKnowledge" :description="L.confirmGeneralKnowledgeHint"
+      v-if="needsConfirmation" v-model="confirmed" :label="L.confirmGeneralKnowledge" :description="L.confirmGeneralKnowledgeHint"
       data-test="publish-confirm-general-knowledge"
     />
 

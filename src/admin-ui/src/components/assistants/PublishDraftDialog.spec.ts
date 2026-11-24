@@ -4,7 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
 import { ApiError } from '@/api/client'
 import { ERROR_MESSAGES } from '@/utils/messages'
-import type { RuleWarning, TestQuestion, VersionDiff } from '@/api/types'
+import type { AssistantDraft, RuleWarning, TestQuestion, VersionDiff } from '@/api/types'
 import PublishDraftDialog from './PublishDraftDialog.vue'
 
 const noText = { changed: false, tooLong: false, lines: [] }
@@ -15,6 +15,8 @@ const diff: VersionDiff = {
 }
 const contactMissing: RuleWarning = { code: 'assistant_contact_missing', params: null, affected: [] }
 const systemPrompt: RuleWarning = { code: 'gateway_key_system_prompt', params: { key: 'Pilot' }, affected: ['k1'] }
+const noKey: RuleWarning = { code: 'gateway_key_required', params: null, affected: [] }
+const draftWith = (warnings: RuleWarning[]) => ({ warnings }) as unknown as AssistantDraft
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.body.querySelector<T>(selector)
 
@@ -33,6 +35,8 @@ beforeEach(() => {
   HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) { this.open = false }
   vi.spyOn(api.assistants, 'diff').mockResolvedValue(diff)
   vi.spyOn(api.assistantTests, 'questions').mockResolvedValue([{ id: 't1' }, { id: 't2' }, { id: 't3' }] as TestQuestion[])
+  // By default the dialog's own read of the draft fails, so the page's copy (the warnings prop) stands.
+  vi.spyOn(api.assistants, 'draft').mockRejectedValue(new Error('offline'))
 })
 afterEach(() => {
   vi.restoreAllMocks()
@@ -103,6 +107,53 @@ describe('Publish draft\'s dialog (admin design §5.5.4, B-82)', () => {
     await flushPromises()
     expect(document.body.textContent).toContain(ERROR_MESSAGES.assistant_contact_missing)
     expect(wrapper.emitted('update:open')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('reads the draft\'s warnings again on opening, so a fix made since the last load no longer blocks, and waits for that read', async () => {
+    let answer: (d: AssistantDraft) => void = () => undefined
+    vi.mocked(api.assistants.draft).mockReturnValue(new Promise((resolve) => (answer = resolve)))
+    const { wrapper } = open({ warnings: [contactMissing] })
+    await flushPromises()
+    expect(api.assistants.draft).toHaveBeenCalledWith('a1')
+    expect($('[data-test=publish-confirm]')!.getAttribute('aria-disabled')).toBe('true')
+    answer(draftWith([]))
+    await flushPromises()
+    expect($('[data-test=publish-refusal]')).toBeNull()
+    expect($('[data-test=publish-confirm]')!.getAttribute('aria-disabled')).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('takes the missing gateway key for a refusal when the publish check raises it too (the gateway acts as keys), else for a note', async () => {
+    vi.mocked(api.assistants.draft).mockResolvedValue(draftWith([noKey, noKey]))
+    const asKeys = open()
+    await flushPromises()
+    expect([...document.body.querySelectorAll('[data-test=publish-refusal]')]).toHaveLength(1)
+    expect($('[data-test=publish-note]')).toBeNull()
+    expect($('[data-test=publish-confirm]')!.getAttribute('aria-disabled')).toBe('true')
+    asKeys.wrapper.unmount()
+
+    vi.mocked(api.assistants.draft).mockResolvedValue(draftWith([noKey]))
+    const note = open()
+    await flushPromises()
+    expect($('[data-test=publish-refusal]')).toBeNull()
+    expect([...document.body.querySelectorAll('[data-test=publish-note]')]).toHaveLength(1)
+    note.wrapper.unmount()
+  })
+
+  it('offers V36\'s checkbox when the server asks for it unexpectedly, and sends it on the next try', async () => {
+    const { wrapper, action } = open()
+    action.mockRejectedValueOnce(new ApiError(409, 'POST', { status: 409, code: 'general_knowledge_public_unconfirmed' }))
+    await flushPromises()
+    expect($('[data-test=publish-confirm-general-knowledge]')).toBeNull()
+    $('[data-test=publish-confirm]')!.click()
+    await flushPromises()
+    expect($('[data-test=publish-confirm-general-knowledge]')).not.toBeNull()
+    $<HTMLInputElement>('[data-test=publish-confirm-general-knowledge] input')!.click()
+    await flushPromises()
+    $('[data-test=publish-confirm]')!.click()
+    await flushPromises()
+    expect(action).toHaveBeenLastCalledWith(true)
     wrapper.unmount()
   })
 })

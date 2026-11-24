@@ -2468,7 +2468,6 @@ export const EXPLAIN = {
   } as Record<string, string>,
 } as const
 
-/** The edit drawers of a knowledge base and an assistant: their own fields, the level included (#446). */
 /** The save bar and the leave guard (admin design §5.12 rule 7, *Saving*); every form saves with these words. */
 export const UNSAVED = {
   region: 'Unsaved changes',
@@ -2488,6 +2487,7 @@ export const MENU = {
   delete: 'Delete…',
 } as const
 
+/** The edit drawers of a knowledge base and an assistant: their own fields, the level included (#446). */
 export const EDIT_DRAWER = {
   edit: 'Edit',
   collectionTitle: 'Edit knowledge base',
