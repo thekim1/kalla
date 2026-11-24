@@ -2,6 +2,8 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/api'
+import { useDirty } from '@/composables/useDirty'
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { useTabQuery } from '@/composables/useTabQuery'
 import { ApiError } from '@/api/client'
 import type {
@@ -18,6 +20,7 @@ import InlineError from '@/components/ui/InlineError.vue'
 import PageBreadcrumb from '@/components/layout/PageBreadcrumb.vue'
 import MenuButton, { type MenuItem } from '@/components/ui/MenuButton.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
+import SaveBar from '@/components/ui/SaveBar.vue'
 import CopyValue from '@/platform/CopyValue.vue'
 import SelectField from '@/components/ui/SelectField.vue'
 import TextAreaField from '@/components/ui/TextAreaField.vue'
@@ -43,7 +46,7 @@ import CostCard from '@/components/costs/CostCard.vue'
 import KeyBudgetStatus from '@/components/gateway/KeyBudgetStatus.vue'
 import KeyUnavailableBadge from '@/components/gateway/KeyUnavailableBadge.vue'
 import { actorText, formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
-import { ASSISTANT, ASSISTANT_TESTS, COMMON, DELETE, EDIT_DRAWER, LEVEL_LABEL, MENU, MODEL_AVAILABILITY, MOVE_DEPARTMENT, PAGE } from '@/utils/labels'
+import { ASSISTANT, ASSISTANT_TESTS, COMMON, DELETE, EDIT_DRAWER, LEVEL_LABEL, MENU, MODEL_AVAILABILITY, MOVE_DEPARTMENT, PAGE, UNSAVED } from '@/utils/labels'
 import MoveDepartmentDrawer from '@/components/organisation/MoveDepartmentDrawer.vue'
 import { ERROR_MESSAGES, formatMessage } from '@/utils/messages'
 import { problemMessage } from '@/utils/problem'
@@ -242,7 +245,9 @@ function levelOf(steps: Record<string, unknown> | undefined): GeneralKnowledge {
   return GENERAL_KNOWLEDGE_LEVELS.includes(value as GeneralKnowledge) ? (value as GeneralKnowledge) : 'off'
 }
 
+let filledFrom: [AssistantDraft | null, Settings | null] = [null, null]
 function fill(d: AssistantDraft | null, base: Settings | null = null): void {
+  filledFrom = [d, base]
   draft.value = d
   const s = d ?? base
   model.value = s?.gatewayModel ?? ''
@@ -263,6 +268,7 @@ function fill(d: AssistantDraft | null, base: Settings | null = null): void {
     language: typeof steps.answer?.language === 'string' ? steps.answer.language : '',
   }
   advancedErrors.value = {}
+  draftDirty.reset()
 }
 
 /** Checks the Advanced fields; true when every one is empty or in range. */
@@ -312,6 +318,34 @@ function stepsToSave(): Record<string, unknown> {
   return steps
 }
 
+// One save bar per form (admin design §5.12 rule 7, B-77): the draft, Audience and Storage each count their unsaved
+// changes against what was loaded or saved, and leaving with any asks first.
+const draftDirty = useDirty(() => ({
+  model: model.value, prompt: prompt.value, links: links.value, notFound: notFound.value, generalKnowledge: generalKnowledge.value, advanced: advanced.value,
+}))
+const audienceDirty = useDirty(() => ({ audience: [...audience.value].sort() }))
+const storageDirty = useDirty(() => ({ historyMode: historyMode.value, retentionDays: retentionDays.value.trim() }))
+function fillAccess(a: Assistant): void {
+  audience.value = [...a.audienceClientIds]
+  historyMode.value = a.historyMode
+  retentionDays.value = String(a.retentionDays)
+  retentionError.value = undefined
+  audienceDirty.reset()
+  storageDirty.reset()
+}
+const tabDirty = (t: string) => (t === 'draft' ? draftDirty : t === 'audience' ? audienceDirty : t === 'storage' ? storageDirty : null)?.dirty.value ?? false
+useUnsavedGuard(() => draftDirty.dirty.value || audienceDirty.dirty.value || storageDirty.dirty.value)
+/** A tab change with unsaved changes on the tab asks first (§5.12, *Saving*); the changes stay for a return. */
+function switchTab(next: Tab): void {
+  if (tabDirty(tab.value) && !(window.confirm(UNSAVED.leave))) return
+  tab.value = next
+}
+const discardDraft = () => fill(...filledFrom)
+const draftConsequence = computed(() => {
+  const n = assistant.data.value?.publishedVersion
+  return n ? UNSAVED.draftConsequence(n) : undefined
+})
+
 async function fillFrom(a: Assistant): Promise<void> {
   if (a.draft) fill(await api.assistants.draft(props.id).catch(() => null))
   else fill(null, a.publishedVersion ? await api.assistants.version(props.id, a.publishedVersion).catch(() => null) : null)
@@ -324,9 +358,7 @@ function toggle(list: string[], id: string, on: boolean): string[] {
 async function load(): Promise<void> {
   const a = await assistant.run(() => api.assistants.get(props.id))
   if (!a) return
-  audience.value = [...a.audienceClientIds]
-  historyMode.value = a.historyMode
-  retentionDays.value = String(a.retentionDays)
+  fillAccess(a)
   await fillFrom(a)
   ;[models.value, collections.value, clients.value] = await Promise.all([
     api.gateway.models(a.classification, a.gatewayKeyId).catch(() => []),
@@ -423,6 +455,7 @@ const test = () => run('test', async () => {
 
 const saveAudience = () => run('audience', async () => {
   assistant.data.value = await api.assistants.audiences(props.id, { clientIds: audience.value, version: assistant.data.value!.version })
+  audienceDirty.reset()
   ui.notify(ASSISTANT.audienceSaved)
 })
 
@@ -490,6 +523,8 @@ const saveStorage = () => run('storage', async () => {
   retentionError.value = /^\d+$/.test(retentionDays.value.trim()) && days >= 1 && days <= max ? undefined : ASSISTANT.retentionInvalid(max)
   if (retentionError.value) return
   assistant.data.value = await api.assistants.retention(props.id, { historyMode: historyMode.value, retentionDays: days, version: assistant.data.value!.version })
+  retentionDays.value = String(days)
+  storageDirty.reset()
   ui.notify(ASSISTANT.storageSaved)
 })
 
@@ -554,7 +589,7 @@ watch(() => props.id, () => {
       </PageHeader>
       <KeyBudgetStatus class="mb-4" :gateway-key-id="assistant.data.value.gatewayKeyId" />
       <InlineError v-if="error" :message="problemMessage(error)" class="mb-4" />
-      <UiTabs id="assistant" v-model="tab" :tabs="tabs" :label="ASSISTANT.tabsLabel" class="mb-6" />
+      <UiTabs id="assistant" :model-value="tab" :tabs="tabs" :label="ASSISTANT.tabsLabel" class="mb-6" @update:model-value="switchTab($event as Tab)" />
 
       <div v-if="tab === 'draft'" id="assistant-panel-draft" role="tabpanel" aria-labelledby="assistant-tab-draft" class="grid max-w-[680px] gap-5">
         <p class="text-fg-2" data-test="draft-lead">{{ draftLead }}</p>
@@ -614,7 +649,9 @@ watch(() => props.id, () => {
             <SelectField id="assistant-language" v-model="advanced.language" class="max-w-sm" :label="ASSISTANT.language" :options="languageOptions" />
           </div>
         </details>
-        <div v-if="canEdit"><UiButton variant="primary" :loading="busy === 'save'" data-test="save-draft" @click="saveDraft">{{ ASSISTANT.saveDraft }}</UiButton></div>
+        <SaveBar
+          v-if="canEdit" :changes="draftDirty.changes.value" :saving="busy === 'save'" :consequence="draftConsequence" @save="saveDraft" @discard="discardDraft"
+        />
       </div>
 
       <div v-else-if="tab === 'test'" id="assistant-panel-test" role="tabpanel" aria-labelledby="assistant-tab-test" class="grid max-w-3xl gap-5">
@@ -699,7 +736,7 @@ watch(() => props.id, () => {
           id="assistant-retention" v-model="retentionDays" :label="ASSISTANT.retentionDays" inputmode="numeric" short :disabled="!canManage"
           :hint="policy ? ASSISTANT.retentionHint(policy.retentionMaxDays) : undefined" :error="retentionError"
         />
-        <div v-if="canManage"><UiButton variant="primary" :loading="busy === 'storage'" data-test="save-storage" @click="saveStorage">{{ ASSISTANT.saveStorage }}</UiButton></div>
+        <SaveBar v-if="canManage" :changes="storageDirty.changes.value" :saving="busy === 'storage'" @save="saveStorage" @discard="fillAccess(assistant.data.value!)" />
       </div>
 
       <div v-else-if="tab === 'statistics'" id="assistant-panel-statistics" role="tabpanel" aria-labelledby="assistant-tab-statistics" class="grid max-w-3xl gap-5">
@@ -729,7 +766,10 @@ watch(() => props.id, () => {
             @update:model-value="audience = toggle(audience, c.id, $event)"
           />
         </fieldset>
-        <div v-if="canManage && clients.length"><UiButton variant="primary" :loading="busy === 'audience'" data-test="save-audience" @click="saveAudience">{{ ASSISTANT.saveAudience }}</UiButton></div>
+        <SaveBar
+          v-if="canManage && clients.length" :changes="audienceDirty.changes.value" :saving="busy === 'audience'" @save="saveAudience"
+          @discard="fillAccess(assistant.data.value!)"
+        />
         <!-- Platform admins add apps; the wizard opens with this assistant ticked (admin design §5.9.1). -->
         <p v-if="auth.can('admin')">
           <RouterLink :to="{ name: 'platform-clients', query: { connect: id } }" class="font-medium text-accent-ink underline" data-test="connect-app">

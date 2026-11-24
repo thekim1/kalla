@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
 import type { Collection, SharingLevel } from '@/api/types'
 import CheckField from '@/components/ui/CheckField.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
-import UiButton from '@/components/ui/UiButton.vue'
+import SaveBar from '@/components/ui/SaveBar.vue'
+import { useDirty } from '@/composables/useDirty'
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { useUiStore } from '@/stores/ui'
 import { SHARING } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
@@ -15,11 +17,11 @@ import { problemMessage } from '@/utils/problem'
 // departments or the whole municipality; shared use is read-only. Narrowing is refused while another department's
 // published assistant links it (V35, `collection_shared_in_use`), and the refusal names those assistants.
 const props = defineProps<{ collection: Collection; canManage: boolean }>()
-const emit = defineEmits<{ (e: 'saved', collection: Collection): void }>()
+const emit = defineEmits<{ (e: 'saved', collection: Collection): void; (e: 'dirty', dirty: boolean): void }>()
 const ui = useUiStore()
 const departments = ref<{ id: string; name: string }[]>([])
-const level = ref<SharingLevel>(props.collection.sharedWith)
-const selected = ref<string[]>([...props.collection.sharedWithDepartmentIds])
+const level = ref<SharingLevel>('department')
+const selected = ref<string[]>([])
 const saving = ref(false)
 const error = ref<unknown>(null)
 const selectedError = ref<string | undefined>(undefined)
@@ -40,6 +42,21 @@ const affected = computed(() => {
   const value = (error.value as { problem?: { affected?: unknown } } | null)?.problem?.affected
   return Array.isArray(value) ? value.map(String) : []
 })
+
+// The save bar (admin design §5.12 rule 7): changes against the saved sharing; the knowledge base page asks before a tab
+// change while there are any, and the guard before leaving the page.
+const dirty = useDirty(() => ({ level: level.value, selected: level.value === 'selected' ? [...selected.value].sort() : [] }))
+function fillFrom(c: Collection): void {
+  level.value = c.sharedWith
+  selected.value = [...c.sharedWithDepartmentIds]
+  selectedError.value = undefined
+  error.value = null
+  dirty.reset()
+}
+fillFrom(props.collection)
+watch(() => props.collection, fillFrom)
+watch(dirty.dirty, (d) => emit('dirty', d))
+useUnsavedGuard(() => dirty.dirty.value)
 
 function toggle(id: string, on: boolean): void {
   selected.value = on ? [...new Set([...selected.value, id])] : selected.value.filter((x) => x !== id)
@@ -100,6 +117,6 @@ onMounted(async () => {
       </DataTable>
     </div>
     <InlineError v-if="error" :message="problemMessage(error) + (affected.length ? ` (${affected.join(', ')})` : '')" data-test="sharing-error" />
-    <div v-if="canManage"><UiButton variant="primary" :loading="saving" data-test="save-sharing" @click="save">{{ SHARING.save }}</UiButton></div>
+    <SaveBar v-if="canManage" :changes="dirty.changes.value" :saving="saving" @save="save" @discard="fillFrom(collection)" />
   </div>
 </template>

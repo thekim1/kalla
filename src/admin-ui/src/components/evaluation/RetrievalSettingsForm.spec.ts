@@ -59,7 +59,7 @@ describe('Search settings (admin design §7.1, V16)', () => {
   it('is read-only without Edit', () => {
     setActivePinia(createPinia())
     const wrapper = mount(RetrievalSettingsForm, { props: { collection, canEdit: false } })
-    expect(wrapper.find('[data-test=save-retrieval]').exists()).toBe(false)
+    expect(wrapper.find('[data-test=save-bar-save]').exists()).toBe(false)
     expect(wrapper.get('#rs-candidates').attributes('disabled')).toBeDefined()
   })
 })

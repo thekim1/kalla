@@ -666,7 +666,6 @@ export const SHARING = {
   published: 'Published',
   draft: 'Draft',
   archived: 'Archived',
-  save: 'Save sharing',
   saved: 'The sharing has been saved.',
   manageOnly: 'Only a department administrator can change the sharing.',
 } as const
@@ -1891,7 +1890,6 @@ export const ASSISTANT = {
   noTopicChoice: 'Choose a topic',
   removeTopic: (topic: string) => `Remove the topic ${topic}`,
   removeCollection: (name: string) => `Remove ${name}`,
-  saveDraft: 'Save draft',
   /** The Draft tab's lead (admin design §5.5.4 Wording, UI4 B): what saving does. */
   draftLead: {
     unpublished: 'Saving keeps a draft; publish it to make the assistant available.',
@@ -1963,7 +1961,6 @@ export const ASSISTANT = {
     'mcp-client': (name: string) => `${name}: the tools that connect with the app’s key.`,
   } as Record<string, (name: string) => string>,
   whoFallback: (name: string) => `${name}: everyone the app lets in.`,
-  saveAudience: 'Save audience',
   audienceSaved: 'The audience has been saved.',
   noClients: 'There are no apps yet. A platform administrator adds them under Apps and keys.',
   connectApp: 'Connect a new app',
@@ -2004,7 +2001,6 @@ export const ASSISTANT = {
   retentionDays: 'Number of days that details about the conversations are kept',
   retentionHint: (max: number) => `At most ${max} days for the information class.`,
   retentionInvalid: (max: number) => `Enter a whole number from 1 to ${max}.`,
-  saveStorage: 'Save storage',
   storageSaved: 'The storage has been saved.',
 } as const
 
@@ -2179,7 +2175,6 @@ export const RETRIEVAL = {
   invalidPositive: 'Enter a number greater than 0, or leave the field empty.',
   invalidKinds: 'Enter at least one document type in lower-case letters, digits or hyphens.',
   proposalFilled: 'The proposal from the evaluation has been filled in. Save to use it.',
-  save: 'Save search settings',
   saved: 'The search settings have been saved. An evaluation is running.',
   savedNoSet: 'The search settings have been saved.',
   tryWithout: 'Try without saving',
@@ -2474,6 +2469,18 @@ export const EXPLAIN = {
 } as const
 
 /** The edit drawers of a knowledge base and an assistant: their own fields, the level included (#446). */
+/** The save bar and the leave guard (admin design §5.12 rule 7, *Saving*); every form saves with these words. */
+export const UNSAVED = {
+  region: 'Unsaved changes',
+  count: (n: number) => `${n} unsaved ${n === 1 ? 'change' : 'changes'}`,
+  save: 'Save changes',
+  discard: 'Discard',
+  discardTitle: (n: number) => `Discard ${n} unsaved ${n === 1 ? 'change' : 'changes'}?`,
+  discardConsequence: 'The form goes back to what is saved.',
+  draftConsequence: (n: number) => `Version ${n} stays published until you publish the draft`,
+  leave: 'You have unsaved changes. Leave without saving them?',
+} as const
+
 /** The ⋯ menu of a header or a row (admin design §5.12 rule 1); its name says whose actions they are. */
 export const MENU = {
   more: (name: string) => `More actions for ${name}`,

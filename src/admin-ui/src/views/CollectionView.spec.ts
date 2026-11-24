@@ -452,17 +452,17 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     // Selected without a department says so and sends nothing; with one, the narrowing is refused and names the assistant.
     await wrapper.get('#sharing-selected').setValue(true)
     expect(wrapper.get('[data-test=sharing-departments]').text()).not.toContain('Kommunikation') // never the owner
-    await wrapper.get('[data-test=save-sharing]').trigger('click')
+    await wrapper.get('[data-test=save-bar-save]').trigger('click')
     expect(wrapper.text()).toContain('Choose at least one department.')
     expect(save).not.toHaveBeenCalled()
     await wrapper.get('[data-test=sharing-departments] input[type=checkbox]').setValue(true)
-    await wrapper.get('[data-test=save-sharing]').trigger('click')
+    await wrapper.get('[data-test=save-bar-save]').trigger('click')
     await flushPromises()
     expect(save).toHaveBeenCalledWith('c1', { sharedWith: 'selected', departmentIds: ['d2'], version: '7' })
     expect(wrapper.get('[data-test=sharing-error]').text()).toContain('Assistants of other departments use this knowledge base')
     expect(wrapper.get('[data-test=sharing-error]').text()).toContain('Permits assistant (Bygg och miljö)')
 
-    await wrapper.get('[data-test=save-sharing]').trigger('click')
+    await wrapper.get('[data-test=save-bar-save]').trigger('click')
     await flushPromises()
     expect(save).toHaveBeenCalledTimes(2)
     expect(wrapper.find('[data-test=sharing-error]').exists()).toBe(false)
@@ -480,7 +480,7 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     await flushPromises()
 
     expect((wrapper.get('#sharing-department').element as HTMLInputElement).disabled).toBe(true)
-    expect(wrapper.find('[data-test=save-sharing]').exists()).toBe(false)
+    expect(wrapper.find('[data-test=save-bar-save]').exists()).toBe(false)
     expect(wrapper.text()).toContain('Only a department administrator can change the sharing.')
   })
 

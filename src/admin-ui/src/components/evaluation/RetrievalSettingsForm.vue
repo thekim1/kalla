@@ -7,7 +7,10 @@ import FieldGroup from '@/components/ui/FieldGroup.vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import TextField from '@/components/ui/TextField.vue'
 import UiButton from '@/components/ui/UiButton.vue'
+import SaveBar from '@/components/ui/SaveBar.vue'
 import UiCard from '@/components/ui/UiCard.vue'
+import { useDirty } from '@/composables/useDirty'
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { useUiStore } from '@/stores/ui'
 import { formatDecimal } from '@/utils/format'
 import { RETRIEVAL } from '@/utils/labels'
@@ -18,7 +21,7 @@ import { problemMessage } from '@/utils/problem'
 // as an explicit null (an editor's choice that keeps the website template from adding it). Saved directly; the API
 // starts the advisory evaluation run. **Prova utan att spara** runs the evaluation with the values as candidate settings.
 const props = defineProps<{ collection: Collection; canEdit: boolean; proposal?: { coverageMaxDistance?: number; coverageMinKeywordScore?: number } | null }>()
-const emit = defineEmits<{ (e: 'saved', collection: Collection): void; (e: 'tried'): void }>()
+const emit = defineEmits<{ (e: 'saved', collection: Collection): void; (e: 'tried'): void; (e: 'dirty', dirty: boolean): void }>()
 const ui = useUiStore()
 
 type NumberKey = 'vectorWeight' | 'keywordWeight' | 'candidates' | 'maxChunksPerDocument' | 'coverageMaxDistance' | 'coverageMinKeywordScore' | 'expandMaxTokens'
@@ -43,6 +46,8 @@ const error = ref<unknown>(null)
 const saving = ref(false)
 const trying = ref(false)
 const proposalFilled = ref(false)
+// The save bar (admin design §5.12 rule 7): a proposal filled in from the evaluation counts as unsaved changes too.
+const dirty = useDirty(() => ({ ...fields, recency: { ...recency } }))
 
 const num = (n: number) => formatDecimal(n, 4)
 const parse = (text: string) => Number(text.replace(/\s/g, '').replace(',', '.'))
@@ -57,8 +62,11 @@ function reset(): void {
   recency.kinds = r?.kinds?.join(', ') ?? 'pdf'
   errors.value = {}
   proposalFilled.value = false
+  dirty.reset()
 }
 watch(() => props.collection.version, reset, { immediate: true })
+watch(dirty.dirty, (d) => emit('dirty', d))
+useUnsavedGuard(() => dirty.dirty.value)
 watch(
   () => props.proposal,
   (p) => {
@@ -163,10 +171,11 @@ async function tryWithout(): Promise<void> {
         </template>
       </FieldGroup>
       <InlineError v-if="error" :message="problemMessage(error)" />
+      <!-- Try without saving stays beside the form; saving is the save bar's (admin design §5.12 rule 7). -->
       <div v-if="canEdit" class="flex flex-wrap gap-2">
-        <UiButton type="submit" variant="primary" :loading="saving" data-test="save-retrieval">{{ RETRIEVAL.save }}</UiButton>
         <UiButton :loading="trying" data-test="try-retrieval" @click="tryWithout">{{ RETRIEVAL.tryWithout }}</UiButton>
       </div>
     </form>
+    <SaveBar v-if="canEdit" :changes="dirty.changes.value" :saving="saving" @save="save" @discard="reset" />
   </UiCard>
 </template>
