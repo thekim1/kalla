@@ -421,7 +421,8 @@ describe('Knowledge base (admin design §5.5.2)', () => {
 
     const table = wrapper.get('[data-test=topics]')
     expect(table.text()).toContain('Rule')
-    expect(table.text()).toContain('www.umea.se/bygga/** · umea.se/bygga')
+    expect(table.text()).toContain('under www.umea.se/bygga/') // the rule in words (§5.5.2)
+    expect(table.text()).toContain('umea.se/bygga') // its source
     expect(table.text()).toContain('No rule any more')
     // A published rule's tag before the re-chunk reads pending, not a count (§5.5.2).
     expect(table.get('[data-test=topic-pending]').text()).toBe('pending')

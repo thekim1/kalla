@@ -726,6 +726,45 @@ export const TOPICS = {
   noRule: 'No rule any more',
   /** A published rule's tag before its source has been processed again (§5.5.2). */
   pending: 'pending',
+  source: 'Source',
+  /** For `Edit` and `Read` of the owning department (§5.5.2). */
+  readOnly: 'Topics are changed by whoever may edit processing.',
+  /** A rule in words in the list (§5.5.2). */
+  words: {
+    under: (path: string) => `under ${path}`,
+    pathPattern: (glob: string) => `whose path matches ${glob}`,
+    titleContains: (text: string) => `whose title contains “${text}”`,
+    titleMatches: (pattern: string) => `whose title matches ${pattern}`,
+    mediaType: (type: string) => `${type} files`,
+    host: (host: string) => `on ${host}`,
+    pathRegex: (pattern: string) => `whose path matches the expression ${pattern}`,
+  },
+  /** The suggestions (§5.5.2): one block per source. */
+  suggested: (source: string) => `Suggested from ${source}`,
+  suggestedLead: 'Sections of the source with 5 documents or more. Tick the ones that should be a topic.',
+  section: 'Section',
+  tag: 'Topic',
+  pick: (section: string) => `Add ${section} as a topic`,
+  tagFor: (section: string) => `Topic for ${section}`,
+  covered: (tags: string) => `Already a topic: ${tags}`,
+  showUnder: 'show the sections under it',
+  hideUnder: 'hide the sections under it',
+  noneUnder: 'No section under it has 5 documents or more.',
+  noSuggestions: 'No section of this source has 5 documents or more yet.',
+  tagRequired: 'Write a topic.',
+  tagInvalid: 'Use lower-case letters, digits and hyphens, at most 50.',
+  /** "Add topics" until a section is ticked. */
+  add: (n: number) => (n === 0 ? 'Add topics' : `Add ${n} ${n === 1 ? 'topic' : 'topics'}`),
+  /** Saving: one publication plan per processing, confirmed as one (§6.6). */
+  planning: 'Working out what needs processing again…',
+  saveTitle: (n: number) => `Add ${n} ${n === 1 ? 'topic' : 'topics'}?`,
+  saveLead: 'The processing is published with the new rules, and these documents are processed again. The topics show as pending until then.',
+  savePlan: (processing: string, documents: string) => `${processing}: saving processes ${documents} documents again`,
+  saveSources: (names: string) => `Sources: ${names}`,
+  otherSources: (n: number) => `${n} other ${n === 1 ? 'source' : 'sources'}`,
+  saveConfirm: 'Confirm',
+  planFailed: (processing: string) => `The plan for ${processing} could not be made. Nothing was saved.`,
+  saved: (n: number) => `${n === 1 ? 'The topic is' : `${n} topics are`} saved. The documents are being processed again.`,
 } as const
 
 /** The Map as a table (admin design §5.5.6). */
