@@ -11,7 +11,10 @@ import { button } from '@/test/helpers'
 import CollectionsView from './CollectionsView.vue'
 
 const push = vi.hoisted(() => vi.fn())
-vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
+// `?q=` and `?view=` through a route the tests set (admin design §5.12 Filters); changes go to router.replace.
+const route = vi.hoisted(() => ({ query: {} as Record<string, string> }))
+const replace = vi.hoisted(() => vi.fn())
+vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push, replace }) }))
 const mountView = () => mount(CollectionsView, { global: { stubs: { RouterLink: RouterLinkStub } } })
 
 describe('Knowledge bases (admin design §5.2, §4.5 view=)', () => {
@@ -144,5 +147,24 @@ describe('Knowledge bases (admin design §5.2, §4.5 view=)', () => {
     expect(push).not.toHaveBeenCalledWith({ name: 'collection', params: { id: 'c1' } })
     await fresh!.findAll('td')[0]!.trigger('click')
     expect(push).toHaveBeenLastCalledWith({ name: 'collection', params: { id: 'c2' } })
+  })
+
+  it('keeps the search and the view in the address, so a link or a reload opens the same list (§5.12 Filters)', async () => {
+    setActivePinia(createPinia())
+    useAuthStore().user = bffUser({ roles: ['rag-department-admin'] })
+    vi.spyOn(api.organisation, 'departments').mockResolvedValue([])
+    const list = vi.spyOn(api.collections, 'list').mockResolvedValue({ total: 0, items: [] })
+    route.query = { q: 'bygg', view: 'all' }
+    const wrapper = mountView()
+    await flushPromises()
+    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'bygg', view: 'all' }))
+    expect((wrapper.get('[data-test=collections-search]').element as HTMLInputElement).value).toBe('bygg')
+    expect(wrapper.get('[role=tab][aria-selected=true]').text()).toBe('All')
+
+    await wrapper.get('[data-test=collections-search]').setValue('bygglov')
+    await flushPromises()
+    expect(replace).toHaveBeenLastCalledWith({ query: { q: 'bygglov', view: 'all' } })
+    route.query = {}
+    wrapper.unmount()
   })
 })

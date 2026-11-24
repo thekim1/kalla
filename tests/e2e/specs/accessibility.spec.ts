@@ -158,7 +158,7 @@ test('the assistant page passes axe on each of its five tabs, and the test as a 
 
 test('the filter rows pass axe with a filter set and the period picker open on a custom range (admin design §5.12 Filters, B-80)', async ({ page }) => {
   await login(page, 'rag-department-admin')
-  for (const path of ['/feedback?rating=down&period=custom', '/costs?kind=assistant&period=custom']) {
+  for (const path of ['/feedback?rating=down&period=custom', '/costs?kind=assistant&period=custom', '/audit?actor=anna&period=custom']) {
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 })
       await ready(page, path)
@@ -170,6 +170,12 @@ test('the filter rows pass axe with a filter set and the period picker open on a
       await scan(page, `the filter row of ${path} at ${width}px`)
     }
   }
+  // The Map has no period: its department and Show chips, one set.
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await ready(page, '/map?show=shared')
+  await expect(page.getByRole('search').getByRole('combobox', { name: 'Show:' })).toHaveValue('shared')
+  await page.waitForLoadState('networkidle')
+  await scan(page, 'the filter row of /map with a chip set')
 })
 
 test('all pages reflow at 320px and at 200 percent text size', async ({ page }) => {

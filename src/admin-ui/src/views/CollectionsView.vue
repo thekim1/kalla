@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, toRef, watch, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import type { Collection, CollectionSummary, CollectionView, Department } from '@/api/types'
@@ -10,6 +10,7 @@ import PageHeader from '@/components/ui/PageHeader.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiTabs from '@/components/ui/UiTabs.vue'
+import { useQueryFilters } from '@/composables/useQueryFilters'
 import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
@@ -26,8 +27,10 @@ const ui = useUiStore()
 const router = useRouter()
 const collections = useLoadable<CollectionSummary[]>([])
 const departments = ref<Department[]>([])
-const q = ref('')
-const view = ref<CollectionView>('mine')
+// The search and the view are kept in the address (admin design §5.12 Filters: the lists' search; `?q=bygg&view=all`).
+const { filters } = useQueryFilters({ q: '', view: 'mine' })
+const q = toRef(filters, 'q')
+const view = toRef(filters, 'view') as Ref<CollectionView>
 const views = [
   { value: 'mine' as const, label: COLLECTIONS.views.mine },
   { value: 'shared' as const, label: COLLECTIONS.views.shared },
