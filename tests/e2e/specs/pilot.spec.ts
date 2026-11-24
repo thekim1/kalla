@@ -104,7 +104,7 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     // lets the draft answer instead of "found nothing" (a real model would not need this).
     await act.press(page.getByRole('tab', { name: 'Search settings' }))
     await act.fill(page.getByRole('textbox', { name: 'Largest distance' }), '1')
-    await act.press(page.getByRole('button', { name: 'Save search settings' }))
+    await act.press(page.getByRole('region', { name: 'Unsaved changes' }).getByRole('button', { name: 'Save changes' }))
     await expect(page.getByText(/The search settings have been saved/)).toBeVisible()
 
     // 8 Publish the knowledge base.
@@ -135,7 +135,7 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     const picker = page.getByRole('dialog', { name: 'Add a knowledge base' })
     await act.press(picker.getByRole('button', { name: `Add ${collection}` }))
     await expect(picker).toBeHidden()
-    await act.press(page.getByRole('button', { name: 'Save draft' }))
+    await act.press(page.getByRole('region', { name: 'Unsaved changes' }).getByRole('button', { name: 'Save changes' }))
     await expect(page.getByText('The draft has been saved.')).toBeVisible()
 
     // 10 Test the draft: an answer with a cited source.
@@ -165,7 +165,7 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     // 12 Make it available in Open WebUI.
     await act.press(page.getByRole('tab', { name: 'Audience' }))
     await act.check(page.getByRole('checkbox', { name: 'Open WebUI (dev)' }))
-    await act.press(page.getByRole('button', { name: 'Save audience' }))
+    await act.press(page.getByRole('region', { name: 'Unsaved changes' }).getByRole('button', { name: 'Save changes' }))
     await expect(page.getByText('The audience has been saved.')).toBeVisible()
 
     // 13 Open it in Open WebUI: the assistant page links to the client's PortalUrl (the dev client's is the stack's Open
@@ -184,7 +184,7 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await ready(page, collectionPage)
     await act.press(page.getByRole('tab', { name: 'Sharing' }))
     await act.check(page.getByRole('radio', { name: /^Whole organisation/ }))
-    await act.press(page.getByRole('button', { name: 'Save sharing' }))
+    await act.press(page.getByRole('region', { name: 'Unsaved changes' }).getByRole('button', { name: 'Save changes' }))
     await expect(page.getByText('The sharing has been saved.')).toBeVisible()
 
     // An assistant of another department (Fritidsförvaltningen; the platform administrator works in every department)
@@ -211,7 +211,7 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await otherAct.fill(link.getByRole('combobox', { name: /^Limit to topics/ }), 'isytor')
     await otherAct.press(link.getByRole('button', { name: 'Add topic' }))
     await expect(link.getByText('isytor', { exact: true })).toBeVisible()
-    await otherAct.press(other.getByRole('button', { name: 'Save draft' }))
+    await otherAct.press(other.getByRole('region', { name: 'Unsaved changes' }).getByRole('button', { name: 'Save changes' }))
     await expect(other.getByText('The draft has been saved.')).toBeVisible()
     await expect(other.getByText(/is not shared with yours/)).toHaveCount(0)
     await expect(other.getByText(/A topic is invalid/)).toHaveCount(0)

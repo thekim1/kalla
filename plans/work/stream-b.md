@@ -252,7 +252,7 @@ design meanwhile.
 - **Waits on:** B-75; the code-quality fixes #3 and #5.
 - **Read:** admin §5.5.2, §5.5.3, §5.5.4, §5.5.7, §5.12 (rule 1, the accessibility table).
 
-### [ ] B-77 The save bar on every form (UX pass step 3, UX6 A)
+### [x] B-77 The save bar on every form (UX pass step 3, UX6 A) (#1035)
 - **Do:** `SaveBar` (admin §5.12 *Saving*: *n unsaved changes · Discard · Save changes*, the consequence when there
   is one, sticky, fixed above the bottom menu on a phone, `scroll-padding-bottom`) and a dirty check per form, on the
   assistant's draft, search settings, sharing, audience, storage and each Settings section; the guard that asks

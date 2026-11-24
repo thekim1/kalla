@@ -8,7 +8,7 @@ import { useAuthStore } from '@/stores/auth'
 import { bffUser, collectionSummary } from '@/test/fixtures'
 import { button, openMenu } from '@/test/helpers'
 import { formatNumber } from '@/utils/format'
-import { ASSISTANT, MODEL_AVAILABILITY } from '@/utils/labels'
+import { ASSISTANT, MODEL_AVAILABILITY, UNSAVED } from '@/utils/labels'
 import AssistantView from './AssistantView.vue'
 
 // `?tab=` through a route the tests set; tab changes go to router.replace.
@@ -156,7 +156,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
 
     await wrapper.get('#assistant-model').setValue('fors/chat-eu')
     await wrapper.get('#assistant-prompt').setValue('Svara kort.')
-    await wrapper.get('[data-test=save-draft]').trigger('click')
+    await wrapper.get('[data-test=save-bar-save]').trigger('click')
     await flushPromises()
 
     expect(save).toHaveBeenCalledWith('a1', {
@@ -178,7 +178,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(wrapper.get('[data-test=link-c2]').text()).toContain('Annan förvaltning (Annan, shared)')
     await wrapper.get('[aria-label="Remove the topic avfall"]').trigger('click')
     await wrapper.get('[aria-label="Remove Bygglov"]').trigger('click')
-    await wrapper.get('[data-test=save-draft]').trigger('click')
+    await wrapper.get('[data-test=save-bar-save]').trigger('click')
     await flushPromises()
 
     expect(save.mock.calls[0]![1].collectionLinks).toEqual([{ collectionId: 'c2', tags: ['kompost'] }])
@@ -222,6 +222,52 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(helps[0]).toBe('Answers only from the knowledge bases; when they have nothing, it says so and shows the contact links.')
   })
 
+  it('discards the draft\'s changes back to the saved values, and says before the first publish what saving does (B-77)', async () => {
+    signIn(['rag-editor'])
+    mocks()
+    vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, publishedVersion: null })
+    const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
+    await flushPromises()
+    const prompt = wrapper.get('#assistant-prompt').element as HTMLTextAreaElement
+    const saved = prompt.value
+
+    await wrapper.get('#assistant-prompt').setValue('Något annat.')
+    expect(wrapper.get('[data-test=save-bar-consequence]').text()).toContain(UNSAVED.firstDraftConsequence)
+    await wrapper.get('[data-test=save-bar-discard]').trigger('click')
+    await flushPromises()
+    ;[...document.body.querySelectorAll('dialog button')].find((b) => b.textContent?.trim() === 'Discard')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(prompt.value).toBe(saved)
+    expect(wrapper.find('[data-test=save-bar]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('saves the draft through the save bar with its consequence, and asks before a tab change with unsaved changes (B-77)', async () => {
+    signIn(['rag-editor'])
+    mocks()
+    vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, publishedVersion: 2 })
+    const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
+    await flushPromises()
+    expect(wrapper.find('[data-test=save-bar]').exists()).toBe(false)
+
+    await wrapper.get('#assistant-prompt').setValue('Svara kort och tydligt.')
+    expect(wrapper.get('[data-test=save-bar-count]').text()).toBe('1 unsaved change')
+    expect(wrapper.get('[data-test=save-bar-consequence]').text()).toContain('Version 2 stays published until you publish the draft')
+
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    await wrapper.get('#assistant-tab-storage').trigger('click')
+    await flushPromises()
+    expect(confirm).toHaveBeenCalledWith(UNSAVED.switchTabKept)
+    expect(wrapper.find('#assistant-panel-draft').exists()).toBe(true) // stayed
+
+    confirm.mockReturnValue(true)
+    await wrapper.get('#assistant-tab-storage').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('#assistant-panel-storage').exists()).toBe(true)
+    confirm.mockRestore()
+    wrapper.unmount()
+  })
+
   it('sends each link back with the topics it was loaded with', async () => {
     signIn(['rag-editor'])
     mocks()
@@ -230,7 +276,8 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
 
     const wrapper = mount(AssistantView, { props: { id: 'a1' } })
     await flushPromises()
-    await wrapper.get('[data-test=save-draft]').trigger('click')
+    await wrapper.get('#assistant-prompt').setValue('Svara kort och tydligt.') // the save bar shows once something has changed (B-77)
+    await wrapper.get('[data-test=save-bar-save]').trigger('click')
     await flushPromises()
 
     expect(save.mock.calls[0]![1].collectionLinks).toEqual([{ collectionId: 'c1', tags: ['bygglov', 'altan'] }])
@@ -260,7 +307,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     await advanced.get('summary').trigger('click')
     await wrapper.get('#assistant-model').setValue('fors/chat-eu')
     await wrapper.get('#assistant-top-k').setValue('99')
-    await wrapper.get('[data-test=save-draft]').trigger('click')
+    await wrapper.get('[data-test=save-bar-save]').trigger('click')
     await flushPromises()
     expect(save).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('Enter a number from 1 to 50, or leave it empty.')
@@ -277,7 +324,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect([...rerank.options].filter((o) => o.disabled).map((o) => o.value)).toEqual(['chat'])
     await wrapper.get('#assistant-rerank').setValue('gateway')
     await wrapper.get('#assistant-language').setValue('')
-    await wrapper.get('[data-test=save-draft]').trigger('click')
+    await wrapper.get('[data-test=save-bar-save]').trigger('click')
     await flushPromises()
 
     // Other keys of a step are kept (filters); an emptied field drops its key.
@@ -396,10 +443,11 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect((wrapper.get('#assistant-prompt').element as HTMLTextAreaElement).value).toBe('Svara kort.')
     expect(wrapper.find('[data-test=link-c1]').exists()).toBe(true)
 
-    await wrapper.get('[data-test=save-draft]').trigger('click')
+    await wrapper.get('#assistant-prompt').setValue('Svara kort och tydligt.') // the save bar shows once something has changed (B-77)
+    await wrapper.get('[data-test=save-bar-save]').trigger('click')
     await flushPromises()
     expect(save).toHaveBeenCalledWith('a1', {
-      gatewayModel: 'fors/chat-eu', systemPrompt: 'Svara kort.', collectionLinks: [{ collectionId: 'c1', tags: [] }], querySteps: { answer: { generalKnowledge: 'off' } }, notFound: {}, version: null,
+      gatewayModel: 'fors/chat-eu', systemPrompt: 'Svara kort och tydligt.', collectionLinks: [{ collectionId: 'c1', tags: [] }], querySteps: { answer: { generalKnowledge: 'off' } }, notFound: {}, version: null,
     })
   })
 
@@ -420,6 +468,13 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(wrapper.find('[data-test=general-knowledge-public-warning]').exists()).toBe(false)
     await wrapper.get('#assistant-general-knowledge-fallback').setValue(true)
     expect(wrapper.find('[data-test=general-knowledge-public-warning]').exists()).toBe(true)
+
+    // Unsaved changes are saved or discarded before publishing: the dialog shows the saved draft (B-77).
+    expect(wrapper.get('[data-test=publish]').attributes('aria-disabled')).toBe('true')
+    expect(wrapper.get('[data-test=publish-unsaved]').text()).toBe(UNSAVED.publishFirst)
+    expect(wrapper.get('[data-test=publish]').attributes('aria-describedby')).toBe('publish-unsaved')
+    await wrapper.get('#assistant-general-knowledge-supplement').setValue(true)
+    expect(wrapper.find('[data-test=publish-unsaved]').exists()).toBe(false)
 
     // V36's confirmation is a checkbox in the Publish dialog (B-82), not a dialog of its own (the draft has no refusal).
     await publishThroughDialog(wrapper, true)
@@ -511,9 +566,10 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     // "Who can use it" in plain words (admin design §5.5.4), from the saved audience.
     expect(wrapper.get('[data-test=who-can-use]').text()).toContain('Nobody yet')
     await wrapper.get('input[type=checkbox]').setValue(true)
-    await wrapper.get('[data-test=save-audience]').trigger('click')
+    await wrapper.get('[data-test=save-bar-save]').trigger('click')
     await flushPromises()
     expect(audiences).toHaveBeenCalledWith('a1', { clientIds: ['k1'], version: 'a4' })
+    expect(wrapper.find('[data-test=save-bar]').exists()).toBe(false) // saved: nothing left to save
     expect(wrapper.get('[data-test=who-can-use]').text()).toContain('Open WebUI (pilot): everyone who can sign in to it.')
     // Adding an app is a platform admin's job: a department admin gets no link.
     expect(wrapper.find('[data-test=connect-app]').exists()).toBe(false)
@@ -695,12 +751,12 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(wrapper.text()).toContain('At most 180 days for the information class.')
     expect(wrapper.text()).toContain('Questions and answers are not saved')
     await wrapper.get('#assistant-retention').setValue('365')
-    await wrapper.get('[data-test=save-storage]').trigger('click')
+    await wrapper.get('[data-test=save-bar-save]').trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('Enter a whole number from 1 to 180.')
     expect(retention).not.toHaveBeenCalled()
     await wrapper.get('#assistant-retention').setValue('30')
-    await wrapper.get('[data-test=save-storage]').trigger('click')
+    await wrapper.get('[data-test=save-bar-save]').trigger('click')
     await flushPromises()
     expect(retention).toHaveBeenCalledWith('a1', { historyMode: 'none', retentionDays: 30, version: 'a5' })
     wrapper.unmount()
@@ -726,7 +782,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(group.text()).toContain('Fallback: as Supplement, and answer from general knowledge when nothing is found')
 
     await wrapper.get('#assistant-general-knowledge-fallback').setValue(true)
-    await wrapper.get('[data-test=save-draft]').trigger('click')
+    await wrapper.get('[data-test=save-bar-save]').trigger('click')
     await flushPromises()
     expect(save).toHaveBeenCalledWith('a1', expect.objectContaining({
       querySteps: { retrieval: { topK: 8 }, answer: { language: 'sv', generalKnowledge: 'fallback' } }, notFound: { sv: 'Inget svar.', links: [] },
@@ -831,7 +887,8 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       expect(wrapper.get('[data-test=model-output-limit]').text()).toBe(ASSISTANT.modelLimit(formatNumber(16_384)))
       expect(wrapper.get('[data-test=model-context-limit]').text()).toBe(ASSISTANT.modelLimit(formatNumber(128_000)))
 
-      await wrapper.get('[data-test=save-draft]').trigger('click')
+      await wrapper.get('#assistant-prompt').setValue('Svara kort och tydligt.') // the save bar shows once something has changed (B-77)
+      await wrapper.get('[data-test=save-bar-save]').trigger('click')
       await flushPromises()
       const steps = save.mock.calls[0]![1].querySteps as { answer: Record<string, unknown> }
       expect(steps.answer).not.toHaveProperty('maxOutputTokens')
@@ -849,7 +906,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
 
       await wrapper.get('[data-test=use-model-output] input').setValue(false)
       await wrapper.get('#assistant-max-tokens').setValue('20000')
-      await wrapper.get('[data-test=save-draft]').trigger('click')
+      await wrapper.get('[data-test=save-bar-save]').trigger('click')
       await flushPromises()
       expect(save).not.toHaveBeenCalled()
       expect(wrapper.text()).toContain(ASSISTANT.rangeInvalid(64, 16_384))
@@ -857,7 +914,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       await wrapper.get('#assistant-max-tokens').setValue('8000')
       await wrapper.get('[data-test=use-model-context] input').setValue(false)
       await wrapper.get('#assistant-context-tokens').setValue('32768')
-      await wrapper.get('[data-test=save-draft]').trigger('click')
+      await wrapper.get('[data-test=save-bar-save]').trigger('click')
       await flushPromises()
       expect((save.mock.calls[0]![1].querySteps as { answer: Record<string, unknown> }).answer).toMatchObject({ maxOutputTokens: 8000, contextTokens: 32768 })
     })
@@ -875,7 +932,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       expect(wrapper.get('[data-test=answer-ceiling]').text()).toBe(ASSISTANT.answerCeiling(formatNumber(4000)))
       await wrapper.get('[data-test=use-model-output] input').setValue(false)
       await wrapper.get('#assistant-max-tokens').setValue('5000')
-      await wrapper.get('[data-test=save-draft]').trigger('click')
+      await wrapper.get('[data-test=save-bar-save]').trigger('click')
       await flushPromises()
       expect(save).not.toHaveBeenCalled()
       expect(wrapper.text()).toContain(ASSISTANT.rangeInvalid(64, 4000))
@@ -905,7 +962,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       expect(wrapper.get('[data-test=model-output-limit]').text()).toBe(ASSISTANT.modelLimitUnknown)
 
       await wrapper.get('[data-test=use-model-output] input').setValue(true)
-      await wrapper.get('[data-test=save-draft]').trigger('click')
+      await wrapper.get('[data-test=save-bar-save]').trigger('click')
       await flushPromises()
       expect((save.mock.calls[0]![1].querySteps as { answer: Record<string, unknown> }).answer).not.toHaveProperty('maxOutputTokens')
     })

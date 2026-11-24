@@ -106,6 +106,32 @@ test('the ⋯ menu passes axe open, as a menu on a desktop and as a sheet on a p
   }
 })
 
+test('the save bar passes axe, and a focused field is never hidden behind it (admin design §5.12, Saving)', async ({ page }) => {
+  await login(page, 'rag-department-admin')
+  const assistant = ((await getJson(page, '/api/assistants')).items ?? [])[0]
+  test.skip(!assistant, 'needs an assistant (the pilot journey makes one)')
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 700 })
+    await ready(page, `/assistants/${assistant.id}`)
+    // The page fills the draft form after its requests settle; an edit before that is overwritten.
+    await page.waitForLoadState('networkidle')
+    const prompt = page.getByRole('textbox', { name: 'Instructions' })
+    await prompt.fill(`${await prompt.inputValue()} `)
+    const bar = page.getByRole('region', { name: 'Unsaved changes' })
+    await expect(bar).toBeVisible()
+    await scan(page, `the save bar at ${width}px`)
+    // The last field above the bar, focused: scrolled clear of the bar (scroll-padding-bottom).
+    const fields = page.getByRole('main').locator('input:not([type=hidden]):not([type=checkbox]):not([type=radio]), textarea, select')
+    const last = fields.filter({ visible: true }).last()
+    await last.focus()
+    const [field, barBox] = [await last.boundingBox(), await bar.boundingBox()]
+    if (field && barBox) expect(field.y + field.height, `${width}px: the focused field ends above the bar`).toBeLessThanOrEqual(barBox.y + 1)
+    await page.getByRole('button', { name: 'Discard' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Discard' }).click()
+    await expect(bar).toBeHidden()
+  }
+})
+
 test('all pages reflow at 320px and at 200 percent text size', async ({ page }) => {
   await login(page, 'rag-platform-admin')
   const pages = await allPages(page)

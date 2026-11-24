@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import { useKeysetList } from '@/composables/useKeysetList'
 import { useTabQuery } from '@/composables/useTabQuery'
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import type { Collection, CostQuery, CollectionRead, CollectionSetup, DocumentSummary, EvaluationOverview, Source, SourceListItem, SourceSummary } from '@/api/types'
 import CollectionSharing from '@/components/collections/CollectionSharing.vue'
 import DocumentFeedbackCard from '@/components/collections/DocumentFeedbackCard.vue'
@@ -37,7 +38,7 @@ import KeyUnavailableBadge from '@/components/gateway/KeyUnavailableBadge.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatDecimal, formatNumber, quietZero } from '@/utils/format'
-import { COLLECTION, COLLECTIONS, DELETE, EDIT_DRAWER, EVALUATION, LEVEL_LABEL, MENU, MOVE_DEPARTMENT, PAGE, RETRIEVAL, RUN_STATE_LABEL, SOURCE, SOURCE_TYPE_LABEL } from '@/utils/labels'
+import { COLLECTION, COLLECTIONS, DELETE, EDIT_DRAWER, EVALUATION, LEVEL_LABEL, MENU, MOVE_DEPARTMENT, PAGE, RETRIEVAL, RUN_STATE_LABEL, SOURCE, SOURCE_TYPE_LABEL, UNSAVED } from '@/utils/labels'
 import MoveDepartmentDrawer from '@/components/organisation/MoveDepartmentDrawer.vue'
 import { problemMessage } from '@/utils/problem'
 import PiiActions from '@/components/documents/PiiActions.vue'
@@ -67,6 +68,19 @@ const documents = useKeysetList((after?: string) =>
 const TABS: [Tab, ...Tab[]] = ['overview', 'files', 'sources', 'documents', 'topics', 'evaluation', 'retrieval', 'sharing']
 /** The tab is kept in `?tab=` (the setup checklist links to them; a reload keeps it). */
 const tab = useTabQuery(TABS)
+// A tab with unsaved changes (its form's save bar, admin design §5.12 *Saving*) asks before the tab changes.
+const unsaved = reactive({ sharing: false, search: false })
+const confirmTabChange = () => !(unsaved.sharing || unsaved.search) || window.confirm(UNSAVED.leave)
+// Leaving the page, or a tab change by a link (`?tab=`, which unmounts the form), asks while a form has changes.
+useUnsavedGuard(() => unsaved.sharing || unsaved.search, {
+  current: () => tab.value,
+  of: (r) => (TABS.includes(r.query.tab as Tab) ? (r.query.tab as Tab) : TABS[0]),
+  confirm: confirmTabChange,
+})
+function switchTab(next: string): void {
+  if (next === tab.value || !confirmTabChange()) return
+  tab.value = next as typeof tab.value
+}
 const publishing = ref(false)
 const publishError = ref<unknown>(null)
 /** The assistants that use it, each with its label; the Overview links each to its page (§5.5.2). */
@@ -128,6 +142,9 @@ async function deleteCollection(): Promise<void> {
   const deleted = collection.data.value!
   await api.collections.remove(deleted.id, deleted.version)
   ui.notify(DELETE.knowledgeBaseDeleted(deleted.name))
+  // The knowledge base is gone, and a form's unsaved changes with it: no question on the way out.
+  unsaved.sharing = false
+  unsaved.search = false
   void router.push({ name: 'collections' })
 }
 const proposal = ref<{ coverageMaxDistance?: number; coverageMinKeywordScore?: number } | null>(null)
@@ -277,7 +294,7 @@ onMounted(load)
         <UiBadge :label="LEVEL_LABEL[shared.classification]" />
         <UiBadge tone="accent" :label="COLLECTIONS.shared" data-test="shared" />
       </PageHeader>
-      <UiTabs id="collection" v-model="tab" :tabs="tabs" :label="COLLECTION.tabsLabel" class="mb-6" />
+      <UiTabs id="collection" :model-value="tab" :tabs="tabs" :label="COLLECTION.tabsLabel" class="mb-6" @update:model-value="switchTab" />
       <div v-if="tab === 'topics'" id="collection-panel-topics" role="tabpanel" aria-labelledby="collection-tab-topics">
         <CollectionTopics :collection-id="shared.id" />
       </div>
@@ -315,7 +332,7 @@ onMounted(load)
         <MenuButton v-if="headerMenu.length" :label="MENU.more(collection.data.value.name)" :items="headerMenu" @select="onHeaderMenu" />
       </PageHeader>
       <InlineError v-if="publishError" :message="problemMessage(publishError)" class="mb-4" />
-      <UiTabs id="collection" v-model="tab" :tabs="tabs" :label="COLLECTION.tabsLabel" class="mb-6" />
+      <UiTabs id="collection" :model-value="tab" :tabs="tabs" :label="COLLECTION.tabsLabel" class="mb-6" @update:model-value="switchTab" />
 
       <div v-if="tab === 'overview'" id="collection-panel-overview" role="tabpanel" aria-labelledby="collection-tab-overview" class="grid gap-6">
         <SetupChecklist v-if="setup && !setup.done" :setup="setup" />
@@ -421,7 +438,7 @@ onMounted(load)
       </div>
 
       <div v-else-if="tab === 'sharing'" id="collection-panel-sharing" role="tabpanel" aria-labelledby="collection-tab-sharing">
-        <CollectionSharing :collection="collection.data.value" :can-manage="canPublish" @saved="sharingSaved" />
+        <CollectionSharing :collection="collection.data.value" :can-manage="canPublish" @saved="sharingSaved" @dirty="unsaved.sharing = $event" />
       </div>
 
       <div v-else-if="tab === 'evaluation'" id="collection-panel-evaluation" role="tabpanel" aria-labelledby="collection-tab-evaluation">
@@ -429,7 +446,10 @@ onMounted(load)
       </div>
 
       <div v-else-if="tab === 'retrieval'" id="collection-panel-retrieval" role="tabpanel" aria-labelledby="collection-tab-retrieval">
-        <RetrievalSettingsForm :collection="collection.data.value" :can-edit="canEdit" :proposal="proposal" @saved="retrievalSaved" @tried="tab = 'evaluation'" />
+        <RetrievalSettingsForm
+          :collection="collection.data.value" :can-edit="canEdit" :proposal="proposal" @saved="retrievalSaved" @tried="tab = 'evaluation'"
+          @dirty="unsaved.search = $event"
+        />
       </div>
 
       <div v-else id="collection-panel-documents" role="tabpanel" aria-labelledby="collection-tab-documents">
