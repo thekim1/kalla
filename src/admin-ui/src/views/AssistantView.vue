@@ -169,6 +169,10 @@ const versionColumns: Column[] = [
 ]
 const archived = computed(() => assistant.data.value?.state === 'archived')
 const headerMenu = computed<MenuItem[]>(() => [
+  // On a phone Compare with published moves from the header into the sheet (§5.12, On a phone).
+  ...(assistant.data.value?.draft && assistant.data.value.publishedVersion
+    ? [{ key: 'compare', label: ASSISTANT.compareWithPublished, icon: 'difference', phoneOnly: true }]
+    : []),
   ...(canEdit.value
     ? [
         { key: 'edit', label: MENU.editNameAndContact, icon: 'edit' },
@@ -180,7 +184,8 @@ const headerMenu = computed<MenuItem[]>(() => [
   ...(canManage.value ? [{ key: 'delete', label: MENU.delete, icon: 'delete', danger: true }] : []),
 ])
 function onHeaderMenu(key: string): void {
-  if (key === 'edit') editing.value = true
+  if (key === 'compare') compare(assistant.data.value!.publishedVersion!)
+  else if (key === 'edit') editing.value = true
   else if (key === 'copy') copying.value = true
   else if (key === 'move') moving.value = true
   else if (key === 'archive') archiving.value = true
@@ -540,7 +545,7 @@ watch(() => props.id, () => {
         <!-- One primary action (admin design §5.5.4, §5.12 rule 1): Publish draft, beside Compare with published; the rest
              in the ⋯ menu, Delete last. -->
         <UiButton
-          v-if="assistant.data.value.draft && assistant.data.value.publishedVersion" icon="difference" data-test="compare-published"
+          v-if="assistant.data.value.draft && assistant.data.value.publishedVersion" icon="difference" class="max-md:hidden" data-test="compare-published"
           @click="compare(assistant.data.value.publishedVersion)"
         >
           {{ ASSISTANT.compareWithPublished }}

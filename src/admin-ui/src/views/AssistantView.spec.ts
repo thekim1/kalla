@@ -6,7 +6,7 @@ import { ApiError } from '@/api/client'
 import type { Assistant, AssistantDraft, ClientSummary, VersionDiff } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { bffUser, collectionSummary } from '@/test/fixtures'
-import { button } from '@/test/helpers'
+import { button, openMenu } from '@/test/helpers'
 import { formatNumber } from '@/utils/format'
 import { ASSISTANT, MODEL_AVAILABILITY } from '@/utils/labels'
 import AssistantView from './AssistantView.vue'
@@ -93,7 +93,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       if (menu.exists()) {
         expect(menu.attributes('aria-label')).toBe('More actions for Bygglovsassistenten')
         await menu.trigger('click')
-        items = wrapper.findAll('[role=menuitem]').map((i) => i.text().replace(/^[a-z_]+/, ''))
+        items = openMenu().findAll('[role=menuitem]').map((i) => i.text().replace(/^[a-z_]+/, ''))
       }
       wrapper.unmount()
       return { primary, compare, items }
@@ -199,7 +199,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       await flushPromises()
       const text = wrapper.get('[data-test=draft-lead]').text()
       await wrapper.get('[data-test=menu-button]').trigger('click')
-      expect(wrapper.get('[data-test=menu-edit]').text()).toContain('Edit name and contact')
+      expect(openMenu().get('[data-test=menu-edit]').text()).toContain('Edit name and contact')
       await wrapper.get('[data-test=menu-button]').trigger('click')
       wrapper.unmount()
       return text
@@ -570,7 +570,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(wrapper.find('[data-test=version-menu-4]').exists()).toBe(false) // the draft is published, not restored
 
     await wrapper.get('[data-test=version-menu-2] [data-test=menu-button]').trigger('click')
-    await wrapper.get('[data-test=version-menu-2] [data-test=menu-restore]').trigger('click')
+    await openMenu().get('[data-test=menu-restore]').trigger('click')
     await flushPromises()
     expect(document.body.textContent).toContain('Version 2 is published again as a new version. Your draft is kept.')
     const confirm = [...document.body.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Restore').at(-1)!
@@ -639,7 +639,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     await flushPromises()
 
     await wrapper.get('[data-test=menu-button]').trigger('click')
-    await wrapper.get('[data-test=menu-delete]').trigger('click')
+    await openMenu().get('[data-test=menu-delete]').trigger('click')
     await flushPromises()
     expect(document.body.querySelector('[data-test=delete-apps]')!.textContent).toContain('Open WebUI (pilot)')
     expect(document.body.querySelector('[data-test=delete-questions]')!.textContent).toBe('Questions in the last 7 days: 42.')
@@ -661,7 +661,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     const editor = mount(AssistantView, { props: { id: 'a1' } })
     await flushPromises()
     await editor.get('[data-test=menu-button]').trigger('click')
-    expect(editor.find('[data-test=menu-delete]').exists()).toBe(false)
+    expect(openMenu().find('[data-test=menu-delete]').exists()).toBe(false)
   })
 
   it('archives and brings back the assistant, and sets retention within the level\'s maximum', async () => {
@@ -677,7 +677,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     await flushPromises()
 
     await wrapper.get('[data-test=menu-button]').trigger('click')
-    await wrapper.get('[data-test=menu-archive]').trigger('click')
+    await openMenu().get('[data-test=menu-archive]').trigger('click')
     await flushPromises()
     expect(document.body.textContent).toContain('The assistant disappears from all clients.')
     ;[...document.body.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Archive').at(-1)!.click()
@@ -685,7 +685,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(archive).toHaveBeenCalledWith('a1', 'a3')
     expect(wrapper.get('[data-test=archived]').text()).toBe('Archived')
     await wrapper.get('[data-test=menu-button]').trigger('click')
-    await wrapper.get('[data-test=menu-unarchive]').trigger('click')
+    await openMenu().get('[data-test=menu-unarchive]').trigger('click')
     await flushPromises()
     expect(unarchive).toHaveBeenCalledWith('a1', 'a4')
     expect(wrapper.find('[data-test=archived]').exists()).toBe(false)

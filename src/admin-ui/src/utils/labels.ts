@@ -2473,7 +2473,6 @@ export const EXPLAIN = {
   } as Record<string, string>,
 } as const
 
-/** The edit drawers of a knowledge base and an assistant: their own fields, the level included (#446). */
 /** The ⋯ menu of a header or a row (admin design §5.12 rule 1); its name says whose actions they are. */
 export const MENU = {
   more: (name: string) => `More actions for ${name}`,
@@ -2481,6 +2480,7 @@ export const MENU = {
   delete: 'Delete…',
 } as const
 
+/** The edit drawers of a knowledge base and an assistant: their own fields, the level included (#446). */
 export const EDIT_DRAWER = {
   edit: 'Edit',
   collectionTitle: 'Edit knowledge base',
