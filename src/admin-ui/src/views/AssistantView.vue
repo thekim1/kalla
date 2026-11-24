@@ -32,6 +32,7 @@ import ExplainAccess from '@/components/assistants/ExplainAccess.vue'
 import KnowledgeLinks from '@/components/assistants/KnowledgeLinks.vue'
 import AssistantCopyDrawer from '@/components/assistants/AssistantCopyDrawer.vue'
 import AssistantEditDrawer from '@/components/assistants/AssistantEditDrawer.vue'
+import PublishDraftDialog from '@/components/assistants/PublishDraftDialog.vue'
 import VersionDiffView from '@/components/assistants/VersionDiffView.vue'
 import UiDrawer from '@/components/ui/UiDrawer.vue'
 import AssistantTestsTab from '@/components/assistants/AssistantTestsTab.vue'
@@ -116,7 +117,7 @@ const testLevelOptions = computed(() => [
 watch(testLevelOptions, (options) => {
   if (!options.some((o) => o.value === testLevel.value)) testLevel.value = ''
 })
-const busy = ref<'' | 'save' | 'publish' | 'test' | 'audience' | 'storage' | 'unarchive'>('')
+const busy = ref<'' | 'save' | 'test' | 'audience' | 'storage' | 'unarchive'>('')
 const versions = ref<AssistantVersionSummary[] | null>(null)
 const restoring = ref<number | null>(null)
 const archiving = ref(false)
@@ -381,25 +382,31 @@ async function withGeneralKnowledgeConfirmation<T>(send: (confirm: boolean) => P
 // dialog shows it, and Publish anyway sends the confirmation.
 const baseDiff = ref<VersionDiff | null>(null)
 
-async function publishDraft(confirmBaseChanged: boolean): Promise<void> {
+// Publish draft opens its dialog (B-82): the diff, the warnings, V36's confirmation and the test run's cost. The
+// confirmation chosen there goes with a later "Publish anyway" too.
+const publishing = ref(false)
+let confirmedGeneralKnowledge = false
+const needsGeneralKnowledgeConfirmation = computed(() => publicLevel.value && levelOf(draft.value?.querySteps) !== 'off')
+
+async function publishDraft(confirmBaseChanged: boolean, confirmGeneralKnowledge = confirmedGeneralKnowledge): Promise<void> {
   const a = assistant.data.value!
-  const published = await withGeneralKnowledgeConfirmation((confirmGeneralKnowledge) =>
-    api.assistants.publish(props.id, { version: a.version, draftVersion: a.draft!.version, confirmBaseChanged, confirmGeneralKnowledge }))
-  if (!published) return
+  const published = await api.assistants.publish(props.id, { version: a.version, draftVersion: a.draft!.version, confirmBaseChanged, confirmGeneralKnowledge })
   assistant.data.value = published
   fill(null, draft.value)
   if (versions.value) await loadVersions()
   ui.notify(ASSISTANT.published(assistant.data.value.publishedVersion ?? 0))
 }
 
-const publish = () => run('publish', async () => {
+/** The dialog's action: a draft started before a restore answers 409 draft_base_changed and moves to that dialog. */
+async function publishFromDialog(confirmGeneralKnowledge: boolean): Promise<void> {
+  confirmedGeneralKnowledge = confirmGeneralKnowledge
   try {
-    await publishDraft(false)
+    await publishDraft(false, confirmGeneralKnowledge)
   } catch (e) {
     if (!(e instanceof ApiError) || e.problem?.code !== 'draft_base_changed' || !e.problem.diff) throw e
     baseDiff.value = e.problem.diff as VersionDiff
   }
-})
+}
 
 // Compare (B-56): a version against the draft, else against the published version.
 const comparing = ref<number | null>(null)
@@ -544,7 +551,7 @@ watch(() => props.id, () => {
           {{ ASSISTANT.compareWithPublished }}
         </UiButton>
         <UiButton
-          v-if="canEdit && assistant.data.value.draft" variant="primary" :loading="busy === 'publish'" data-test="publish" @click="publish"
+          v-if="canEdit && assistant.data.value.draft" variant="primary" data-test="publish" @click="publishing = true"
         >
           {{ ASSISTANT.publish }}
         </UiButton>
@@ -752,6 +759,10 @@ watch(() => props.id, () => {
       <AssistantEditDrawer
         v-if="canEdit" v-model:open="editing" :assistant="assistant.data.value"
         @saved="edited"
+      />
+      <PublishDraftDialog
+        v-model:open="publishing" :assistant-id="id" :published-version="assistant.data.value.publishedVersion" :warnings="draft?.warnings ?? []"
+        :needs-general-knowledge-confirmation="needsGeneralKnowledgeConfirmation" :action="publishFromDialog"
       />
       <ConfirmDialog
         :open="baseDiff !== null" :title="ASSISTANT.baseChangedTitle" :confirm-label="ASSISTANT.publishAnyway" :action="() => publishDraft(true)"

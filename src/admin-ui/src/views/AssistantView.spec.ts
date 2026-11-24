@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
+import { flushPromises, mount, RouterLinkStub, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
 import { ApiError } from '@/api/client'
@@ -60,6 +60,21 @@ function mocks() {
     collectionSummary({ id: 'c2', slug: 'annan', name: 'Annan förvaltning', departmentId: 'd2', departmentName: 'Annan', shared: false }),
   ] })
   vi.spyOn(api.clients, 'list').mockResolvedValue([{ id: 'k1', name: 'Open WebUI (pilot)', kind: 'open-webui', classificationCeiling: 'internal', isEnabled: true, isManagedByDeployment: false, activeKeys: 1, lastUsedAt: null }])
+  vi.spyOn(api.assistantTests, 'questions').mockResolvedValue([])
+  vi.spyOn(api.assistants, 'diff').mockResolvedValue(versionDiff)
+}
+
+/** Publish draft opens its dialog (B-82); this presses its Publish, after ticking V36's confirmation when asked. */
+async function publishThroughDialog(wrapper: VueWrapper, confirmGeneralKnowledge = false): Promise<void> {
+  await wrapper.get('[data-test=publish]').trigger('click')
+  await flushPromises()
+  if (confirmGeneralKnowledge) {
+    const box = document.body.querySelector<HTMLInputElement>('[data-test=publish-confirm-general-knowledge] input')!
+    box.click()
+    await flushPromises()
+  }
+  document.body.querySelector<HTMLButtonElement>('[data-test=publish-confirm]')!.click()
+  await flushPromises()
 }
 
 describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
@@ -388,18 +403,14 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     })
   })
 
-  it('offers every general knowledge level on a public assistant with a warning, and publishes after one extra confirmation (V36, #445)', async () => {
+  it('offers every general knowledge level on a public assistant with a warning, and publishes after the confirmation in the Publish dialog (V36, #445, B-82)', async () => {
     signIn(['rag-department-admin'])
     mocks()
     vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, classification: 'public' })
-    vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, querySteps: { answer: { generalKnowledge: 'supplement' } } })
-    const unconfirmed = new ApiError(409, 'POST', { status: 409, code: 'general_knowledge_public_unconfirmed', params: { generalKnowledge: 'supplement' } })
-    const publish = vi.spyOn(api.assistants, 'publish')
-      .mockRejectedValueOnce(unconfirmed)
-      .mockResolvedValueOnce({ ...assistant, classification: 'public', publishedVersion: 1, draft: null, version: 'a4' })
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, warnings: [], querySteps: { answer: { generalKnowledge: 'supplement' } } })
+    const publish = vi.spyOn(api.assistants, 'publish').mockResolvedValueOnce({ ...assistant, classification: 'public', publishedVersion: 1, draft: null, version: 'a4' })
 
-    const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+    const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
     await flushPromises()
 
     const radios = wrapper.findAll<HTMLInputElement>('[data-test=general-knowledge] input[type=radio]')
@@ -410,30 +421,28 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     await wrapper.get('#assistant-general-knowledge-fallback').setValue(true)
     expect(wrapper.find('[data-test=general-knowledge-public-warning]').exists()).toBe(true)
 
-    await wrapper.get('[data-test=publish]').trigger('click')
-    await flushPromises()
-    expect(confirm).toHaveBeenCalledWith(ASSISTANT.generalKnowledgeConfirm)
-    expect(publish).toHaveBeenNthCalledWith(1, 'a1', { version: 'a3', draftVersion: 'd7', confirmBaseChanged: false, confirmGeneralKnowledge: false })
-    expect(publish).toHaveBeenNthCalledWith(2, 'a1', { version: 'a3', draftVersion: 'd7', confirmBaseChanged: false, confirmGeneralKnowledge: true })
+    // V36's confirmation is a checkbox in the Publish dialog (B-82), not a dialog of its own (the draft has no refusal).
+    await publishThroughDialog(wrapper, true)
+    expect(publish).toHaveBeenCalledTimes(1)
+    expect(publish).toHaveBeenCalledWith('a1', { version: 'a3', draftVersion: 'd7', confirmBaseChanged: false, confirmGeneralKnowledge: true })
     expect(wrapper.get('[data-test=published]').text()).toBe('Published: version 1')
-    confirm.mockRestore()
+    wrapper.unmount()
   })
 
-  it('does not publish a public assistant with general knowledge when the extra confirmation is declined', async () => {
+  it('does not publish a public assistant with general knowledge until the dialog\'s confirmation is ticked (V36, B-82)', async () => {
     signIn(['rag-department-admin'])
     mocks()
     vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, classification: 'public' })
+    vi.mocked(api.assistants.draft).mockResolvedValue({ ...draft, warnings: [], querySteps: { answer: { generalKnowledge: 'supplement' } } })
     const publish = vi.spyOn(api.assistants, 'publish')
-      .mockRejectedValueOnce(new ApiError(409, 'POST', { status: 409, code: 'general_knowledge_public_unconfirmed' }))
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
 
-    const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+    const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
     await flushPromises()
-    await wrapper.get('[data-test=publish]').trigger('click')
-    await flushPromises()
-    expect(publish).toHaveBeenCalledTimes(1)
+    await publishThroughDialog(wrapper) // without ticking the confirmation
+    expect(document.body.querySelector('[data-test=publish-confirm]')!.getAttribute('aria-disabled')).toBe('true')
+    expect(publish).not.toHaveBeenCalled()
     expect(wrapper.find('[data-test=published]').exists()).toBe(false)
-    confirm.mockRestore()
+    wrapper.unmount()
   })
 
   it('greys out a model the platform\'s key may not use at the assistant\'s ceiling, and asks at its level (#447)', async () => {
@@ -481,7 +490,8 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     const publish = vi.spyOn(api.assistants, 'publish').mockResolvedValue({ ...assistant, publishedVersion: 1, draft: null, version: 'a4' })
     const audiences = vi.spyOn(api.assistants, 'audiences').mockResolvedValue({ ...assistant, publishedVersion: 1, draft: null, audienceClientIds: ['k1'], version: 'a5' })
 
-    const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+    vi.mocked(api.assistants.draft).mockResolvedValue({ ...draft, warnings: [] }) // a refusal would block the dialog's Publish
+    const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
     await flushPromises()
 
     await button(wrapper, 'Test').trigger('click')
@@ -493,8 +503,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(wrapper.text()).toContain('fors/chat-eu · EU · 812 ms')
     expect(wrapper.text()).toContain('Cited')
 
-    await wrapper.get('[data-test=publish]').trigger('click')
-    await flushPromises()
+    await publishThroughDialog(wrapper)
     expect(publish).toHaveBeenCalledWith('a1', { version: 'a3', draftVersion: 'd7', confirmBaseChanged: false, confirmGeneralKnowledge: false })
     expect(wrapper.get('[data-test=published]').text()).toBe('Published: version 1')
 
@@ -603,11 +612,11 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     const publish = vi.spyOn(api.assistants, 'publish')
       .mockRejectedValueOnce(new ApiError(409, 'POST', { status: 409, code: 'draft_base_changed', diff: versionDiff }))
       .mockResolvedValueOnce({ ...assistant, publishedVersion: 5, draft: null, version: 'a9' })
+    vi.mocked(api.assistants.draft).mockResolvedValue({ ...draft, warnings: [] })
     const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
     await flushPromises()
 
-    await wrapper.get('[data-test=publish]').trigger('click')
-    await flushPromises()
+    await publishThroughDialog(wrapper)
     expect(publish).toHaveBeenCalledTimes(1)
     expect(document.body.textContent).toContain(ASSISTANT.baseChangedLead)
     expect(document.body.querySelector('[data-test=version-diff] ins')!.textContent).toContain('Svara kort och vänligt.')
