@@ -92,7 +92,8 @@ P2 wave 1 (*P2 Broaden* below) is the code work. Beside it, what is open without
 - **Support chatbot F10, F7 and F6** (cost per outcome, the content-gap report, downvotes per document;
   [`proposals/support-chatbot-features.md`](proposals/support-chatbot-features.md)): F10 and F7 picked by the user on
   2026-11-21, F6 on 2026-11-22; designed (Decisions "Cost per outcome", "Content-gap report", "Downvotes per document")
-  and queued as stream b's B-61, B-62 and B-66.
+  and **built** as B-61, B-62 and B-66 (#1018, #1022, #1023; on `main` since 2026-11-23, in the release after
+  `v0.10.0`).
 - **The topics editor** (#929 steps 2 to 4; [`proposals/topics-editor.md`](proposals/topics-editor.md)): adopted by
   the user on 2026-11-22 (Decisions "Topics editor"); designed in admin §4.5, §5.5.2 and processing §7 and queued as
   A-42 (one matcher in `Kalla.Pipelines`), then B-64 (pick from the sections found) and B-65 (the form and the match
@@ -100,11 +101,13 @@ P2 wave 1 (*P2 Broaden* below) is the code work. Beside it, what is open without
 - **The chat extension for streaming clients** (#959, from the support assistant): a progress chunk and step times,
   topics on related documents and the nearest subject of a turn without an answer; adopted by the user on 2026-11-23
   (Decisions "Progress, timings and the nearest subject in the chat extension"), designed in chat §9.10 and §9.11 and
-  queued as B-72 and B-73.
+  **built** as B-72 and B-73 (#1021, #1026; on `main` since 2026-11-23).
+- **Replace an upload by name** (support case SA-11; admin §5.5.7 point 6): a file added with a known name replaces
+  the existing one by default; **built** as B-83 (#1017), before DoIT's editors upload for the test chatbot (T3).
 - **The admin UI's UX pass** ([`proposals/admin-ui-ux-pass.md`](proposals/admin-ui-ux-pass.md)): decided by the user
   on 2026-11-23 (UX1 A, UX2 to UX6 C; Decisions "Admin API and UI"), the eleven layout rules in admin §5.12 and the
-  pages in §5; queued as B-74 to B-81, one pull request per step, smallest first. UX3 and UX2 wait on B-58, B-61, B-62,
-  B-66 and the code-quality fixes #3 and #5; the last step (the menu and Home) on B-59. The NVDA checklist is
+  pages in §5; queued as B-74 to B-81, one pull request per step, smallest first. UX3 and UX2 waited on B-58, B-61, B-62,
+  B-66 and the code-quality fixes #3 and #5, the last step (the menu and Home) on B-59: all are merged. The NVDA checklist is
   rewritten once UX2 and UX3 have landed.
 - **Code quality** ([`proposals/code-quality-top7.md`](proposals/code-quality-top7.md), asked for by the user on
   2026-11-23): seven DRY fixes, one pull request each; five are merged, #5 and #3 follow B-63.
