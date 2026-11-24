@@ -259,11 +259,12 @@ The matrix is data (`PermissionMatrix` in `Kalla.Domain`), used for endpoint aut
 
 | Policy | Actions (department-scoped unless noted) |
 |---|---|
-| `Read` | list/detail of everything in scope; runs, reports, documents (metadata), evaluation reports, feedback metadata, the cost of an assistant or own knowledge base (§8.6) |
+| `Read` | list/detail of everything in scope; runs, reports, documents (metadata), evaluation reports, the cost of an assistant or own knowledge base (§8.6) |
 | `Edit` | collections (create, edit, retrieval settings, test retrieval, run evaluation), sources (create, edit, pause/resume, sync now, retry failed, upload, delete files), assistants (create, edit the draft, publish, restore a version, archive/unarchive, test panel; P2: create from a template, copy, assistant test questions and runs), human test questions, generate test questions, link served skills (P2); P2 limited to the owner team when the department says so (§3.2) |
 | `EditPipelines` | template parameters of the department's sources (preview, plan, publish, roll back), pipeline test retrieval |
 | `EditSkills` (P2) | skills of own departments: draft, publish, serve, roll back, share list, re-run the gate; skill test panel |
 | `Manage` | collection publish, collection sharing level and departments, delete collections/sources, deletion confirm/reject, release holds, PII clear (a decision on the document), assistant audiences, retention and history mode within policy, keys of own teams, document reprocess, explain access for own department's assistants and clients, audit log (own departments, §9.1), the cost report per department with its CSV (§8.6), P2 department settings (owner-team scoping) and owner-team changes while it is on |
+| `Feedback` | the feedback list and summary (`GET /api/feedback`, `/api/feedback/summary`; metadata, no content, §8.1): platform admin, department admin, reviewer, viewer, as the Feedback page in §3.3 (user, 2026-11-24) |
 | `FeedbackComments` | reveal one feedback comment (`public`/`internal`) |
 | `Review` | open a conversation with a reason; P2: request/approve `sensitive` access, search conversations |
 | `Admin` (platform) | templates, assistant templates (P2), site profiles (edit, roll back; approve P2), embedding profiles, clients, `GatewayModels` manual rows, settings, data protection, raised agent limits, tool servers, approvals (platform side, incl. pre-registrations), grants, platform skills, parse-profile proposals (P2), audit log (all), organisation sync now, explain access |
