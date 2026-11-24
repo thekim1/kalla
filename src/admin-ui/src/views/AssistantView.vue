@@ -117,7 +117,7 @@ const testLevelOptions = computed(() => [
 watch(testLevelOptions, (options) => {
   if (!options.some((o) => o.value === testLevel.value)) testLevel.value = ''
 })
-const busy = ref<'' | 'save' | 'publish' | 'test' | 'audience' | 'storage' | 'unarchive'>('')
+const busy = ref<'' | 'save' | 'test' | 'audience' | 'storage' | 'unarchive'>('')
 const versions = ref<AssistantVersionSummary[] | null>(null)
 const restoring = ref<number | null>(null)
 const archiving = ref(false)
