@@ -33,7 +33,7 @@ onMounted(load)
     <div v-if="props.sources?.length" class="grid gap-2" data-test="topics-help">
       <p class="m-0">
         {{ TOPICS.editRules }}
-        <template v-for="(s, i) in props.sources" :key="s.id"><span v-if="i > 0">, </span><RouterLink :to="{ name: 'source', params: { id: s.id } }" data-test="topics-source">{{ s.name }}</RouterLink></template>
+        <template v-for="(s, i) in props.sources" :key="s.id"><span v-if="i > 0">, </span><RouterLink :to="{ name: 'source', params: { id: s.id } }" class="text-accent-ink underline" data-test="topics-source">{{ s.name }}</RouterLink></template>
       </p>
       <details>
         <summary class="cursor-pointer">{{ TOPICS.howTitle }}</summary>

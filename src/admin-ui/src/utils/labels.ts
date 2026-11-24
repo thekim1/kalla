@@ -601,7 +601,32 @@ export const SHARING_LABEL: Record<SharingLevel, string> = {
 export const COLLECTION = {
   /** The header's primary action once the knowledge base is published (admin design §5.5.2). */
   addContent: 'Add content',
-  tabs: { overview: 'Overview', files: 'Files', sources: 'Sources', documents: 'Documents', topics: 'Topics', sharing: 'Sharing' },
+  /** The six tabs (admin design §5.5.2, UX pass UX2 C), each named in `?tab=`. */
+  tabs: { overview: 'Overview', content: 'Content', documents: 'Documents', topics: 'Topics', quality: 'Quality', sharing: 'Sharing' },
+  /** A tab's dot, for assistive technology (§5.5.2): a failed fetch on Content, a worse or missing evaluation on Quality. */
+  needsAttention: (tab: string) => `${tab}, needs attention`,
+  /** Quality's search settings (§7.1), below the evaluation. */
+  tuneSearch: 'Tune the search',
+  /** The Overview's four tiles (§5.5.2). */
+  tiles: {
+    documents: 'Documents',
+    searchable: 'searchable',
+    noneSearchable: 'none searchable yet',
+    lastFetch: 'Last fetch',
+    never: 'Never',
+    openRun: 'Open the run',
+    fetchFailed: 'Needs attention: the last fetch failed.',
+    quality: (k: number) => `Quality (recall@${k})`,
+    notMeasured: 'Not measured',
+    createQuestions: 'Create test questions',
+    qualityWorse: 'Needs attention: worse than the run before.',
+    usedBy: 'Used by',
+    assistants: (n: number) => `${n} ${n === 1 ? 'assistant' : 'assistants'}`,
+    departments: (n: number) => `${n} ${n === 1 ? 'department' : 'departments'}`,
+  },
+  /** Content when an upload is the only source: the source folded to one line above the file list (§5.5.2). */
+  uploadOnly: (name: string, documents: string) => `${name} · Files · ${documents} documents`,
+  openSource: 'Open the source',
   filesSource: 'Upload source',
   addFiles: 'Add files',
   noFilesSource: 'This knowledge base has no files source yet. Add files creates it.',
