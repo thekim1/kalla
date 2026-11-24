@@ -165,7 +165,7 @@ test('the filter rows pass axe with a filter set and the period picker open on a
       const filters = page.getByRole('search')
       await expect(filters.getByRole('combobox', { name: 'Period:' })).toHaveValue('custom')
       await expect(filters.getByLabel('From')).toBeVisible()
-      await expect(filters.getByRole('button', { name: /^Remove the .* filter$/ })).toBeVisible()
+      await expect(filters.getByRole('button', { name: /^Remove the .* filter$/ }).first()).toBeVisible()
       await page.waitForLoadState('networkidle')
       await scan(page, `the filter row of ${path} at ${width}px`)
     }
