@@ -101,7 +101,7 @@ public static class CollectionSharing
                 if (!owner)
                 {
                     // The path rules are the sources' settings: only the owning department sees them (admin design §3.2).
-                    return new TopicsDto(id, [.. live.Select(c => new TopicDto(c.Tag, c.Documents, null))]);
+                    return new TopicsDto(id, [.. live.Select(c => new TopicDto(c.Tag, c.Documents, null)).OrderBy(t => t.Tag, TagOrder)]);
                 }
 
                 var rules = await PathRulesAsync(admin.Db, id, ct);
@@ -113,7 +113,7 @@ public static class CollectionSharing
                     .Except(live.Select(c => c.Tag), StringComparer.Ordinal).Distinct(StringComparer.Ordinal);
                 return new TopicsDto(id, [.. live.Select(c => new TopicDto(c.Tag, c.Documents, RulesOf(c.Tag)))
                     .Concat(pending.Select(t => new TopicDto(t, null, RulesOf(t)) { Pending = true }))
-                    .OrderBy(t => t.Tag, StringComparer.Ordinal)]);
+                    .OrderBy(t => t.Tag, TagOrder)]);
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("GetCollectionTopics")
             .WithSummary("The tags on a collection's live chunks with document counts (and, for the owner, the path rules that set them and the tags still pending)");
@@ -193,8 +193,9 @@ public static class CollectionSharing
     }
 
     /// <summary>
-    /// The sources of <paramref name="sourceIds"/> being processed again: a <c>reprocess</c> sync job queued or running, or a
-    /// <c>reprocess</c> run still running between its jobs.
+    /// The sources of <paramref name="sourceIds"/> being processed again after a publication or a rollback: a <c>reprocess</c>
+    /// sync job queued or running, or such a run still running between its jobs. The nightly drift sweep's re-process
+    /// (trigger <c>schedule</c>) is not a rule change, so it marks nothing pending (#1059).
     /// </summary>
     private static async Task<HashSet<Guid>> ReprocessingAsync(RagDbContext db, Guid[] sourceIds, CancellationToken ct)
     {
@@ -207,9 +208,11 @@ public static class CollectionSharing
         var jobs = await db.Database.SqlQuery<Guid>($"""
             SELECT ("Payload"::jsonb ->> 'sourceId')::uuid AS "Value" FROM content."Jobs"
             WHERE "Class" = {JobClasses.Sync} AND "State" IN ({JobStates.Queued}, {JobStates.Running})
-              AND "Payload"::jsonb ->> 'kind' = 'reprocess' AND "Payload"::jsonb ->> 'sourceId' = ANY ({keys})
+              AND "Payload"::jsonb ->> 'kind' = 'reprocess' AND "Payload"::jsonb ->> 'trigger' IN ('publish', 'rollback')
+              AND "Payload"::jsonb ->> 'sourceId' = ANY ({keys})
             """).ToListAsync(ct);
-        var runs = await db.Runs.AsNoTracking().Where(r => sourceIds.Contains(r.SourceId) && r.Kind == RunKinds.Reprocess && r.State == RunStates.Running)
+        var runs = await db.Runs.AsNoTracking().Where(r => sourceIds.Contains(r.SourceId) && r.Kind == RunKinds.Reprocess && r.State == RunStates.Running
+            && (r.Trigger == RunTriggers.Publish || r.Trigger == RunTriggers.Rollback))
             .Select(r => r.SourceId).ToListAsync(ct);
         return [.. jobs, .. runs];
     }
@@ -243,6 +246,9 @@ public static class CollectionSharing
 
         return rules;
     }
+
+    /// <summary>Owner and shared viewers see the topics in one order, Swedish (å before ä before ö; #1059).</summary>
+    private static readonly StringComparer TagOrder = StringComparer.Create(CultureInfo.GetCultureInfo("sv-SE"), CompareOptions.None);
 
     private sealed record PathRuleTags(Guid SourceId, string SourceName, string On, string Match, IReadOnlyList<string> Tags);
 }
