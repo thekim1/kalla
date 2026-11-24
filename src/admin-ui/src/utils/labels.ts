@@ -444,12 +444,19 @@ export const ATTENTION_KEY_REASONS: Record<string, string> = {
 /** Service actors shown as words rather than ids (admin design §5.7): the demo seed's changes read *Demo data*. */
 export const ACTOR_LABEL: Record<string, string> = { 'system:seed': 'Demo data' }
 
+/** The greeting line's separators: between names, and between the departments, the roles and Your access. */
+const OVERVIEW_LIST = ', '
+const OVERVIEW_PARTS = ' · '
+
 export const OVERVIEW = {
   /** Home's greeting by the time of day, with the first name when there is one (admin design §5.7). */
   greeting: (part: 'morning' | 'afternoon' | 'evening', firstName: string | null) =>
     `Good ${part}${firstName ? `, ${firstName}` : ''}`,
   /** Under the greeting: the departments, then the roles (admin design §5.7). */
-  identity: (departments: string[], roles: string[]) => [departments.join(', '), roles.join(', ')].filter(Boolean).join(' · '),
+  identity: (departments: string[], roles: string[]) => [departments.join(OVERVIEW_LIST), roles.join(OVERVIEW_LIST)].filter(Boolean).join(OVERVIEW_PARTS),
+  /** The greeting line's separators, for the page that marks the department names up (#1049). */
+  listSeparator: OVERVIEW_LIST,
+  partSeparator: OVERVIEW_PARTS,
   access: 'Your access',
   roles: 'Roles',
   departments: 'Departments',
@@ -554,7 +561,7 @@ export const COLLECTIONS = {
   empty: 'Here you build knowledge bases and assistants for your department.',
   create: 'Create knowledge base',
   /** Contains the placeholder's words, so the visible text is in the accessible name (WCAG 2.5.3; #1036). */
-  search: 'Search knowledge bases by name',
+  search: 'Search by name in knowledge bases',
   /** The search field's placeholder; it has no label above it, the aria-label is `search` (admin design §5.7). */
   searchPlaceholder: 'Search by name',
   name: 'Name',
@@ -579,7 +586,7 @@ export const COLLECTIONS = {
   notPublishedHint: 'Not published: only visible in Test.',
   created: (name: string) => `The knowledge base ${name} has been created.`,
   createdNoFiles: (name: string, problem: string) =>
-    `The knowledge base ${name} has been created, but not its files source: ${problem} Use Add files on the Sources tab.`,
+    `The knowledge base ${name} has been created, but not its files source: ${problem} Use Add files on the Content tab.`,
   contentQuestion: 'What goes in?',
   contentRequired: 'Choose what goes in.',
   content: { files: 'Files I upload', web: 'A website or a list of addresses' },
@@ -617,8 +624,6 @@ export const COLLECTION = {
   tabs: { overview: 'Overview', content: 'Content', documents: 'Documents', topics: 'Topics', quality: 'Quality', sharing: 'Sharing' },
   /** A tab's dot, for assistive technology (§5.5.2): a failed fetch on Content, a worse or missing evaluation on Quality. */
   needsAttention: (tab: string) => `${tab}, needs attention`,
-  /** Quality's search settings (§7.1), below the evaluation. */
-  tuneSearch: 'Tune the search',
   /** The Overview's four tiles (§5.5.2). */
   tiles: {
     documents: 'Documents',
@@ -631,13 +636,17 @@ export const COLLECTION = {
     quality: (k: number) => `Quality (recall@${k})`,
     notMeasured: 'Not measured',
     createQuestions: 'Create test questions',
+    runEvaluation: 'Run the evaluation',
+    unread: 'Could not be read.',
     qualityWorse: 'Needs attention: worse than the run before.',
     usedBy: 'Used by',
     assistants: (n: number) => `${n} ${n === 1 ? 'assistant' : 'assistants'}`,
     departments: (n: number) => `${n} ${n === 1 ? 'department' : 'departments'}`,
   },
   /** Content when an upload is the only source: the source folded to one line above the file list (§5.5.2). */
-  uploadOnly: (name: string, documents: string) => `${name} · Files · ${documents} documents`,
+  uploadOnly: (name: string, documents: number, shown: string) => `${name} · Files · ${shown} ${documents === 1 ? 'document' : 'documents'}`,
+  /** The Overview's sources table, named apart from its heading. */
+  sourcesCaption: 'The sources with their last run and documents',
   openSource: 'Open the source',
   filesSource: 'Upload source',
   addFiles: 'Add files',
@@ -650,12 +659,7 @@ export const COLLECTION = {
   level: 'Information class',
   sharedWithYou: (owner: string) =>
     `${owner} shares this knowledge base with your department. Your assistants can use it; its sources and settings belong to ${owner}.`,
-  usedBy: 'Used by',
   notUsed: 'No assistant uses the knowledge base yet.',
-  lastFetch: 'Last fetch',
-  notFetched: 'Not fetched yet',
-  quality: (k: number) => `Latest quality (recall@${k})`,
-  notMeasured: 'Not measured yet',
   draftOnly: 'draft',
   archived: 'archived',
   publish: 'Publish',
@@ -2128,9 +2132,8 @@ export const DELETIONS = {
   released: 'The documents have been released and are checked again at the next run.',
 } as const
 
-/** Test questions and quality on the collection page (admin design §7.1, §7.2). */
+/** Test questions and the evaluation on the knowledge base's Quality tab (admin design §7.1, §7.2). */
 export const EVALUATION = {
-  tab: 'Test questions and quality',
   set: 'Test questions',
   noSet: 'Test questions are created automatically when the first fetch is done (about 10–20 minutes).',
   layers: { human: 'From your organisation', generated: 'Generated' } as Record<string, string>,
@@ -2180,7 +2183,7 @@ export const EVALUATION = {
   proposalLead: 'The values that best separate your organisation’s questions that have an answer from those that do not.',
   proposalDistance: (value: string, wrong: number) => `Largest distance: ${value} (${wrong} ${wrong === 1 ? 'question ends' : 'questions end'} up wrong)`,
   proposalKeyword: (value: string, wrong: number) => `Lowest keyword score: ${value} (${wrong} ${wrong === 1 ? 'question ends' : 'questions end'} up wrong)`,
-  useProposal: 'Use in Search settings',
+  useProposal: 'Use in Tune the search',
   history: 'Earlier evaluations',
   historyCaption: 'Earlier evaluations with accuracy and MRR',
   started: 'Started',
@@ -2242,9 +2245,9 @@ export const EVALUATION = {
 
 /** Search settings on the collection page (admin design §7.1, V16). */
 export const RETRIEVAL = {
-  tab: 'Search settings',
-  title: 'Search settings',
-  lead: 'Changes apply at once. An evaluation runs afterwards and shows the effect under Test questions and quality.',
+  /** The card's title: the section of the Quality tab (admin design §5.5.2), the title inside the card (§5.12). */
+  title: 'Tune the search',
+  lead: 'Changes apply at once. An evaluation runs afterwards and shows the effect above, with the test questions.',
   defaultHint: (value: string) => `Empty field: the platform’s default (${value}).`,
   weights: 'Weighting',
   vectorWeight: 'Weight of meaning search',
@@ -2272,7 +2275,7 @@ export const RETRIEVAL = {
   saved: 'The search settings have been saved. An evaluation is running.',
   savedNoSet: 'The search settings have been saved.',
   tryWithout: 'Try without saving',
-  tryStarted: 'A comparing evaluation is running with the new values. The result is shown under Test questions and quality.',
+  tryStarted: 'A comparing evaluation is running with the new values. The result shows above, with the test questions.',
 } as const
 
 /** The setup checklist "Get started" (admin design §5.4, §5.5.2), on the start page and the collection's Overview. */

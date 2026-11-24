@@ -69,6 +69,8 @@ Beside P2 wave 1: take B-64 when a wave item waits, or after it. `proposals/topi
   counted after the re-chunk.
 - **Waits on:** A-42.
 - **Read:** Decisions "Topics editor"; admin §4.5, §5.5.2, §6.6, §4.8; processing §7.
+- **Taken** 2026-11-24, `b/64-topic-suggestions-api` (part 1: the suggestions route, `pending`, the client; part 2: the
+  Topics tab).
 
 ### [ ] B-65 The topic form, the match preview, and the read-only Topics field
 - **Do:** admin §4.5's `POST /api/collections/{id}/topic-rules/preview`; on the Topics tab the *Add topic* / *Edit* form

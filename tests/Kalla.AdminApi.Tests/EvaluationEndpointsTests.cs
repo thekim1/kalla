@@ -152,6 +152,10 @@ public sealed class EvaluationEndpointsTests(AdminDatabaseFixture database, Admi
         var overview = await admin.GetFromJsonAsync<JsonElement>(path, Ct);
         overview.GetProperty("hasSet").GetBoolean().ShouldBeTrue();
         overview.GetProperty("latestRuns")[0].GetProperty("id").GetGuid().ShouldBe(second.Id);
+        // The compared run's recall, for the Quality dot's "worse" (Home's rule, #1049); none for a run compared with nothing.
+        overview.GetProperty("latestRuns")[0].GetProperty("comparedRecallAtK").GetDecimal().ShouldBe(0.5m);
+        overview.GetProperty("latestRuns")[1].GetProperty("comparedRecallAtK").ValueKind.ShouldBe(JsonValueKind.Null);
+        (await admin.GetFromJsonAsync<JsonElement>($"/api/evaluation-runs/{second.Id}", Ct)).GetProperty("comparedRecallAtK").GetDecimal().ShouldBe(0.5m);
         var result = (await admin.GetFromJsonAsync<JsonElement[]>($"/api/evaluation-runs/{second.Id}/results", Ct))!.ShouldHaveSingleItem();
         (result.GetProperty("rank").GetInt32(), result.GetProperty("previousRank").GetInt32()).ShouldBe((1, 4));
         (await admin.GetFromJsonAsync<JsonElement>($"{path}/questions?layer=generated", Ct)).GetProperty("items").GetArrayLength().ShouldBe(1);

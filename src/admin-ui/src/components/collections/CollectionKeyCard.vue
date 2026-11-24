@@ -3,16 +3,17 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
 import type { GatewayKeyList } from '@/api/types'
 import KeyBudgetStatus from '@/components/gateway/KeyBudgetStatus.vue'
+import KeySettings from '@/components/gateway/KeySettings.vue'
 import KeyUnavailableBadge from '@/components/gateway/KeyUnavailableBadge.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import { gatewayHref } from '@/utils/gateway'
 import { GATEWAY_KEY } from '@/utils/labels'
 
 /**
- * The knowledge base Overview's *Gateway key* card (admin design §5.5.2): the key indexing and evaluation run as, by name
- * and team, its status (an unusable key's badge with the reason), its budget status from gateway phase 3, and a link to
- * the keys in the gateway; without a key, that the calls are charged to the platform. The key is changed in *Edit name
- * and contact*.
+ * The knowledge base Overview's *Gateway key* card (admin design §5.5.2): the key indexing and evaluation run as, by name,
+ * its settings read-only (KeySettings, as in the key picker), its status (an unusable key's badge with the reason), its
+ * budget status from gateway phase 3, and a link to the gateway's Keys page (it has no address per key); without a key,
+ * that the calls are charged to the platform. The key is changed in *Edit name and contact*.
  */
 const props = defineProps<{ gatewayKeyId?: string | null; departmentId: string }>()
 const list = ref<GatewayKeyList | null>(null)
@@ -30,11 +31,9 @@ onMounted(load)
   <UiCard :title="GATEWAY_KEY.label" data-test="key-card">
     <p v-if="!gatewayKeyId" class="text-fg-2" data-test="key-none">{{ GATEWAY_KEY.noneWarning }}</p>
     <template v-else>
-      <p class="mb-2" data-test="key-name">
-        <span class="font-medium">{{ key?.name ?? gatewayKeyId }}</span>
-        <span v-if="key?.teamName" class="text-fg-2"> · {{ GATEWAY_KEY.team }}: {{ key.teamName }}</span>
-      </p>
+      <p class="mb-2 font-medium" data-test="key-name">{{ key?.name ?? gatewayKeyId }}</p>
       <KeyUnavailableBadge class="mb-2" :gateway-key-id="gatewayKeyId" :department-id="departmentId" />
+      <KeySettings v-if="key" class="mb-3 text-small" :gateway-key="key" />
       <KeyBudgetStatus class="mb-2" :gateway-key-id="gatewayKeyId" />
       <a v-if="link" :href="link" target="_blank" rel="noopener noreferrer" class="text-small text-accent-ink underline" data-test="key-link">{{ GATEWAY_KEY.openInGateway }}</a>
     </template>

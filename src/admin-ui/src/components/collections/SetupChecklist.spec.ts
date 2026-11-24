@@ -50,3 +50,12 @@ describe('Get started: the last step (admin design §5.4)', () => {
     expect(target(mountWith(false, setupOf({ assistantId: null, assistantPublished: false })))).toEqual({ name: 'assistants' })
   })
 })
+
+describe('Get started: the steps\' tabs (admin design §5.5.2; #1049)', () => {
+  it('sends the source and fetch steps to Content and the questions and evaluation steps to Quality', () => {
+    const wrapper = mountWith(true, setupOf({ sources: 0, firstSyncDone: false, testQuestions: 0, evaluated: false, published: false }))
+    const to = (step: string) => JSON.parse(wrapper.get(`[data-test=step-${step}] a`).attributes('data-to')!)
+    for (const step of ['source', 'sync']) expect(to(step)).toEqual({ name: 'collection', params: { id: 'c1' }, query: { tab: 'content' } })
+    for (const step of ['questions', 'evaluation']) expect(to(step)).toEqual({ name: 'collection', params: { id: 'c1' }, query: { tab: 'quality' } })
+  })
+})

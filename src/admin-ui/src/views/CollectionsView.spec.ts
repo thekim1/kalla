@@ -33,7 +33,7 @@ describe('Knowledge bases (admin design §5.2, §4.5 view=)', () => {
     await flushPromises()
     // Admin design §5.7: the search has a placeholder and an aria-label, no label above it.
     const search = wrapper.get('[data-test=collections-search]')
-    expect([search.attributes('placeholder'), search.attributes('aria-label')]).toEqual(['Search by name', 'Search knowledge bases by name'])
+    expect([search.attributes('placeholder'), search.attributes('aria-label')]).toEqual(['Search by name', 'Search by name in knowledge bases'])
     expect(wrapper.find('label[for=collections-search]').exists()).toBe(false)
 
     expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ view: 'mine' }))
@@ -100,7 +100,7 @@ describe('Knowledge bases (admin design §5.2, §4.5 view=)', () => {
 
     drawer.vm.$emit('created', collection({ id: 'c8', name: 'Rutiner' }), 'files', new ApiError(500, 'POST', { code: 'internal' }))
     expect(push).toHaveBeenLastCalledWith({ name: 'collection', params: { id: 'c8' }, query: { tab: 'files' } })
-    expect(useUiStore().toasts.at(-1)?.message).toContain('Use Add files on the Sources tab.')
+    expect(useUiStore().toasts.at(-1)?.message).toContain('Use Add files on the Content tab.')
 
     drawer.vm.$emit('created', collection({ id: 'c9' }), 'web', null)
     expect(push).toHaveBeenLastCalledWith({ name: 'collection', params: { id: 'c9' } })

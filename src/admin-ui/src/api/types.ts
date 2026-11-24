@@ -793,6 +793,8 @@ export interface EvaluationRun {
   wins: number | null
   losses: number | null
   comparedRunId: string | null
+  /** The compared run's recall@k; null without one (the Quality dot's "worse", Home's rule; #1049). */
+  comparedRecallAtK?: number | null
   candidate: boolean
   /** The worker's coverage-threshold proposal (processing design §13.6), as stored; null without human questions. */
   thresholdProposal: CoverageProposal | null

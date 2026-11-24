@@ -239,7 +239,7 @@ test('forced colours and reduced motion keep a visible focus indicator', async (
   await login(page, 'rag-department-admin')
   await page.emulateMedia({ forcedColors: 'active', reducedMotion: 'reduce' })
   await ready(page, '/collections')
-  const outline = await page.getByRole('searchbox', { name: 'Search knowledge bases by name' }).evaluate(element => {
+  const outline = await page.getByRole('searchbox', { name: 'Search by name in knowledge bases' }).evaluate(element => {
     (element as HTMLElement).focus()
     return getComputedStyle(element).outlineStyle
   })
