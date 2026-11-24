@@ -546,7 +546,8 @@ export const COLLECTIONS = {
   lead: 'A knowledge base gathers sources, for example a website or files, that the assistants can search.',
   empty: 'Here you build knowledge bases and assistants for your department.',
   create: 'Create knowledge base',
-  search: 'Search knowledge bases',
+  /** Contains the placeholder's words, so the visible text is in the accessible name (WCAG 2.5.3; #1036). */
+  search: 'Search knowledge bases by name',
   /** The search field's placeholder; it has no label above it, the aria-label is `search` (admin design §5.7). */
   searchPlaceholder: 'Search by name',
   name: 'Name',

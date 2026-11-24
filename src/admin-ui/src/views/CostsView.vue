@@ -136,7 +136,7 @@ onMounted(async () => {
       <span class="font-medium" aria-hidden="true">{{ COSTS.csvGranularity }}</span>
       <div class="flex flex-wrap items-center gap-3">
         <SegmentedControl v-model="filters.granularity" :label="COSTS.csvGranularity" :options="granularityOptions" />
-        <a :href="csvUrl" class="link text-small" download data-test="costs-csv">{{ COSTS.downloadCsv }}</a>
+        <a :href="csvUrl" class="text-small text-accent-ink underline" download data-test="costs-csv">{{ COSTS.downloadCsv }}</a>
       </div>
       <span v-if="csvByMonthOnly" class="text-small text-fg-2" data-test="costs-csv-month-only">{{ COSTS.csvMonthOnly }}</span>
     </div>

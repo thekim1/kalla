@@ -14,7 +14,7 @@ import UiCard from '@/components/ui/UiCard.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useLoadable } from '@/stores/loadable'
 import { useUiStore } from '@/stores/ui'
-import { formatNumber, formatRelative, formatUsdCost, quietZero, TIME_ZONE } from '@/utils/format'
+import { formatNumber, formatRelative, formatUsdCost, partOfDay, quietZero } from '@/utils/format'
 import { DEPARTMENT_SOURCE_LABEL, OVERVIEW, ROLE_LABEL, SETUP, type Tone } from '@/utils/labels'
 import { readStoredIds, writeStoredIds } from '@/utils/storedIds'
 
@@ -43,22 +43,16 @@ onMounted(() => {
 // The greeting (admin design §5.7): "Good morning, Anna" by the hour in Europe/Stockholm, and under it the departments
 // and roles, so the person sees at once whose page this is.
 const firstName = computed(() => auth.user?.name?.trim().split(/\s+/)[0] || null)
-const partOfDay = (now: Date): 'morning' | 'afternoon' | 'evening' => {
-  const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: TIME_ZONE, hour: '2-digit', hour12: false }).format(now)) % 24
-  return hour >= 5 && hour < 12 ? 'morning' : hour >= 12 && hour < 18 ? 'afternoon' : 'evening'
-}
 const greeting = computed(() => OVERVIEW.greeting(partOfDay(new Date()), firstName.value))
 const roles = computed(() => auth.roles.filter((r): r is Role => r in ROLE_LABEL))
 const departments = computed(() =>
   auth.departmentSources.map((d) => ({ ...d, name: synced.value ? (synced.value.find((s) => s.costCenterCode === d.code)?.name ?? null) : undefined })),
 )
 
-const identity = computed(() =>
-  OVERVIEW.identity(
-    departments.value.map((d) => d.name ?? d.code),
-    roles.value.map((r) => ROLE_LABEL[r]),
-  ),
-)
+/** The departments under the greeting: a synced name (Swedish), else the code. */
+const departmentNames = computed(() => departments.value.map((d) => ({ text: d.name ?? d.code, sv: !!d.name })))
+const roleNames = computed(() => roles.value.map((r) => ROLE_LABEL[r]))
+const identity = computed(() => OVERVIEW.identity(departmentNames.value.map((d) => d.text), roleNames.value))
 const live = computed(() => overview.data.value?.live ?? [])
 const quiet = computed(() => live.value.every((a) => a.questions === 0))
 
@@ -99,7 +93,12 @@ function showHidden(): void {
 </script>
 
 <template>
-  <PageHeader :title="greeting" :description="identity || undefined" />
+  <PageHeader :title="greeting">
+    <!-- The departments and roles under the greeting; the department names are Swedish (admin design §5.7; #1036). -->
+    <template v-if="identity" #description>
+      <span data-test="identity"><template v-for="(d, i) in departmentNames" :key="i"><template v-if="i > 0">, </template><span :lang="d.sv ? 'sv' : undefined">{{ d.text }}</span></template><template v-if="departmentNames.length && roleNames.length"> · </template>{{ roleNames.join(', ') }}</span>
+    </template>
+  </PageHeader>
   <template v-if="overview.data.value">
     <NeedsAttention :items="overview.data.value.attention" class="mb-6" />
     <SecretExpiryNotices v-if="auth.isPlatformAdmin && overview.data.value.secretExpiry.length" :entries="overview.data.value.secretExpiry" class="mb-6" />

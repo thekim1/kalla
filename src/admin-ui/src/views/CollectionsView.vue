@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { NO_PASSWORD_MANAGER } from '@/components/ui/noAutofill'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/api'
@@ -76,10 +77,11 @@ onMounted(async () => {
   <!-- The search sits on the tabs' row, right-aligned, with a placeholder and no label above (admin design §5.7). -->
   <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
     <UiTabs id="collections" v-model="view" :tabs="views" :label="COLLECTIONS.viewsLabel" />
-    <form class="w-full sm:w-72" role="search" @submit.prevent="load">
+    <!-- 320 px wide from a tablet up (§5.12 rule 3); what TextField gives a field: a name and the password managers' opt-outs. -->
+    <form class="w-full sm:w-80" role="search" @submit.prevent="load">
       <input
-        id="collections-search" v-model="q" type="search" class="field-input" :placeholder="COLLECTIONS.searchPlaceholder" :aria-label="COLLECTIONS.search"
-        autocomplete="off" data-test="collections-search"
+        id="collections-search" v-model="q" type="search" name="collections-search" class="field-input" :placeholder="COLLECTIONS.searchPlaceholder"
+        :aria-label="COLLECTIONS.search" autocomplete="off" v-bind="NO_PASSWORD_MANAGER" data-test="collections-search"
       >
     </form>
   </div>

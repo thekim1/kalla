@@ -30,7 +30,7 @@ describe('Knowledge bases (admin design §5.2, §4.5 view=)', () => {
     await flushPromises()
     // Admin design §5.7: the search has a placeholder and an aria-label, no label above it.
     const search = wrapper.get('[data-test=collections-search]')
-    expect([search.attributes('placeholder'), search.attributes('aria-label')]).toEqual(['Search by name', 'Search knowledge bases'])
+    expect([search.attributes('placeholder'), search.attributes('aria-label')]).toEqual(['Search by name', 'Search knowledge bases by name'])
     expect(wrapper.find('label[for=collections-search]').exists()).toBe(false)
 
     expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ view: 'mine' }))

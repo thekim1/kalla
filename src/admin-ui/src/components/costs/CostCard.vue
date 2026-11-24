@@ -156,10 +156,10 @@ onMounted(load)
           {{ COST_MESSAGES.estimatedNote(formatNumber(totals.estimatedCalls)) }}
         </p>
       </template>
-      <a v-if="gatewayKeyId && !gateway && gatewayLink" :href="gatewayLink" target="_blank" rel="noopener noreferrer" class="link mt-3 mr-4 inline-block text-small"
+      <a v-if="gatewayKeyId && !gateway && gatewayLink" :href="gatewayLink" target="_blank" rel="noopener noreferrer" class="mt-3 mr-4 inline-block text-small text-accent-ink underline"
          data-test="cost-gateway-link"
       >{{ COSTS.gatewayReport }}</a>
-      <RouterLink v-if="costsLink" :to="costsLink" class="link mt-3 inline-block text-small" data-test="cost-link">{{ COSTS.openCosts }}</RouterLink>
+      <RouterLink v-if="costsLink" :to="costsLink" class="mt-3 inline-block text-small text-accent-ink underline" data-test="cost-link">{{ COSTS.openCosts }}</RouterLink>
     </AsyncState>
   </UiCard>
 </template>

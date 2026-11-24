@@ -66,11 +66,11 @@ function key(row: DocumentFeedbackRow): string {
           <template #cell-document="{ row }">
             <span v-if="row.deleted" class="text-fg-3">{{ L.deleted }}</span>
             <RouterLink
-              v-else :to="{ name: 'collection', params: { id: collectionId }, query: { tab: 'documents' } }" class="link break-words"
+              v-else :to="{ name: 'collection', params: { id: collectionId }, query: { tab: 'documents' } }" class="break-words text-accent-ink underline"
               data-test="document-feedback-link"
             >{{ row.title }}</RouterLink>
             <RouterLink
-              v-if="canShowRatings" :to="{ name: 'feedback', query: { documentId: row.documentId } }" class="link block text-small"
+              v-if="canShowRatings" :to="{ name: 'feedback', query: { documentId: row.documentId } }" class="block text-small text-accent-ink underline"
               data-test="document-feedback-ratings"
             >{{ L.showRatings }}</RouterLink>
           </template>
@@ -81,7 +81,7 @@ function key(row: DocumentFeedbackRow): string {
           <UiButton v-if="documents.length > SHOWN" data-test="document-feedback-show-all" @click="showAll = !showAll">
             {{ showAll ? L.showFewer : L.showAll(documents.length) }}
           </UiButton>
-          <a :href="csvUrl" class="link text-small" download data-test="document-feedback-csv">{{ COSTS.downloadCsv }}</a>
+          <a :href="csvUrl" class="text-small text-accent-ink underline" download data-test="document-feedback-csv">{{ COSTS.downloadCsv }}</a>
         </div>
       </template>
     </AsyncState>

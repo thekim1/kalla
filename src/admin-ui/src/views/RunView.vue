@@ -121,7 +121,7 @@ onMounted(load)
       <UiCard v-if="continued" class="mb-6" data-test="continued">
         <p>
           {{ CONTINUE_RUN.continuedFrom }}
-          <RouterLink :to="{ name: 'run', params: { id: continued.from } }" class="link">{{ CONTINUE_RUN.earlierRun }}</RouterLink>.
+          <RouterLink :to="{ name: 'run', params: { id: continued.from } }" class="text-accent-ink underline">{{ CONTINUE_RUN.earlierRun }}</RouterLink>.
           {{ CONTINUE_RUN.carried(formatNumber(continued.open), formatNumber(continued.failed)) }}
         </p>
         <p v-if="continued.dropped" class="mt-2 text-small text-fg-2">{{ CONTINUE_RUN.dropped(formatNumber(continued.dropped)) }}</p>
