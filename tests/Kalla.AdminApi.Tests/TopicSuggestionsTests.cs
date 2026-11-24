@@ -84,7 +84,7 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
             {
                 CollectionId = collection.Id, EmbeddingProfileId = profile, SourceId = web.Id, Classification = Classification.Internal,
                 Title = title ?? path, Url = $"https://www.umea.se{path}",
-            }, [new FixtureChunk($"Sidan {path}.") { Tags = tags }], Ct);
+            }, [new FixtureChunk($"Sidan {path}.") { Tags = [.. tags.Where(t => t.Length > 0)] }], Ct);
         async Task File(string displayName) =>
             await writer.AddDocumentAsync(new FixtureDocumentSpec
             {
@@ -110,7 +110,8 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
 
         foreach (var page in new[] { "/%C3%A4ldre/a", "/%C3%A4ldre/b", "/%C3%A4ldre/c", "/äldre/d", "/äldre/e" })
         {
-            await Page(page);
+            // Two tags that sort apart: ordinally ä before å, in Swedish å before ä (#1059).
+            await Page(page, null, page.EndsWith('a') ? "äldre" : page.EndsWith('d') ? "ålder" : "");
         }
 
         await Page("/");
@@ -202,7 +203,8 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
 
         await EnqueueReprocessAsync(seed.Website);
         var topics = (await shared.GetFromJsonAsync<JsonElement>($"/api/collections/{seed.Collection}/topics", Ct)).GetProperty("topics").EnumerateArray().ToList();
-        topics.Select(t => t.GetProperty("tag").GetString()).ShouldBe(["bygga"]);
+        // The same Swedish order as the owner's list.
+        topics.Select(t => t.GetProperty("tag").GetString()).ShouldBe(["bygga", "ålder", "äldre"]);
         topics[0].GetProperty("rules").ValueKind.ShouldBe(JsonValueKind.Null);
         topics[0].GetProperty("pending").GetBoolean().ShouldBeFalse();
     }
@@ -216,11 +218,25 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
             [.. (await viewer.GetFromJsonAsync<JsonElement>($"/api/collections/{seed.Collection}/topics", Ct)).GetProperty("topics").EnumerateArray()];
 
         // No re-process: only the tags on live chunks.
-        (await TopicsAsync()).Select(t => t.GetProperty("tag").GetString()).ShouldBe(["bygga"]);
+        (await TopicsAsync()).Select(t => t.GetProperty("tag").GetString()).ShouldBe(["bygga", "ålder", "äldre"]);
+
+        // The nightly drift sweep processes again without a rule change: nothing pending (#1059).
+        var sweep = await EnqueueReprocessAsync(seed.Website, "schedule");
+        await using (var sweepDb = TestPostgres.Context(database.Connection(null)))
+        {
+            sweepDb.Runs.Add(new Run
+            {
+                SourceId = seed.Website, Classification = Classification.Internal, Kind = RunKinds.Reprocess, Trigger = RunTriggers.Schedule, StartedAt = DateTimeOffset.UtcNow,
+            });
+            await sweepDb.SaveChangesAsync(Ct);
+            await sweepDb.Jobs.Where(j => j.Id == sweep).ExecuteUpdateAsync(u => u.SetProperty(j => j.State, JobStates.Running), Ct);
+        }
+
+        (await TopicsAsync()).Select(t => t.GetProperty("tag").GetString()).ShouldBe(["bygga", "ålder", "äldre"]);
 
         var job = await EnqueueReprocessAsync(seed.Website);
         var topics = await TopicsAsync();
-        topics.Select(t => t.GetProperty("tag").GetString()).ShouldBe(["bygga", "kommun", "protokoll"]);
+        topics.Select(t => t.GetProperty("tag").GetString()).ShouldBe(["bygga", "kommun", "protokoll", "ålder", "äldre"]);
         var bygga = topics[0];
         bygga.GetProperty("pending").GetBoolean().ShouldBeFalse();
         bygga.GetProperty("documents").GetInt32().ShouldBe(6);
@@ -234,7 +250,7 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
         await db.Jobs.Where(j => j.Id == job).ExecuteUpdateAsync(u => u.SetProperty(j => j.State, JobStates.Running), Ct);
         (await TopicsAsync()).Count(t => t.GetProperty("pending").GetBoolean()).ShouldBe(2);
         await db.Jobs.Where(j => j.Id == job).ExecuteUpdateAsync(u => u.SetProperty(j => j.State, JobStates.Succeeded), Ct);
-        (await TopicsAsync()).Select(t => t.GetProperty("tag").GetString()).ShouldBe(["bygga"]);
+        (await TopicsAsync()).Select(t => t.GetProperty("tag").GetString()).ShouldBe(["bygga", "ålder", "äldre"]);
 
         // A reprocess run still running between its jobs keeps them pending.
         db.Runs.Add(new Run
@@ -270,14 +286,14 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
         tag.ShouldNotEndWith("-");
     }
 
-    private async Task<Guid> EnqueueReprocessAsync(Guid source)
+    private async Task<Guid> EnqueueReprocessAsync(Guid source, string trigger = "publish")
     {
         await using var db = TestPostgres.Context(database.Connection(null));
         var department = await (from s in db.Sources join c in db.Collections on s.CollectionId equals c.Id where s.Id == source select c.DepartmentId).SingleAsync(Ct);
         var job = new Job
         {
             Class = JobClasses.Sync, DepartmentId = department, Classification = Classification.Internal,
-            Payload = $$"""{"sourceId":"{{source}}","kind":"reprocess","trigger":"publish"}""", EnqueuedAt = DateTimeOffset.UtcNow, State = JobStates.Queued,
+            Payload = $$"""{"sourceId":"{{source}}","kind":"reprocess","trigger":"{{trigger}}"}""", EnqueuedAt = DateTimeOffset.UtcNow, State = JobStates.Queued,
         };
         db.Jobs.Add(job);
         await db.SaveChangesAsync(Ct);
