@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import type { RouteLocationRaw } from 'vue-router'
 import { api } from '@/api'
 import type { AuditDetail, AuditSummary } from '@/api/types'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import DetailRow from '@/components/ui/DetailRow.vue'
+import FilterChip from '@/components/ui/FilterChip.vue'
+import FilterTextChip from '@/components/ui/FilterTextChip.vue'
+import PeriodPicker from '@/components/ui/PeriodPicker.vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import SelectField, { type SelectOption } from '@/components/ui/SelectField.vue'
@@ -14,19 +17,27 @@ import UiButton from '@/components/ui/UiButton.vue'
 import UiDrawer from '@/components/ui/UiDrawer.vue'
 import { useDebouncedWatch } from '@/composables/useDebouncedWatch'
 import { useKeysetList } from '@/composables/useKeysetList'
+import { useQueryFilters } from '@/composables/useQueryFilters'
 import { SETTINGS_SECTIONS, type SettingsSectionName } from '@/platform/settingsPage'
 import { actorText, formatDateTime } from '@/utils/format'
-import { AUDIT, AUDIT_EVENTS, AUDIT_OBJECT_TYPES, PAGE, PLATFORM } from '@/utils/labels'
+import { AUDIT, AUDIT_EVENTS, AUDIT_OBJECT_TYPES, FILTERS, PAGE, PLATFORM } from '@/utils/labels'
+import { periodRange } from '@/utils/period'
 import { problemMessage } from '@/utils/problem'
 
 // Audit log (admin design §9.1): the audit log newest first by keyset, filtered by period, actor, event, type of object,
 // object and service; the detail shows the stored before/after snapshot as JSON text (the diff viewer is P2). Entries are
 // readable: the event in plain words (the code as its title), the object by name, linked to its page while it exists.
 // Manage: department admins see their departments' entries (the API scopes them). Each read emits 6007 server-side.
+// The filters are one row of chips kept in the address (§5.12 *Filters*): the period, *Who* and *Type of object*; the
+// event, the service and the object id are under *More filters*.
 const entries = useKeysetList((after?: number) => api.audit.list({ ...query.value, after, limit: 50 }))
 /** `event` is an `AUDIT_EVENTS` key (`entityType.action`); picking one sets the type of object to its type. */
-const filters = reactive({ from: '', to: '', actor: '', event: '', entityType: '', entityId: '', service: '' })
-const moreOpen = ref(false)
+const { filters, active, clear } = useQueryFilters({
+  period: '30d', from: '', to: '', actor: '', entityType: '', event: '', service: '', entityId: '',
+})
+const range = computed(() => periodRange(filters.period, filters.from, filters.to))
+/** More filters opens itself while one of its filters is set. */
+const moreOpen = ref(!!(filters.event || filters.service || filters.entityId))
 const selectedRow = ref<AuditSummary | null>(null)
 const selected = ref<AuditDetail | null>(null)
 const detailOpen = ref(false)
@@ -63,10 +74,7 @@ function eventLabel(entry: { entityType: string; action: string }): string {
 function byLabel(a: SelectOption, b: SelectOption): number {
   return a.label.localeCompare(b.label, 'en')
 }
-const typeOptions = computed<SelectOption[]>(() => [
-  { value: '', label: AUDIT.any },
-  ...Object.entries(AUDIT_OBJECT_TYPES).map(([value, label]) => ({ value, label })).sort(byLabel),
-])
+const typeOptions = computed<SelectOption[]>(() => Object.entries(AUDIT_OBJECT_TYPES).map(([value, label]) => ({ value, label })).sort(byLabel))
 /** The events of the chosen type of object, or every event. */
 const eventOptions = computed<SelectOption[]>(() => [
   { value: '', label: AUDIT.any },
@@ -81,7 +89,7 @@ watch(() => filters.entityType, (type) => {
 })
 
 const query = computed(() => ({
-  from: day(filters.from), to: day(filters.to, true), actor: filters.actor.trim() || undefined,
+  from: day(range.value.from), to: day(range.value.to, true), actor: filters.actor.trim() || undefined,
   action: filters.event ? filters.event.slice(typeOf(filters.event).length + 1) : undefined, entityType: filters.entityType || undefined,
   entityId: filters.entityId.trim() || undefined, service: filters.service.trim() || undefined,
 }))
@@ -136,27 +144,28 @@ const details = computed(() => {
   }
 })
 
-function clear(): void {
-  Object.assign(filters, { from: '', to: '', actor: '', event: '', entityType: '', entityId: '', service: '' })
-}
-
 useDebouncedWatch(() => ({ ...filters }), () => void entries.reload(), 300)
 onMounted(() => entries.reload())
 </script>
 
 <template>
   <PageHeader :title="PAGE.audit.title" :description="AUDIT.lead" />
-  <form class="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4" role="search" :aria-label="AUDIT.filters" @submit.prevent="entries.reload()">
-    <TextField id="audit-from" v-model="filters.from" type="date" :label="AUDIT.from" />
-    <TextField id="audit-to" v-model="filters.to" type="date" :label="AUDIT.to" />
-    <TextField id="audit-actor" v-model="filters.actor" :label="AUDIT.actor" :hint="AUDIT.actorHint" />
-    <SelectField id="audit-entity-type" v-model="filters.entityType" :label="AUDIT.entityType" :options="typeOptions" />
-    <SelectField id="audit-event" v-model="filters.event" :label="AUDIT.action" :options="eventOptions" />
-    <TextField id="audit-service" v-model="filters.service" :label="AUDIT.service" :hint="AUDIT.serviceHint" mono />
-    <div class="flex items-end"><UiButton data-test="clear" @click="clear">{{ AUDIT.clear }}</UiButton></div>
-    <details :open="moreOpen" class="sm:col-span-2 lg:col-span-4" data-test="more-filters" @toggle="moreOpen = ($event.target as HTMLDetailsElement).open">
+  <!-- One row of chips (admin design §5.12 Filters), kept in the address; Event, Service and the object under More filters. -->
+  <form class="mb-6 grid gap-3" role="search" :aria-label="AUDIT.filters" @submit.prevent="entries.reload()">
+    <div class="flex flex-wrap items-center gap-2" data-test="filters">
+      <PeriodPicker v-model:period="filters.period" v-model:from="filters.from" v-model:to="filters.to" id-prefix="audit" />
+      <FilterTextChip v-model="filters.actor" :label="AUDIT.actor" :any="AUDIT.actorHint" />
+      <FilterChip v-model="filters.entityType" :label="AUDIT.entityType" :options="typeOptions" :any="AUDIT.any" />
+      <UiButton v-if="active.length" size="sm" variant="quiet" data-test="clear" @click="clear()">{{ FILTERS.clear }}</UiButton>
+      <p class="ml-auto text-small text-fg-2" aria-live="polite" data-test="filter-count">
+        {{ entries.loaded.value ? AUDIT.shown(entries.items.value.length, !!entries.next.value) : '' }}
+      </p>
+    </div>
+    <details :open="moreOpen" data-test="more-filters" @toggle="moreOpen = ($event.target as HTMLDetailsElement).open">
       <summary class="cursor-pointer font-medium">{{ AUDIT.moreFilters }}</summary>
-      <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <SelectField id="audit-event" v-model="filters.event" :label="AUDIT.action" :options="eventOptions" />
+        <TextField id="audit-service" v-model="filters.service" :label="AUDIT.service" :hint="AUDIT.serviceHint" mono />
         <TextField id="audit-entity-id" v-model="filters.entityId" :label="AUDIT.entityId" mono />
       </div>
     </details>

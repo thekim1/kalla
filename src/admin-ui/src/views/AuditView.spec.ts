@@ -3,7 +3,7 @@ import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
 import type { AuditSummary } from '@/api/types'
-import { AUDIT, AUDIT_EVENTS, AUDIT_OBJECT_TYPES, PLATFORM } from '@/utils/labels'
+import { AUDIT, AUDIT_EVENTS, AUDIT_OBJECT_TYPES, PLATFORM, FILTERS } from '@/utils/labels'
 import AuditView from './AuditView.vue'
 
 function entry(id: number, overrides: Partial<AuditSummary> = {}): AuditSummary {
@@ -48,8 +48,12 @@ describe('Granskningslogg (admin design §9.1)', () => {
     expect(wrapper.text()).toContain(AUDIT_EVENTS['collection.publish'])
 
     await wrapper.get('#audit-event').setValue('collection.publish')
+    // The period chip's custom range (§5.12 Filters).
+    await wrapper.get('[data-test="chip-Period"] select').setValue('custom')
     await wrapper.get('#audit-from').setValue('2026-11-01')
+    await wrapper.get('#audit-from').trigger('change')
     await wrapper.get('#audit-to').setValue('2026-11-01')
+    await wrapper.get('#audit-to').trigger('change')
     await vi.advanceTimersByTimeAsync(350)
     await flushPromises()
     const last = list.mock.lastCall![0]
@@ -119,13 +123,15 @@ describe('Granskningslogg (admin design §9.1)', () => {
     const wrapper = mountPage()
     await flushPromises()
 
-    const types = wrapper.get('#audit-entity-type').findAll('option')
+    const typeChip = wrapper.get('[data-test="chip-Type of object"]')
+    expect(typeChip.get('label').text()).toBe(`${AUDIT.entityType}:`)
+    const types = typeChip.findAll('option')
     expect(types[0]!.text()).toBe(AUDIT.any)
     expect(types.map((o) => o.text())).toContain(AUDIT_OBJECT_TYPES.collection)
     expect(wrapper.get('#audit-event').findAll('option').length).toBe(Object.keys(AUDIT_EVENTS).length + 1)
 
     // A type narrows the events to its own.
-    await wrapper.get('#audit-entity-type').setValue('source')
+    await typeChip.get('select').setValue('source')
     const events = wrapper.get('#audit-event').findAll('option').map((o) => o.attributes('value'))
     expect(events[0]).toBe('')
     expect(events.slice(1).every((v) => v!.startsWith('source.'))).toBe(true)
@@ -135,7 +141,7 @@ describe('Granskningslogg (admin design §9.1)', () => {
     expect(list.mock.lastCall![0]).toEqual(expect.objectContaining({ entityType: 'source', action: 'sync' }))
 
     // Another type clears an event of the old one.
-    await wrapper.get('#audit-entity-type').setValue('collection')
+    await typeChip.get('select').setValue('collection')
     await vi.advanceTimersByTimeAsync(350)
     await flushPromises()
     expect(list.mock.lastCall![0]).toEqual(expect.objectContaining({ entityType: 'collection', action: undefined }))
@@ -154,6 +160,33 @@ describe('Granskningslogg (admin design §9.1)', () => {
     wrapper.unmount()
   })
 
+  it('has Who and Type of object as chips, the event, service and object under More filters, and Clear filters', async () => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    const list = vi.spyOn(api.audit, 'list').mockResolvedValue({ items: [], next: null })
+    const wrapper = mountPage()
+    await flushPromises()
+    const row = wrapper.get('[data-test=filters]')
+    const chips = row.findAll('[data-test^="chip-"]').map((c) => c.attributes('data-test')).filter((t) => !['chip-select', 'chip-input', 'chip-remove'].includes(t!))
+    expect(chips).toEqual(['chip-Period', 'chip-Who', 'chip-Type of object'])
+    const more = wrapper.get('[data-test=more-filters]')
+    for (const id of ['#audit-event', '#audit-service', '#audit-entity-id']) expect(more.find(id).exists()).toBe(true)
+
+    const who = wrapper.get('[data-test="chip-Who"]')
+    await who.get('input').setValue('anna')
+    await vi.advanceTimersByTimeAsync(350)
+    await flushPromises()
+    expect(list.mock.lastCall![0]).toEqual(expect.objectContaining({ actor: 'anna' }))
+    expect(who.get('[data-test=chip-remove]').attributes('aria-label')).toBe(FILTERS.remove('Who'))
+    await wrapper.get('[data-test=clear]').trigger('click')
+    await vi.advanceTimersByTimeAsync(350)
+    await flushPromises()
+    expect(list.mock.lastCall![0]).toEqual(expect.objectContaining({ actor: undefined }))
+    expect(wrapper.get('[data-test=filter-count]').attributes('aria-live')).toBe('polite')
+    wrapper.unmount()
+    vi.useRealTimers()
+  })
+
   it('says so when nothing matches', async () => {
     setActivePinia(createPinia())
     vi.spyOn(api.audit, 'list').mockResolvedValue({ items: [], next: null })
@@ -170,7 +203,7 @@ describe('Granskningslogg (admin design §9.1)', () => {
     await flushPromises()
     expect(list).toHaveBeenCalledTimes(1)
 
-    await wrapper.get('#audit-from').setValue('2026-11-01')
+    await wrapper.get('[data-test="chip-Who"] input').setValue('anna')
     wrapper.unmount()
     await vi.advanceTimersByTimeAsync(1_000)
     expect(list).toHaveBeenCalledTimes(1)
