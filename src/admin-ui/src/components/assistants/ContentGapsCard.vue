@@ -70,7 +70,7 @@ function key(row: ContentGapRow): string {
             <span v-else-if="row.notShared" class="text-fg-3" data-test="content-gaps-not-shared">{{ L.notShared }}</span>
             <span v-else-if="row.deleted" class="text-fg-3">{{ L.deleted }}</span>
             <RouterLink
-              v-else-if="row.canOpen" :to="{ name: 'collection', params: { id: row.collectionId }, query: { tab: 'documents' } }" class="link break-words"
+              v-else-if="row.canOpen" :to="{ name: 'collection', params: { id: row.collectionId }, query: { tab: 'documents' } }" class="break-words text-accent-ink underline"
               data-test="content-gaps-link"
             >{{ row.documentTitle }}</RouterLink>
             <span v-else class="break-words">{{ row.documentTitle }}</span>
@@ -86,7 +86,7 @@ function key(row: ContentGapRow): string {
           <UiButton v-if="documents.length > SHOWN" data-test="content-gaps-show-all" @click="showAll = !showAll">
             {{ showAll ? L.showFewer : L.showAll(documents.length) }}
           </UiButton>
-          <a :href="csvUrl" class="link text-small" download data-test="content-gaps-csv">{{ COSTS.downloadCsv }}</a>
+          <a :href="csvUrl" class="text-small text-accent-ink underline" download data-test="content-gaps-csv">{{ COSTS.downloadCsv }}</a>
         </div>
       </template>
     </AsyncState>

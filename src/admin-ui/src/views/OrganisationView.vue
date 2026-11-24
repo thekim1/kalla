@@ -93,7 +93,7 @@ onMounted(load)
       </template>
       <template #cell-sharing="{ row }">
         <template v-if="row.sharing">
-          <span class="block tabular" data-test="knowledge-bases">{{ PLATFORM.organisation.summary(row.sharing.department, row.sharing.selected + row.sharing.municipality) }}</span>
+          <span class="block tabular" data-test="knowledge-bases">{{ PLATFORM.organisation.summary(row.sharing.department + row.sharing.selected + row.sharing.municipality, row.sharing.selected + row.sharing.municipality) }}</span>
           <span v-if="row.sharing.sharedWithDepartments" class="block text-small text-fg-3">{{ PLATFORM.organisation.sharedWith }}: {{ row.sharing.sharedWithDepartments }}</span>
         </template>
       </template>

@@ -58,7 +58,7 @@ onMounted(() => proposals.reload())
     </ul>
     <div class="mt-3 flex flex-wrap gap-2">
       <UiButton v-if="proposals.next.value" size="sm" @click="proposals.more()">{{ DELETIONS.more }}</UiButton>
-      <a :href="api.runs.deletionsCsvUrl(runId)" class="link text-small" download>{{ DELETIONS.csv }}</a>
+      <a :href="api.runs.deletionsCsvUrl(runId)" class="text-small text-accent-ink underline" download>{{ DELETIONS.csv }}</a>
     </div>
     <div v-if="canDecide" class="mt-4 flex flex-wrap gap-2">
       <UiButton variant="primary" data-test="keep" @click="deciding = 'keep'">{{ DELETIONS.keep }}</UiButton>
