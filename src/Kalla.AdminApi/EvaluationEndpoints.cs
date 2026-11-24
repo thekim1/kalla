@@ -17,6 +17,18 @@ namespace Kalla.AdminApi;
 /// </summary>
 public static class EvaluationEndpoints
 {
+    /// <summary>The recall@k of the runs these runs were compared with, by id, in one query.</summary>
+    private static async Task<Dictionary<Guid, decimal?>> ComparedRecallAsync(AdminContext admin, IReadOnlyCollection<EvaluationRun> runs, CancellationToken ct)
+    {
+        var ids = runs.Select(r => r.ComparedRunId).OfType<Guid>().Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        return await admin.Db.EvaluationRuns.AsNoTracking().Where(r => ids.Contains(r.Id)).ToDictionaryAsync(r => r.Id, r => r.RecallAtK, ct);
+    }
+
     public static RouteGroupBuilder MapEvaluation(this RouteGroupBuilder api)
     {
         ArgumentNullException.ThrowIfNull(api);
@@ -30,7 +42,9 @@ public static class EvaluationEndpoints
                     .Select(g => new QuestionCount(g.Key.Layer, g.Key.State, g.Count())).ToListAsync(ct);
                 var runs = await admin.Db.EvaluationRuns.AsNoTracking().Where(r => r.SetId != null && sets.Contains(r.SetId.Value)).OrderByDescending(r => r.StartedAt).Take(10).ToListAsync(ct);
                 var gone = await DocumentGoneAsync(admin, runs, ct);
-                return new EvaluationOverview(await sets.AnyAsync(ct), counts, [.. runs.Select(r => EvaluationRunDto.Of(r, gone.GetValueOrDefault(r.Id)))]);
+                var before = await ComparedRecallAsync(admin, runs, ct);
+                return new EvaluationOverview(await sets.AnyAsync(ct), counts,
+                    [.. runs.Select(r => EvaluationRunDto.Of(r, gone.GetValueOrDefault(r.Id), r.ComparedRunId is { } c ? before.GetValueOrDefault(c) : null))]);
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("GetEvaluation").WithSummary("A collection's evaluation set by layer and state, and its latest runs");
 
@@ -158,7 +172,8 @@ public static class EvaluationEndpoints
             {
                 var run = await RunAsync(admin, runId, ct);
                 var gone = await DocumentGoneAsync(admin, [run], ct);
-                return EvaluationRunDto.Of(run, gone.GetValueOrDefault(run.Id));
+                var before = await ComparedRecallAsync(admin, [run], ct);
+                return EvaluationRunDto.Of(run, gone.GetValueOrDefault(run.Id), run.ComparedRunId is { } c ? before.GetValueOrDefault(c) : null);
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("GetEvaluationRun").WithSummary("A run: recall@k and MRR with counts, compared run");
 
@@ -372,13 +387,17 @@ public sealed record EvaluationQuestionDto(Guid Id, string Layer, string State, 
 /// questions the run left out because an expected document is gone (processing design §13.3), read from the run's job result;
 /// null once the job is past retention or while the run is unfinished.
 /// </summary>
+/// <summary>
+/// A run as the admin shows it; <paramref name="ComparedRecallAtK"/> is the compared run's recall@k, so the knowledge base's
+/// Quality dot judges "worse" by Home's rule (<see cref="AttentionList.Points"/>: 5 points or more below it).
+/// </summary>
 public sealed record EvaluationRunDto(
     Guid Id, string Kind, string Variant, int? QuestionCount, int K, int? Found, decimal? RecallAtK, decimal? Mrr, int? Wins, int? Losses, Guid? ComparedRunId,
-    bool Candidate, JsonElement? ThresholdProposal, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt, int? DocumentGone)
+    bool Candidate, JsonElement? ThresholdProposal, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt, int? DocumentGone, decimal? ComparedRecallAtK = null)
 {
-    public static EvaluationRunDto Of(EvaluationRun r, int? documentGone) => new(r.Id, r.Kind, r.Variant, r.QuestionCount, r.K, r.Found, r.RecallAtK, r.Mrr, r.Wins,
-        r.Losses, r.ComparedRunId, r.Candidate, r.ThresholdProposal is { } proposal ? JsonDocument.Parse(proposal).RootElement.Clone() : null, r.StartedAt,
-        r.FinishedAt, documentGone);
+    public static EvaluationRunDto Of(EvaluationRun r, int? documentGone, decimal? comparedRecallAtK = null) => new(r.Id, r.Kind, r.Variant, r.QuestionCount, r.K,
+        r.Found, r.RecallAtK, r.Mrr, r.Wins, r.Losses, r.ComparedRunId, r.Candidate,
+        r.ThresholdProposal is { } proposal ? JsonDocument.Parse(proposal).RootElement.Clone() : null, r.StartedAt, r.FinishedAt, documentGone, comparedRecallAtK);
 }
 
 /// <summary>

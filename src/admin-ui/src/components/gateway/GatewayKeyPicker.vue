@@ -3,8 +3,8 @@ import { computed, ref, watch } from 'vue'
 import { api } from '@/api'
 import type { GatewayKey, GatewayKeyList } from '@/api/types'
 import SelectField from '@/components/ui/SelectField.vue'
-import { formatDateTime, formatNumber } from '@/utils/format'
 import { gatewayHref } from '@/utils/gateway'
+import KeySettings from './KeySettings.vue'
 import { GATEWAY_KEY } from '@/utils/labels'
 
 // The gateway key picker (admin design §4.5, §5.5.2, §5.5.4; B-36): the department's assigned keys from the mirror. A key
@@ -47,8 +47,6 @@ const options = computed(() => [
 ])
 // The gateway's admin UI has a Keys page and no address per key (v0.10.0 router): the link opens it.
 const link = computed(() => (chosen.value ? gatewayHref(list.value?.adminUrl, '/keys') : null))
-const all = (values: string[]) => (values.length ? values.join(', ') : GATEWAY_KEY.all)
-const limit = (n: number | null) => (n === null ? GATEWAY_KEY.unlimited : formatNumber(n))
 </script>
 
 <template>
@@ -71,19 +69,7 @@ const limit = (n: number | null) => (n === null ? GATEWAY_KEY.unlimited : format
       <p class="mb-2 font-medium">{{ GATEWAY_KEY.settings }}</p>
       <p v-if="chosen.hasSystemPrompt" class="mb-2 text-warn" data-test="key-system-prompt">{{ GATEWAY_KEY.systemPrompt }}</p>
       <p v-if="!chosen.selectable" class="mb-2 text-danger" data-test="key-unusable">{{ GATEWAY_KEY.notSelectable(chosen.reason ?? chosen.status) }}</p>
-      <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-        <dt class="text-fg-2">{{ GATEWAY_KEY.team }}</dt><dd>{{ chosen.teamName ?? chosen.teamId }}</dd>
-        <dt class="text-fg-2">{{ GATEWAY_KEY.status }}</dt><dd>{{ chosen.status }}</dd>
-        <dt class="text-fg-2">{{ GATEWAY_KEY.expires }}</dt><dd>{{ chosen.expiresAt ? formatDateTime(chosen.expiresAt) : GATEWAY_KEY.never }}</dd>
-        <dt class="text-fg-2">{{ GATEWAY_KEY.models }}</dt><dd data-test="key-models">{{ all(chosen.allowedModels) }}</dd>
-        <dt class="text-fg-2">{{ GATEWAY_KEY.residencies }}</dt><dd>{{ all(chosen.allowedResidencies) }}</dd>
-        <dt class="text-fg-2">{{ GATEWAY_KEY.pii }}</dt><dd>{{ chosen.piiPolicy }}</dd>
-        <dt class="text-fg-2">{{ GATEWAY_KEY.contentGuard }}</dt><dd>{{ chosen.contentGuardPolicy }}</dd>
-        <dt class="text-fg-2">{{ GATEWAY_KEY.rateLimits }}</dt>
-        <dd>{{ GATEWAY_KEY.rate(limit(chosen.requestsPerMinute), limit(chosen.tokensPerMinute), limit(chosen.maxConcurrentRequests)) }}</dd>
-        <dt class="text-fg-2">{{ GATEWAY_KEY.outputCap }}</dt>
-        <dd>{{ chosen.maxOutputTokens === null ? GATEWAY_KEY.unlimited : GATEWAY_KEY.tokens(formatNumber(chosen.maxOutputTokens)) }}</dd>
-      </dl>
+      <KeySettings :gateway-key="chosen" />
       <a v-if="link" :href="link" target="_blank" rel="noopener noreferrer" class="mt-2 inline-block underline" data-test="key-link">{{ GATEWAY_KEY.openInGateway }}</a>
     </div>
   </div>

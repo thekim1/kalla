@@ -27,7 +27,7 @@ import { POLL_MS } from './files'
 // Show more; a row opens its details. While anything is processing, the summary and the visible rows refresh every 3 s;
 // polling stops when nothing is processing, while the page is hidden or when the card goes away, and starts again after
 // an upload, a removal or a retry. Removed files (Show removed) are listed for a platform admin to restore within the
-// 14-day grace (connectors §9.3, B-24). The same card is on the source page and on the knowledge base's Files tab.
+// 14-day grace (connectors §9.3, B-24). The same card is on the source page and on the knowledge base's Content tab.
 const props = withDefaults(defineProps<{
   source: Source
   canEdit: boolean

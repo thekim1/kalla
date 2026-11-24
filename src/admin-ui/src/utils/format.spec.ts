@@ -74,7 +74,8 @@ describe('partOfDay (the greeting, admin design §5.7; #1036)', () => {
     expect(partOfDay(new Date('2026-11-24T16:59:00Z'))).toBe('afternoon') // 17:59
     expect(partOfDay(new Date('2026-11-24T17:00:00Z'))).toBe('evening') // 18:00
     expect(partOfDay(new Date('2026-11-24T23:30:00Z'))).toBe('evening') // 00:30
-    // Summer time: UTC+2, so 04:00 UTC is 06:00 in Stockholm.
-    expect(partOfDay(new Date('2026-07-01T04:00:00Z'))).toBe('morning')
+    // Summer time: UTC+2, so 03:00 UTC is 05:00 in Stockholm, morning; under UTC+1 it would be 04:00, evening (#1049).
+    expect(partOfDay(new Date('2026-07-01T03:00:00Z'))).toBe('morning')
+    expect(partOfDay(new Date('2026-07-01T10:00:00Z'))).toBe('afternoon') // 12:00 in summer, 11:00 under UTC+1
   })
 })

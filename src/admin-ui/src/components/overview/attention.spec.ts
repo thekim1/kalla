@@ -14,3 +14,13 @@ describe('the downvoted-document attention item (admin design §5.5.1, §8.8, B-
     expect(attentionLink(item)).toEqual({ name: 'collection', params: { id: 'c1' }, query: { tab: 'overview' } })
   })
 })
+
+describe('the evaluation items\' links (admin design §5.5.1, §5.5.2; #1049)', () => {
+  const item = (kind: string): AttentionItem => ({ kind, objectType: 'collection', objectId: 'c1', objectName: 'Bygglov', departmentId: 'd1', since: null, details: {} })
+
+  it('opens the knowledge base\'s Quality tab for a worse or below-median evaluation', () => {
+    for (const kind of ['evaluation_worse', 'recall_below_median']) {
+      expect(attentionLink(item(kind))).toEqual({ name: 'collection', params: { id: 'c1' }, query: { tab: 'quality' } })
+    }
+  })
+})

@@ -20,7 +20,7 @@ import { problemMessage } from '@/utils/problem'
 // as an explicit null (an editor's choice that keeps the website template from adding it). Saved directly; the API
 // starts the advisory evaluation run. **Prova utan att spara** runs the evaluation with the values as candidate settings.
 const props = defineProps<{ collection: Collection; canEdit: boolean; proposal?: { coverageMaxDistance?: number; coverageMinKeywordScore?: number } | null }>()
-const emit = defineEmits<{ (e: 'saved', collection: Collection): void; (e: 'tried'): void; (e: 'dirty', dirty: boolean): void }>()
+const emit = defineEmits<{ (e: 'saved', collection: Collection): void; (e: 'tried', jobId: string): void; (e: 'dirty', dirty: boolean): void }>()
 const ui = useUiStore()
 
 type NumberKey = 'vectorWeight' | 'keywordWeight' | 'candidates' | 'maxChunksPerDocument' | 'coverageMaxDistance' | 'coverageMinKeywordScore' | 'expandMaxTokens'
@@ -72,7 +72,7 @@ watch(() => props.collection.version, () => {
   adopt = false
 })
 watch(dirty.dirty, (d) => emit('dirty', d))
-// Gone from the page (another tab, or Try without saving), its changes are gone too.
+// Gone from the page (another tab), its changes are gone too.
 onBeforeUnmount(() => emit('dirty', false))
 watch(
   () => props.proposal,
@@ -142,9 +142,10 @@ async function tryWithout(): Promise<void> {
   trying.value = true
   error.value = null
   try {
-    await api.evaluation.run(props.collection.id, { candidateSettings: settings })
+    const started = await api.evaluation.run(props.collection.id, { candidateSettings: settings })
     ui.notify(RETRIEVAL.tryStarted)
-    emit('tried')
+    // The page's evaluation follows this job and shows the candidate run when it ends (#1049).
+    emit('tried', started.jobId)
   } catch (e) {
     error.value = e
   } finally {
