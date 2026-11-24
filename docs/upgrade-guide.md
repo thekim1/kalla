@@ -23,6 +23,14 @@ and the release preparation folds the notes in here and writes the release's *Ro
 
 ## Unreleased
 
+## 0.11.0
+
+- **Rolling update: yes** from 0.10.0: three migrations, each a new table (`chat."AssistantDailyOutcomes"`,
+  `chat."AssistantDailyGaps"`, `chat."DocumentDailyFeedback"`), whose grants the migration service applies at start; no
+  variable changes. Paste this release's stack file (or set the image variables to 0.11.0's) and update the stack once.
+  From 0.9.2 or earlier, first to 0.10.0 by its section below.
+- **The gateway stays at Fors 0.13.0**: nothing to do on the gateway side.
+
 ## 0.10.0
 
 - **Rolling update: yes** from 0.9.2: three migrations, all additive (new tables, nullable columns and one column with

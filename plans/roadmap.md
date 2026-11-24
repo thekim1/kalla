@@ -22,6 +22,7 @@ lands or an input arrives.
 | `v0.9.1` (2026-11-21) | **The upgrade without SQL by hand**: the one-shots `kalla-roles` and Fors `v0.12.2`'s `roles` rename the database roles, so a Portainer stack is upgraded by renaming its variables and updating once; the admin shows evaluation questions whose documents were deleted (B-60, #893); the admin's name is Källa |
 | `v0.9.2` (2026-11-21) | **Rendering works again**: the worker image carries `libatomic.so.1` for Playwright 1.65's driver (#927), with the driver started inside the built image in CI and the release; topic rules take a pasted address and the Topics tab says how to set them (#929) |
 | `v0.10.0` (2026-11-23) | **P2 wave 1, assistants and answer quality** (B-54 to B-59): templates, copy, version diff, test questions after every publish, the nightly answer run, Home's *Needs attention*; personal-data highlights and Clear (B-63), a source's pause and schedule (B-70); on Fors `v0.13.0` with its logo; the Feedback API limited to its roles (#1014), drafts kept to their department's knowledge bases (#983), Debian fixes in three images (#1010) |
+| `v0.11.0` (2026-11-24) | **The admin UI reworked** (UX pass B-74 to B-82): one primary action and ⋯ menus, the save bar, the assistant's five tabs with the test beside the draft, the knowledge base's six tabs and tiles, filters as chips in the address, the side menu and Home, the Publish dialog; topics picked from the sections found (B-64); cost per outcome (B-61), the content-gap report (B-62), downvotes per document (B-66), progress and nearest subject in the chat extension (B-72, B-73), replace an upload by name (B-83); on Fors `v0.13.0` |
 
 What is left before go-live is live work, and every step of it waits on an input from people. **P2 code is built
 beside it since `v0.9.0`** (user, 2026-11-20; Decisions "P2 starts before go-live"): *P2 Broaden* below.
@@ -92,8 +93,7 @@ P2 wave 1 (*P2 Broaden* below) is the code work. Beside it, what is open without
 - **Support chatbot F10, F7 and F6** (cost per outcome, the content-gap report, downvotes per document;
   [`proposals/support-chatbot-features.md`](proposals/support-chatbot-features.md)): F10 and F7 picked by the user on
   2026-11-21, F6 on 2026-11-22; designed (Decisions "Cost per outcome", "Content-gap report", "Downvotes per document")
-  and **built** as B-61, B-62 and B-66 (#1018, #1022, #1023; on `main` since 2026-11-23, in the release after
-  `v0.10.0`).
+  and **built** as B-61, B-62 and B-66 (#1018, #1022, #1023; on `main` since 2026-11-23, in `v0.11.0`).
 - **The topics editor** (#929 steps 2 to 4; [`proposals/topics-editor.md`](proposals/topics-editor.md)): adopted by
   the user on 2026-11-22 (Decisions "Topics editor"); designed in admin §4.5, §5.5.2 and processing §7 and queued as
   A-42 (one matcher in `Kalla.Pipelines`), then B-64 (pick from the sections found) and B-65 (the form and the match

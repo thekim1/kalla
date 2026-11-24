@@ -6,6 +6,180 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
+## 0.11.0 (2026-11-24)
+
+**The admin UI reworked** (the UX pass, B-74 to B-82): one primary action per page and the rest in ⋯ menus, a save
+bar on every form with a warning before leaving unsaved changes, the assistant page in five tabs with the test beside
+the draft, the knowledge base page in six tabs with summary tiles, filters as chips kept in the address, the side
+menu and Home reordered, and a Publish dialog that shows what changes. Topics are picked from the sections found on
+the Topics tab (B-64). New reports: cost per outcome (B-61), content gaps (B-62) and downvotes per document (B-66);
+the chat extension gains progress, step times and the nearest subject (B-72, B-73); an upload with a known name
+replaces the file (B-83). Still on **Fors 0.13.0**. Three migrations, each a new table; no variable changes.
+**Rolling update: yes** from 0.10.0, with nothing to do ([upgrade guide](docs/upgrade-guide.md#0110)).
+
+### Added
+
+- **An upload with a known name replaces the file** (B-83, support case SA-11): when a file added to a knowledge base's
+  file list has the name and folder of a file already there (case ignored), one dialog lists those files before
+  anything is sent and asks *Replace the existing files* (the default) or *Keep both*. Replacing sends each into that
+  file's slot, as the row's *Replace* does, so the document keeps its id and the old version leaves the search; the
+  other files upload as new. A byte-identical file still changes nothing. A new browser spec, the `tests/e2e` project
+  `upload`, covers it.
+- **Cost per outcome** (B-61): every assistant turn now adds one turn and its full cost (all its model calls, the
+  gateway's cost and the estimate apart) to a daily row per outcome, `chat."AssistantDailyOutcomes"`, kept 3 years. A
+  turn that fails after a model call counts as *Error* or *Unavailable*; test-panel and test-question turns count under
+  the test panel's client. `GET /api/assistants/{id}/costs` returns them as `outcomes`, and the assistant's *Cost* card
+  on the Statistics tab shows the turns, the cost and the cost per turn by outcome, real use and the test panel apart.
+- **Progress and step times in the chat extension** (B-72, #959): two new optional members of the chat API's `kalla`
+  extension, `true` or `false` (any other value is 400 `invalid_request`). With `kalla.progress`, a streamed turn that
+  gets a model answer starts with one `kalla` chunk `{"progress":"writing"}`, written once the gateway has accepted the
+  answer call, so a spent budget or an unusable key is still an HTTP error before the first byte; it carries the related
+  documents, without `cited` and `number`, when those are asked for too. A fixed text and a non-streamed answer have
+  none. With `kalla.timings`, the answer's `kalla` has `timings`: `condense`, `retrieve`, `first_token` and `total` in
+  whole milliseconds, each left out when its step did not run, and a non-streamed answer also gets them in a
+  `Server-Timing` header. A request without the members gets the same answer as before, byte for byte.
+- **Content-gap report** (B-62): every assistant turn that ends *Not found* or *Answered from general knowledge* now
+  adds one to a daily count by its nearest hit, the knowledge base and document of the search's first result (*no hit*
+  when the search found nothing), in `chat."AssistantDailyGaps"`, kept 3 years. No question, answer, subject or
+  conversation is stored with it, and test-panel turns are left out. `GET /api/assistants/{id}/gaps` (with
+  `format=csv`) returns the period's share of such turns and the documents they came nearest to, most first (another
+  department's knowledge base is named only while it is still shared with the assistant's department), and the
+  assistant's Statistics tab shows them on a new *Content gaps* card.
+- **Feedback on documents** (B-66): every rating of an answer, from `POST /v1/feedback` or the Open WebUI import, now
+  also counts once for each document the answer cited, however many of its passages were cited, in
+  `chat."DocumentDailyFeedback"` (kept 3 years), in the rating's own transaction; a changed rating moves one count, and
+  no count goes below 0. No question, answer or comment is stored with it, so it works in history mode `none`. `GET
+  /api/collections/{id}/feedback` (with `format=csv`) lists a knowledge base's documents by the downvotes of the answers
+  that cited them, summed over every assistant that cites them and only for the owning department; the knowledge base's
+  Overview shows them on a new *Feedback on documents* card, whose *Show the ratings* opens the Feedback page filtered
+  by the document (`documentId`). A document cited in 3 or more downvoted answers in the last 7 days is a new item in
+  Home's *Needs attention*.
+- **Topics on related documents and the nearest subject in the chat extension** (B-73, #959): every
+  `kalla.related_documents` entry now has `topics`, the topic tags of the document's best-ranked chunk as stored (`[]`
+  when it has none), in the list after the text and in the progress chunk alike. A new optional member
+  `kalla.nearest`, `true` or `false` (any other value is 400 `invalid_request`), adds `nearest` to the answer's `kalla`:
+  for a turn that ended `not-found` or `answered-general`, `{ "collection", "topics" }` of the search's first result
+  (the knowledge base's slug and that chunk's tags), and `null` for every other turn and when the search found nothing.
+  It names no title, address or document id, and with `kalla.topics` it is the first result of what the narrowed links
+  searched. The tags come with the hits the search already reads: no extra query.
+- **The Publish dialog** (B-82, admin §5.5.4): *Publish draft* opens a dialog before it publishes: what changes against
+  the published version (the diff of *Compare*), the draft's remaining warnings (a refusal disables *Publish*), and,
+  when the assistant has test questions, the test run's estimated model calls. A public assistant with general
+  knowledge is confirmed with a checkbox there instead of a dialog of its own; a first publish says what it does.
+- **`GET /api/feedback/summary`** returns `lastUsedOn`, the last day with an answer, whatever the period.
+- **Topic suggestions** (B-64, part 1): `GET /api/collections/{id}/topic-suggestions` lists, per source, the sections of
+  its live documents: the first path segment of the URLs (website) or the first folder of the display names (upload),
+  with `under=` for one section's next level. Sections under 5 documents are left out. Each section has its document
+  count, its page's title, the tag to propose and the topics whose path rules already cover it. Only the owning
+  department sees them. `GET …/topics` lists a published rule's tag as `pending` while its source is processed again.
+- **Topics tab** (B-64, part 2): the knowledge base's *Topics* lists one row per topic, with its rules in words ("under
+  /bygga/", "PDF files"), their sources, and the document count, or *pending* until the documents have been processed
+  again. Whoever may edit processing also sees *Suggested from {source}*: the sections of each source to tick, each
+  with an editable topic name and *show the sections under it*. **Add N topics** saves the new rules through each
+  affected processing's publication plan, confirmed once with each plan's document count.
+
+### Changed
+
+- **A paused source's page** (#1007): *Resume* is the primary action, and *Fetch now* and *Continue* are no longer
+  shown (the API refuses both while the source is paused). A banner says the source is not fetched on schedule and that
+  a fetch already running finishes; the earlier text said *Fetch now* still worked, which was wrong.
+- **An upload source can't be paused** (#1007): it has no schedule, and a paused upload source took a batch whose files
+  were then never processed. `POST /api/sources/{id}/pause` answers 409 `source_not_pausable` for one, and its page
+  shows no *Pause*.
+- **The phone's bottom menu** (B-74, admin §5.2): Home, Knowledge bases, Assistants and Feedback, then Menu. Each tab
+  is filtered by role as in the side menu, so the editor roles have no Feedback tab; *Menu* is highlighted on every
+  other page.
+- **Admin UI layout rules, first part** (B-75, admin §5.12): number fields are short and page forms are at most 680 px
+  wide, with their selects about 380 px; zeros in lists and counts are grey; a chosen radio card has the accent border
+  and soft background; *Not scanned for malware* is said once in the file list's summary ("13 files were not scanned
+  for malware: the scan was off when they were stored") instead of on each row, and
+  `GET /api/sources/{id}/files/summary` returns `notScanned`; the source and run pages keep their section titles inside
+  the cards; detail pages have a breadcrumb (*Knowledge bases / …*), which replaces the run page's *Back to the
+  source*, and the menu item stays lit on them.
+- **Admin UI names, second part** (B-75, admin §5.7): Home greets by the time of day and first name ("Good morning,
+  Anna"), with the departments and roles under it; the knowledge bases' search has the placeholder *Search by name* on
+  the tabs' row, the column *Class*, and *Last fetch* "Today, 01:17" for today; the assistants list shows the model in
+  plain text and "· draft has changes" after the published version; the assistant's model name is on *Audience* with a
+  copy button instead of in the subtitle; a source's kept documents and quarantine are one card, *Held and
+  quarantined*; Organisation's *Knowledge bases* reads "1 own · 0 shared", no member groups is a grey dash and
+  *Fetched* drops the date today; the demo seed's changes read *Demo data*; the empty Feedback page keeps the API
+  endpoint behind *Details*; drawer subtitles are no longer monospaced.
+- **One primary action and ⋯ menus** (B-76, admin §5.12 rule 1): the knowledge base's header has *Publish* until it is
+  published, then *Add content*; the assistant's has *Publish draft* beside *Compare with published*; a source's has
+  *Fetch now* and *Pause* (a website or address list) or *Upload files* (an upload source, which has no *Fetch now*).
+  *Edit name and contact*, *Copy*, *Change department*, *Archive* and *Delete…* are in a ⋯ menu (a bottom sheet on a
+  phone, which also holds *Compare with published*). A file row's *Replace* and *Remove…* and a version's *Restore*
+  are in the row's ⋯ menu, and a source's files come after its runs.
+- **The save bar** (B-77, admin §5.12 rule 7): the assistant's draft, *Audience* and *Storage*, the knowledge base's
+  search settings and its sharing save through one bar at the bottom of the page, "3 unsaved changes · Discard · Save
+  changes", with the consequence when there is one ("Version 2 stays published until you publish the draft"; before
+  the first publish "Saving keeps a draft; publish it to make the assistant available"). It appears only with unsaved
+  changes, sits above the bottom menu on a phone, and *Discard* asks once. Leaving the page, or the tab, with unsaved
+  changes asks first. *Publish draft* waits until the draft's changes are saved or discarded. The per-form buttons
+  (*Save draft*, *Save audience*, …) are gone.
+- **The assistant page's five tabs** (B-78 part 1, admin §5.5.4): *Build*, *Quality*, *Versions*, *Access* and *Usage*
+  replace the seven tabs. *Build* has the draft and, beside it from 1,280 px, the test panel, sticky; below that the
+  panel folds under the form as *Try the draft*, and on a phone *Try the draft* in the save bar opens it as a sheet.
+  *Quality* holds the test questions, the answer evaluation and the content gaps. *Access* tells one story with one save
+  bar: who can use it, the apps, the storage of conversations, the model name, and *Check access* folded at the end.
+  *Usage* shows the last use and a period's questions, not found and ratings above the Cost card. Old `?tab=` values
+  open the tab their content moved to; the app's own links use the new names (`build`, `quality`, `versions`, `access`,
+  `usage`).
+- **The assistant's Build tab, part 2** (B-78, admin §5.5.4, §5.12 *Drawers*): *General knowledge* is one scale of four
+  (*Off*, *Supplement*, *Fallback*, *Open*) with the chosen level's line of help under it. The knowledge bases are rows
+  with "all topics" or the topic count, *Limit to topics*, which opens the topic field, and a row ⋯ menu with *Remove*.
+  *Create assistant* shows *Start from* as template cards with one line each, and its department select asks *Choose a
+  department*.
+- **The knowledge base page's six tabs** (B-79 part 1, admin §5.5.2): *Overview*, *Content*, *Documents*, *Topics*,
+  *Quality* and *Sharing* replace the eight tabs. *Overview* opens with four tiles (documents, last fetch, quality, used
+  by; only one that needs action is marked, in text), then *Get started*, the sources, and the *Gateway key*, *Cost* and
+  *Feedback on documents* cards. *Content* has the sources and an upload source's file list, and opens straight onto
+  the file list when an upload is the only source. *Quality* has the test questions and the evaluation, then *Tune the
+  search*. A dot marks *Content* after a failed fetch and *Quality* without a measurement or after a worse one, and the
+  tab's name says so ("Quality, needs attention"). Old `?tab=` values open the tab their content moved to.
+- **The knowledge base drawers** (B-79 part 2, admin §5.12 *Drawers*): *Create knowledge base* asks in the order of
+  the decision, name → what goes in → who may read it → department and contact, with the contact pre-filled and folded
+  into one line ("Contact: Anna Andersson, anna@… · Change"). *Add source* keeps the type cards on top and puts
+  *Sitemaps* with the advanced crawl fields under *More options*, which opens itself on one of their errors.
+- **Filters as chips, kept in the address** (B-80 part 1, admin §5.12 *Filters*): Feedback and Costs filter with one
+  row of chips. A period chip offers *Last 7 days*, *Last 30 days*, *This month* and *Custom…*, a range of two date
+  fields. Each filter's chip names the filter and its value ("Rating: Thumbs down"), and a set chip is coloured with
+  an × of its own. *Clear filters* shows while any filter is set, and the count ends the row in a polite live region.
+  The filters are kept in the address (`?period=7d&rating=down`), so a filtered view can be linked and survives a
+  reload. On Costs, *Export* in the header downloads the CSV by day or by month.
+- **Filters as chips on the Audit log, the Map and the knowledge base list** (B-80 part 2, admin §5.12 *Filters*): the
+  Audit log has the period, *Who* and *Type of object* as chips, with *Event*, *Service* and the object id under *More
+  filters*; the Map has its department and *Show* as chips; both end the row with the count. The knowledge base list
+  keeps its search and view in the address (`?q=bygg&view=all`), as the other pages keep their filters.
+- **The side menu and Home** (B-81, admin §5.2, §5.5.1): Home stands alone at the top of the menu with its badge,
+  then *Build* (knowledge bases, assistants), *Follow-up* (feedback, costs and the Map, moved in) and
+  *Administration*. Home is, top to bottom, the greeting with a *Your access* link (the roles and departments now open
+  in a drawer, and the card is gone), the notices, *Needs attention*, *Get started*, *Assistants in use* as a table,
+  most asked first with zeros grey, and *Health* as one line of four states, with the counts per department behind it.
+
+### Fixed
+
+- **A paused upload source takes no files** (#1024): one paused on 0.10.0 answers a new upload batch and a batch's
+  commit with 409 `source_paused` until it is resumed, instead of taking files the worker then never processes.
+- **B-75's follow-ups** (#1036): Organisation's *Knowledge bases* reads "N own · M shared" as every knowledge base the
+  department owns and how many of those reach other departments. The knowledge base search is named "Search knowledge
+  bases by name", 320 px wide, with the password managers' opt-outs. Links in the cost, content-gap, document-feedback,
+  run, publication, source and upload views are underlined in the link colour (their `link` class was never defined).
+- **Filter fixes after B-80** (#1051): *Show the ratings* on *Feedback on documents* opens Feedback over the card's own
+  period. Removing a chip or pressing *Clear filters* keeps focus on the filter row. Leaving *Custom…* drops its dates.
+  A value in the address a filter doesn't know reads as its default instead of an error. Feedback can be filtered by
+  whether a rating has a comment. On Costs an open custom range ends today, and a backwards one is turned round. The
+  × is 44 px on a phone.
+- **Fixes after B-79 and #1036** (#1049): *Try without saving* now shows its run when it ends. The knowledge base's
+  *Quality* dot and tile call a run worse by Home's rule, 5 points or more below the run it is compared with
+  (`GET …/evaluation` runs gain `comparedRecallAtK`). The texts name *Content* and *Quality*, and *Tune the search* is
+  its card's own title. The *Last fetch* tile waits for the sources, the *Quality* tile asks for a run once questions
+  exist, and the tiles sit two by two on a phone. The *Gateway key* card shows the key's settings, and `?tab=files`
+  becomes `?tab=content`. The knowledge base search is named "Search by name in knowledge bases".
+- **Topics** (#1059): a topic reads *pending* only while its source is processed again after a publication or a
+  rollback, not during the nightly drift sweep, and the topics are listed in Swedish order (å before ä) for the owner
+  and for a department the knowledge base is shared with alike.
+
 ## 0.10.0 (2026-11-23)
 
 The first P2 release: **assistants and answer quality** (P2 wave 1). Assistants start from a template, can be copied
