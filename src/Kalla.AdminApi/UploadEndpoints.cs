@@ -68,6 +68,7 @@ public static class UploadEndpoints
                     throw AdminFaults.Of(AdminErrorCodes.NotAnUploadSource);
                 }
 
+                RefusePaused(source);
                 var batch = new BatchState(Guid.CreateVersion7(), source.Id, admin.Actor, admin.Now);
                 await blobs.PutAsync(BatchKey(batch.BatchId), new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(batch, ContractJson.Options)), null, ct);
                 return Results.Created($"/api/upload-batches/{batch.BatchId}", new UploadBatchCreated(batch.BatchId, MaxFilesPerBatch, MaxBatchBytes));
@@ -138,8 +139,11 @@ public static class UploadEndpoints
                     .Select(g => new { State = g.Key, Count = g.Count(), Bytes = g.Sum(f => f.Upload.Bytes), Last = g.Max(f => (DateTimeOffset?)f.Upload.UploadedAt) })
                     .ToListAsync(ct);
                 int InStates(IReadOnlyList<string> states) => groups.Where(g => states.Contains(g.State)).Sum(g => g.Count);
+                // Said once for the list, not on each row (§5.5.7 point 4, §5.12 rule 5): unscanned, or indexed without a scan.
+                var notScanned = await Files(admin, id, deleted: false)
+                    .CountAsync(f => f.Upload.State == UploadStates.Unscanned || (f.Upload.State == UploadStates.Indexed && f.Upload.ScannedAt == null), ct);
                 return new FilesSummary(groups.Sum(g => g.Count), InStates(FileStates.Processing), InStates(FileStates.Indexed), InStates(FileStates.Failed),
-                    groups.Sum(g => g.Bytes), groups.Max(g => g.Last));
+                    groups.Sum(g => g.Bytes), groups.Max(g => g.Last), notScanned);
             })
             .RequireAuthorization(AdminPolicies.Read).WithTags("Uploads").WithName("SourceFilesSummary")
             .WithSummary("A source's file counts by state, bytes and the last upload (deleted files not counted)");
@@ -308,6 +312,8 @@ public static class UploadEndpoints
                         : throw AdminFaults.Of(AdminErrorCodes.UploadBatchCommitted);
                 }
 
+                RefusePaused(source);
+
                 foreach (var number in request.Files.Distinct())
                 {
                     await using var stream = await blobs.OpenReadAsync(FileKey(batchId, number), null, ct)
@@ -460,6 +466,18 @@ public static class UploadEndpoints
     private static BlobKey FileKey(Guid batchId, int n) => new($"tmp/upload-batches/{batchId:D}/files/{n}.json");
 
     private static BlobKey CommittedKey(Guid batchId) => new($"tmp/upload-batches/{batchId:D}/committed.json");
+
+    /// <summary>
+    /// An upload source paused before Pause was refused on one (0.10.0 allowed it, #1007): its sync job would be dropped by the worker
+    /// (<c>source.paused</c>), so a batch is refused until it is resumed rather than taken and never processed (#1024 review).
+    /// </summary>
+    private static void RefusePaused(Source source)
+    {
+        if (source.State == SourceStates.Paused)
+        {
+            throw AdminFaults.Of(AdminErrorCodes.SourcePaused);
+        }
+    }
 
     /// <summary>
     /// The batch and its source, both in the caller's scope; 404 for an unknown or dropped batch. With <paramref name="open"/>
@@ -634,8 +652,11 @@ public static class FileSorts
     public static IReadOnlyList<string> All { get; } = [Name, Uploaded];
 }
 
-/// <summary>A source's non-deleted files by state (§5.5.7 summary bar): processing, indexed, failed, their bytes and the last upload.</summary>
-public sealed record FilesSummary(int Total, int Processing, int Indexed, int Failed, long Bytes, DateTimeOffset? LastUploadAt);
+/// <summary>
+/// A source's non-deleted files by state (§5.5.7 summary bar): processing, indexed, failed, their bytes, the last upload, and
+/// how many were not scanned for malware (<c>unscanned</c>, or <c>indexed</c> without <c>ScannedAt</c>).
+/// </summary>
+public sealed record FilesSummary(int Total, int Processing, int Indexed, int Failed, long Bytes, DateTimeOffset? LastUploadAt, int NotScanned);
 
 /// <summary>A quarantined file (connectors §11): where it came from, the signature, when; never the content or its hash.</summary>
 public sealed record QuarantinedFileDto(Guid Id, string Origin, string? Name, string? Url, string Signature, Guid? RunId, DateTimeOffset DetectedAt, DateTimeOffset PurgeAfter);

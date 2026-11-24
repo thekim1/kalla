@@ -11,7 +11,7 @@ import { useLoadable } from '@/stores/loadable'
 import {
   clientLabel, costPerTurn, groupTotals, INDEXING_STEPS, lastDays, outcomeLabel, outcomeTotals, stepLabel, sumTotals, TEST_PANEL_CLIENT, totalCost,
 } from '@/components/costs/costs'
-import { formatNumber, formatUsdCost } from '@/utils/format'
+import { formatNumber, quietZero, formatUsdCost } from '@/utils/format'
 import { gatewayHref } from '@/utils/gateway'
 import { COSTS } from '@/utils/labels'
 import { COST_MESSAGES } from '@/utils/messages'
@@ -124,8 +124,8 @@ onMounted(load)
         <h3 class="mb-2 font-medium">{{ COSTS.byStep }}</h3>
         <DataTable :columns="stepColumns" :rows="bySteps" :row-key="(r) => r.key" :caption="COSTS.byStep" data-test="cost-steps">
           <template #cell-label="{ row }">{{ row.label }}</template>
-          <template #cell-calls="{ row }"><span class="tabular">{{ formatNumber(row.totals.calls) }}</span></template>
-          <template #cell-tokens="{ row }"><span class="tabular">{{ formatNumber(row.totals.inputTokens + row.totals.outputTokens) }}</span></template>
+          <template #cell-calls="{ row }"><span class="tabular" :class="quietZero(row.totals.calls)">{{ formatNumber(row.totals.calls) }}</span></template>
+          <template #cell-tokens="{ row }"><span class="tabular" :class="quietZero(row.totals.inputTokens + row.totals.outputTokens)">{{ formatNumber(row.totals.inputTokens + row.totals.outputTokens) }}</span></template>
           <template #cell-cost="{ row }"><span class="tabular">{{ formatUsdCost(totalCost(row.totals)) }}</span></template>
           <template #cell-gateway="{ row }"><span class="tabular">{{ formatUsdCost(gatewayBySteps.get(row.key) ?? 0) }}</span></template>
         </DataTable>
@@ -133,15 +133,15 @@ onMounted(load)
           <h3 class="mb-2 mt-4 font-medium">{{ COSTS.byClient }}</h3>
           <DataTable :columns="clientColumns" :rows="byClients" :row-key="(r) => r.key" :caption="COSTS.byClient" data-test="cost-clients">
             <template #cell-label="{ row }">{{ row.label }}</template>
-            <template #cell-calls="{ row }"><span class="tabular">{{ formatNumber(row.totals.calls) }}</span></template>
-            <template #cell-tokens="{ row }"><span class="tabular">{{ formatNumber(row.totals.inputTokens + row.totals.outputTokens) }}</span></template>
+            <template #cell-calls="{ row }"><span class="tabular" :class="quietZero(row.totals.calls)">{{ formatNumber(row.totals.calls) }}</span></template>
+            <template #cell-tokens="{ row }"><span class="tabular" :class="quietZero(row.totals.inputTokens + row.totals.outputTokens)">{{ formatNumber(row.totals.inputTokens + row.totals.outputTokens) }}</span></template>
             <template #cell-cost="{ row }"><span class="tabular">{{ formatUsdCost(totalCost(row.totals)) }}</span></template>
           </DataTable>
           <template v-for="group in outcomeGroups" :key="group.key">
             <h3 class="mb-2 mt-4 font-medium">{{ group.title }}</h3>
             <DataTable :columns="outcomeColumns" :rows="group.rows" :row-key="(r) => r.outcome" :caption="group.title" :data-test="`cost-outcomes-${group.key}`">
               <template #cell-outcome="{ row }">{{ outcomeLabel(row.outcome) }}</template>
-              <template #cell-turns="{ row }"><span class="tabular">{{ formatNumber(row.turns) }}</span></template>
+              <template #cell-turns="{ row }"><span class="tabular" :class="quietZero(row.turns)">{{ formatNumber(row.turns) }}</span></template>
               <template #cell-gateway="{ row }"><span class="tabular">{{ formatUsdCost(row.costUsd) }}</span></template>
               <template #cell-estimated="{ row }"><span class="tabular">{{ formatUsdCost(row.estimatedCostUsd) }}</span></template>
               <template #cell-per-turn="{ row }"><span class="tabular">{{ formatUsdCost(costPerTurn(row)) }}</span></template>

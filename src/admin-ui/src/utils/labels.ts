@@ -75,6 +75,8 @@ export const RELATIVE = {
   minutesAgo: (n: number) => `${n} min ago`,
   hoursAgo: (n: number) => `${n} h ago`,
   yesterday: 'Yesterday',
+  /** `Today, 01:17` (admin design §5.7, the knowledge bases' Last fetch). */
+  today: (time: string) => `Today, ${time}`,
   daysAgo: (n: number) => `${n} days ago`,
 } as const
 
@@ -88,6 +90,8 @@ export const SHELL = {
   skipToMain: 'Skip to main content',
   mainNav: 'Main menu',
   quickAccess: 'Quick access',
+  /** The breadcrumb above a detail page's title (admin design §5.12). */
+  breadcrumb: 'Breadcrumb',
   needAttention: ' need attention',
   theme: 'Theme',
   signOut: 'Sign out',
@@ -436,9 +440,15 @@ export const ATTENTION_KEY_REASONS: Record<string, string> = {
   residency_lost: 'its gateway key no longer allows a residency at its information class',
 }
 
+/** Service actors shown as words rather than ids (admin design §5.7): the demo seed's changes read *Demo data*. */
+export const ACTOR_LABEL: Record<string, string> = { 'system:seed': 'Demo data' }
+
 export const OVERVIEW = {
-  welcome: (name: string) => `Welcome, ${name}`,
-  lead: 'Here you build knowledge bases and assistants for your department.',
+  /** Home's greeting by the time of day, with the first name when there is one (admin design §5.7). */
+  greeting: (part: 'morning' | 'afternoon' | 'evening', firstName: string | null) =>
+    `Good ${part}${firstName ? `, ${firstName}` : ''}`,
+  /** Under the greeting: the departments, then the roles (admin design §5.7). */
+  identity: (departments: string[], roles: string[]) => [departments.join(', '), roles.join(', ')].filter(Boolean).join(' · '),
   access: 'Your access',
   roles: 'Roles',
   departments: 'Departments',
@@ -537,8 +547,12 @@ export const COLLECTIONS = {
   empty: 'Here you build knowledge bases and assistants for your department.',
   create: 'Create knowledge base',
   search: 'Search knowledge bases',
+  /** The search field's placeholder; it has no label above it, the aria-label is `search` (admin design §5.7). */
+  searchPlaceholder: 'Search by name',
   name: 'Name',
   level: 'Information class',
+  /** The list's column (admin design §5.7): *Information class* wraps there. */
+  levelColumn: 'Class',
   levelQuestion: 'Who may read the content?',
   levelRequired: 'Choose who may read the content.',
   nameRequired: 'Enter a name.',
@@ -1017,6 +1031,8 @@ export const FILES = {
   } as Record<string, string>,
   /** A file the malware scan did not check (admin design §5.5.7; the deployment runs with the scan off, #535). */
   notScanned: 'Not scanned for malware',
+  /** Said once in the summary instead of on each row (admin design §5.5.7 point 4, §5.12 rule 5). */
+  notScannedSummary: (n: number) => `${formatNumber(n)} ${n === 1 ? 'file was' : 'files were'} not scanned for malware: the scan was off when they were stored`,
   replace: 'Replace',
   replaceLabel: (name: string) => `Replace ${name}`,
   select: (name: string) => `Select ${name}`,
@@ -1193,7 +1209,7 @@ export const PLATFORM = {
     source: 'Source',
     costCenter: 'Cost centre',
     memberGroups: 'Member groups',
-    sharing: 'Knowledge bases shared',
+    sharing: 'Knowledge bases',
     client: 'Client',
   },
   actions: {
@@ -1324,8 +1340,8 @@ export const PLATFORM = {
     selected: 'Selected departments',
     municipality: 'Whole organisation',
     sharedWith: 'Departments shared with',
-    summary: (department: number, selected: number, municipality: number) =>
-      `Own: ${department} · Shared with selected departments: ${selected} · Shared with everyone: ${municipality}`,
+    /** The Knowledge bases column (admin design §5.7): kept to the department, and shared with others or everyone. */
+    summary: (own: number, shared: number) => `${own} own · ${shared} shared`,
   },
   gatewayModels: {
     limitsSource: 'Limits from',
@@ -1545,7 +1561,8 @@ export const SOURCE_PAGE = {
   pause: 'Pause',
   resume: 'Resume',
   pausedBadge: 'Paused',
-  paused: 'The source is paused: it is not fetched on schedule until you resume it. Fetch now still works.',
+  paused: 'The source is paused: it is not fetched on schedule until you resume it. A fetch that is already running finishes.',
+  pausedNotice: 'The source is paused.',
   resumed: 'The source runs on schedule again.',
   pauseConflict: 'Someone else changed the source. It has been reloaded; try again.',
   syncNow: 'Fetch now',
@@ -1561,6 +1578,8 @@ export const SOURCE_PAGE = {
   runFailed: (failed: string) => `${failed} failed`,
   more: 'Show more',
   pii: 'Personal data',
+  /** The card of kept documents and quarantined files (admin design §5.7). */
+  heldAndQuarantined: 'Held and quarantined',
   piiNone: 'No documents with personal data.',
   piiHeld: 'Kept out of the search',
   piiLive: 'Searchable',
@@ -1602,7 +1621,6 @@ export const RUN_PAGE = {
   document: 'Document',
   outcome: 'Outcome',
   reason: 'Reason',
-  back: 'Back to the source',
   more: 'Show more',
   politeness: 'Websites fetched with their own politeness',
   render: 'Pages fetched with a browser',
@@ -1789,12 +1807,17 @@ export const ASSISTANTS = {
   noModel: 'Not chosen',
   questions7d: 'Questions, 7 days',
   publishedVersion: (version: number) => `Version ${version}`,
+  /** After the published version's date when the draft differs (admin design §5.7). */
+  draftHasChanges: 'draft has changes',
 } as const
 
 export const ASSISTANT = {
   tabs: { draft: 'Draft', test: 'Test', testQuestions: 'Test questions', versions: 'Versions', audience: 'Audience', storage: 'Storage', statistics: 'Statistics' },
   tabsLabel: 'Parts of the assistant',
-  modelName: (slug: string) => `Model name: ${slug}`,
+  /** On *Access*, with a copy button, not in the page's subtitle (admin design §5.7). */
+  modelNameLabel: 'Model name',
+  modelNameHint: 'Apps choose the assistant by this name, for example in Open WebUI’s list of models.',
+  copyModelName: 'Copy the model name',
   publishedVersion: (n: number) => `Published: version ${n}`,
   advanced: 'Advanced: model, follow-up questions, history, length',
   advancedHint: 'Leave a field empty to use the platform default.',
@@ -2368,7 +2391,10 @@ export const FEEDBACK = {
   caption: 'Feedback, newest first',
   empty: 'No feedback yet. It arrives when users give a thumbs up or down in Open WebUI.',
   /** Without Open WebUI, ratings arrive only through kalla-api's feedback endpoint (chat design §3.5). */
-  emptyApi: 'No feedback yet. It arrives when an app sends a thumbs up or down to the API (POST /v1/feedback).',
+  emptyApi: 'No feedback yet. It arrives when an app sends a thumbs up or down.',
+  /** The technical part, behind Details (admin design §5.7). */
+  emptyApiDetails: 'Details',
+  emptyApiEndpoint: 'Apps send ratings to kalla-api’s feedback endpoint, POST /v1/feedback, with the id of the answer.',
   mark: 'Mark as handled',
   reopen: 'Open again',
   more: 'Show more',

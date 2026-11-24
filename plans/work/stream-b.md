@@ -211,7 +211,7 @@ and fixed in the same pull request, named in its body. **Every step's hand-offs*
 names), and a `stream-a` issue for any change in `src/admin-ui/src/platform/**` (stream a's), built against the
 design meanwhile.
 
-### [ ] B-74 The phone's bottom menu as admin §5.2 says (UX pass step 0)
+### [x] B-74 The phone's bottom menu as admin §5.2 says (UX pass step 0) (#1025)
 - **Do:** `mobileTabs` in `router/nav.ts` gets Assistants and Feedback beside Home and Knowledge bases (Home, Knowledge
   bases, Assistants, Feedback, Menu), each filtered by role like the side menu (Feedback: `FEEDBACK_ROLES`); *Menu*
   stays highlighted for every other page.
@@ -221,7 +221,7 @@ design meanwhile.
 - **Waits on:** nothing.
 - **Read:** admin §5.2, §5.12 rule 10.
 
-### [ ] B-75 Field widths, grey zeros, repeated texts and the renames (UX pass step 1)
+### [x] B-75 Field widths, grey zeros, repeated texts and the renames (UX pass step 1) (#1027, #1029)
 - **Do:** admin §5.12 rules 3, 5 and 8 on every page: fields sized to their answer (numbers 8–12 characters, names and
   selects 320–400 px, form columns at most 680 px) in every form and drawer; zeros, "none", "never" and "not yet" as
   grey text; texts that repeat on each row said once (the file list's *Not scanned for malware* in the summary,

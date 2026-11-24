@@ -5,7 +5,7 @@ import type { AnswerEvaluation, AnswerRunSummary } from '@/api/types'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import { useLoadable } from '@/stores/loadable'
-import { formatDate, formatNumber, formatRatio } from '@/utils/format'
+import { formatDate, formatNumber, quietZero, formatRatio } from '@/utils/format'
 import { ANSWER_EVALUATION as L } from '@/utils/labels'
 
 // The Statistics tab's latest answer evaluation (admin design §5.5.4, processing §14.8; B-58): faithfulness and citation
@@ -60,7 +60,7 @@ const precision = computed(() => figure((r) => r.citationPrecision))
             </div>
             <div>
               <dt class="text-small text-fg-2">{{ L.questions }}</dt>
-              <dd class="tabular" data-test="answer-evaluation-questions">{{ formatNumber(latest.questions) }}</dd>
+              <dd class="tabular" :class="quietZero(latest.questions)" data-test="answer-evaluation-questions">{{ formatNumber(latest.questions) }}</dd>
             </div>
             <div>
               <dt class="text-small text-fg-2">{{ L.found }}</dt>

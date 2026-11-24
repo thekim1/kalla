@@ -4,7 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { ROLES } from '@/api/types'
 import { ragRoles, useAuthStore } from '@/stores/auth'
 import { createAppRouter, routes } from '.'
-import { ALL_ROLES, filterEntries, mobileTabs, navGroups, searchEntries } from './nav'
+import { ALL_ROLES, FEEDBACK_ROLES, filterEntries, isNavItemActive, mobileTabs, navGroups, searchEntries } from './nav'
 import { NAV_KEYWORDS, PAGE, PLATFORM } from '@/utils/labels'
 
 describe('menu structure (copied checks)', () => {
@@ -79,6 +79,42 @@ describe('search', () => {
   })
 })
 
+describe('the phone\'s bottom menu (admin design §5.2; B-74)', () => {
+  const signIn = (roles: string[]) => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = { isAuthenticated: true, name: 'A', email: null, roles, departmentCodes: [], departmentSources: [], sessionExpiresAt: null, signIn: { configured: true }, setup: { open: false }, openWebUi: { enabled: true } }
+    auth.status = 'authenticated'
+    return auth
+  }
+  const shown = (roles: string[]) => {
+    const auth = signIn(roles)
+    return mobileTabs.filter((t) => auth.canOpen(t)).map((t) => t.label)
+  }
+
+  it('holds Home, Knowledge bases, Assistants and Feedback, as the side menu has them (Menu comes after)', () => {
+    expect(mobileTabs.map((t) => t.label)).toEqual(['Home', 'Knowledge bases', 'Assistants', 'Feedback'])
+    const items = navGroups.flatMap((g) => g.items)
+    for (const tab of mobileTabs) {
+      const item = items.find((i) => i.name === tab.name)!
+      expect([tab.icon, tab.roles, tab.badge]).toEqual([item.icon, item.roles, item.badge])
+    }
+    expect(mobileTabs.find((t) => t.name === 'feedback')?.roles).toEqual(FEEDBACK_ROLES)
+    expect(mobileTabs.find((t) => t.name === 'overview')?.badge).toBe('attention')
+  })
+
+  it('filters the tabs by role as the side menu: no Feedback tab for an editor role', () => {
+    expect(shown(['rag-editor'])).toEqual(['Home', 'Knowledge bases', 'Assistants'])
+    expect(shown(['rag-viewer'])).toEqual(['Home', 'Knowledge bases', 'Assistants', 'Feedback'])
+    expect(shown(['rag-department-admin'])).toEqual(['Home', 'Knowledge bases', 'Assistants', 'Feedback'])
+  })
+
+  it('leaves every other page to Menu', () => {
+    for (const name of ['map', 'costs', 'organisation', 'audit', 'platform-settings']) expect(mobileTabs.some((t) => isNavItemActive(t, name))).toBe(false)
+    expect(mobileTabs.some((t) => isNavItemActive(t, 'assistants'))).toBe(true)
+  })
+})
+
 describe('roles', () => {
   it('counts only rag-* roles', () => {
     expect([...ragRoles(['rag-viewer', 'gateway-admin', 'offline_access'])]).toEqual(['rag-viewer'])
@@ -123,5 +159,16 @@ describe('Costs (admin design §3.3, §8.6; B-41)', () => {
     await router.push('/costs')
     expect(router.currentRoute.value.name).toBe('forbidden')
     expect(router.currentRoute.value.query.from).toBe('/costs')
+  })
+})
+
+describe('the menu item stays lit on a detail page (admin design §5.12, Every page)', () => {
+  const item = (name: string) => navGroups.flatMap((g) => g.items).find((i) => i.name === name)!
+
+  it('lights Knowledge bases on a knowledge base, a source, a run and a publication, and Assistants on an assistant', () => {
+    for (const page of ['collections', 'collection', 'source', 'run', 'publication']) expect(isNavItemActive(item('collections'), page)).toBe(true)
+    expect(isNavItemActive(item('assistants'), 'assistant')).toBe(true)
+    expect(isNavItemActive(item('assistants'), 'collection')).toBe(false)
+    for (const page of ['collection', 'source', 'assistant']) expect(routes.some((r) => r.name === page)).toBe(true)
   })
 })

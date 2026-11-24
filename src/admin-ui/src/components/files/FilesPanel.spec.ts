@@ -15,7 +15,7 @@ const slot = (id: string, fileName: string, state: string, reason: string | null
   id, fileName, bytes: 2_500_000, state, reason, documentId: null, uploadedBy: 'anna', uploadedAt: '2026-11-01T10:00:00Z', replacedAt: null, deletedAt: null,
 })
 const summary = (overrides: Partial<UploadSummary> = {}): UploadSummary => ({
-  total: 0, processing: 0, indexed: 0, failed: 0, bytes: 0, lastUploadAt: null, ...overrides,
+  total: 0, processing: 0, indexed: 0, failed: 0, bytes: 0, lastUploadAt: null, notScanned: 0, ...overrides,
 })
 const page = (items: UploadFile[], next: string | null = null) => ({ items, next })
 
@@ -265,9 +265,9 @@ describe('Files (admin design §4.5, §5.5.7, connectors §9)', () => {
     expect(wrapper.get('[data-test=file-list]').text()).toContain('taxa.pdf')
   })
 
-  it('notes a file that was not scanned for malware, in its row and its details, and not a scanned one (#535)', async () => {
+  it('says once in the summary how many files were not scanned for malware, not on each row, and notes it in a file’s details (#535; §5.12 rule 5)', async () => {
     signIn(['rag-viewer'])
-    vi.spyOn(api.sources, 'filesSummary').mockResolvedValue(summary({ total: 3, processing: 1, indexed: 2 }))
+    vi.spyOn(api.sources, 'filesSummary').mockResolvedValue(summary({ total: 3, processing: 1, indexed: 2, notScanned: 2 }))
     vi.spyOn(api.sources, 'files').mockResolvedValue(page([
       slot('u1', 'pending.pdf', 'unscanned'),
       { ...slot('u2', 'old.pdf', 'indexed'), scannedAt: null },
@@ -275,9 +275,8 @@ describe('Files (admin design §4.5, §5.5.7, connectors §9)', () => {
     ]))
     const wrapper = mount(FilesPanel, { props: { source, canEdit: false }, attachTo: document.body })
     await flushPromises()
-    expect(wrapper.get('[data-test=not-scanned-u1]').text()).toBe(FILES.notScanned)
-    expect(wrapper.get('[data-test=not-scanned-u2]').text()).toBe(FILES.notScanned)
-    expect(wrapper.find('[data-test=not-scanned-u3]').exists()).toBe(false)
+    expect(wrapper.get('[data-test=files-not-scanned]').text()).toBe('2 files were not scanned for malware: the scan was off when they were stored')
+    expect(wrapper.get('[data-test=file-list]').text()).not.toContain(FILES.notScanned)
     expect(wrapper.get('[data-test=file-list]').text()).toContain(FILES.states.unscanned)
     await wrapper.get('[data-test=open-u2]').trigger('click')
     await flushPromises()

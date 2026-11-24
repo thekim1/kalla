@@ -14,8 +14,8 @@ import UiCard from '@/components/ui/UiCard.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useLoadable } from '@/stores/loadable'
 import { useUiStore } from '@/stores/ui'
-import { formatNumber, formatRelative, formatUsdCost } from '@/utils/format'
-import { DEPARTMENT_SOURCE_LABEL, OVERVIEW, PAGE, ROLE_LABEL, SETUP, type Tone } from '@/utils/labels'
+import { formatNumber, formatRelative, formatUsdCost, quietZero, TIME_ZONE } from '@/utils/format'
+import { DEPARTMENT_SOURCE_LABEL, OVERVIEW, ROLE_LABEL, SETUP, type Tone } from '@/utils/labels'
 import { readStoredIds, writeStoredIds } from '@/utils/storedIds'
 
 // Home (admin design §5.5.1, "P1's Home"), top to bottom: for a platform admin, a reminder per client secret stored by the setup
@@ -40,12 +40,25 @@ onMounted(() => {
   })
   void api.organisation.departments().then((d) => (synced.value = d)).catch(() => undefined)
 })
-const name = computed(() => auth.user?.name ?? auth.user?.email ?? '')
+// The greeting (admin design §5.7): "Good morning, Anna" by the hour in Europe/Stockholm, and under it the departments
+// and roles, so the person sees at once whose page this is.
+const firstName = computed(() => auth.user?.name?.trim().split(/\s+/)[0] || null)
+const partOfDay = (now: Date): 'morning' | 'afternoon' | 'evening' => {
+  const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: TIME_ZONE, hour: '2-digit', hour12: false }).format(now)) % 24
+  return hour >= 5 && hour < 12 ? 'morning' : hour >= 12 && hour < 18 ? 'afternoon' : 'evening'
+}
+const greeting = computed(() => OVERVIEW.greeting(partOfDay(new Date()), firstName.value))
 const roles = computed(() => auth.roles.filter((r): r is Role => r in ROLE_LABEL))
 const departments = computed(() =>
   auth.departmentSources.map((d) => ({ ...d, name: synced.value ? (synced.value.find((s) => s.costCenterCode === d.code)?.name ?? null) : undefined })),
 )
 
+const identity = computed(() =>
+  OVERVIEW.identity(
+    departments.value.map((d) => d.name ?? d.code),
+    roles.value.map((r) => ROLE_LABEL[r]),
+  ),
+)
 const live = computed(() => overview.data.value?.live ?? [])
 const quiet = computed(() => live.value.every((a) => a.questions === 0))
 
@@ -86,7 +99,7 @@ function showHidden(): void {
 </script>
 
 <template>
-  <PageHeader :title="name ? OVERVIEW.welcome(name) : PAGE.overview.title" :description="OVERVIEW.lead" />
+  <PageHeader :title="greeting" :description="identity || undefined" />
   <template v-if="overview.data.value">
     <NeedsAttention :items="overview.data.value.attention" class="mb-6" />
     <SecretExpiryNotices v-if="auth.isPlatformAdmin && overview.data.value.secretExpiry.length" :entries="overview.data.value.secretExpiry" class="mb-6" />
@@ -111,23 +124,23 @@ function showHidden(): void {
             <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-small">
               <div>
                 <dt class="text-fg-3">{{ OVERVIEW.questions }}</dt>
-                <dd class="tabular font-medium" data-test="live-questions">{{ formatNumber(a.questions) }}</dd>
+                <dd class="tabular font-medium" :class="quietZero(a.questions)" data-test="live-questions">{{ formatNumber(a.questions) }}</dd>
               </div>
               <div>
                 <dt class="text-fg-3">{{ OVERVIEW.notFound }}</dt>
-                <dd class="tabular font-medium">{{ formatNumber(a.notFound) }}</dd>
+                <dd class="tabular font-medium" :class="quietZero(a.notFound)">{{ formatNumber(a.notFound) }}</dd>
               </div>
               <div>
                 <dt class="text-fg-3">{{ OVERVIEW.thumbsUp }}</dt>
-                <dd class="tabular font-medium">{{ formatNumber(a.thumbsUp) }}</dd>
+                <dd class="tabular font-medium" :class="quietZero(a.thumbsUp)">{{ formatNumber(a.thumbsUp) }}</dd>
               </div>
               <div>
                 <dt class="text-fg-3">{{ OVERVIEW.thumbsDown }}</dt>
-                <dd class="tabular font-medium">{{ formatNumber(a.thumbsDown) }}</dd>
+                <dd class="tabular font-medium" :class="quietZero(a.thumbsDown)">{{ formatNumber(a.thumbsDown) }}</dd>
               </div>
               <div class="col-span-2">
                 <dt class="text-fg-3">{{ OVERVIEW.cost }}</dt>
-                <dd class="tabular font-medium" data-test="live-cost">{{ formatUsdCost(a.costUsd) }}</dd>
+                <dd class="tabular font-medium" :class="quietZero(a.costUsd)" data-test="live-cost">{{ formatUsdCost(a.costUsd) }}</dd>
               </div>
             </dl>
           </RouterLink>

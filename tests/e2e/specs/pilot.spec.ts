@@ -26,7 +26,7 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     // 1 Sign in to the start page. Its "Get started" checklist shows only while a knowledge base is not done yet (§5.4), so
     // it depends on what earlier runs left.
     await login(page, 'rag-department-admin')
-    await expect(page.getByRole('heading', { name: /^Welcome, /, level: 1 })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /^Good (morning|afternoon|evening)/, level: 1 })).toBeVisible()
 
     // 2 Create the knowledge base: name, department, information class (none preselected), what goes in.
     await act.press(page.getByRole('navigation', { name: 'Main menu' }).getByRole('link', { name: 'Knowledge bases' }))
@@ -77,7 +77,8 @@ for (const mode of ['mouse', 'keyboard'] as const) {
       return visibleSoon(page.getByRole('main').getByText(/^(Done|Done with remarks)$/).first())
     }, 'the first fetch finishes', 300_000)
     await expect(page.getByText('The whole website was gone through.')).toBeVisible()
-    await act.press(page.getByRole('link', { name: 'Back to the source' }))
+    // The breadcrumb leads back (admin design §5.12): Knowledge bases / Testwebbplatsen /.
+    await act.press(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Testwebbplatsen' }))
 
     // 7 Test questions: one of our own, with the document that answers it.
     const collectionPage = await collectionUrl(page, collection)
@@ -169,7 +170,8 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await expect(openWebUi).toHaveURL(url => url.origin === portalUrl.origin)
     await expect(openWebUi).toHaveTitle(/Open WebUI/, { timeout: 30_000 })
     await openWebUi.close()
-    const slug = (await page.getByText(/^Model name: /).textContent())!.replace('Model name: ', '').trim()
+    // The model name is on the Audience tab with a copy button (admin design §5.7), not in the page's subtitle.
+    const slug = (await page.getByRole('region', { name: 'Model name' }).locator('code').textContent())!.trim()
     await eventually(async () => (await listedModels(page.request, devClientKey())).includes(slug), 'kalla-api lists the assistant', 60_000)
 
     // 14 Share the knowledge base with the whole organisation (admin design §5.5.2, item 36; renamed in #544).

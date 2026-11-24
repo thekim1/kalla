@@ -1,4 +1,4 @@
-import { RELATIVE } from './labels'
+import { ACTOR_LABEL, RELATIVE } from './labels'
 
 // As the gateway's (admin design §5.7): dates `8 Oct 2026, 14:32`, 24 h Europe/Stockholm, money `24,32 US$`. Adapted only
 // in that the relative-time words come from labels.ts, so a translation touches only that file, and in formatDecimal.
@@ -50,6 +50,14 @@ export function formatUsdCost(value: number | null | undefined): string {
 export function formatTokensPerSecond(value: number | null | undefined): string {
   if (isMissing(value)) return DASH
   return `${nbsp(decimalFormatter.format(value))}${NBSP}tok/s`
+}
+
+/**
+ * Admin design §5.12 rule 8: a zero or a missing count is grey text, so colour is left for what needs attention. Bind it
+ * as `:class` beside the number it greys.
+ */
+export function quietZero(value: number | null | undefined): string | undefined {
+  return isMissing(value) || value === 0 ? 'text-fg-3' : undefined
 }
 
 export function formatNumber(value: number | null | undefined): string {
@@ -117,6 +125,16 @@ export function formatTime(value: string | Date | null | undefined, seconds = fa
 export function formatDateTime(value: string | Date | null | undefined, seconds = false): string {
   const date = toDate(value)
   return date ? `${formatDate(date)}, ${formatTime(date, seconds)}` : DASH
+}
+
+/**
+ * `Today, 01:17` for a time on today's date in Europe/Stockholm, else `8 Oct 2026, 01:17` (admin design §5.7: *Fetched*
+ * and *Last fetch* drop the date when it is today).
+ */
+export function formatDateTimeToday(value: string | Date | null | undefined, now: Date = new Date()): string {
+  const date = toDate(value)
+  if (!date) return DASH
+  return formatDate(date) === formatDate(now) ? RELATIVE.today(formatTime(date)) : formatDateTime(date)
 }
 
 /** Relative time for anything under 7 days ("2 min ago"), absolute date otherwise. */
@@ -192,4 +210,11 @@ export function initials(name: string | null | undefined): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
   const letters = parts.length > 1 ? [parts[0]?.[0], parts[parts.length - 1]?.[0]] : [parts[0]?.slice(0, 2)]
   return letters.filter(Boolean).join('').toUpperCase() || '?'
+}
+
+/** Who did it, in words (admin design §5.7): the person's name when known, a service actor's label (`system:seed` reads *Demo data*), else the id. */
+export function actorText(actor: string | null | undefined, name?: string | null): string {
+  if (name) return name
+  if (!actor) return ''
+  return ACTOR_LABEL[actor] ?? actor
 }

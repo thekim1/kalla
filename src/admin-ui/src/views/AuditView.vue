@@ -15,7 +15,7 @@ import UiDrawer from '@/components/ui/UiDrawer.vue'
 import { useDebouncedWatch } from '@/composables/useDebouncedWatch'
 import { useKeysetList } from '@/composables/useKeysetList'
 import { SETTINGS_SECTIONS, type SettingsSectionName } from '@/platform/settingsPage'
-import { formatDateTime } from '@/utils/format'
+import { actorText, formatDateTime } from '@/utils/format'
 import { AUDIT, AUDIT_EVENTS, AUDIT_OBJECT_TYPES, PAGE, PLATFORM } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 
@@ -169,7 +169,7 @@ onMounted(() => entries.reload())
     <DataTable :columns="columns" :rows="entries.items.value" :row-key="(e) => String(e.id)" :caption="AUDIT.caption" clickable @row-click="open">
       <template #cell-time="{ row }"><span class="tabular whitespace-nowrap">{{ formatDateTime(row.timestamp, true) }}</span></template>
       <template #cell-actor="{ row }">
-        <span class="font-medium">{{ row.actorName ?? row.actor }}</span>
+        <span class="font-medium">{{ actorText(row.actor, row.actorName) }}</span>
         <span v-if="row.service" class="block font-mono text-small text-fg-3">{{ row.service }}</span>
       </template>
       <template #cell-action="{ row }"><span :title="code(row)" data-test="event">{{ eventLabel(row) }}</span></template>
@@ -200,7 +200,7 @@ onMounted(() => entries.reload())
     <div v-else-if="selected" class="grid gap-1" data-test="detail">
       <dl class="m-0">
         <DetailRow :label="AUDIT.time">{{ formatDateTime(selected.timestamp, true) }}</DetailRow>
-        <DetailRow :label="AUDIT.actor">{{ selected.actorName ? `${selected.actorName} (${selected.actor})` : selected.actor }}</DetailRow>
+        <DetailRow :label="AUDIT.actor">{{ actorText(selected.actor, selected.actorName) === selected.actor ? selected.actor : `${actorText(selected.actor, selected.actorName)} (${selected.actor})` }}</DetailRow>
         <DetailRow v-if="selected.actorRoles" :label="AUDIT.roles"><span class="font-mono text-small">{{ selected.actorRoles }}</span></DetailRow>
         <DetailRow :label="AUDIT.action">
           {{ eventLabel(selected) }} <span class="font-mono text-small text-fg-3" data-test="detail-code">{{ code(selected) }}</span>
