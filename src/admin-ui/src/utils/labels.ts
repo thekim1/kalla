@@ -455,8 +455,8 @@ export const OVERVIEW = {
   /** Under the greeting: the departments, then the roles (admin design §5.7). */
   identity: (departments: string[], roles: string[]) => [departments.join(OVERVIEW_LIST), roles.join(OVERVIEW_LIST)].filter(Boolean).join(OVERVIEW_PARTS),
   /** The greeting line's separators, for the page that marks the department names up (#1049). */
-  listSeparator: ', ',
-  partSeparator: ' · ',
+  listSeparator: OVERVIEW_LIST,
+  partSeparator: OVERVIEW_PARTS,
   access: 'Your access',
   roles: 'Roles',
   departments: 'Departments',
