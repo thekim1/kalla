@@ -253,7 +253,8 @@ async function chooseReplacement(event: Event): Promise<void> {
   await upload()
 }
 
-defineExpose({ replace })
+// The source page's Upload files (admin design §5.5.3) opens the same file picker.
+defineExpose({ replace, pick: () => picker.value?.click() })
 
 onMounted(() => {
   // `webkitdirectory` is not in the DOM typings; every current browser supports it on a file input.

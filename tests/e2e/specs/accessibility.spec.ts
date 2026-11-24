@@ -66,6 +66,46 @@ test('drawers and dialogs pass axe', async ({ page }) => {
   }
 })
 
+test('the ⋯ menu passes axe open, as a menu on a desktop and as a sheet on a phone, and Esc returns focus (admin design §5.12)', async ({ page }) => {
+  await login(page, 'rag-department-admin')
+  const assistant = ((await getJson(page, '/api/assistants')).items ?? [])[0]
+  test.skip(!assistant, 'needs an assistant (the pilot journey makes one)')
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    await ready(page, `/assistants/${assistant.id}`)
+    const more = page.getByRole('button', { name: /^More actions for / })
+    await expect(more).toHaveAttribute('aria-haspopup', 'menu')
+    await more.click()
+    await expect(more).toHaveAttribute('aria-expanded', 'true')
+    if (width === 1280) {
+      const menu = page.getByRole('menu')
+      await expect(menu).toBeVisible()
+      await expect(menu.getByRole('menuitem').first()).toBeFocused()
+    } else {
+      await expect(page.getByRole('dialog', { name: /^More actions for / })).toBeVisible()
+    }
+    await scan(page, `the ⋯ menu at ${width}px`)
+    await page.keyboard.press('Escape')
+    await expect(more).toBeFocused()
+    await expect(more).toHaveAttribute('aria-expanded', 'false')
+    // A drawer opened from the menu returns focus to the ⋯ button when it closes (WCAG 2.4.3).
+    await more.click()
+    await (width === 1280 ? page.getByRole('menuitem', { name: 'Edit name and contact' }) : page.getByRole('button', { name: 'Edit name and contact' })).click()
+    await expect(page.getByRole('dialog', { name: 'Edit assistant' })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(more).toBeFocused()
+  }
+  // A row's menu is not clipped by its table: the oldest version's Restore is on screen.
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await ready(page, `/assistants/${assistant.id}?tab=versions`)
+  const rowMenus = page.getByRole('button', { name: /^More actions for version / })
+  if (await rowMenus.count()) {
+    await rowMenus.last().click()
+    await expect(page.getByRole('menuitem', { name: /Restore/ })).toBeInViewport({ ratio: 1 })
+    await page.keyboard.press('Escape')
+  }
+})
+
 test('all pages reflow at 320px and at 200 percent text size', async ({ page }) => {
   await login(page, 'rag-platform-admin')
   const pages = await allPages(page)

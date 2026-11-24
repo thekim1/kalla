@@ -6,7 +6,7 @@ import { ApiError } from '@/api/client'
 import type { Collection, DocumentSummary, Source, SourceListItem } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { bffUser, collection, collectionSummary, collectionUser } from '@/test/fixtures'
-import { button } from '@/test/helpers'
+import { button, openMenu } from '@/test/helpers'
 import CollectionEditDrawer from '@/components/collections/CollectionEditDrawer.vue'
 import CollectionView from './CollectionView.vue'
 
@@ -36,6 +36,34 @@ function signIn(roles: string[]) {
 }
 
 describe('Knowledge base (admin design §5.5.2)', () => {
+  it('has one primary action by state and role, and the rest in the ⋯ menu with Delete last (§5.5.2, §5.12 rule 1)', async () => {
+    const header = async (roles: string[], publishedAt: string | null) => {
+      signIn(roles)
+      vi.spyOn(api.collections, 'get').mockResolvedValue({ ...base, publishedAt })
+      vi.spyOn(api.collections, 'sources').mockResolvedValue([])
+      vi.spyOn(api.documents, 'list').mockResolvedValue({ items: [], next: null })
+      const wrapper = mount(CollectionView, { props: { id: 'c1' }, attachTo: globalThis.document.body })
+      await flushPromises()
+      const primary = wrapper.findAll('header .bg-accent').map((b) => b.text())
+      const menu = wrapper.find('header [data-test=menu-button]')
+      let items: string[] = []
+      if (menu.exists()) {
+        expect(menu.attributes('aria-label')).toBe(`More actions for ${base.name}`)
+        await menu.trigger('click')
+        items = openMenu().findAll('[role=menuitem]').map((i) => i.text())
+      }
+      wrapper.unmount()
+      return { primary, items }
+    }
+    expect(await header(['rag-department-admin'], null)).toEqual({ primary: ['Publish'], items: ['editEdit name and contact', 'deleteDelete…'] })
+    expect(await header(['rag-department-admin'], '2026-11-01T10:00:00Z')).toEqual({ primary: ['addAdd content'], items: ['editEdit name and contact', 'deleteDelete…'] })
+    expect(await header(['rag-platform-admin'], '2026-11-01T10:00:00Z')).toEqual({
+      primary: ['addAdd content'], items: ['editEdit name and contact', 'swap_horizChange department', 'deleteDelete…'],
+    })
+    expect(await header(['rag-editor'], null)).toEqual({ primary: ['addAdd content'], items: ['editEdit name and contact'] })
+    expect(await header(['rag-viewer'], null)).toEqual({ primary: [], items: [] })
+  })
+
   it('shows the state, who uses it, its sources, and documents filtered to personal data', async () => {
     signIn(['rag-editor'])
     vi.spyOn(api.collections, 'get').mockResolvedValue(base)
@@ -198,7 +226,8 @@ describe('Knowledge base (admin design §5.5.2)', () => {
 
     const wrapper = mount(CollectionView, { props: { id: 'c1' }, attachTo: window.document.body, global: { stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
-    await wrapper.get('[data-test=delete]').trigger('click')
+    await wrapper.get('[data-test=menu-button]').trigger('click')
+    await openMenu().get('[data-test=menu-delete]').trigger('click')
     await flushPromises()
     expect(window.document.body.textContent).toContain('This cannot be undone. Its name is free for a new knowledge base.')
     const confirm = window.document.body.querySelector<HTMLButtonElement>('[data-test=confirm]')!
@@ -226,7 +255,8 @@ describe('Knowledge base (admin design §5.5.2)', () => {
 
     const wrapper = mount(CollectionView, { props: { id: 'c1' }, attachTo: window.document.body, global: { stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
-    await wrapper.get('[data-test=delete]').trigger('click')
+    await wrapper.get('[data-test=menu-button]').trigger('click')
+    await openMenu().get('[data-test=menu-delete]').trigger('click')
     await flushPromises()
     expect(window.document.body.querySelector('[data-test=in-use-assistants]')!.textContent).toBe('Used by: GK check (archived). Delete or unlink them first.')
     expect(window.document.body.querySelector('[data-test=in-use-sources]')!.textContent).toBe('It has 1 source. Delete its sources first.')
@@ -237,7 +267,8 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     signIn(['rag-editor'])
     const editor = mount(CollectionView, { props: { id: 'c1' }, global: { stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
-    expect(editor.find('[data-test=delete]').exists()).toBe(false)
+    await editor.get('[data-test=menu-button]').trigger('click')
+    expect(openMenu().find('[data-test=menu-delete]').exists()).toBe(false)
   })
 
   it('offers Add contact on an empty contact, which opens the Edit drawer; a reader sees no button (§5.5.2)', async () => {

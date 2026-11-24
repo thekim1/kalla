@@ -9,6 +9,7 @@ import { useUiStore } from '@/stores/ui'
 import { bffUser } from '@/test/fixtures'
 import { FILES } from '@/utils/labels'
 import FilesPanel from './FilesPanel.vue'
+import { openMenu } from '@/test/helpers'
 
 const source = { id: 's1', type: 'upload', name: 'Blanketter', settings: { maxFileSizeMb: 20 } } as unknown as Source
 const slot = (id: string, fileName: string, state: string, reason: string | null = null): UploadFile => ({
@@ -197,7 +198,8 @@ describe('Files (admin design §4.5, §5.5.7, connectors §9)', () => {
 
     expect(wrapper.text()).toContain('Refused')
     expect(wrapper.text()).toContain('This file format is not supported yet.')
-    await wrapper.get('[data-test=replace-u1]').trigger('click')
+    await wrapper.get('[data-test=row-menu-u1] [data-test=menu-button]').trigger('click')
+    await openMenu().get('[data-test=menu-replace]').trigger('click')
     const replacement = new File(['new'], 'taxa-2027.pdf')
     await pick(wrapper, 'replace-input', [replacement])
     await flushPromises()
@@ -211,6 +213,27 @@ describe('Files (admin design §4.5, §5.5.7, connectors §9)', () => {
     confirm('Remove 1 file')
     await flushPromises()
     expect(commit).toHaveBeenLastCalledWith('b3', { files: [], deletes: ['u2'] })
+    wrapper.unmount()
+  })
+
+  it('removes one file from its row\'s ⋯ menu after the same confirmation, and shows the bulk bar only while rows are selected (§5.12)', async () => {
+    signIn()
+    vi.spyOn(api.sources, 'filesSummary').mockResolvedValue(summary({ total: 1, indexed: 1 }))
+    vi.spyOn(api.sources, 'files').mockResolvedValue(page([slot('u1', 'taxa.pdf', 'indexed')]))
+    vi.spyOn(api.sources, 'uploadBatch').mockResolvedValue({ batchId: 'b4', maxFiles: 100, maxBytes: 500 })
+    const commit = vi.spyOn(api.uploads, 'commit').mockResolvedValue({ batchId: 'b4', jobId: 'j', entries: 1 })
+    const wrapper = mount(FilesPanel, { props: { source, canEdit: true }, attachTo: document.body })
+    await flushPromises()
+    expect(wrapper.find('[data-test=delete-files]').exists()).toBe(false)
+    const menu = wrapper.get('[data-test=row-menu-u1] [data-test=menu-button]')
+    expect(menu.attributes('aria-label')).toBe('Actions for taxa.pdf')
+    await menu.trigger('click')
+    expect(openMenu().findAll('[role=menuitem]').map((i) => i.text().replace(/^[a-z_]+/, ''))).toEqual(['Replace', 'Remove…'])
+    await openMenu().get('[data-test=menu-delete]').trigger('click')
+    await flushPromises()
+    confirm('Remove 1 file')
+    await flushPromises()
+    expect(commit).toHaveBeenLastCalledWith('b4', { files: [], deletes: ['u1'] })
     wrapper.unmount()
   })
 
@@ -261,7 +284,7 @@ describe('Files (admin design §4.5, §5.5.7, connectors §9)', () => {
     expect(wrapper.find('[data-test=drop-zone]').exists()).toBe(false)
     expect(wrapper.find('input[type=checkbox]').exists()).toBe(false)
     expect(wrapper.find('[data-test=retry-failed]').exists()).toBe(false)
-    expect(wrapper.find('[data-test=replace-u1]').exists()).toBe(false)
+    expect(wrapper.find('[data-test=row-menu-u1]').exists()).toBe(false)
     expect(wrapper.get('[data-test=file-list]').text()).toContain('taxa.pdf')
   })
 
