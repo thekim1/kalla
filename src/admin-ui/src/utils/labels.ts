@@ -334,11 +334,12 @@ export const SESSION = {
   stay: 'Stay signed in',
 } as const
 
+/** The side menu's groups (admin design §5.2): Home alone at the top, then Build, Follow-up and Administration. */
 export const NAV_GROUP = {
-  overview: 'Overview',
-  content: 'Content',
+  home: 'Home',
+  build: 'Build',
   followUp: 'Follow-up',
-  platform: 'Platform',
+  administration: 'Administration',
 } as const
 
 /** Extra words people search with that are not in a page's label (router/nav.ts). */
@@ -460,7 +461,7 @@ export const OVERVIEW = {
   profileTitle: 'Set up the platform',
   profileText: 'Create the embedding profile first: it is the model that indexes the content, and no knowledge base can be created without it.',
   profileAction: 'Create the embedding profile',
-  live: 'Live',
+  live: 'Assistants in use',
   liveMeta: 'Last 7 days',
   liveEmpty: 'No questions in the last 7 days',
   liveVersion: (n: number) => `Version ${n}`,
@@ -471,6 +472,12 @@ export const OVERVIEW = {
   cost: 'Cost',
   health: 'Health',
   runs: 'Runs in the last 24 hours',
+  /** Health's one line (admin design §5.5.1 item 6). */
+  fetches24h: 'Fetches, 24 h',
+  noRunsShort: 'none',
+  byDepartment: 'By department',
+  assistant: 'Assistant',
+  liveCaption: 'Assistants in use in the last 7 days, the most asked first',
   noRuns: 'No runs in the last 24 hours.',
   runsSucceeded: (n: number) => `${n} done`,
   runsDegraded: (n: number) => `${n} with remarks`,

@@ -30,6 +30,8 @@ export interface NavItem {
 export interface NavGroup {
   id: string
   label: string
+  /** Home's group: its heading is for assistive technology only, so Home stands alone at the top (admin design §5.2). */
+  hideLabel?: boolean
   items: NavItem[]
 }
 
@@ -46,13 +48,15 @@ export const MANAGE_ROLES: Role[] = rolesFor('manage')
 export const FEEDBACK_ROLES: Role[] = rolesFor('feedback')
 
 /**
- * Grouped by the job people come to do (admin design §5.2), filtered by role: Home and Map; Knowledge bases and
- * Assistants; Feedback; then the platform pages (Apps and keys, Models, Settings), Organisation and the Audit log (§5.10).
+ * Grouped by what people do there (admin design §5.2, UX pass UX1 A), filtered by role: Home alone at the top with its
+ * badge; Build (Knowledge bases, Assistants); Follow-up (Feedback, Costs, Map); Administration (the platform pages of
+ * §5.10: Apps and keys, Models, Settings; Organisation and the Audit log).
  */
 export const navGroups: NavGroup[] = [
   {
-    id: 'overview',
-    label: NAV_GROUP.overview,
+    id: 'home',
+    label: NAV_GROUP.home,
+    hideLabel: true,
     items: [
       {
         name: 'overview',
@@ -63,19 +67,11 @@ export const navGroups: NavGroup[] = [
         roles: ALL_ROLES,
         badge: 'attention',
       },
-      {
-        name: 'map',
-        label: PAGE.map.title,
-        icon: 'hub',
-        description: PAGE.map.description,
-        keywords: [...NAV_KEYWORDS.map],
-        roles: ALL_ROLES,
-      },
     ],
   },
   {
-    id: 'content',
-    label: NAV_GROUP.content,
+    id: 'build',
+    label: NAV_GROUP.build,
     items: [
       {
         name: 'collections',
@@ -118,11 +114,20 @@ export const navGroups: NavGroup[] = [
         keywords: [...NAV_KEYWORDS.costs],
         roles: MANAGE_ROLES,
       },
+      {
+        name: 'map',
+        label: PAGE.map.title,
+        icon: 'hub',
+        description: PAGE.map.description,
+        keywords: [...NAV_KEYWORDS.map],
+        roles: ALL_ROLES,
+      },
     ],
   },
   {
+    // The id stays `platform` (stream a's specs find the group by it); the label is Administration.
     id: 'platform',
-    label: NAV_GROUP.platform,
+    label: NAV_GROUP.administration,
     items: [
       ...platformNavItems,
       {
