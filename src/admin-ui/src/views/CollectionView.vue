@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import { useKeysetList } from '@/composables/useKeysetList'
 import { useTabQuery } from '@/composables/useTabQuery'
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import type { Collection, CostQuery, CollectionRead, CollectionSetup, DocumentSummary, EvaluationOverview, Source, SourceListItem, SourceSummary } from '@/api/types'
 import CollectionSharing from '@/components/collections/CollectionSharing.vue'
 import DocumentFeedbackCard from '@/components/collections/DocumentFeedbackCard.vue'
@@ -69,10 +70,15 @@ const TABS: [Tab, ...Tab[]] = ['overview', 'files', 'sources', 'documents', 'top
 const tab = useTabQuery(TABS)
 // A tab with unsaved changes (its form's save bar, admin design §5.12 *Saving*) asks before the tab changes.
 const unsaved = reactive({ sharing: false, search: false })
+const confirmTabChange = () => !(unsaved.sharing || unsaved.search) || window.confirm(UNSAVED.leave)
+// Leaving the page, or a tab change by a link (`?tab=`, which unmounts the form), asks while a form has changes.
+useUnsavedGuard(() => unsaved.sharing || unsaved.search, {
+  current: () => tab.value,
+  of: (r) => (TABS.includes(r.query.tab as Tab) ? (r.query.tab as Tab) : TABS[0]),
+  confirm: confirmTabChange,
+})
 function switchTab(next: string): void {
-  if ((unsaved.sharing || unsaved.search) && !window.confirm(UNSAVED.leave)) return
-  unsaved.sharing = false
-  unsaved.search = false
+  if (next === tab.value || !confirmTabChange()) return
   tab.value = next as typeof tab.value
 }
 const publishing = ref(false)
@@ -136,6 +142,9 @@ async function deleteCollection(): Promise<void> {
   const deleted = collection.data.value!
   await api.collections.remove(deleted.id, deleted.version)
   ui.notify(DELETE.knowledgeBaseDeleted(deleted.name))
+  // The knowledge base is gone, and a form's unsaved changes with it: no question on the way out.
+  unsaved.sharing = false
+  unsaved.search = false
   void router.push({ name: 'collections' })
 }
 const proposal = ref<{ coverageMaxDistance?: number; coverageMinKeywordScore?: number } | null>(null)

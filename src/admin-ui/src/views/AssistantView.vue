@@ -62,7 +62,8 @@ const ui = useUiStore()
 const router = useRouter()
 const assistant = useLoadable<Assistant | null>(null)
 /** The tab is kept in `?tab=`, so a reload or a link opens it. */
-const tab = useTabQuery<Tab>(['draft', 'test', 'test-questions', 'versions', 'audience', 'storage', 'statistics'])
+const TABS: [Tab, ...Tab[]] = ['draft', 'test', 'test-questions', 'versions', 'audience', 'storage', 'statistics']
+const tab = useTabQuery<Tab>(TABS)
 /** The Statistics tab's Cost card (admin design §8.6). */
 const assistantCosts = (query: CostQuery) => api.costs.assistant(props.id, query)
 const draft = ref<AssistantDraft | null>(null)
@@ -151,6 +152,10 @@ async function deleteAssistant(): Promise<void> {
   const deleted = assistant.data.value!
   await api.assistants.remove(deleted.id, deleted.version)
   ui.notify(DELETE.assistantDeleted(deleted.name))
+  // The assistant is gone, and its unsaved changes with it: no question on the way out.
+  draftDirty.reset()
+  audienceDirty.reset()
+  storageDirty.reset()
   void router.push({ name: 'assistants' })
 }
 
@@ -339,16 +344,21 @@ function fillAccess(a: Assistant): void {
   storageDirty.reset()
 }
 const tabDirty = (t: string) => (t === 'draft' ? draftDirty : t === 'audience' ? audienceDirty : t === 'storage' ? storageDirty : null)?.dirty.value ?? false
-useUnsavedGuard(() => draftDirty.dirty.value || audienceDirty.dirty.value || storageDirty.dirty.value)
 /** A tab change with unsaved changes on the tab asks first (§5.12, *Saving*); the changes stay for a return. */
+const confirmTabChange = () => !tabDirty(tab.value) || window.confirm(UNSAVED.switchTabKept)
+useUnsavedGuard(() => draftDirty.dirty.value || audienceDirty.dirty.value || storageDirty.dirty.value, {
+  current: () => tab.value,
+  of: (r) => (TABS.includes(r.query.tab as Tab) ? (r.query.tab as Tab) : TABS[0]),
+  confirm: confirmTabChange,
+})
 function switchTab(next: Tab): void {
-  if (tabDirty(tab.value) && !(window.confirm(UNSAVED.leave))) return
+  if (next === tab.value || !confirmTabChange()) return
   tab.value = next
 }
 const discardDraft = () => fill(...filledFrom)
 const draftConsequence = computed(() => {
   const n = assistant.data.value?.publishedVersion
-  return n ? UNSAVED.draftConsequence(n) : undefined
+  return n ? UNSAVED.draftConsequence(n) : UNSAVED.firstDraftConsequence
 })
 
 async function fillFrom(a: Assistant): Promise<void> {
@@ -586,10 +596,15 @@ watch(() => props.id, () => {
           {{ ASSISTANT.compareWithPublished }}
         </UiButton>
         <UiButton
-          v-if="canEdit && assistant.data.value.draft" variant="primary" data-test="publish" @click="publishing = true"
+          v-if="canEdit && assistant.data.value.draft" variant="primary" :disabled="draftDirty.dirty.value"
+          :aria-describedby="draftDirty.dirty.value ? 'publish-unsaved' : undefined" data-test="publish" @click="publishing = true"
         >
           {{ ASSISTANT.publish }}
         </UiButton>
+        <!-- The dialog shows the saved draft, so unsaved changes are saved or discarded first. -->
+        <p v-if="canEdit && assistant.data.value.draft && draftDirty.dirty.value" id="publish-unsaved" class="basis-full text-small text-fg-2 md:text-right" data-test="publish-unsaved">
+          {{ UNSAVED.publishFirst }}
+        </p>
         <MenuButton v-if="headerMenu.length" :label="MENU.more(assistant.data.value.name)" :items="headerMenu" @select="onHeaderMenu" />
       </PageHeader>
       <KeyBudgetStatus class="mb-4" :gateway-key-id="assistant.data.value.gatewayKeyId" />

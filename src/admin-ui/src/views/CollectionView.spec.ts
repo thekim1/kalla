@@ -7,6 +7,7 @@ import type { Collection, DocumentSummary, Source, SourceListItem } from '@/api/
 import { useAuthStore } from '@/stores/auth'
 import { bffUser, collection, collectionSummary, collectionUser } from '@/test/fixtures'
 import { button, openMenu } from '@/test/helpers'
+import { UNSAVED } from '@/utils/labels'
 import CollectionEditDrawer from '@/components/collections/CollectionEditDrawer.vue'
 import CollectionView from './CollectionView.vue'
 
@@ -466,6 +467,7 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     await flushPromises()
     expect(save).toHaveBeenCalledTimes(2)
     expect(wrapper.find('[data-test=sharing-error]').exists()).toBe(false)
+    expect(wrapper.find('[data-test=save-bar]').exists()).toBe(false) // the saved sharing is the form's again
   })
 
   it('shows the sharing to an editor without letting them change it', async () => {
@@ -578,5 +580,33 @@ describe('Knowledge base (admin design §5.5.2)', () => {
       expect(editor.find('[data-test=add-files]').exists()).toBe(false)
       expect(editor.find('[data-test=add-source]').exists()).toBe(true)
     })
+  })
+
+  it('asks before a tab change while the sharing has unsaved changes, and drops them on Yes (B-77)', async () => {
+    signIn(['rag-department-admin'])
+    vi.spyOn(api.collections, 'get').mockResolvedValue(collection({ sharedWith: 'department', version: '7' }))
+    vi.spyOn(api.collections, 'sources').mockResolvedValue([])
+    vi.spyOn(api.organisation, 'departmentNames').mockResolvedValue([{ id: 'd1', name: 'Kommunikation' }, { id: 'd2', name: 'Bygg och miljö' }])
+    const wrapper = mount(CollectionView, { props: { id: 'c1' } })
+    await flushPromises()
+    await button(wrapper, 'Sharing').trigger('click')
+    await flushPromises()
+    await wrapper.get('#sharing-municipality').setValue(true)
+    expect(wrapper.get('[data-test=save-bar-count]').text()).toBe('1 unsaved change')
+
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    await button(wrapper, 'Overview').trigger('click')
+    expect(confirm).toHaveBeenCalledWith(UNSAVED.leave)
+    expect(wrapper.find('#collection-panel-sharing').exists()).toBe(true)
+
+    confirm.mockReturnValue(true)
+    await button(wrapper, 'Overview').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('#collection-panel-sharing').exists()).toBe(false)
+    confirm.mockClear()
+    await button(wrapper, 'Sharing').trigger('click') // nothing unsaved is left behind
+    await flushPromises()
+    await button(wrapper, 'Overview').trigger('click')
+    expect(confirm).not.toHaveBeenCalled()
   })
 })

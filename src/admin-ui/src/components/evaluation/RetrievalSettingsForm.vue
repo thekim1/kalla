@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { api } from '@/api'
 import type { Collection } from '@/api/types'
 import CheckField from '@/components/ui/CheckField.vue'
@@ -10,7 +10,6 @@ import UiButton from '@/components/ui/UiButton.vue'
 import SaveBar from '@/components/ui/SaveBar.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import { useDirty } from '@/composables/useDirty'
-import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { useUiStore } from '@/stores/ui'
 import { formatDecimal } from '@/utils/format'
 import { RETRIEVAL } from '@/utils/labels'
@@ -64,9 +63,17 @@ function reset(): void {
   proposalFilled.value = false
   dirty.reset()
 }
-watch(() => props.collection.version, reset, { immediate: true })
+// A change to the knowledge base from elsewhere on the page (a header action) keeps unsaved settings; this form's own
+// save takes the saved values.
+let adopt = false
+reset()
+watch(() => props.collection.version, () => {
+  if (adopt || !dirty.dirty.value) reset()
+  adopt = false
+})
 watch(dirty.dirty, (d) => emit('dirty', d))
-useUnsavedGuard(() => dirty.dirty.value)
+// Gone from the page (another tab, or Try without saving), its changes are gone too.
+onBeforeUnmount(() => emit('dirty', false))
 watch(
   () => props.proposal,
   (p) => {
@@ -120,6 +127,7 @@ async function save(): Promise<void> {
   try {
     const saved = await api.collections.retrievalSettings(props.collection.id, settings, props.collection.version)
     ui.notify(RETRIEVAL.saved)
+    adopt = true
     emit('saved', saved)
   } catch (e) {
     error.value = e

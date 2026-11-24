@@ -2477,7 +2477,11 @@ export const UNSAVED = {
   discardTitle: (n: number) => `Discard ${n} unsaved ${n === 1 ? 'change' : 'changes'}?`,
   discardConsequence: 'The form goes back to what is saved.',
   draftConsequence: (n: number) => `Version ${n} stays published until you publish the draft`,
+  firstDraftConsequence: 'Saving keeps a draft; publish it to make the assistant available',
   leave: 'You have unsaved changes. Leave without saving them?',
+  /** The assistant keeps a tab's changes while another tab shows. */
+  switchTabKept: 'You have unsaved changes on this tab. Switch anyway? They stay here until you save or discard them.',
+  publishFirst: 'Save or discard the draft\'s changes before you publish.',
 } as const
 
 /** The ⋯ menu of a header or a row (admin design §5.12 rule 1); its name says whose actions they are. */

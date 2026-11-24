@@ -62,4 +62,30 @@ describe('Search settings (admin design §7.1, V16)', () => {
     expect(wrapper.find('[data-test=save-bar-save]').exists()).toBe(false)
     expect(wrapper.get('#rs-candidates').attributes('disabled')).toBeDefined()
   })
+
+  it('keeps unsaved settings when the knowledge base changes from elsewhere, takes its own save, and is clean once gone (B-77)', async () => {
+    setActivePinia(createPinia())
+    const saved = { ...collection, retrievalSettings: { ...collection.retrievalSettings, candidates: 90 }, version: '9' }
+    vi.spyOn(api.collections, 'retrievalSettings').mockResolvedValue(saved)
+    const onDirty = vi.fn()
+    const wrapper = mount(RetrievalSettingsForm, { props: { collection, canEdit: true, onDirty } })
+    await wrapper.get('#rs-candidates').setValue('90')
+    expect(onDirty.mock.calls).toEqual([[true]])
+
+    await wrapper.setProps({ collection: { ...collection, version: '8' } }) // a header action, say Publish
+    expect((wrapper.get('#rs-candidates').element as HTMLInputElement).value).toBe('90')
+    expect(wrapper.get('[data-test=save-bar-count]').text()).toBe('1 unsaved change')
+
+    await wrapper.get('[data-test=save-bar-save]').trigger('click')
+    await flushPromises()
+    await wrapper.setProps({ collection: saved })
+    expect(wrapper.find('[data-test=save-bar]').exists()).toBe(false)
+    expect(onDirty.mock.calls.at(-1)).toEqual([false])
+
+    await wrapper.get('#rs-candidates').setValue('100')
+    await flushPromises()
+    expect(onDirty.mock.calls.at(-1)).toEqual([true])
+    wrapper.unmount() // another tab, or Try without saving
+    expect(onDirty.mock.calls.at(-1)).toEqual([false])
+  })
 })

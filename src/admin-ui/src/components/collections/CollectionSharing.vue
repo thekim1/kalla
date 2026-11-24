@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
 import type { Collection, SharingLevel } from '@/api/types'
 import CheckField from '@/components/ui/CheckField.vue'
@@ -8,7 +8,6 @@ import InlineError from '@/components/ui/InlineError.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import SaveBar from '@/components/ui/SaveBar.vue'
 import { useDirty } from '@/composables/useDirty'
-import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { useUiStore } from '@/stores/ui'
 import { SHARING } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
@@ -54,9 +53,16 @@ function fillFrom(c: Collection): void {
   dirty.reset()
 }
 fillFrom(props.collection)
-watch(() => props.collection, fillFrom)
+// A change to the knowledge base from elsewhere on the page (a header action) keeps unsaved sharing; this form's own
+// save takes the saved values.
+let adopt = false
+watch(() => props.collection, (c) => {
+  if (adopt || !dirty.dirty.value) fillFrom(c)
+  adopt = false
+})
 watch(dirty.dirty, (d) => emit('dirty', d))
-useUnsavedGuard(() => dirty.dirty.value)
+// Gone from the page (another tab), its changes are gone too.
+onBeforeUnmount(() => emit('dirty', false))
 
 function toggle(id: string, on: boolean): void {
   selected.value = on ? [...new Set([...selected.value, id])] : selected.value.filter((x) => x !== id)
@@ -71,6 +77,7 @@ async function save(): Promise<void> {
     const saved = await api.collections.sharing(props.collection.id, {
       sharedWith: level.value, departmentIds: level.value === 'selected' ? selected.value : [], version: props.collection.version,
     })
+    adopt = true
     emit('saved', saved)
     ui.notify(SHARING.saved)
   } catch (e) {

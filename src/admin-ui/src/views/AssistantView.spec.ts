@@ -8,7 +8,7 @@ import { useAuthStore } from '@/stores/auth'
 import { bffUser, collectionSummary } from '@/test/fixtures'
 import { button, openMenu } from '@/test/helpers'
 import { formatNumber } from '@/utils/format'
-import { ASSISTANT, MODEL_AVAILABILITY } from '@/utils/labels'
+import { ASSISTANT, MODEL_AVAILABILITY, UNSAVED } from '@/utils/labels'
 import AssistantView from './AssistantView.vue'
 
 // `?tab=` through a route the tests set; tab changes go to router.replace.
@@ -222,6 +222,26 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(helps[0]).toBe('Answers only from the knowledge bases; when they have nothing, it says so and shows the contact links.')
   })
 
+  it('discards the draft\'s changes back to the saved values, and says before the first publish what saving does (B-77)', async () => {
+    signIn(['rag-editor'])
+    mocks()
+    vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, publishedVersion: null })
+    const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
+    await flushPromises()
+    const prompt = wrapper.get('#assistant-prompt').element as HTMLTextAreaElement
+    const saved = prompt.value
+
+    await wrapper.get('#assistant-prompt').setValue('Något annat.')
+    expect(wrapper.get('[data-test=save-bar-consequence]').text()).toContain(UNSAVED.firstDraftConsequence)
+    await wrapper.get('[data-test=save-bar-discard]').trigger('click')
+    await flushPromises()
+    ;[...document.body.querySelectorAll('dialog button')].find((b) => b.textContent?.trim() === 'Discard')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(prompt.value).toBe(saved)
+    expect(wrapper.find('[data-test=save-bar]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('saves the draft through the save bar with its consequence, and asks before a tab change with unsaved changes (B-77)', async () => {
     signIn(['rag-editor'])
     mocks()
@@ -237,7 +257,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     await wrapper.get('#assistant-tab-storage').trigger('click')
     await flushPromises()
-    expect(confirm).toHaveBeenCalledWith('You have unsaved changes. Leave without saving them?')
+    expect(confirm).toHaveBeenCalledWith(UNSAVED.switchTabKept)
     expect(wrapper.find('#assistant-panel-draft').exists()).toBe(true) // stayed
 
     confirm.mockReturnValue(true)
@@ -449,6 +469,13 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     await wrapper.get('#assistant-general-knowledge-fallback').setValue(true)
     expect(wrapper.find('[data-test=general-knowledge-public-warning]').exists()).toBe(true)
 
+    // Unsaved changes are saved or discarded before publishing: the dialog shows the saved draft (B-77).
+    expect(wrapper.get('[data-test=publish]').attributes('aria-disabled')).toBe('true')
+    expect(wrapper.get('[data-test=publish-unsaved]').text()).toBe(UNSAVED.publishFirst)
+    expect(wrapper.get('[data-test=publish]').attributes('aria-describedby')).toBe('publish-unsaved')
+    await wrapper.get('#assistant-general-knowledge-supplement').setValue(true)
+    expect(wrapper.find('[data-test=publish-unsaved]').exists()).toBe(false)
+
     // V36's confirmation is a checkbox in the Publish dialog (B-82), not a dialog of its own (the draft has no refusal).
     await publishThroughDialog(wrapper, true)
     expect(publish).toHaveBeenCalledTimes(1)
@@ -542,6 +569,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     await wrapper.get('[data-test=save-bar-save]').trigger('click')
     await flushPromises()
     expect(audiences).toHaveBeenCalledWith('a1', { clientIds: ['k1'], version: 'a4' })
+    expect(wrapper.find('[data-test=save-bar]').exists()).toBe(false) // saved: nothing left to save
     expect(wrapper.get('[data-test=who-can-use]').text()).toContain('Open WebUI (pilot): everyone who can sign in to it.')
     // Adding an app is a platform admin's job: a department admin gets no link.
     expect(wrapper.find('[data-test=connect-app]').exists()).toBe(false)
