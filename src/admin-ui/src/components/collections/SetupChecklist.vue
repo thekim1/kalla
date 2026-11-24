@@ -13,7 +13,7 @@ import { SETUP } from '@/utils/labels'
 // (Home, §5.5.1): a checklist whose knowledge base is published starts folded to one line ("Name: 5 of 8 steps done") and
 // unfolds on click. The `actions` slot (Home's Hide) shows in both forms. The last step is done, either way, once the
 // published assistant is offered to an app (`available`); without Open WebUI it names an app with a key and opens the
-// assistant's Audience tab, where the apps are ticked and a platform admin connects a new one.
+// assistant's Access tab, where the apps are ticked and a platform admin connects a new one.
 const props = defineProps<{ setup: CollectionSetup; showName?: boolean; foldable?: boolean }>()
 const auth = useAuthStore()
 const canFold = computed(() => !!props.foldable && props.setup.published)

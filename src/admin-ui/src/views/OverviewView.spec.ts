@@ -133,7 +133,7 @@ describe('Home: Needs attention (admin design §5.5.1, B-59)', () => {
     const items = card.findAll('[data-test=attention-item]')
     expect(items[0]!.text()).toContain(ATTENTION.kinds.deletion_waiting!(attention[0]!.details, 'umea.se/bygga'))
     expect(JSON.parse(items[0]!.get('[data-to]').attributes('data-to')!)).toEqual({ name: 'run', params: { id: 'r1' } })
-    expect(JSON.parse(items[1]!.get('[data-to]').attributes('data-to')!)).toEqual({ name: 'assistant', params: { id: 'a1' }, query: { tab: 'usage' } })
+    expect(JSON.parse(items[1]!.get('[data-to]').attributes('data-to')!)).toEqual({ name: 'assistant', params: { id: 'a1' }, query: { tab: 'quality' } })
     expect(items[1]!.text()).toContain('Faithfulness last night is 8.0 points below the usual')
     expect(items[2]!.find('[data-to]').exists()).toBe(false) // a worker update: no page to go to
     expect(useUiStore().attention).toBe(3)
@@ -158,7 +158,7 @@ describe('Home: Live, Health and Get started (admin design §5.5.1)', () => {
     assistantId: 'a1', name: 'Bygglovsassistenten', departmentId: 'd1', publishedVersion: 3, questions: 42, notFound: 5, thumbsUp: 7, thumbsDown: 2, costUsd: 1.5,
   }
 
-  it('shows a card per published assistant linking to its Statistics tab, and says when nobody asked anything', async () => {
+  it('shows a card per published assistant linking to its Usage tab, and says when nobody asked anything', async () => {
     editor()
     const overview = vi.spyOn(api, 'overview').mockResolvedValue(overviewOf({ live: [assistant, { ...assistant, assistantId: 'a2', name: 'Tyst', questions: 0 }] }))
     const wrapper = mount(OverviewView, { global: { stubs: { RouterLink: LinkStub } } })

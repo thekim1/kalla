@@ -119,7 +119,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     await flushPromises()
 
     expect(wrapper.get('[data-test=warnings]').text()).toContain('Add a description and a contact before you publish.')
-    // The model name is on the Audience tab, not in the page's subtitle (admin design §5.7).
+    // The model name is on the Access tab, not in the page's subtitle (admin design §5.7).
     expect(wrapper.get('header').text()).not.toContain('bygglov')
     const options = wrapper.findAll('#assistant-model option').map((o) => o.text())
     expect(options).toContain('fors/chat-eu')
@@ -184,7 +184,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(save.mock.calls[0]![1].collectionLinks).toEqual([{ collectionId: 'c2', tags: ['kompost'] }])
   })
 
-  it('says in the Draft tab\'s lead what saving does, per state, and names the header\'s menu item Edit name and contact (UI4 B; admin design §5.7)', async () => {
+  it('says in the draft form\'s lead what saving does, per state, and names the header\'s menu item Edit name and contact (UI4 B; admin design §5.7)', async () => {
     signIn(['rag-editor'])
     mocks()
     vi.spyOn(api.assistants, 'version').mockResolvedValue({
@@ -295,7 +295,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     const wrapper = mount(AssistantView, { props: { id: 'a1' } })
     await flushPromises()
 
-    // The first draft's instructions (the platform default) are on the Draft tab; the model is under Advanced.
+    // The first draft's instructions (the platform default) are on the Build tab; the model is under Advanced.
     expect((wrapper.get('#assistant-prompt').element as HTMLTextAreaElement).value).toBe('Du svarar invånare.')
     const advanced = wrapper.get('[data-test=advanced]')
     expect((advanced.element as HTMLDetailsElement).open).toBe(false)
@@ -380,7 +380,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       return wrapper
     }
 
-    it('shows the model name with a copy button on the Audience tab (admin design §5.7)', async () => {
+    it('shows the model name with a copy button on the Access tab (admin design §5.7)', async () => {
       const wrapper = await mountWith({ publishedVersion: 2 })
       await wrapper.get('#assistant-tab-access').trigger('click')
       await flushPromises()
@@ -1032,18 +1032,34 @@ describe('the assistant page\'s five tabs and the test beside the draft (admin d
     gateway: { model: 'fors/chat-eu', residency: 'Eu', latencyMs: 700, inputTokens: 300, outputTokens: 5, costUsd: 0.0001, costEstimated: false },
   } as never
 
-  /** Which media queries match: `wide` is 1,280 px and up, `phone` below 760 px. */
-  function screen(size: 'wide' | 'narrow' | 'phone'): void {
+  /** Which media queries match: `wide` is 1,280 px and up, `phone` below 768 px. Returns a resize to another size. */
+  function screen(size: 'wide' | 'narrow' | 'phone'): (to: 'wide' | 'narrow' | 'phone') => void {
+    const listeners: { query: string; fn: (e: { matches: boolean }) => void }[] = []
+    const matches = (query: string, at: string) => (query.includes('min-width: 1280px') ? at === 'wide' : query.includes('max-width: 767px') ? at === 'phone' : false)
     vi.stubGlobal('matchMedia', (query: string) => ({
-      matches: query.includes('min-width: 1280px') ? size === 'wide' : query.includes('max-width: 759px') ? size === 'phone' : false,
-      media: query, addEventListener: () => undefined, removeEventListener: () => undefined,
+      matches: matches(query, size), media: query,
+      addEventListener: (_: string, fn: (e: { matches: boolean }) => void) => listeners.push({ query, fn }), removeEventListener: () => undefined,
     }))
+    return (to) => listeners.forEach((l) => l.fn({ matches: matches(l.query, to) }))
   }
 
-  it('has Build, Quality, Versions, Access and Usage, each in ?tab=, and opens Build for an old or unknown value', async () => {
+  it('opens the tab an old ?tab= value moved to, so bookmarks keep working, and Build for an unknown one', async () => {
     signIn(['rag-department-admin'])
     mocks()
-    route.query = { tab: 'statistics' }
+    vi.spyOn(api.feedback, 'summary').mockResolvedValue({ totals: { answers: 0, notFound: 0, thumbsUp: 0, thumbsDown: 0 }, imports: [], lastUsedOn: null })
+    vi.spyOn(api.costs, 'assistant').mockResolvedValue({ rows: [], outcomes: [] } as never)
+    for (const [old, now] of [['draft', 'build'], ['test', 'build'], ['test-questions', 'quality'], ['statistics', 'usage'], ['audience', 'access'], ['storage', 'access'], ['nonsense', 'build']]) {
+      route.query = { tab: old! }
+      const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
+      await flushPromises()
+      expect(wrapper.find(`#assistant-panel-${now}`).exists(), old).toBe(true)
+      wrapper.unmount()
+    }
+  })
+
+  it('has Build, Quality, Versions, Access and Usage, each in ?tab=', async () => {
+    signIn(['rag-department-admin'])
+    mocks()
     const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
     await flushPromises()
     expect(wrapper.findAll('[role=tab]').map((t) => t.text())).toEqual(['Build', 'Quality', 'Versions', 'Access', 'Usage'])
@@ -1062,33 +1078,50 @@ describe('the assistant page\'s five tabs and the test beside the draft (admin d
     vi.unstubAllGlobals()
   })
 
-  it('puts the test panel beside the draft from 1,280 px, folds it under the form below, and keeps the answer when it moves', async () => {
+  it('puts the test panel beside the draft from 1,280 px, folds it under the form below, and keeps the answer when the window narrows', async () => {
     signIn(['rag-editor'])
     mocks()
     vi.spyOn(api.assistants, 'test').mockResolvedValue(testResult)
-    screen('wide')
-    const wide = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
+    const resize = screen('wide')
+    const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
     await flushPromises()
-    const beside = wide.get('[data-test=test-beside]')
+    const beside = wrapper.get('[data-test=test-beside]')
     expect(beside.classes()).toContain('sticky')
-    expect(wide.find('[data-test=try-draft]').exists()).toBe(false)
-    expect(beside.find('[data-test=test-panel]').exists()).toBe(true)
-    wide.unmount()
-
-    screen('narrow')
-    const narrow = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
+    expect(wrapper.find('[data-test=try-draft]').exists()).toBe(false)
+    await beside.get('#assistant-question').setValue('Behöver jag bygglov för en altan?')
+    await beside.get('form').trigger('submit')
     await flushPromises()
-    const folded = narrow.get('[data-test=try-draft]')
+    expect(beside.get('[data-test=answer]').text()).toContain('Ja [1].')
+    // Announced politely in a log (§5.12's accessibility table).
+    expect(beside.get('[data-test=test-log]').attributes('role')).toBe('log')
+    expect(beside.get('[data-test=test-log]').text()).toBe(ASSISTANT.answerReady('Answered'))
+
+    resize('narrow')
+    await flushPromises()
+    expect(wrapper.find('[data-test=test-beside]').exists()).toBe(false)
+    const folded = wrapper.get('[data-test=try-draft]')
     expect(folded.element.tagName).toBe('DETAILS')
     expect(folded.get('summary').text()).toBe(ASSISTANT.tryDraft)
     // Under the form: after the draft form in the panel's order.
-    const panel = narrow.get('#assistant-panel-build').element
-    expect([...panel.children].indexOf(folded.element)).toBeGreaterThan([...panel.children].indexOf(narrow.get('[data-test=draft-form]').element))
-    await folded.get('#assistant-question').setValue('Behöver jag bygglov för en altan?')
-    await folded.get('form').trigger('submit')
-    await flushPromises()
+    const panel = wrapper.get('#assistant-panel-build').element
+    expect([...panel.children].indexOf(folded.element)).toBeGreaterThan([...panel.children].indexOf(wrapper.get('[data-test=draft-form]').element))
+    // The same question and answer: the panel moved, its state did not.
+    expect((folded.get('#assistant-question').element as HTMLTextAreaElement).value).toBe('Behöver jag bygglov för en altan?')
     expect(folded.get('[data-test=answer]').text()).toContain('Ja [1].')
-    narrow.unmount()
+    wrapper.unmount()
+    vi.unstubAllGlobals()
+  })
+
+  it('says the panel tests the saved draft while the form has unsaved changes', async () => {
+    signIn(['rag-editor'])
+    mocks()
+    screen('wide')
+    const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
+    await flushPromises()
+    expect(wrapper.find('[data-test=test-unsaved]').exists()).toBe(false)
+    await wrapper.get('#assistant-prompt').setValue('Svara kort.')
+    expect(wrapper.get('[data-test=test-beside] [data-test=test-unsaved]').text()).toBe(ASSISTANT.testsSavedDraft)
+    wrapper.unmount()
     vi.unstubAllGlobals()
   })
 

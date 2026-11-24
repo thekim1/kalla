@@ -22,7 +22,7 @@ async function open(value: AnswerEvaluation) {
   return wrapper
 }
 
-describe('the Statistics tab\'s answer evaluation (admin design §5.5.4, B-58)', () => {
+describe('the Quality tab\'s answer evaluation (admin design §5.5.4, B-58)', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     setActivePinia(createPinia())
