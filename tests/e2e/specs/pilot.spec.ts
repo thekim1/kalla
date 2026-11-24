@@ -51,7 +51,7 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await act.fill(source.getByRole('textbox', { name: 'Name of the source' }), 'Testwebbplatsen')
     await act.fill(source.getByRole('textbox', { name: 'Start addresses' }), `${fixtureSiteUrl}/webbplats/`)
     // The saved umea.se pages link to paths the fixture site does not have: keep the crawl inside its part.
-    await act.press(source.getByText('More settings'))
+    await act.press(source.getByText('More options'))
     await act.fill(source.getByRole('textbox', { name: 'Only include' }), `${new URL(fixtureSiteUrl).host}/webbplats/**`)
 
     // 4 Check: reachability, robots, sitemap; nothing blocks (the E2E stack seeds the fixture port in Settings.Crawl).

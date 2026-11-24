@@ -560,6 +560,10 @@ export const COLLECTIONS = {
   departmentRequired: 'Choose a department.',
   contactName: 'Contact person',
   contactEmail: 'Contact email',
+  /** The pre-filled contact folded into one line (admin design §5.12, Drawers). */
+  contactLine: 'Contact',
+  change: 'Change',
+  changeContact: 'Change the contact',
   contactHint: 'Shown to the departments that may use the knowledge base. A person or a functional mailbox.',
   state: 'State',
   published: 'Published',
@@ -755,7 +759,8 @@ export const SOURCE = {
   sitemaps: 'Sitemaps',
   sitemapsHint: 'Optional, one address per line, for example https://www.example.org/sitemap.xml or a compressed …/sitemap.xml.gz. Use it when the check finds no sitemap: the website’s robots.txt and /sitemap.xml are always tried.',
   sitemapsInvalid: 'Each sitemap address must start with http:// or https://. At most 20.',
-  advanced: 'More settings',
+  /** The Add source drawer's fold: the sitemaps and the advanced crawl fields (admin design §5.12, Drawers). */
+  advanced: 'More options',
   include: 'Only include',
   includeHint: 'Patterns, one per line, for example www.example.org/building* for that page (also when its address goes on, as in building.4.1a2b.html) and www.example.org/building/** for every page under it. * stays within one part of the path, ** crosses parts. A leading https:// is ignored. Empty means the whole website.',
   exclude: 'Skip',
