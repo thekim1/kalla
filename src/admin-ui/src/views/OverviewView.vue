@@ -49,12 +49,10 @@ const departments = computed(() =>
   auth.departmentSources.map((d) => ({ ...d, name: synced.value ? (synced.value.find((s) => s.costCenterCode === d.code)?.name ?? null) : undefined })),
 )
 
-const identity = computed(() =>
-  OVERVIEW.identity(
-    departments.value.map((d) => d.name ?? d.code),
-    roles.value.map((r) => ROLE_LABEL[r]),
-  ),
-)
+/** The departments under the greeting: a synced name (Swedish), else the code. */
+const departmentNames = computed(() => departments.value.map((d) => ({ text: d.name ?? d.code, sv: !!d.name })))
+const roleNames = computed(() => roles.value.map((r) => ROLE_LABEL[r]))
+const identity = computed(() => OVERVIEW.identity(departmentNames.value.map((d) => d.text), roleNames.value))
 const live = computed(() => overview.data.value?.live ?? [])
 const quiet = computed(() => live.value.every((a) => a.questions === 0))
 
@@ -95,7 +93,12 @@ function showHidden(): void {
 </script>
 
 <template>
-  <PageHeader :title="greeting" :description="identity || undefined" />
+  <PageHeader :title="greeting">
+    <!-- The departments and roles under the greeting; the department names are Swedish (admin design §5.7; #1036). -->
+    <template v-if="identity" #description>
+      <span data-test="identity"><template v-for="(d, i) in departmentNames" :key="i"><template v-if="i > 0">, </template><span :lang="d.sv ? 'sv' : undefined">{{ d.text }}</span></template><template v-if="departmentNames.length && roleNames.length"> · </template>{{ roleNames.join(', ') }}</span>
+    </template>
+  </PageHeader>
   <template v-if="overview.data.value">
     <NeedsAttention :items="overview.data.value.attention" class="mb-6" />
     <SecretExpiryNotices v-if="auth.isPlatformAdmin && overview.data.value.secretExpiry.length" :entries="overview.data.value.secretExpiry" class="mb-6" />
