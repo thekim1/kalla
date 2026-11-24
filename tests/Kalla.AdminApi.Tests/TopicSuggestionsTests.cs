@@ -29,7 +29,8 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
     /// <c>bygga</c> and <c>/kommun/</c> <c>kommun</c>, and an upload source without rules. Website documents: <c>/bygga/</c>
     /// (the section's page, titled) and five under <c>/bygga/bygglov/</c>; four under <c>/skola/</c> (under the cut-off);
     /// five under <c>/kommun/</c>; five under <c>/äldre/</c>, three of them written percent-encoded; one at the root. Upload
-    /// documents: five in <c>HR/Policys/</c>, one in <c>HR/</c>, one at the top. Only the <c>/bygga/</c> documents carry a tag yet.
+    /// documents: five in <c>HR/Policys/</c>, one in <c>HR/</c>, one written <c>/HR/g.pdf</c> (no <c>HR/</c> rule
+    /// matches it, so it is in no section), one at the top. Only the <c>/bygga/</c> documents carry a tag yet.
     /// </summary>
     private async Task<Seed> SeedAsync()
     {
@@ -57,11 +58,11 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
                   {"match":"Protokoll","on":"title-regex","tags":["protokoll"]}]}}
                 """,
         };
-        var files = new Pipeline { Name = $"topics-files-{n}", TemplateId = "upload", UpdatedAt = DateTimeOffset.UtcNow };
+        var files = new Pipeline { Name = $"topics-files-{n}", TemplateId = "files", UpdatedAt = DateTimeOffset.UtcNow };
         var filesVersion = new PipelineVersion
         {
             PipelineId = files.Id, Number = 1, State = PipelineVersionStates.Published, PublishedAt = DateTimeOffset.UtcNow,
-            Definition = """{"schema":1,"template":"upload","templateVersion":1,"params":{}}""",
+            Definition = """{"schema":1,"template":"files","templateVersion":1,"params":{}}""",
         };
         var web = new Source
         {
@@ -115,7 +116,7 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
         }
 
         await Page("/");
-        foreach (var file in new[] { "HR/Policys/a.pdf", "HR/Policys/b.pdf", "HR/Policys/c.pdf", "HR/Policys/d.pdf", "/HR/Policys/e.pdf", "HR/f.pdf", "g.pdf" })
+        foreach (var file in new[] { "HR/Policys/a.pdf", "HR/Policys/b.pdf", "HR/Policys/c.pdf", "HR/Policys/d.pdf", "HR/Policys/e.pdf", "HR/f.pdf", "/HR/g.pdf", "h.pdf" })
         {
             await File(file);
         }
@@ -153,7 +154,7 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
         web[2].GetProperty("coveredBy").GetArrayLength().ShouldBe(0);
         (!web[2].TryGetProperty("title", out var title) || title.ValueKind == JsonValueKind.Null).ShouldBeTrue(); // no page of its own
 
-        // An upload's sections are the first folders of its display names (a leading slash is the same folder).
+        // An upload's sections are the first folders of its display names, as the matcher reads them (/HR/g.pdf is not in HR/).
         var files = Sections(suggestions, seed.Upload);
         files.Select(s => s.GetProperty("path").GetString()).ShouldBe(["HR/"]);
         files[0].GetProperty("documents").GetInt32().ShouldBe(6);
@@ -268,6 +269,67 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
             .GroupBy(e => $"{e.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods[0]} {e.RoutePattern.RawText?.TrimEnd('/')}")
             .ToDictionary(g => g.Key, g => g.SelectMany(e => e.Metadata.GetOrderedMetadata<IAuthorizeData>()).Select(a => a.Policy).OfType<string>().ToHashSet());
         routes["GET /api/collections/{id:guid}/topic-suggestions"].ShouldBe(new HashSet<string> { AdminPolicies.Read });
+        routes["POST /api/collections/{id:guid}/topic-rules/preview"].ShouldContain(AdminPolicies.EditPipelines);
+    }
+
+    [Fact]
+    public async Task The_preview_counts_what_each_rule_kind_matches_with_the_first_ten_through_the_workers_matcher()
+    {
+        var seed = await SeedAsync();
+        using var editor = await AdminDatabaseFixture.UserAsync(host.Factory, RagRoles.PipelineEditor, seed.OwnerCode);
+        var url = $"/api/collections/{seed.Collection}/topic-rules/preview";
+        async Task<JsonElement> Preview(Guid source, object rule)
+        {
+            var response = await editor.PostAsJsonAsync(url, new { sourceId = source, rule }, Ct);
+            response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
+            return await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        }
+
+        // 21 live website documents: /bygga/ 6, /skola/ 4, /kommun/ 5, /äldre/ 5 and the root.
+        var under = await Preview(seed.Website, new { match = "/bygga/", on = "path", tags = new[] { "bygga" } });
+        under.GetProperty("matched").GetInt32().ShouldBe(6);
+        under.GetProperty("total").GetInt32().ShouldBe(21);
+        under.GetProperty("sample").EnumerateArray().Select(d => d.GetProperty("url").GetString()).ShouldContain("https://www.umea.se/bygga/");
+        (await Preview(seed.Website, new { match = "https://www.umea.se/kommun/?utm=x", on = "path", tags = new[] { "kommun" } }))
+            .GetProperty("matched").GetInt32().ShouldBe(5); // a pasted address, as the worker reads it
+        (await Preview(seed.Website, new { match = "^/skola/", on = "path-regex", tags = new[] { "skola" } })).GetProperty("matched").GetInt32().ShouldBe(4);
+        (await Preview(seed.Website, new { match = "Bygga, bo", on = "title-regex", tags = new[] { "bygga" } })).GetProperty("matched").GetInt32().ShouldBe(1);
+        (await Preview(seed.Website, new { match = "text/html", on = "mediaType", tags = new[] { "sidor" } })).GetProperty("matched").GetInt32().ShouldBe(21);
+        // The sample stops at ten.
+        var onHost = await Preview(seed.Website, new { match = "www.umea.se", on = "host", tags = new[] { "umea" } });
+        onHost.GetProperty("matched").GetInt32().ShouldBe(21);
+        onHost.GetProperty("sample").GetArrayLength().ShouldBe(10);
+        (await Preview(seed.Website, new { match = "/finns-inte/", on = "path", tags = new[] { "inget" } })).GetProperty("matched").GetInt32().ShouldBe(0);
+
+        // An upload's folders and file types, with its display names in the sample.
+        var hr = await Preview(seed.Upload, new { match = "HR/", on = "path", tags = new[] { "hr" } });
+        hr.GetProperty("matched").GetInt32().ShouldBe(6);
+        hr.GetProperty("total").GetInt32().ShouldBe(8);
+        hr.GetProperty("sample")[0].GetProperty("displayName").GetString()!.ShouldContain("HR/");
+        (await Preview(seed.Upload, new { match = "application/pdf", on = "mediaType", tags = new[] { "pdf" } })).GetProperty("matched").GetInt32().ShouldBe(8);
+    }
+
+    [Fact]
+    public async Task The_preview_refuses_an_invalid_rule_another_collections_source_and_whoever_may_not_edit_processing()
+    {
+        var seed = await SeedAsync();
+        var url = $"/api/collections/{seed.Collection}/topic-rules/preview";
+        var rule = new { match = "/bygga/", on = "path", tags = new[] { "bygga" } };
+        using var editor = await AdminDatabaseFixture.UserAsync(host.Factory, RagRoles.PipelineEditor, seed.OwnerCode);
+
+        var invalid = await editor.PostAsJsonAsync(url, new { sourceId = seed.Website, rule = new { match = "(", on = "path-regex", tags = new[] { "x" } } }, Ct);
+        invalid.StatusCode.ShouldBe(HttpStatusCode.BadRequest); // V24: format regex, as at Save
+        (await invalid.Content.ReadAsStringAsync(Ct)).ShouldContain("pipeline_params_invalid");
+        (await editor.PostAsJsonAsync(url, new { sourceId = seed.Website, rule = new { match = "/a/", on = "nowhere", tags = new[] { "x" } } }, Ct))
+            .StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await editor.PostAsJsonAsync(url, new { sourceId = Guid.NewGuid(), rule }, Ct)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+
+        using var viewer = await AdminDatabaseFixture.UserAsync(host.Factory, RagRoles.Viewer, seed.OwnerCode);
+        (await viewer.PostAsJsonAsync(url, new { sourceId = seed.Website, rule }, Ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        using var contentEditor = await AdminDatabaseFixture.UserAsync(host.Factory, RagRoles.Editor, seed.OwnerCode);
+        (await contentEditor.PostAsJsonAsync(url, new { sourceId = seed.Website, rule }, Ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        using var shared = await AdminDatabaseFixture.UserAsync(host.Factory, RagRoles.DepartmentAdmin, seed.SharedCode);
+        (await shared.PostAsJsonAsync(url, new { sourceId = seed.Website, rule }, Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Theory]

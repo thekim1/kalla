@@ -480,6 +480,22 @@ export interface TopicSection {
   coveredBy: string[]
 }
 
+/** One rule of processing §7's `pathRules`. */
+export interface PathRuleJson {
+  match: string
+  on: 'path' | 'path-regex' | 'host' | 'title-regex' | 'mediaType'
+  tags: string[]
+  documentType?: string
+  date?: string
+}
+
+/** `POST /api/collections/{id}/topic-rules/preview`: what one rule matches among a source's live documents (≤ 10 listed). */
+export interface TopicRulePreview {
+  matched: number
+  total: number
+  sample: { documentId: string; title: string | null; url: string | null; displayName: string | null }[]
+}
+
 /** One source's sections; `under` is the section whose next level this is, null for the first level. */
 export interface SourceTopicSuggestions {
   sourceId: string
