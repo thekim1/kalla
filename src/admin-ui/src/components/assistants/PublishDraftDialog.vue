@@ -22,8 +22,9 @@ import VersionDiffView from './VersionDiffView.vue'
  * still answers shows inline.
  *
  * The warnings are read again from the draft when the dialog opens, since a fix in *Edit name and contact* or the
- * audience changes the assistant, not the draft, and the page's copy is from the draft's last load or save. *Publish*
- * waits for that read; the diff and the cost don't hold it up.
+ * audience changes the assistant, not the draft, and the page's copy is from the draft's last load or save. Until the
+ * read answers nothing is listed or judged; a press on *Publish* meanwhile waits for it and then judges by its
+ * warnings (the page's copy when the read fails). The diff and the cost don't hold it up.
  */
 const props = defineProps<{
   open: boolean
@@ -70,18 +71,20 @@ const busy = ref(false)
 const error = ref<unknown>(null)
 /** The draft's warnings as of opening the dialog; null while that read runs (or when it failed: the page's copy). */
 const fresh = ref<RuleWarning[] | null>(null)
-const checking = ref(false)
+let check: Promise<unknown> = Promise.resolve()
+/** The read runs: the page's copy may be stale, so nothing is judged or listed until it answers. */
+const reading = ref(false)
 /** The server asked for V36's confirmation although the page did not expect it. */
 const askedForConfirmation = ref(false)
 
 const text = (w: RuleWarning) => formatMessage(ERROR_MESSAGES[w.code] ?? w.code, w.params ?? undefined) + (w.affected.length ? ` (${w.affected.join(', ')})` : '')
-const warnings = computed(() => fresh.value ?? props.warnings)
+const warnings = computed(() => (reading.value ? [] : (fresh.value ?? props.warnings)))
 const classified = computed(() => classify(warnings.value))
 const refusals = computed(() => classified.value.refusals)
 const notes = computed(() => classified.value.notes)
 const needsConfirmation = computed(() =>
   props.needsGeneralKnowledgeConfirmation || askedForConfirmation.value || warnings.value.some((w) => w.code === GENERAL_KNOWLEDGE))
-const blocked = computed(() => checking.value || refusals.value.length > 0 || (needsConfirmation.value && !confirmed.value))
+const blocked = computed(() => refusals.value.length > 0 || (needsConfirmation.value && !confirmed.value))
 
 watch(
   () => props.open,
@@ -92,11 +95,11 @@ watch(
     questions.value = null
     fresh.value = null
     askedForConfirmation.value = false
-    checking.value = true
-    void api.assistants.draft(props.assistantId)
+    reading.value = true
+    check = api.assistants.draft(props.assistantId)
       .then((d) => (fresh.value = d.warnings ?? []))
       .catch(() => undefined) // the page's copy stands; the server judges the publish
-      .finally(() => (checking.value = false))
+      .finally(() => (reading.value = false))
     if (props.publishedVersion !== null) void diff.run(() => api.assistants.diff(props.assistantId, props.publishedVersion!, 'draft'))
     void api.assistantTests.questions(props.assistantId).then((q) => (questions.value = q.length)).catch(() => (questions.value = null))
   },
@@ -104,10 +107,12 @@ watch(
 )
 
 async function publish(): Promise<void> {
-  if (blocked.value) return
+  if (busy.value) return
   busy.value = true
   error.value = null
   try {
+    await check
+    if (blocked.value) return
     await props.action(confirmed.value)
     emit('update:open', false)
   } catch (e) {

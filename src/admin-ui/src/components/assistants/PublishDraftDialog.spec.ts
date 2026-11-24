@@ -110,17 +110,32 @@ describe('Publish draft\'s dialog (admin design §5.5.4, B-82)', () => {
     wrapper.unmount()
   })
 
-  it('reads the draft\'s warnings again on opening, so a fix made since the last load no longer blocks, and waits for that read', async () => {
+  it('reads the draft\'s warnings again on opening, so a fix made since the last load no longer blocks; a press during the read waits for it', async () => {
     let answer: (d: AssistantDraft) => void = () => undefined
     vi.mocked(api.assistants.draft).mockReturnValue(new Promise((resolve) => (answer = resolve)))
-    const { wrapper } = open({ warnings: [contactMissing] })
+    const { wrapper, action } = open({ warnings: [contactMissing] })
     await flushPromises()
     expect(api.assistants.draft).toHaveBeenCalledWith('a1')
-    expect($('[data-test=publish-confirm]')!.getAttribute('aria-disabled')).toBe('true')
+    $('[data-test=publish-confirm]')!.click() // before the read answers (a quick keyboard user)
+    await flushPromises()
+    expect(action).not.toHaveBeenCalled()
     answer(draftWith([]))
     await flushPromises()
     expect($('[data-test=publish-refusal]')).toBeNull()
-    expect($('[data-test=publish-confirm]')!.getAttribute('aria-disabled')).toBeNull()
+    expect(action).toHaveBeenCalledWith(false)
+    wrapper.unmount()
+  })
+
+  it('does not publish a press made during the read when the read finds a refusal', async () => {
+    let answer: (d: AssistantDraft) => void = () => undefined
+    vi.mocked(api.assistants.draft).mockReturnValue(new Promise((resolve) => (answer = resolve)))
+    const { wrapper, action } = open()
+    await flushPromises()
+    $('[data-test=publish-confirm]')!.click()
+    answer(draftWith([contactMissing]))
+    await flushPromises()
+    expect(action).not.toHaveBeenCalled()
+    expect([...document.body.querySelectorAll('[data-test=publish-refusal]')]).toHaveLength(1)
     wrapper.unmount()
   })
 
