@@ -1189,10 +1189,10 @@ and the run's reason (`gateway.budget_exhausted`, `gateway.key_unavailable`, eng
 ```
 Knowledge bases /
 Bygglov                                                        [Internal] [Not published]   [Publish] [⋯]
-Overview  Content (3)  Documents (1 204)  Topics (4)  Quality •  Sharing
+Overview  Content (3)  Documents (1 204)  Topics  Quality •  Sharing
 ┌ Documents ───────────┐ ┌ Last fetch ──────────┐ ┌ Quality (recall@10) ─┐ ┌ Used by ─────────────────────┐
 │ 1 204                │ │ Today, 01:12  Done   │ │ Not measured         │ │ Bygglovsassistenten (draft)  │
-│ all searchable       │ │                      │ │ Create test questions│ │ 1 assistant · 1 department   │
+│ searchable           │ │                      │ │ Create test questions│ │ 1 assistant · 1 department   │
 └──────────────────────┘ └──────────────────────┘ └──────────────────────┘ └──────────────────────────────┘
 ┌ Get started ────────────────────────────────────────┐
 │ ✓ Source added            ✓ First fetch done        │
@@ -1234,7 +1234,9 @@ published, else **Add content** (the source drawer with its type cards: a websit
 - **Sharing**: below.
 
 A dot on a tab marks something to do there (a failed fetch on *Content*, a worse or missing evaluation on *Quality*),
-with text for assistive technology ("Quality, needs attention").
+with text for assistive technology ("Quality, needs attention"). The dot stands before the tab's name, since Fors's
+`UiTabs` is copied unchanged. *Content* and *Documents* carry counts; *Topics* doesn't, since the page doesn't load the
+topics on open. Neither do the assistant page's tabs (the test questions and versions aren't loaded with the page).
 
 Sharing and Topics tabs (English UI):
 
@@ -1388,8 +1390,8 @@ Assistants /
 Bygglovsassistenten                          [Internal] [Published: version 3] [Draft changed 30 Oct]
 Svarar på frågor om bygglov, anmälan och avgifter. Contact: Anna Andersson, bygglov@umea.se
 Uses tools (P2)                                       [Compare with published]  [Publish draft]  [⋯]
-Build  Quality (8)  Versions (3)  Access  Usage
-┌ Draft (changed since version 3) ─────────────────┐ ┌ Test (runs the draft ▾) ───────────────────────────┐
+Build  Quality  Versions  Access  Usage
+┌ Draft (changed since version 3) ─────────────────┐ ┌ Test ──────────────────────────────────────────────┐
 │ Instructions  [textarea, template filled in]     │ │ Question [Behöver jag bygglov för en altan?] [Ask] │
 │ Knowledge bases                                  │ │ Suggestions: · Vad kostar ett bygglov? · …         │
 │  Bygglov        all topics  [Limit to topics] [⋯]│ │ Sources in the search (coverage: ok, 0,31 ≤ 0,50)  │
@@ -1413,11 +1415,12 @@ published** (the version diff, P2). **Edit name and contact** (the drawer of the
 
 **Tabs** (UX pass UX3 C, user 2026-11-23; rule 6 of §5.12): five, each named in `?tab=`:
 
-- **Build**: the draft form and, beside it, the test panel (§4.9), sticky, as a short chat with the cited documents.
-  The panel keeps everything §4.9 gives it: the choice between the draft and the published version, the topic
-  narrowing, the trace behind *Why this answer?*, and **Save as test question** (P2). You edit, ask and read the
-  answer on one tab. Below 1,280 px the panel folds under the form as a *Try the draft* card; on a phone *Try the
-  draft* in the save bar opens it as a full-height sheet, with the unsaved draft kept in memory.
+- **Build**: the draft form and, beside it, the test panel (§4.9), sticky: one question and its answer with the cited
+  documents (a conversation in the panel waits for §4.9's `history[]`, P2). It tests the draft, or the published version
+  when there is no draft. The panel keeps the rest of §4.9: the topic narrowing, the trace behind *Why this answer?*,
+  and **Save as test question** (P2). You edit, ask and read the answer on one tab. Below 1,280 px the panel folds under
+  the form as a *Try the draft* card; on a phone *Try the draft* in the save bar opens it as a full-height sheet, with
+  the unsaved draft kept in memory.
 - **Quality** (P2): the test questions with **Run test questions** and the latest report (§7.4, the §7.2 card), the
   latest answer evaluation (below), and the *Content gaps* card (§8.7): the same name and job as the knowledge base's
   *Quality*.
@@ -1428,11 +1431,12 @@ published** (the version diff, P2). **Edit name and contact** (the drawer of the
 - **Usage**: the date of last use; questions, not found and ratings for a period; and the *Cost* card (§8.6).
 
 - **Knowledge** (Knowledge bases in the draft): one row per link with the knowledge base, its owning department when it
-  is shared ("umea.se (Communications, shared)"), and its topics ("all topics", or the count), **Limit to topics**
-  (opens the topic field) and a row ⋯ menu (*Remove*); **Add knowledge base** opens a picker with *Ours*, *Shared with
-  us* and *All* (relative to the assistant's department, not the user's), showing level, document count and topics. The
-  topic field, labelled "Limit to topics (empty: all topics)", is free text with the knowledge base's current topics as
-  suggestions, so a topic a path rule is about to set can be linked; V11 `topic_invalid` checks the format.
+  is shared ("umea.se (Communications, shared)"), and its topics ("all topics", or the limited topics as chips under the
+  row, readable without opening the field), **Limit to topics** (opens the topic field) and a row ⋯ menu (*Remove*);
+  **Add knowledge base** opens a picker with *Ours*, *Shared with us* and *All* (relative to the assistant's department,
+  not the user's), showing level, document count and topics. The topic field, labelled "Limit to topics (empty: all
+  topics)", is free text with the knowledge base's current topics as suggestions, so a topic a path rule is about to set
+  can be linked; V11 `topic_invalid` checks the format.
 - **General knowledge** (`answer.generalKnowledge`, on the Build tab, not under Advanced, since it changes what users
   get): one scale of four radio buttons in a radio group named "General knowledge", *Off* (`off`, default), *Supplement*
   (`supplement`), *Fallback* (`fallback`) and *Open* (`open`), with the chosen level's one line of help under it (tied
@@ -1663,8 +1667,9 @@ The main session owns this feature's code (user, 2026-11-09), on `main-session/`
 - **Source:** the section of kept and quarantined documents is **Held and quarantined**.
 - **Costs:** **Export** in the header, with *By day* and *By month* in its menu; the department card's total in the
   card title's row.
-- **Organisation:** the column **Knowledge bases** reads "1 own · 0 shared"; no member groups is a grey dash;
-  *Fetched* drops the date when it is today.
+- **Organisation:** the column **Knowledge bases** reads "3 own · 2 shared": *own* is every knowledge base the
+  department owns, *shared* how many of those reach other departments (levels `selected` and `municipality`); no
+  member groups is a grey dash; *Fetched* drops the date when it is today.
 - **Apps and keys:** *Enabled* shows only as an *Off* badge; *Last used* "Never used" is grey.
 - **Models:** the tabs **Models** and **Embedding** (§5.10).
 - **Settings:** the groups **Answers**, **Content**, **Data protection** and **Platform** (§5.10); **Advanced: edit
@@ -1958,19 +1963,22 @@ They are proposed to Fors first; when Fors has not taken one by the time a page 
 - A row's rare actions are on a row ⋯ menu; a bulk bar shows only while rows are selected.
 
 **Filters** (UX pass UX5 C): Feedback, Costs, the Audit log, the Map and the lists' search use one row of chips: a
-period chip with presets (*Last 7 days*, *Last 30 days*, *This month*, *Custom…*, the custom range as two labelled
-date fields in the UI's date format), a chip per filter whose name says the filter and its value ("Rating: Thumbs
-down"), set chips coloured with an × of their own ("Remove the rating filter"), and *Clear filters* while any is set.
-The counts are one line at the end of the row, in a polite live region. *Export* is in the page header. The filters are
-kept in the address (`?period=30d&rating=down`), so a filtered view can be linked, survives a reload and works with
-back and forward; a change never moves focus or reloads the page. On the Audit log *Who* and *Type of object* are
+period chip with presets (*Last 7 days*, *Last 30 days*, *This month*, *Custom…*, the custom range as two labelled date
+fields, the browser's native date input in its own format), a chip per filter whose name says the filter and its value
+("Rating: Thumbs down"), set chips coloured with an × of their own ("Remove the rating filter"), and *Clear filters*
+while any is set. The counts are one line at the end of the row, in a polite live region. *Export* is in the page
+header. The filters are kept in the address (`?period=30d&rating=down`), so a filtered view can be linked, survives a
+reload and works with back and forward to and from the page; a change replaces the address rather than adding a history
+entry (as `?tab=` does), and never moves focus or reloads the page. On the Audit log *Who* and *Type of object* are
 chips and *Service* and the object filter are under *More filters*; on the Map the department and object filters are
 chips, with *Table* / *Drawing* on the same row, right-aligned.
 
 **Saving** (UX pass UX6 A): every form saves through `SaveBar`: the assistant's draft, search settings, sharing, the
 audience and storage on *Access*, and each Settings section. The bar is a labelled region ("Unsaved changes") that
-appears with a polite announcement; the page has `scroll-padding-bottom` equal to its height, so a focused field is
-never hidden behind it. Leaving a page, or a tab, with unsaved changes asks first in a dialog; *Discard* asks once.
+appears with a polite announcement; the page has `scroll-padding-bottom` equal to what it covers, so a focused field is
+never hidden behind it: its height where it is sticky in the form, and from its top to the window's bottom where it is
+fixed on a phone (the bar and the bottom menu under it). Leaving a page, or a tab, with unsaved changes asks first in a
+dialog; *Discard* asks once.
 
 **Drawers:** *Create knowledge base* asks in the order of the decision: name → what goes in (*Files I upload* / *A
 website or addresses*) → who may read it → department and contact, the contact pre-filled and folded into one line
