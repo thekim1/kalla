@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
 import type { AssistantSummary, FeedbackItem, FeedbackSummary } from '@/api/types'
 import AsyncState from '@/components/ui/AsyncState.vue'
@@ -8,15 +7,17 @@ import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import MetricTile from '@/components/ui/MetricTile.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
-import SelectField from '@/components/ui/SelectField.vue'
-import TextField from '@/components/ui/TextField.vue'
+import FilterChip from '@/components/ui/FilterChip.vue'
+import PeriodPicker from '@/components/ui/PeriodPicker.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import { useKeysetList } from '@/composables/useKeysetList'
+import { useQueryFilters } from '@/composables/useQueryFilters'
 import { useAuthStore } from '@/stores/auth'
 import { formatDateTime, formatNumber, formatRatio } from '@/utils/format'
-import { FEEDBACK, PAGE } from '@/utils/labels'
+import { FEEDBACK, FILTERS, PAGE } from '@/utils/labels'
+import { periodRange } from '@/utils/period'
 import { problemMessage } from '@/utils/problem'
 
 // Feedback (admin design §8.1, chat design §14.4): ratings of the department's assistants without content (no
@@ -27,14 +28,16 @@ import { problemMessage } from '@/utils/problem'
 // names the API's feedback endpoint; feedback already stored still shows.
 // `?documentId=` (Show the ratings on a knowledge base's Feedback on documents, §8.8): only the ratings whose answer cited
 // that document, the caller's own assistants' as every row here.
+// The filters are one row of chips kept in the address (§5.12 *Filters*): `?period=7d&rating=down&state=` and so on.
 const auth = useAuthStore()
-const route = useRoute()
-const router = useRouter()
 const summary = ref<FeedbackSummary | null>(null)
 const assistants = ref<AssistantSummary[]>([])
-const filters = reactive({
-  from: '', to: '', assistantId: '', rating: '', outcome: '', state: 'open', documentId: typeof route.query.documentId === 'string' ? route.query.documentId : '',
+const { filters, active, clear } = useQueryFilters({
+  period: '30d', from: '', to: '', assistant: '', rating: '', outcome: '', state: 'open', documentId: '',
 })
+/** The address says `up` or `down`; the API takes 1 or -1. */
+const RATING_VALUE: Record<string, string> = { up: '1', down: '-1' }
+const range = computed(() => periodRange(filters.period, filters.from, filters.to))
 const busy = ref<string | null>(null)
 const markError = ref<unknown>(null)
 const canMark = computed(() => auth.can('feedback-comments'))
@@ -48,10 +51,11 @@ const columns = computed<Column[]>(() => [
   { key: 'state', label: FEEDBACK.state },
   ...(canMark.value ? [{ key: 'actions', label: FEEDBACK.mark, hideLabel: true }] : []),
 ])
-const assistantOptions = computed(() => [{ value: '', label: FEEDBACK.allAssistants }, ...assistants.value.map((a) => ({ value: a.id, label: a.name }))])
-const ratingOptions = [{ value: '', label: FEEDBACK.allRatings }, { value: '1', label: FEEDBACK.up }, { value: '-1', label: FEEDBACK.down }]
-const outcomeOptions = [{ value: '', label: FEEDBACK.allOutcomes }, ...Object.entries(FEEDBACK.outcomes).map(([value, label]) => ({ value, label }))]
-const stateOptions = [{ value: '', label: FEEDBACK.allStates }, ...Object.entries(FEEDBACK.states).map(([value, label]) => ({ value, label }))]
+const assistantOptions = computed(() => assistants.value.map((a) => ({ value: a.id, label: a.name })))
+const ratingOptions = [{ value: 'up', label: FEEDBACK.up }, { value: 'down', label: FEEDBACK.down }]
+const outcomeOptions = Object.entries(FEEDBACK.outcomes).map(([value, label]) => ({ value, label }))
+// Open is the default; the chip's other choices are every state, Handled and Dismissed.
+const stateOptions = [{ value: 'all', label: FEEDBACK.allStates }, ...Object.entries(FEEDBACK.states).filter(([v]) => v !== 'open').map(([value, label]) => ({ value, label }))]
 
 function day(value: string, next = false): string | undefined {
   if (!value) return undefined
@@ -62,13 +66,14 @@ function day(value: string, next = false): string | undefined {
 }
 
 const feedback = useKeysetList((after?: string) => api.feedback.list({
-  from: day(filters.from), to: day(filters.to, true), assistantId: filters.assistantId || undefined, rating: filters.rating || undefined,
-  outcome: filters.outcome || undefined, state: filters.state || undefined, documentId: filters.documentId || undefined, after, limit: 50,
+  from: day(range.value.from), to: day(range.value.to, true), assistantId: filters.assistant || undefined, rating: RATING_VALUE[filters.rating],
+  outcome: filters.outcome || undefined, state: filters.state === 'all' ? undefined : filters.state || undefined,
+  documentId: filters.documentId || undefined, after, limit: 50,
 }))
 
 async function load(): Promise<void> {
   await feedback.reload()
-  summary.value = await api.feedback.summary({ from: filters.from || undefined, to: filters.to || undefined, assistantId: filters.assistantId || undefined })
+  summary.value = await api.feedback.summary({ from: range.value.from || undefined, to: range.value.to || undefined, assistantId: filters.assistant || undefined })
     .catch(() => null)
 }
 
@@ -91,15 +96,12 @@ const citedTitle = computed(() =>
 
 function clearCited(): void {
   filters.documentId = ''
-  const query = { ...route.query }
-  delete query.documentId
-  void router.replace({ query })
 }
 
 const totals = computed(() => summary.value?.totals ?? null)
 const ratings = computed(() => (totals.value ? totals.value.thumbsUp + totals.value.thumbsDown : 0))
 
-watch(filters, () => void load())
+watch(() => ({ ...filters, ...range.value }), () => void load())
 onMounted(async () => {
   await load()
   assistants.value = await api.assistants.list({ pageSize: 200 }).then((p) => p.items).catch(() => [])
@@ -128,14 +130,17 @@ onMounted(async () => {
     </UiCard>
   </div>
 
-  <!-- The same filter layout as Costs: every label above its field, even columns. -->
-  <form class="mb-6 grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-3" role="search" :aria-label="FEEDBACK.filters" @submit.prevent="load()">
-    <TextField id="feedback-from" v-model="filters.from" type="date" :label="FEEDBACK.from" />
-    <TextField id="feedback-to" v-model="filters.to" type="date" :label="FEEDBACK.to" />
-    <SelectField id="feedback-assistant" v-model="filters.assistantId" :label="FEEDBACK.assistant" :options="assistantOptions" />
-    <SelectField id="feedback-rating" v-model="filters.rating" :label="FEEDBACK.rating" :options="ratingOptions" />
-    <SelectField id="feedback-outcome" v-model="filters.outcome" :label="FEEDBACK.outcome" :options="outcomeOptions" />
-    <SelectField id="feedback-state" v-model="filters.state" :label="FEEDBACK.state" :options="stateOptions" />
+  <!-- One row of chips (admin design §5.12 Filters), kept in the address; the count at its end, politely announced. -->
+  <form class="mb-6 flex flex-wrap items-center gap-2" role="search" :aria-label="FEEDBACK.filters" data-test="filters" @submit.prevent="load()">
+    <PeriodPicker v-model:period="filters.period" v-model:from="filters.from" v-model:to="filters.to" id-prefix="feedback" />
+    <FilterChip v-model="filters.assistant" :label="FEEDBACK.assistant" :options="assistantOptions" :any="FEEDBACK.allAssistants" />
+    <FilterChip v-model="filters.rating" :label="FEEDBACK.rating" :options="ratingOptions" :any="FEEDBACK.allRatings" />
+    <FilterChip v-model="filters.outcome" :label="FEEDBACK.outcome" :options="outcomeOptions" :any="FEEDBACK.allOutcomes" />
+    <FilterChip v-model="filters.state" :label="FEEDBACK.state" :options="stateOptions" :any="FEEDBACK.states.open!" unset="open" />
+    <UiButton v-if="active.length" size="sm" variant="quiet" data-test="clear-filters" @click="clear()">{{ FILTERS.clear }}</UiButton>
+    <p class="ml-auto text-small text-fg-2" aria-live="polite" data-test="filter-count">
+      {{ feedback.loaded.value ? FEEDBACK.shown(feedback.items.value.length, !!feedback.next.value) : '' }}
+    </p>
   </form>
   <p v-if="filters.documentId" class="mb-4 flex flex-wrap items-center gap-3" data-test="cited-filter">
     <span>{{ FEEDBACK.citedFilter(citedTitle) }}</span>

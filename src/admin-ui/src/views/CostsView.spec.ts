@@ -8,7 +8,7 @@ import { useAuthStore } from '@/stores/auth'
 import { bffUser } from '@/test/fixtures'
 import { sumTotals } from '@/components/costs/costs'
 import { formatUsdCost } from '@/utils/format'
-import { COSTS } from '@/utils/labels'
+import { COSTS, FILTERS } from '@/utils/labels'
 import { COST_MESSAGES } from '@/utils/messages'
 import CostsView from './CostsView.vue'
 
@@ -72,63 +72,60 @@ describe('Costs (admin design §8.6; B-41)', () => {
     expect(wrapper.get('[data-test=costs-gateway-note]').text()).toBe(COST_MESSAGES.gatewayRecord)
   })
 
-  it('takes the department from the link, asks again on a filter change, and the CSV link carries the filters', async () => {
+  it('takes the department from the link, asks again on a filter change, and Export carries the filters', async () => {
     const get = vi.spyOn(api.costs, 'report').mockResolvedValue(report([]))
     vi.spyOn(api.organisation, 'departments').mockResolvedValue([{ id: 'd1', name: 'Bygg' }] as never)
     const wrapper = await mountView('/costs?departmentId=d1')
 
     expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ departmentId: 'd1' }))
     expect(wrapper.text()).toContain(COST_MESSAGES.empty)
+    // The department chip shows the value from the link, set and removable.
+    expect(wrapper.get('[data-test="chip-Department"] [data-test=chip-remove]').attributes('aria-label')).toBe(FILTERS.remove('Department'))
 
-    await wrapper.findAll('select')[1]!.setValue('collection')
-    await wrapper.findAll('button').find((b) => b.text() === COSTS.granularities.month)!.trigger('click')
+    await wrapper.get('[data-test="chip-Kind"] select').setValue('collection')
     await flushPromises()
     expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ departmentId: 'd1', kind: 'collection', granularity: 'month' }))
-    const href = wrapper.get('[data-test=costs-csv]').attributes('href')!
-    const url = new URL(href, 'https://admin.example')
+    const url = new URL(wrapper.get('[data-test=costs-csv-day]').attributes('href')!, 'https://admin.example')
     expect(url.pathname).toBe('/api/costs')
-    expect(Object.fromEntries(url.searchParams)).toEqual(expect.objectContaining({ format: 'csv', departmentId: 'd1', kind: 'collection', granularity: 'month' }))
+    expect(Object.fromEntries(url.searchParams)).toEqual(expect.objectContaining({ format: 'csv', departmentId: 'd1', kind: 'collection', granularity: 'day' }))
     expect(url.searchParams.get('from')).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 
-  it('asks by month for the page and keeps the chosen granularity for the CSV only (#710)', async () => {
+  it('asks by month for the page, and has Export by day and by month in the header (#710; §5.12 Filters)', async () => {
     const get = vi.spyOn(api.costs, 'report').mockResolvedValue(report([]))
     vi.spyOn(api.organisation, 'departments').mockResolvedValue([] as never)
     const wrapper = await mountView('/costs')
-    const csvGranularity = () => new URL(wrapper.get('[data-test=costs-csv]').attributes('href')!, 'https://admin.example').searchParams.get('granularity')
+    const granularity = (t: string) => new URL(wrapper.get(`[data-test=${t}]`).attributes('href')!, 'https://admin.example').searchParams.get('granularity')
 
     expect(get).toHaveBeenCalledTimes(1)
     expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ granularity: 'month' }))
-    expect(csvGranularity()).toBe('day')
-
-    await wrapper.findAll('button').find((b) => b.text() === COSTS.granularities.month)!.trigger('click')
-    await flushPromises()
-    expect(csvGranularity()).toBe('month')
-    expect(get).toHaveBeenCalledTimes(1) // the page's figures don't depend on it
+    const exportGroup = wrapper.get('header [data-test=costs-export]')
+    expect(exportGroup.attributes('aria-label')).toBe(COSTS.export)
+    expect([granularity('costs-csv-day'), granularity('costs-csv-month')]).toEqual(['day', 'month'])
+    expect(wrapper.get('[data-test=costs-csv-day]').attributes('aria-label')).toBe(COSTS.exportBy(COSTS.byDay))
   })
 
-  it('downloads a range over 400 days by month, and says so', async () => {
+  it('downloads a range over 400 days by month only, and says so', async () => {
     vi.spyOn(api.costs, 'report').mockResolvedValue(report([]))
     vi.spyOn(api.organisation, 'departments').mockResolvedValue([] as never)
-    const wrapper = await mountView('/costs')
-    const csvGranularity = () => new URL(wrapper.get('[data-test=costs-csv]').attributes('href')!, 'https://admin.example').searchParams.get('granularity')
+    const wrapper = await mountView('/costs?period=custom&from=2024-01-01&to=2025-06-30')
 
-    expect(wrapper.find('[data-test=costs-csv-month-only]').exists()).toBe(false)
-    await wrapper.get('#costs-from').setValue('2024-01-01')
-    await wrapper.get('#costs-to').setValue('2025-06-30')
-    await flushPromises()
-    expect(csvGranularity()).toBe('month')
+    expect(wrapper.find('[data-test=costs-csv-day]').exists()).toBe(false)
+    expect(wrapper.find('[data-test=costs-csv-month]').exists()).toBe(true)
     expect(wrapper.get('[data-test=costs-csv-month-only]').text()).toBe(COSTS.csvMonthOnly)
   })
 
-  it('labels every filter above its field, the same layout as Feedback', async () => {
-    vi.spyOn(api.costs, 'report').mockResolvedValue(report([]))
+  it('keeps the filters in the address, so a reload opens the same view, and Clear filters takes them out', async () => {
+    const get = vi.spyOn(api.costs, 'report').mockResolvedValue(report([]))
     vi.spyOn(api.organisation, 'departments').mockResolvedValue([] as never)
-    const wrapper = await mountView('/costs')
-
-    const form = wrapper.get('form[role=search]')
-    const fields = form.findAll('input, select')
-    expect(fields).toHaveLength(4)
-    for (const f of fields) expect(form.find(`label[for="${f.attributes('id')}"]`).exists()).toBe(true)
+    const wrapper = await mountView('/costs?period=7d&kind=assistant')
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'assistant' }))
+    expect((wrapper.get('[data-test="chip-Period"] select').element as HTMLSelectElement).value).toBe('7d')
+    const router = (wrapper.vm as unknown as { $router: { currentRoute: { value: { query: Record<string, string> } } } }).$router
+    await wrapper.get('[data-test=clear-filters]').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query).toEqual({})
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ kind: undefined }))
+    expect(wrapper.get('[data-test=filter-count]').attributes('aria-live')).toBe('polite')
   })
 })

@@ -5,7 +5,7 @@ import { api } from '@/api'
 import type { FeedbackItem } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { bffUser } from '@/test/fixtures'
-import { FEEDBACK } from '@/utils/labels'
+import { FEEDBACK, FILTERS } from '@/utils/labels'
 import FeedbackView from './FeedbackView.vue'
 
 // `?documentId=` (Show the ratings on Feedback on documents, §8.8) through a route the tests set.
@@ -66,7 +66,7 @@ describe('Feedback (admin design §8.1)', () => {
     expect(wrapper.text()).toContain('Found nothing')
     expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ state: 'open' }))
 
-    await wrapper.findAll('select')[1]!.setValue('-1')
+    await wrapper.get('[data-test="chip-Rating"] select').setValue('down')
     await flushPromises()
     expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ rating: '-1' }))
 
@@ -125,7 +125,7 @@ describe('Feedback (admin design §8.1)', () => {
     expect(wrapper.get('[data-test=feedback-api-details]').text()).toContain('POST /v1/feedback')
 
     list.mockResolvedValue({ items: [item()], next: null })
-    await wrapper.findAll('select')[1]!.setValue('-1')
+    await wrapper.get('[data-test="chip-Rating"] select').setValue('down')
     await flushPromises()
     expect(wrapper.text()).toContain('Altan och uteplats')
   })
@@ -169,17 +169,90 @@ describe('Feedback (admin design §8.1)', () => {
     expect(plain.find('[data-test=cited-filter]').exists()).toBe(false)
   })
 
-  it('labels every filter above its field, the same layout as Costs', async () => {
-    signIn(['rag-viewer'])
-    vi.spyOn(api.feedback, 'list').mockResolvedValue({ items: [], next: null })
-    vi.spyOn(api.feedback, 'summary').mockResolvedValue({ lastUsedOn: null, totals: { answers: 0, notFound: 0, thumbsUp: 0, thumbsDown: 0 }, imports: [] })
-    vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 } as never)
-    const wrapper = mount(FeedbackView)
-    await flushPromises()
+  describe('the filter row (admin design §5.12 Filters, B-80)', () => {
+    function mocks() {
+      const list = vi.spyOn(api.feedback, 'list').mockResolvedValue({ items: [item()], next: 'f9' as never })
+      const summary = vi.spyOn(api.feedback, 'summary').mockResolvedValue({ lastUsedOn: null, totals: { answers: 0, notFound: 0, thumbsUp: 0, thumbsDown: 0 }, imports: [] })
+      vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 } as never)
+      return { list, summary }
+    }
 
-    const form = wrapper.get('form[role=search]')
-    const fields = form.findAll('input, select')
-    expect(fields).toHaveLength(6)
-    for (const f of fields) expect(form.find(`label[for="${f.attributes('id')}"]`).exists()).toBe(true)
+    it('is one row of chips, each named for its filter and showing its value, with a set chip\'s own × and Clear filters', async () => {
+      signIn(['rag-viewer'])
+      mocks()
+      const wrapper = mount(FeedbackView, { attachTo: document.body })
+      await flushPromises()
+      const chips = wrapper.findAll('[data-test=chip-select]')
+      expect(chips).toHaveLength(5)
+      for (const c of chips) expect(wrapper.find(`label[for="${c.attributes('id')}"]`).exists()).toBe(true)
+      const rating = wrapper.get('[data-test="chip-Rating"]')
+      expect(rating.get('label').text()).toBe('Rating:')
+      expect((rating.get('select').element as HTMLSelectElement).selectedOptions[0]!.text).toBe(FEEDBACK.allRatings)
+      expect(rating.find('[data-test=chip-remove]').exists()).toBe(false)
+      expect(wrapper.find('[data-test=clear-filters]').exists()).toBe(false)
+
+      await rating.get('select').setValue('down')
+      expect((rating.get('select').element as HTMLSelectElement).selectedOptions[0]!.text).toBe('Thumbs down')
+      expect(rating.get('[data-test=chip-remove]').attributes('aria-label')).toBe(FILTERS.remove('Rating'))
+      expect(rating.classes()).toContain('bg-accent-soft')
+      await wrapper.get('[data-test=clear-filters]').trigger('click')
+      expect((rating.get('select').element as HTMLSelectElement).value).toBe('')
+      wrapper.unmount()
+    })
+
+    it('keeps the filters in the address: read on opening (a link, a reload) and written on a change without moving focus', async () => {
+      signIn(['rag-viewer'])
+      route.query = { period: '7d', rating: 'down', state: 'all' }
+      const { list } = mocks()
+      const wrapper = mount(FeedbackView, { attachTo: document.body })
+      await flushPromises()
+      expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ rating: '-1', state: undefined }))
+      expect((wrapper.get('[data-test="chip-Rating"] select').element as HTMLSelectElement).value).toBe('down')
+      expect((wrapper.get('[data-test="chip-Period"] select').element as HTMLSelectElement).value).toBe('7d')
+
+      const outcome = wrapper.get('[data-test="chip-Answer"] select')
+      ;(outcome.element as HTMLSelectElement).focus()
+      await outcome.setValue('not-found')
+      await flushPromises()
+      expect(replace).toHaveBeenLastCalledWith({ query: { period: '7d', rating: 'down', state: 'all', outcome: 'not-found' } })
+      expect(document.activeElement).toBe(outcome.element) // a change moves no focus
+
+      // Back to the defaults: the keys leave the address.
+      await wrapper.get('[data-test=clear-filters]').trigger('click')
+      await flushPromises()
+      expect(replace).toHaveBeenLastCalledWith({ query: {} })
+      wrapper.unmount()
+    })
+
+    it('says the count at the end of the row in a polite live region', async () => {
+      signIn(['rag-viewer'])
+      mocks()
+      const wrapper = mount(FeedbackView)
+      await flushPromises()
+      const count = wrapper.get('[data-test=filter-count]')
+      expect(count.attributes('aria-live')).toBe('polite')
+      expect(count.text()).toBe(FEEDBACK.shown(1, true))
+    })
+
+    it('offers the period presets, and the custom range as two labelled date fields', async () => {
+      signIn(['rag-viewer'])
+      const { list } = mocks()
+      const wrapper = mount(FeedbackView)
+      await flushPromises()
+      const period = wrapper.get('[data-test="chip-Period"] select')
+      expect(period.findAll('option').map((o) => o.text())).toEqual(['Last 30 days', 'Last 7 days', 'This month', 'Custom…'])
+      expect(wrapper.find('[data-test=period-from]').exists()).toBe(false)
+      await period.setValue('custom')
+      expect(wrapper.get('[data-test=period-from]').text()).toContain(FILTERS.from)
+      expect(wrapper.get('[data-test=period-to] input').attributes('type')).toBe('date')
+      await wrapper.get('[data-test=period-from] input').setValue('2026-11-01')
+      await wrapper.get('[data-test=period-from] input').trigger('change')
+      await wrapper.get('[data-test=period-to] input').setValue('2026-11-10')
+      await wrapper.get('[data-test=period-to] input').trigger('change')
+      await flushPromises()
+      expect(list).toHaveBeenLastCalledWith(expect.objectContaining({
+        from: new Date('2026-11-01T00:00:00').toISOString(), to: new Date('2026-11-11T00:00:00').toISOString(),
+      }))
+    })
   })
 })

@@ -2422,6 +2422,8 @@ export const FEEDBACK = {
   state: 'State',
   allStates: 'All states',
   states: { open: 'Open', reviewed: 'Handled', dismissed: 'Dismissed' } as Record<string, string>,
+  /** The filter row's count (admin design §5.12 *Filters*). */
+  shown: (n: number, more: boolean) => `${n} ${n === 1 ? 'rating' : 'ratings'}${more ? ' shown, more below' : ''}`,
   /** Open WebUI's fixed reason keys and the API's own reasons (chat design §3.5, §14.1); anything else is `other`. */
   reasons: {
     accurate_information: 'Accurate information',
@@ -2536,6 +2538,17 @@ export const USAGE = {
   notFound: 'Not found',
   ratings: 'Ratings',
   thumbs: (up: string, down: string) => `${up} up · ${down} down`,
+} as const
+
+/** The filter rows of Feedback, Costs, the Audit log, the Map and the lists' search (admin design §5.12 *Filters*). */
+export const FILTERS = {
+  period: 'Period',
+  periods: { '7d': 'Last 7 days', '30d': 'Last 30 days', month: 'This month', custom: 'Custom…' } as Record<string, string>,
+  from: 'From',
+  to: 'To',
+  remove: (filter: string) => `Remove the ${filter.toLowerCase()} filter`,
+  clear: 'Clear filters',
+  any: 'Any',
 } as const
 
 /** The ⋯ menu of a header or a row (admin design §5.12 rule 1); its name says whose actions they are. */
@@ -2859,6 +2872,12 @@ export const COSTS = {
   caption: 'Cost per assistant and knowledge base, highest first',
   stepsCaption: (name: string) => `Cost of ${name} by step`,
   filters: 'Cost filters',
+  /** Export in the header (admin design §5.12 Filters): the CSV with the page's filters. */
+  export: 'Export',
+  byDay: 'By day',
+  byMonth: 'By month',
+  exportBy: (by: string) => `Export the costs as CSV, ${by.toLowerCase()}`,
+  shown: (n: number) => `${n} ${n === 1 ? 'assistant or knowledge base' : 'assistants and knowledge bases'}`,
 } as const
 
 /** Content gaps (admin design §8.7; Decisions "Content-gap report"): the card on the assistant's Quality tab. */

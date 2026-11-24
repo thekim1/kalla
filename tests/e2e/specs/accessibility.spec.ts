@@ -175,6 +175,22 @@ test('the knowledge base page passes axe on each of its six tabs, and names a ta
   }
 })
 
+test('the filter rows pass axe with a filter set and the period picker open on a custom range (admin design §5.12 Filters, B-80)', async ({ page }) => {
+  await login(page, 'rag-department-admin')
+  for (const path of ['/feedback?rating=down&period=custom', '/costs?kind=assistant&period=custom']) {
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 })
+      await ready(page, path)
+      const filters = page.getByRole('search')
+      await expect(filters.getByRole('combobox', { name: 'Period:' })).toHaveValue('custom')
+      await expect(filters.getByLabel('From')).toBeVisible()
+      await expect(filters.getByRole('button', { name: /^Remove the .* filter$/ }).first()).toBeVisible()
+      await page.waitForLoadState('networkidle')
+      await scan(page, `the filter row of ${path} at ${width}px`)
+    }
+  }
+})
+
 test('all pages reflow at 320px and at 200 percent text size', async ({ page }) => {
   await login(page, 'rag-platform-admin')
   const pages = await allPages(page)
