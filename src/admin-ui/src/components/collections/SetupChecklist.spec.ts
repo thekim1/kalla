@@ -43,7 +43,7 @@ describe('Get started: the last step (admin design §5.4)', () => {
     expect(step.text()).toContain(SETUP.steps.availableApp)
     expect(wrapper.text()).not.toContain('Open WebUI')
     expect(step.attributes('data-state')).toBe('todo')
-    expect(target(wrapper)).toEqual({ name: 'assistant', params: { id: 'a1' }, query: { tab: 'audience' } })
+    expect(target(wrapper)).toEqual({ name: 'assistant', params: { id: 'a1' }, query: { tab: 'access' } })
 
     expect(mountWith(false, setupOf({ available: true })).get('[data-test=step-available]').attributes('data-state')).toBe('done')
     // No assistant yet: the step opens the assistants list, as the assistant steps do.

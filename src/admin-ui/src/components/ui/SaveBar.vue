@@ -12,8 +12,12 @@ import UiButton from './UiButton.vue'
  * height under the form keeps the end of the page clear of it. Discard asks once. When the bar goes (after a save or a
  * discard) with focus in it, focus returns to the field last edited, not to the body. Built in Källa until Fors takes
  * it (§5.12, Shared components).
+ *
+ * The `phone` slot holds an action the page offers from the bar on a phone (the assistant's *Try the draft*, §5.5.4):
+ * shown beside the buttons while there are changes, and on its own in the same place while there are none.
  */
 const props = defineProps<{ changes: number; saving?: boolean; consequence?: string; disabled?: boolean }>()
+const slots = defineSlots<{ phone?: () => unknown }>()
 const emit = defineEmits<{ (e: 'save'): void; (e: 'discard'): void }>()
 
 const bar = ref<HTMLElement | null>(null)
@@ -66,6 +70,7 @@ onBeforeUnmount(() => {
       <span v-if="consequence" class="text-fg-2" data-test="save-bar-consequence"> · {{ consequence }}</span>
     </p>
     <div class="flex gap-2 max-md:w-full max-md:[&>*]:h-11 max-md:[&>*]:flex-1">
+      <div v-if="slots.phone" class="contents md:hidden"><slot name="phone" /></div>
       <UiButton :disabled="saving" data-test="save-bar-discard" @click="discarding = true">{{ L.discard }}</UiButton>
       <UiButton variant="primary" :loading="saving" :disabled="disabled" data-test="save-bar-save" @click="emit('save')">{{ L.save }}</UiButton>
     </div>
@@ -74,6 +79,16 @@ onBeforeUnmount(() => {
       @confirm="emit('discard')"
     />
   </section>
+  <div
+    v-if="changes === 0 && slots.phone"
+    class="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-topbar flex p-3 md:hidden [&>*]:h-11 [&>*]:flex-1"
+    data-test="save-bar-phone"
+  >
+    <slot name="phone" />
+  </div>
   <!-- On a phone the bar is fixed above the bottom menu: this keeps the end of the form clear of it. -->
-  <div v-if="changes > 0" class="md:hidden" :style="{ height: `${height}px` }" aria-hidden="true" data-test="save-bar-spacer" />
+  <div
+    v-if="changes > 0 || slots.phone" class="md:hidden" :style="{ height: changes > 0 ? `${height}px` : '68px' }" aria-hidden="true"
+    data-test="save-bar-spacer"
+  />
 </template>

@@ -76,6 +76,13 @@ public static class FeedbackEndpoints
             {
                 var departments = admin.Departments().Select(d => d.Id);
                 var totals = admin.Db.AssistantDailyTotals.AsNoTracking().Where(t => departments.Contains(t.DepartmentId));
+                if (assistantId is { } one)
+                {
+                    totals = totals.Where(t => t.AssistantId == one);
+                }
+
+                // The last day with an answer, whatever the period (the assistant's Usage tab, admin design §5.5.4).
+                var lastUsedOn = await totals.Where(t => t.Messages > 0).MaxAsync(t => (DateOnly?)t.Day, ct);
                 if (from is { } start)
                 {
                     totals = totals.Where(t => t.Day >= start);
@@ -84,11 +91,6 @@ public static class FeedbackEndpoints
                 if (to is { } end)
                 {
                     totals = totals.Where(t => t.Day <= end);
-                }
-
-                if (assistantId is { } assistant)
-                {
-                    totals = totals.Where(t => t.AssistantId == assistant);
                 }
 
                 var sums = await totals.GroupBy(t => 1).Select(g => new FeedbackTotals(
@@ -106,10 +108,10 @@ public static class FeedbackEndpoints
                                      select new FeedbackImportHealth(c.Id, c.Name, s.LastRunAt, s.LastOutcome, s.Unmapped, s.FailedRuns,
                                          s.FailedRuns >= FeedbackImportState.AlertAfterFailedRuns))
                     .ToListAsync(ct);
-                return new FeedbackSummary(sums, imports);
+                return new FeedbackSummary(sums, imports, lastUsedOn);
             })
             .RequireAuthorization(AdminPolicies.Feedback).WithName("GetFeedbackSummary")
-            .WithSummary("Totals of the period from AssistantDailyTotals (answers, not found, thumbs) and the Open WebUI import health");
+            .WithSummary("Totals of the period from AssistantDailyTotals (answers, not found, thumbs), the last day with an answer, and the Open WebUI import health");
 
         feedback.MapPut("/{id:guid}/review-state", async (Guid id, ReviewStateRequest request, AdminContext admin, CancellationToken ct) =>
                 await admin.WriteAsync(async attempt =>
@@ -211,7 +213,8 @@ public sealed record FeedbackTotals(int Answers, int NotFound, int ThumbsUp, int
 /// <summary>One Open WebUI client's import health; <paramref name="Alert"/> from <see cref="FeedbackImportState.AlertAfterFailedRuns"/> failed runs in a row (chat §14.3).</summary>
 public sealed record FeedbackImportHealth(Guid ClientId, string ClientName, DateTimeOffset? LastRunAt, string? LastOutcome, int Unmapped, int FailedRuns, bool Alert);
 
-public sealed record FeedbackSummary(FeedbackTotals Totals, IReadOnlyList<FeedbackImportHealth> Imports);
+/// <summary>The period's totals, the import health, and <paramref name="LastUsedOn"/>: the last day with an answer, of any period.</summary>
+public sealed record FeedbackSummary(FeedbackTotals Totals, IReadOnlyList<FeedbackImportHealth> Imports, DateOnly? LastUsedOn);
 
 public sealed record FeedbackReviewed(Guid Id, string ReviewState);
 

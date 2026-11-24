@@ -38,6 +38,7 @@ describe('Feedback (admin design §8.1)', () => {
     signIn(['rag-department-admin'])
     const list = vi.spyOn(api.feedback, 'list').mockResolvedValue({ items: [item(), item({ id: 'f2', rating: 1, reasonCategory: null, outcome: 'not-found', citedDocuments: [] })], next: null })
     vi.spyOn(api.feedback, 'summary').mockResolvedValue({
+      lastUsedOn: null,
       totals: { answers: 200, notFound: 12, thumbsUp: 41, thumbsDown: 9 },
       imports: [
         { clientId: 'c1', clientName: 'Open WebUI (pilot)', lastRunAt: '2026-11-02T09:15:00Z', lastOutcome: 'ok', unmapped: 2, failedRuns: 0, alert: false },
@@ -78,7 +79,7 @@ describe('Feedback (admin design §8.1)', () => {
   it('shows no mark buttons to a viewer', async () => {
     signIn(['rag-viewer'])
     vi.spyOn(api.feedback, 'list').mockResolvedValue({ items: [item()], next: null })
-    vi.spyOn(api.feedback, 'summary').mockResolvedValue({ totals: { answers: 0, notFound: 0, thumbsUp: 0, thumbsDown: 0 }, imports: [] })
+    vi.spyOn(api.feedback, 'summary').mockResolvedValue({ lastUsedOn: null, totals: { answers: 0, notFound: 0, thumbsUp: 0, thumbsDown: 0 }, imports: [] })
     vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 } as never)
     const wrapper = mount(FeedbackView)
     await flushPromises()
@@ -91,7 +92,7 @@ describe('Feedback (admin design §8.1)', () => {
   it('says that feedback comes from Open WebUI while the deployment runs it', async () => {
     signIn(['rag-viewer'])
     vi.spyOn(api.feedback, 'list').mockResolvedValue({ items: [], next: null })
-    vi.spyOn(api.feedback, 'summary').mockResolvedValue({ totals: { answers: 0, notFound: 0, thumbsUp: 0, thumbsDown: 0 }, imports: [] })
+    vi.spyOn(api.feedback, 'summary').mockResolvedValue({ lastUsedOn: null, totals: { answers: 0, notFound: 0, thumbsUp: 0, thumbsDown: 0 }, imports: [] })
     vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 } as never)
     const wrapper = mount(FeedbackView)
     await flushPromises()
@@ -105,6 +106,7 @@ describe('Feedback (admin design §8.1)', () => {
     const list = vi.spyOn(api.feedback, 'list').mockResolvedValue({ items: [], next: null })
     // An import that ran before the profile was turned off: its health is not shown, as nothing is imported any more.
     vi.spyOn(api.feedback, 'summary').mockResolvedValue({
+      lastUsedOn: null,
       totals: { answers: 3, notFound: 0, thumbsUp: 1, thumbsDown: 0 },
       imports: [{ clientId: 'c2', clientName: 'Open WebUI (test)', lastRunAt: '2026-11-02T09:15:00Z', lastOutcome: 'failed:401', unmapped: 0, failedRuns: 4, alert: true }],
     })
@@ -134,7 +136,7 @@ describe('Feedback (admin design §8.1)', () => {
     const list = vi.spyOn(api.feedback, 'list').mockResolvedValue({
       items: [item({ citedDocuments: [{ id: 'd0', title: 'Bygglov' }, { id: 'd1', title: 'Altan och uteplats' }] })], next: null,
     })
-    vi.spyOn(api.feedback, 'summary').mockResolvedValue({ totals: { answers: 0, notFound: 0, thumbsUp: 0, thumbsDown: 0 }, imports: [] })
+    vi.spyOn(api.feedback, 'summary').mockResolvedValue({ lastUsedOn: null, totals: { answers: 0, notFound: 0, thumbsUp: 0, thumbsDown: 0 }, imports: [] })
     vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 } as never)
     const wrapper = mount(FeedbackView)
     await flushPromises()
@@ -154,7 +156,7 @@ describe('Feedback (admin design §8.1)', () => {
     signIn(['rag-viewer'])
     route.query = { documentId: 'd9' }
     const list = vi.spyOn(api.feedback, 'list').mockResolvedValue({ items: [], next: null })
-    vi.spyOn(api.feedback, 'summary').mockResolvedValue({ totals: { answers: 0, notFound: 0, thumbsUp: 0, thumbsDown: 0 }, imports: [] })
+    vi.spyOn(api.feedback, 'summary').mockResolvedValue({ lastUsedOn: null, totals: { answers: 0, notFound: 0, thumbsUp: 0, thumbsDown: 0 }, imports: [] })
     vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 } as never)
     const wrapper = mount(FeedbackView)
     await flushPromises()
@@ -170,7 +172,7 @@ describe('Feedback (admin design §8.1)', () => {
   it('labels every filter above its field, the same layout as Costs', async () => {
     signIn(['rag-viewer'])
     vi.spyOn(api.feedback, 'list').mockResolvedValue({ items: [], next: null })
-    vi.spyOn(api.feedback, 'summary').mockResolvedValue({ totals: { answers: 0, notFound: 0, thumbsUp: 0, thumbsDown: 0 }, imports: [] })
+    vi.spyOn(api.feedback, 'summary').mockResolvedValue({ lastUsedOn: null, totals: { answers: 0, notFound: 0, thumbsUp: 0, thumbsDown: 0 }, imports: [] })
     vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 } as never)
     const wrapper = mount(FeedbackView)
     await flushPromises()

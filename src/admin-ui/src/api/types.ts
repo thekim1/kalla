@@ -1728,6 +1728,8 @@ export interface FeedbackItem {
 /** `GET /api/feedback/summary`: the period's totals and the Open WebUI import health. */
 export interface FeedbackSummary {
   totals: { answers: number; notFound: number; thumbsUp: number; thumbsDown: number }
+  /** The last day with an answer, of any period; null before the first (the assistant's Usage tab). */
+  lastUsedOn: string | null
   imports: {
     clientId: string
     clientName: string

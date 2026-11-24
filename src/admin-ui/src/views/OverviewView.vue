@@ -113,7 +113,7 @@ function showHidden(): void {
       <ul class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <li v-for="a in live" :key="a.assistantId">
           <RouterLink
-            :to="{ name: 'assistant', params: { id: a.assistantId }, query: { tab: 'statistics' } }"
+            :to="{ name: 'assistant', params: { id: a.assistantId }, query: { tab: 'usage' } }"
             class="block h-full rounded-control bg-sunken p-4 hover:bg-hover"
             data-test="live-card"
           >

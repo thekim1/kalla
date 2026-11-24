@@ -27,9 +27,9 @@ export function attentionLink(item: AttentionItem): RouteLocationRaw | null {
     case 'personal_data_public':
       return item.objectId ? { name: 'collection', params: { id: item.objectId }, query: { tab: 'documents', pii: 'flagged' } } : null
     case 'assistant_tests_worse':
-      return item.objectId ? { name: 'assistant', params: { id: item.objectId }, query: { tab: 'test-questions' } } : null
+      return item.objectId ? { name: 'assistant', params: { id: item.objectId }, query: { tab: 'quality' } } : null
     case 'answers_below_median':
-      return item.objectId ? { name: 'assistant', params: { id: item.objectId }, query: { tab: 'statistics' } } : null
+      return item.objectId ? { name: 'assistant', params: { id: item.objectId }, query: { tab: 'usage' } } : null
     case 'document_downvoted':
       // The knowledge base's Overview, where its Feedback on documents card is (§8.8).
       return item.objectId ? { name: 'collection', params: { id: item.objectId }, query: { tab: 'overview' } } : null

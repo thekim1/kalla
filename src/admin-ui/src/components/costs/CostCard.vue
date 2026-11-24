@@ -16,7 +16,7 @@ import { gatewayHref } from '@/utils/gateway'
 import { COSTS } from '@/utils/labels'
 import { COST_MESSAGES } from '@/utils/messages'
 
-// The Cost card of admin design §8.6: an assistant's (Statistics tab, with a period picker, by step, by client and by outcome,
+// The Cost card of admin design §8.6: an assistant's (Usage tab, with a period picker, by step, by client and by outcome,
 // real use and the test panel apart) or a knowledge base's (Overview, the last 30 days, indexing and evaluation apart). The
 // total shows the gateway's cost and the estimate of the calls without one apart.
 const props = defineProps<{

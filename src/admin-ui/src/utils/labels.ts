@@ -1831,7 +1831,14 @@ export const ASSISTANTS = {
 } as const
 
 export const ASSISTANT = {
-  tabs: { draft: 'Draft', test: 'Test', testQuestions: 'Test questions', versions: 'Versions', audience: 'Audience', storage: 'Storage', statistics: 'Statistics' },
+  /** The five tabs (admin design §5.5.4, UX pass UX3 C), each named in `?tab=`. */
+  tabs: { build: 'Build', quality: 'Quality', versions: 'Versions', access: 'Access', usage: 'Usage' },
+  /** The test panel beside the draft; folded under it below 1,280 px and a sheet on a phone (§5.5.4 *Build*). */
+  testPanelTitle: 'Test',
+  tryDraft: 'Try the draft',
+  storageTitle: 'Storage of conversations',
+  /** *Check access*, folded at the end of *Access* as a tool for when something is wrong (§5.5.4). */
+  checkAccessFold: 'Check access: why someone can or cannot use it',
   tabsLabel: 'Parts of the assistant',
   /** On *Access*, with a copy button, not in the page's subtitle (admin design §5.7). */
   modelNameLabel: 'Model name',
@@ -2485,6 +2492,17 @@ export const UNSAVED = {
 } as const
 
 /** The ⋯ menu of a header or a row (admin design §5.12 rule 1); its name says whose actions they are. */
+/** The assistant's *Usage* tab (admin design §5.5.4): the last use and a period's questions, not found and ratings. */
+export const USAGE = {
+  title: 'Use',
+  lastUsed: (date: string) => `Last used ${date}.`,
+  neverUsed: 'Not used yet.',
+  questions: 'Questions',
+  notFound: 'Not found',
+  ratings: 'Ratings',
+  thumbs: (up: string, down: string) => `${up} up · ${down} down`,
+} as const
+
 export const MENU = {
   more: (name: string) => `More actions for ${name}`,
   editNameAndContact: 'Edit name and contact',

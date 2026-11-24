@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
@@ -142,6 +143,13 @@ public sealed class FeedbackEndpointsTests(AdminDatabaseFixture database, AdminH
         var totals = summary.GetProperty("totals");
         (totals.GetProperty("answers").GetInt32(), totals.GetProperty("notFound").GetInt32(), totals.GetProperty("thumbsUp").GetInt32(), totals.GetProperty("thumbsDown").GetInt32())
             .ShouldBe((2, 1, 1, 1));
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        summary.GetProperty("lastUsedOn").GetString().ShouldBe(today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+        // Of any period: a period after the last use has no answers but the same last day.
+        var tomorrow = today.AddDays(1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var later = await viewer.GetFromJsonAsync<JsonElement>($"/api/feedback/summary?assistantId={seed.Assistant}&from={tomorrow}", Ct);
+        (later.GetProperty("totals").GetProperty("answers").GetInt32(), later.GetProperty("lastUsedOn").GetString())
+            .ShouldBe((0, summary.GetProperty("lastUsedOn").GetString()));
         var import = summary.GetProperty("imports").EnumerateArray().Single(i => i.GetProperty("clientId").GetGuid() == seed.Client);
         (import.GetProperty("lastOutcome").GetString(), import.GetProperty("unmapped").GetInt32()).ShouldBe(("ok", 2));
 

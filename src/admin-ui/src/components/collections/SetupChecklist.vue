@@ -48,7 +48,7 @@ const steps = computed<Step[]>(() => {
       ? { key: 'available', label: SETUP.steps.available, state: state(s.available), to: assistant }
       : {
           key: 'available', label: SETUP.steps.availableApp, state: state(s.available),
-          to: s.assistantId ? { name: 'assistant', params: { id: s.assistantId }, query: { tab: 'audience' } } : assistant,
+          to: s.assistantId ? { name: 'assistant', params: { id: s.assistantId }, query: { tab: 'access' } } : assistant,
         },
   ]
 })

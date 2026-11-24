@@ -138,8 +138,7 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await act.press(page.getByRole('region', { name: 'Unsaved changes' }).getByRole('button', { name: 'Save changes' }))
     await expect(page.getByText('The draft has been saved.')).toBeVisible()
 
-    // 10 Test the draft: an answer with a cited source.
-    await act.press(page.getByRole('tab', { name: 'Test', exact: true }))
+    // 10 Test the draft: an answer with a cited source. The test panel is beside the draft on Build (admin design §5.5.4).
     await act.fill(page.getByRole('textbox', { name: 'Question' }), 'Vad kostar det att hyra en isyta?')
     await act.press(page.getByRole('button', { name: 'Test', exact: true }))
     const answer = page.getByTestId('answer')
@@ -162,8 +161,8 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await act.press(publishDialog.getByRole('button', { name: 'Publish', exact: true }))
     await expect(page.getByText('Published: version 1')).toBeVisible()
 
-    // 12 Make it available in Open WebUI.
-    await act.press(page.getByRole('tab', { name: 'Audience' }))
+    // 12 Make it available in Open WebUI: the apps on Access (admin design §5.5.4).
+    await act.press(page.getByRole('tab', { name: 'Access' }))
     await act.check(page.getByRole('checkbox', { name: 'Open WebUI (dev)' }))
     await act.press(page.getByRole('region', { name: 'Unsaved changes' }).getByRole('button', { name: 'Save changes' }))
     await expect(page.getByText('The audience has been saved.')).toBeVisible()
@@ -176,7 +175,7 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await expect(openWebUi).toHaveURL(url => url.origin === portalUrl.origin)
     await expect(openWebUi).toHaveTitle(/Open WebUI/, { timeout: 30_000 })
     await openWebUi.close()
-    // The model name is on the Audience tab with a copy button (admin design §5.7), not in the page's subtitle.
+    // The model name is on the Access tab with a copy button (admin design §5.7), not in the page's subtitle.
     const slug = (await page.getByRole('region', { name: 'Model name' }).locator('code').textContent())!.trim()
     await eventually(async () => (await listedModels(page.request, devClientKey())).includes(slug), 'kalla-api lists the assistant', 60_000)
 

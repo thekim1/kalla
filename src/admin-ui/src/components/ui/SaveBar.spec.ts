@@ -77,6 +77,20 @@ describe('SaveBar (admin design §5.12 rule 7, Saving)', () => {
     wrapper.unmount()
   })
 
+  it('holds the page\'s phone action: on its own while nothing is unsaved (not the Unsaved changes region), beside the buttons after', async () => {
+    const wrapper = mount(SaveBar, { props: { changes: 0 }, slots: { phone: '<button data-test="try">Try the draft</button>' }, attachTo: document.body })
+    expect(wrapper.find('[data-test=save-bar]').exists()).toBe(false)
+    const idle = wrapper.get('[data-test=save-bar-phone]')
+    expect(idle.classes()).toContain('md:hidden')
+    expect(idle.find('[data-test=try]').exists()).toBe(true)
+    expect(wrapper.get('[data-test=save-bar-spacer]').attributes('style')).toContain('height: 68px')
+    await wrapper.setProps({ changes: 1 })
+    await flushPromises()
+    expect(wrapper.find('[data-test=save-bar-phone]').exists()).toBe(false)
+    expect(wrapper.get('[data-test=save-bar] [data-test=try]').element.parentElement?.className).toContain('md:hidden')
+    wrapper.unmount()
+  })
+
   it('returns focus to the field last edited when it goes with focus in it (after Save changes)', async () => {
     const changes = ref(0)
     const Form = defineComponent({

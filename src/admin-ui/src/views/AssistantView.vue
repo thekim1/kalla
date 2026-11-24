@@ -4,11 +4,12 @@ import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import { useDirty } from '@/composables/useDirty'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
+import { useMedia } from '@/composables/useMedia'
 import { useTabQuery } from '@/composables/useTabQuery'
 import { ApiError } from '@/api/client'
 import type {
   CostQuery,
-  Assistant, AssistantCopyResult, AssistantDraft, AssistantTestResult, AssistantVersion, AssistantVersionSummary, ClientSummary, CollectionLink, CollectionSummary, DataProtectionPolicy,
+  Assistant, AssistantCopyResult, AssistantDraft, AssistantVersion, AssistantVersionSummary, ClientSummary, CollectionLink, CollectionSummary, DataProtectionPolicy,
   GatewayModel, GeneralKnowledge, VersionDiff,
 } from '@/api/types'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
@@ -27,6 +28,7 @@ import TextAreaField from '@/components/ui/TextAreaField.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
+import UiDialog from '@/components/ui/UiDialog.vue'
 import UiTabs from '@/components/ui/UiTabs.vue'
 import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
@@ -38,14 +40,17 @@ import AssistantEditDrawer from '@/components/assistants/AssistantEditDrawer.vue
 import PublishDraftDialog from '@/components/assistants/PublishDraftDialog.vue'
 import VersionDiffView from '@/components/assistants/VersionDiffView.vue'
 import UiDrawer from '@/components/ui/UiDrawer.vue'
+import AssistantTestPanel from '@/components/assistants/AssistantTestPanel.vue'
 import AssistantTestsTab from '@/components/assistants/AssistantTestsTab.vue'
+import AssistantUsageCard from '@/components/assistants/AssistantUsageCard.vue'
+import { GENERAL_KNOWLEDGE_LEVELS, useAssistantTest } from '@/components/assistants/useAssistantTest'
 import TestQuestionDrawer from '@/components/assistants/TestQuestionDrawer.vue'
 import AnswerEvaluationCard from '@/components/assistants/AnswerEvaluationCard.vue'
 import ContentGapsCard from '@/components/assistants/ContentGapsCard.vue'
 import CostCard from '@/components/costs/CostCard.vue'
 import KeyBudgetStatus from '@/components/gateway/KeyBudgetStatus.vue'
 import KeyUnavailableBadge from '@/components/gateway/KeyUnavailableBadge.vue'
-import { actorText, formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
+import { actorText, formatDateTime, formatNumber } from '@/utils/format'
 import { ASSISTANT, ASSISTANT_TESTS, COMMON, DELETE, EDIT_DRAWER, LEVEL_LABEL, MENU, MODEL_AVAILABILITY, MOVE_DEPARTMENT, PAGE, UNSAVED } from '@/utils/labels'
 import MoveDepartmentDrawer from '@/components/organisation/MoveDepartmentDrawer.vue'
 import { ERROR_MESSAGES, formatMessage } from '@/utils/messages'
@@ -55,16 +60,17 @@ import { problemMessage } from '@/utils/problem'
 // V-rule warnings, Testa on the draft (POST /api/assistants/{id}/test, nothing stored), Publicera (V34, V8 at the gateway),
 // Målgrupp (the clients that offer it), Versioner with Återställ (publishes an earlier version again as a new one), Lagring
 // (history mode and retention days within the level's policy, V10) and Arkivera / Ta fram igen.
-type Tab = 'draft' | 'test' | 'test-questions' | 'versions' | 'audience' | 'storage' | 'statistics'
+// The five tabs (§5.5.4, UX pass UX3 C): Build (the draft and the test panel beside it), Quality, Versions, Access and Usage.
+type Tab = 'build' | 'quality' | 'versions' | 'access' | 'usage'
 const props = defineProps<{ id: string }>()
 const auth = useAuthStore()
 const ui = useUiStore()
 const router = useRouter()
 const assistant = useLoadable<Assistant | null>(null)
 /** The tab is kept in `?tab=`, so a reload or a link opens it. */
-const TABS: [Tab, ...Tab[]] = ['draft', 'test', 'test-questions', 'versions', 'audience', 'storage', 'statistics']
+const TABS: [Tab, ...Tab[]] = ['build', 'quality', 'versions', 'access', 'usage']
 const tab = useTabQuery<Tab>(TABS)
-/** The Statistics tab's Cost card (admin design §8.6). */
+/** The Usage tab's Cost card (admin design §8.6). */
 const assistantCosts = (query: CostQuery) => api.costs.assistant(props.id, query)
 const draft = ref<AssistantDraft | null>(null)
 const models = ref<GatewayModel[]>([])
@@ -104,24 +110,18 @@ const limits = computed(() => ({
 }) as const)
 const limitHint = (tokens: number | null | undefined) => (tokens ? ASSISTANT.modelLimit(formatNumber(tokens)) : ASSISTANT.modelLimitUnknown)
 const languageOptions = ['', 'auto', 'sv'].map((v) => ({ value: v, label: ASSISTANT.languages[v]! }))
-const GENERAL_KNOWLEDGE_LEVELS: GeneralKnowledge[] = ['off', 'supplement', 'fallback', 'open']
 const audience = ref<string[]>([])
-const question = ref('')
-const result = ref<AssistantTestResult | null>(null)
-// The test's general-knowledge level (#726, admin design §4.9): '' sends none, so the tested version's own level runs; the
-// picker offers only levels up to that one, since a request can only make it stricter.
-const testLevel = ref('')
 /** The tested version's saved level: the draft's, else the published version's (the panel tests the draft when there is one). */
 const testedLevel = computed(() => levelOf(querySteps.value))
-const testLevelOptions = computed(() => [
-  { value: '', label: ASSISTANT.testGeneralKnowledgeOwn(ASSISTANT.generalKnowledgeNames[testedLevel.value]!) },
-  ...GENERAL_KNOWLEDGE_LEVELS.slice(0, GENERAL_KNOWLEDGE_LEVELS.indexOf(testedLevel.value) + 1)
-    .map((g) => ({ value: g, label: ASSISTANT.generalKnowledgeLevels[g]!.label })),
-])
-watch(testLevelOptions, (options) => {
-  if (!options.some((o) => o.value === testLevel.value)) testLevel.value = ''
-})
-const busy = ref<'' | 'save' | 'test' | 'audience' | 'storage' | 'unarchive'>('')
+// The test panel's state (§4.9): the page's, so the panel keeps its answer when it moves (beside, folded, the phone's sheet).
+const tester = useAssistantTest(() => props.id, testedLevel)
+/** The panel's place (§5.5.4 *Build*): beside the draft from 1,280 px, folded under it below, a full-height sheet on a phone. */
+const wide = useMedia('(min-width: 1280px)')
+const phone = useMedia('(max-width: 759px)')
+const trying = ref(false)
+/** The question *Save as test question* opens the drawer with. */
+const questionToSave = ref('')
+const busy = ref<'' | 'save' | 'access' | 'unarchive'>('')
 const versions = ref<AssistantVersionSummary[] | null>(null)
 const restoring = ref<number | null>(null)
 const archiving = ref(false)
@@ -160,13 +160,11 @@ async function deleteAssistant(): Promise<void> {
 }
 
 const tabs = [
-  { value: 'draft' as const, label: ASSISTANT.tabs.draft },
-  { value: 'test' as const, label: ASSISTANT.tabs.test },
-  { value: 'test-questions' as const, label: ASSISTANT.tabs.testQuestions },
+  { value: 'build' as const, label: ASSISTANT.tabs.build },
+  { value: 'quality' as const, label: ASSISTANT.tabs.quality },
   { value: 'versions' as const, label: ASSISTANT.tabs.versions },
-  { value: 'audience' as const, label: ASSISTANT.tabs.audience },
-  { value: 'storage' as const, label: ASSISTANT.tabs.storage },
-  { value: 'statistics' as const, label: ASSISTANT.tabs.statistics },
+  { value: 'access' as const, label: ASSISTANT.tabs.access },
+  { value: 'usage' as const, label: ASSISTANT.tabs.usage },
 ]
 const versionColumns: Column[] = [
   { key: 'number', label: ASSISTANT.version },
@@ -343,7 +341,9 @@ function fillAccess(a: Assistant): void {
   audienceDirty.reset()
   storageDirty.reset()
 }
-const tabDirty = (t: string) => (t === 'draft' ? draftDirty : t === 'audience' ? audienceDirty : t === 'storage' ? storageDirty : null)?.dirty.value ?? false
+// Access is one story with one save bar: the audience and the storage count together (§5.5.4 *Access*).
+const accessChanges = computed(() => audienceDirty.changes.value + storageDirty.changes.value)
+const tabDirty = (t: string) => (t === 'build' ? draftDirty.dirty.value : t === 'access' ? accessChanges.value > 0 : false)
 /** A tab change with unsaved changes on the tab asks first (§5.12, *Saving*); the changes stay for a return. */
 const confirmTabChange = () => !tabDirty(tab.value) || window.confirm(UNSAVED.switchTabKept)
 useUnsavedGuard(() => draftDirty.dirty.value || audienceDirty.dirty.value || storageDirty.dirty.value, {
@@ -462,16 +462,21 @@ function compare(number: number): void {
   void comparison.run(() => api.assistants.diff(props.id, number, compareTarget.value!))
 }
 
-const test = () => run('test', async () => {
-  result.value = await api.assistants.test(props.id, {
-    question: question.value.trim(), ...(testLevel.value ? { generalKnowledge: testLevel.value as GeneralKnowledge } : {}),
-  })
-})
+function saveQuestion(question: string): void {
+  questionToSave.value = question
+  savingQuestion.value = true
+}
 
-const saveAudience = () => run('audience', async () => {
-  assistant.data.value = await api.assistants.audiences(props.id, { clientIds: audience.value, version: assistant.data.value!.version })
-  audienceDirty.reset()
-  ui.notify(ASSISTANT.audienceSaved)
+/** Access's save bar: the audience and the storage, each saved when it has changes, the storage checked first. */
+const saveAccess = () => run('access', async () => {
+  const storage = storageDirty.dirty.value
+  if (storage && !checkRetention()) return
+  if (audienceDirty.dirty.value) {
+    assistant.data.value = await api.assistants.audiences(props.id, { clientIds: audience.value, version: assistant.data.value!.version })
+    audienceDirty.reset()
+    ui.notify(ASSISTANT.audienceSaved)
+  }
+  if (storage) await saveStorage()
 })
 
 async function loadVersions(): Promise<void> {
@@ -495,7 +500,7 @@ watch(() => [assistant.data.value?.classification, assistant.data.value?.gateway
 
 function openTab(t: Tab): void {
   if (t === 'versions') void loadVersions()
-  if (t === 'storage') void loadPolicy()
+  if (t === 'access') void loadPolicy()
 }
 
 watch(tab, openTab)
@@ -532,16 +537,20 @@ const unarchive = () => run('unarchive', async () => {
   ui.notify(ASSISTANT.unarchivedDone)
 })
 
-const saveStorage = () => run('storage', async () => {
+/** V10: the retention days within the level's maximum; sets the field's error. */
+function checkRetention(): boolean {
   const max = policy.value?.retentionMaxDays ?? 3650
   const days = Number(retentionDays.value.trim())
   retentionError.value = /^\d+$/.test(retentionDays.value.trim()) && days >= 1 && days <= max ? undefined : ASSISTANT.retentionInvalid(max)
-  if (retentionError.value) return
+  return !retentionError.value
+}
+async function saveStorage(): Promise<void> {
+  const days = Number(retentionDays.value.trim())
   assistant.data.value = await api.assistants.retention(props.id, { historyMode: historyMode.value, retentionDays: days, version: assistant.data.value!.version })
   retentionDays.value = String(days)
   storageDirty.reset()
   ui.notify(ASSISTANT.storageSaved)
-})
+}
 
 // Test questions (B-57): the knowledge bases the draft links, for the expected-document picker; Save as test question in Test.
 const linkedCollections = computed(() => links.value.map((l) => ({ id: l.collectionId, name: collections.value.find((c) => c.id === l.collectionId)?.name ?? l.collectionId })))
@@ -559,13 +568,13 @@ const copying = ref(false)
 function copied(result: AssistantCopyResult): void {
   const leftOut = ASSISTANT.copyLeftOut(result.leftOut?.links ?? 0, result.leftOut?.expectedDocuments ?? 0)
   ui.notify(leftOut ? `${ASSISTANT.copied(result.assistant.name)} ${leftOut}` : ASSISTANT.copied(result.assistant.name))
-  void router.push({ name: 'assistant', params: { id: result.assistant.id }, query: { tab: 'draft' } })
+  void router.push({ name: 'assistant', params: { id: result.assistant.id } })
 }
 
 watch(() => props.id, () => {
   versions.value = null
   policy.value = null
-  result.value = null
+  tester.clear()
   error.value = null
   void load()
 })
@@ -611,114 +620,100 @@ watch(() => props.id, () => {
       <InlineError v-if="error" :message="problemMessage(error)" class="mb-4" />
       <UiTabs id="assistant" :model-value="tab" :tabs="tabs" :label="ASSISTANT.tabsLabel" class="mb-6" @update:model-value="switchTab($event as Tab)" />
 
-      <div v-if="tab === 'draft'" id="assistant-panel-draft" role="tabpanel" aria-labelledby="assistant-tab-draft" class="grid max-w-[680px] gap-5">
-        <p class="text-fg-2" data-test="draft-lead">{{ draftLead }}</p>
-        <UiCard v-if="warnings.length" :title="ASSISTANT.warnings" data-test="warnings">
-          <ul class="ml-5 list-disc text-warn"><li v-for="w in warnings" :key="w">{{ w }}</li></ul>
-        </UiCard>
-        <TextAreaField id="assistant-prompt" v-model="prompt" :label="ASSISTANT.prompt" :hint="ASSISTANT.promptHint" :rows="8" />
-        <KnowledgeLinks v-model="links" :collections="collections" :department-id="assistant.data.value.departmentId" :disabled="!canEdit" />
-        <fieldset class="grid gap-2" data-test="general-knowledge" aria-describedby="assistant-general-knowledge-hint">
-          <legend class="mb-1 font-medium">{{ ASSISTANT.generalKnowledge }}</legend>
-          <p id="assistant-general-knowledge-hint" class="text-small text-fg-2">{{ ASSISTANT.generalKnowledgeHint }}</p>
-          <label v-for="g in GENERAL_KNOWLEDGE_LEVELS" :key="g" class="flex cursor-pointer gap-3 rounded-card border border-border p-3 has-checked:bg-accent-soft has-checked:shadow-inset-selected">
-            <input
-              :id="`assistant-general-knowledge-${g}`" v-model="generalKnowledge" type="radio" name="assistant-general-knowledge" :value="g" class="mt-1"
-            />
-            <span>
-              <span class="block font-medium">{{ ASSISTANT.generalKnowledgeLevels[g]!.label }}</span>
-              <span class="block text-small text-fg-2">{{ ASSISTANT.generalKnowledgeLevels[g]!.help }}</span>
-            </span>
-          </label>
-          <p v-if="publicLevel && generalKnowledge !== 'off'" class="text-small text-warn" role="status" data-test="general-knowledge-public-warning">
-            {{ ASSISTANT.generalKnowledgePublicWarning }}
-          </p>
-        </fieldset>
-        <details class="rounded-card border border-border p-4" data-test="advanced">
-          <summary class="cursor-pointer font-medium">{{ ASSISTANT.advanced }}</summary>
-          <div class="mt-4 grid gap-5">
-            <p class="text-small text-fg-2">{{ ASSISTANT.advancedHint }}</p>
-            <SelectField id="assistant-model" v-model="model" class="max-w-sm" :label="ASSISTANT.model" :hint="modelHint" :options="modelOptions" data-test="model" />
-            <TextField id="assistant-top-k" v-model="advanced.topK" :label="ASSISTANT.topK" inputmode="numeric" short :error="advancedErrors.topK" />
-            <SelectField id="assistant-rerank"
-              v-model="advanced.rerank" class="max-w-sm" :label="ASSISTANT.rerank" :hint="rerankHint" :options="rerankOptions"
-              :disabled="rerankers.length === 0 && !advanced.rerank" data-test="rerank"
-            />
-            <CheckField v-model="advanced.condense" :label="ASSISTANT.condense" data-test="condense" />
-            <TextField id="assistant-history" v-model="advanced.maxMessages" :label="ASSISTANT.historyMessages" inputmode="numeric" short :error="advancedErrors.maxMessages" />
-            <fieldset class="grid gap-2" data-test="answer-length">
-              <legend class="font-medium">{{ ASSISTANT.maxOutputTokens }}</legend>
-              <CheckField v-model="advanced.useModelOutput" :label="ASSISTANT.useModelLimit" data-test="use-model-output" />
-              <p class="text-small text-fg-3" data-test="model-output-limit">{{ limitHint(chosenModel?.maxOutputTokens) }}</p>
-              <p v-if="answerCeiling !== null" class="text-small text-fg-3" data-test="answer-ceiling">{{ ASSISTANT.answerCeiling(formatNumber(answerCeiling)) }}</p>
-              <TextField
-                v-if="!advanced.useModelOutput" id="assistant-max-tokens" v-model="advanced.maxOutputTokens" :label="ASSISTANT.maxOutputTokens"
-                inputmode="numeric" short :error="advancedErrors.maxOutputTokens"
-              />
-            </fieldset>
-            <fieldset class="grid gap-2" data-test="context-size">
-              <legend class="font-medium">{{ ASSISTANT.contextTokens }}</legend>
-              <CheckField v-model="advanced.useModelContext" :label="ASSISTANT.useModelLimit" data-test="use-model-context" />
-              <p class="text-small text-fg-3" data-test="model-context-limit">{{ limitHint(chosenModel?.contextWindow) }}</p>
-              <TextField
-                v-if="!advanced.useModelContext" id="assistant-context-tokens" v-model="advanced.contextTokens" :label="ASSISTANT.contextTokens"
-                inputmode="numeric" short :error="advancedErrors.contextTokens"
-              />
-            </fieldset>
-            <TextField id="assistant-temperature" v-model="advanced.temperature" :label="ASSISTANT.temperature" inputmode="decimal" short :error="advancedErrors.temperature" />
-            <SelectField id="assistant-language" v-model="advanced.language" class="max-w-sm" :label="ASSISTANT.language" :options="languageOptions" />
-          </div>
-        </details>
-        <SaveBar
-          v-if="canEdit" :changes="draftDirty.changes.value" :saving="busy === 'save'" :consequence="draftConsequence" @save="saveDraft" @discard="discardDraft"
-        />
-      </div>
-
-      <div v-else-if="tab === 'test'" id="assistant-panel-test" role="tabpanel" aria-labelledby="assistant-tab-test" class="grid max-w-3xl gap-5">
-        <form class="grid gap-3" @submit.prevent="test">
-          <TextAreaField id="assistant-question" v-model="question" :label="ASSISTANT.question" :hint="ASSISTANT.askHint" :rows="2" />
-          <SelectField id="assistant-test-general-knowledge"
-            v-model="testLevel" class="max-w-sm" :label="ASSISTANT.testGeneralKnowledge" :hint="ASSISTANT.testGeneralKnowledgeHint"
-            :options="testLevelOptions"
-          />
-          <div><UiButton type="submit" variant="primary" :loading="busy === 'test'" :disabled="!question.trim()" data-test="ask">{{ ASSISTANT.ask }}</UiButton></div>
-        </form>
-        <template v-if="result">
-          <UiCard :title="ASSISTANT.answer" data-test="answer">
-            <UiBadge :label="ASSISTANT.outcome[result.answer.outcome.replace('-', '')] ?? result.answer.outcome" class="mb-2" />
-            <p class="whitespace-pre-wrap">{{ result.answer.delivered }}</p>
-            <details v-if="result.answer.raw" class="mt-3"><summary class="cursor-pointer text-small">{{ ASSISTANT.raw }}</summary><p class="whitespace-pre-wrap text-small text-fg-2">{{ result.answer.raw }}</p></details>
-            <p class="mt-3 text-small text-fg-3" data-test="test-general-knowledge">
-              {{ ASSISTANT.testGeneralKnowledgeRan(ASSISTANT.generalKnowledgeNames[result.generalKnowledge] ?? result.generalKnowledge) }}
-            </p>
-            <p class="text-small text-fg-3">{{ ASSISTANT.gateway(result.gateway.model, result.gateway.residency, String(Math.round(result.durationMs))) }}</p>
-            <p v-if="result.gateway.maxTokensSource" class="text-small text-fg-3" data-test="max-tokens-sent">
-              {{ ASSISTANT.maxTokensSent(result.gateway.maxTokens == null ? null : formatNumber(result.gateway.maxTokens),
-                                         ASSISTANT.maxTokensSources[result.gateway.maxTokensSource] ?? result.gateway.maxTokensSource) }}
-            </p>
-            <p class="text-small text-fg-3" data-test="test-cost">
-              {{ ASSISTANT.testCost(result.gateway.costUsd > 0 && result.gateway.costUsd < 0.00005 ? ASSISTANT.costBelow(formatDecimal(0.0001, 4, 4)) : formatDecimal(result.gateway.costUsd, 4, 4), result.gateway.costEstimated) }}
-            </p>
-            <p v-if="result.gateway.finishReason === 'length'" role="status" class="mt-2 font-medium text-warn" data-test="length-stopped">
-              {{ ASSISTANT.lengthStopped }}
-            </p>
-            <div v-if="canEdit" class="mt-3"><UiButton size="sm" icon="add" data-test="save-test-question" @click="savingQuestion = true">{{ ASSISTANT_TESTS.saveFromTest }}</UiButton></div>
+      <!-- Build (§5.5.4): the draft form and, beside it from 1,280 px, the test panel, sticky; below that the panel folds under
+           the form as Try the draft, and on a phone Try the draft in the save bar opens it as a full-height sheet. -->
+      <div
+        v-if="tab === 'build'" id="assistant-panel-build" role="tabpanel" aria-labelledby="assistant-tab-build"
+        class="grid gap-6 xl:grid-cols-[minmax(0,680px)_minmax(0,1fr)] xl:items-start"
+      >
+        <div class="grid min-w-0 max-w-[680px] gap-5" data-test="draft-form">
+          <p class="text-fg-2" data-test="draft-lead">{{ draftLead }}</p>
+          <UiCard v-if="warnings.length" :title="ASSISTANT.warnings" data-test="warnings">
+            <ul class="ml-5 list-disc text-warn"><li v-for="w in warnings" :key="w">{{ w }}</li></ul>
           </UiCard>
-          <UiCard :title="ASSISTANT.sources">
-            <ol class="grid gap-3">
-              <li v-for="c in result.retrieval.candidates" :key="c.rank">
-                <span class="font-medium">{{ c.rank }}. {{ c.title }}</span>
-                <UiBadge v-if="c.cited" tone="ok" :label="ASSISTANT.cited" class="ml-2" />
-                <span class="block text-small text-fg-3">{{ c.headingPath }}</span>
-                <span class="block text-small text-fg-2">{{ c.text }}</span>
-              </li>
-            </ol>
+          <TextAreaField id="assistant-prompt" v-model="prompt" :label="ASSISTANT.prompt" :hint="ASSISTANT.promptHint" :rows="8" />
+          <KnowledgeLinks v-model="links" :collections="collections" :department-id="assistant.data.value.departmentId" :disabled="!canEdit" />
+          <fieldset class="grid gap-2" data-test="general-knowledge" aria-describedby="assistant-general-knowledge-hint">
+            <legend class="mb-1 font-medium">{{ ASSISTANT.generalKnowledge }}</legend>
+            <p id="assistant-general-knowledge-hint" class="text-small text-fg-2">{{ ASSISTANT.generalKnowledgeHint }}</p>
+            <label v-for="g in GENERAL_KNOWLEDGE_LEVELS" :key="g" class="flex cursor-pointer gap-3 rounded-card border border-border p-3 has-checked:bg-accent-soft has-checked:shadow-inset-selected">
+              <input
+                :id="`assistant-general-knowledge-${g}`" v-model="generalKnowledge" type="radio" name="assistant-general-knowledge" :value="g" class="mt-1"
+              />
+              <span>
+                <span class="block font-medium">{{ ASSISTANT.generalKnowledgeLevels[g]!.label }}</span>
+                <span class="block text-small text-fg-2">{{ ASSISTANT.generalKnowledgeLevels[g]!.help }}</span>
+              </span>
+            </label>
+            <p v-if="publicLevel && generalKnowledge !== 'off'" class="text-small text-warn" role="status" data-test="general-knowledge-public-warning">
+              {{ ASSISTANT.generalKnowledgePublicWarning }}
+            </p>
+          </fieldset>
+          <details class="rounded-card border border-border p-4" data-test="advanced">
+            <summary class="cursor-pointer font-medium">{{ ASSISTANT.advanced }}</summary>
+            <div class="mt-4 grid gap-5">
+              <p class="text-small text-fg-2">{{ ASSISTANT.advancedHint }}</p>
+              <SelectField id="assistant-model" v-model="model" class="max-w-sm" :label="ASSISTANT.model" :hint="modelHint" :options="modelOptions" data-test="model" />
+              <TextField id="assistant-top-k" v-model="advanced.topK" :label="ASSISTANT.topK" inputmode="numeric" short :error="advancedErrors.topK" />
+              <SelectField id="assistant-rerank"
+                v-model="advanced.rerank" class="max-w-sm" :label="ASSISTANT.rerank" :hint="rerankHint" :options="rerankOptions"
+                :disabled="rerankers.length === 0 && !advanced.rerank" data-test="rerank"
+              />
+              <CheckField v-model="advanced.condense" :label="ASSISTANT.condense" data-test="condense" />
+              <TextField id="assistant-history" v-model="advanced.maxMessages" :label="ASSISTANT.historyMessages" inputmode="numeric" short :error="advancedErrors.maxMessages" />
+              <fieldset class="grid gap-2" data-test="answer-length">
+                <legend class="font-medium">{{ ASSISTANT.maxOutputTokens }}</legend>
+                <CheckField v-model="advanced.useModelOutput" :label="ASSISTANT.useModelLimit" data-test="use-model-output" />
+                <p class="text-small text-fg-3" data-test="model-output-limit">{{ limitHint(chosenModel?.maxOutputTokens) }}</p>
+                <p v-if="answerCeiling !== null" class="text-small text-fg-3" data-test="answer-ceiling">{{ ASSISTANT.answerCeiling(formatNumber(answerCeiling)) }}</p>
+                <TextField
+                  v-if="!advanced.useModelOutput" id="assistant-max-tokens" v-model="advanced.maxOutputTokens" :label="ASSISTANT.maxOutputTokens"
+                  inputmode="numeric" short :error="advancedErrors.maxOutputTokens"
+                />
+              </fieldset>
+              <fieldset class="grid gap-2" data-test="context-size">
+                <legend class="font-medium">{{ ASSISTANT.contextTokens }}</legend>
+                <CheckField v-model="advanced.useModelContext" :label="ASSISTANT.useModelLimit" data-test="use-model-context" />
+                <p class="text-small text-fg-3" data-test="model-context-limit">{{ limitHint(chosenModel?.contextWindow) }}</p>
+                <TextField
+                  v-if="!advanced.useModelContext" id="assistant-context-tokens" v-model="advanced.contextTokens" :label="ASSISTANT.contextTokens"
+                  inputmode="numeric" short :error="advancedErrors.contextTokens"
+                />
+              </fieldset>
+              <TextField id="assistant-temperature" v-model="advanced.temperature" :label="ASSISTANT.temperature" inputmode="decimal" short :error="advancedErrors.temperature" />
+              <SelectField id="assistant-language" v-model="advanced.language" class="max-w-sm" :label="ASSISTANT.language" :options="languageOptions" />
+            </div>
+          </details>
+          <SaveBar
+            :changes="canEdit ? draftDirty.changes.value : 0" :saving="busy === 'save'" :consequence="draftConsequence" @save="saveDraft" @discard="discardDraft"
+          >
+            <template #phone>
+              <UiButton icon="chat" data-test="try-draft-phone" @click="trying = true">{{ ASSISTANT.tryDraft }}</UiButton>
+            </template>
+          </SaveBar>
+        </div>
+        <template v-if="!phone">
+          <UiCard v-if="wide" :title="ASSISTANT.testPanelTitle" class="sticky top-4 max-h-[calc(100dvh-2rem)] overflow-auto" data-test="test-beside">
+            <AssistantTestPanel :test="tester" :can-edit="canEdit" @save-question="saveQuestion" />
           </UiCard>
+          <details v-else class="material max-w-[680px] rounded-card p-5" data-test="try-draft">
+            <summary class="cursor-pointer font-medium">{{ ASSISTANT.tryDraft }}</summary>
+            <div class="mt-4"><AssistantTestPanel :test="tester" :can-edit="canEdit" @save-question="saveQuestion" /></div>
+          </details>
         </template>
+        <UiDialog v-else :open="trying" :title="ASSISTANT.tryDraft" @update:open="trying = $event">
+          <!-- Full height: the sheet is the panel's whole screen; the unsaved draft stays in the form behind it. -->
+          <div class="min-h-[calc(100dvh-12rem)]" data-test="try-draft-sheet">
+            <AssistantTestPanel :test="tester" :can-edit="canEdit" @save-question="saveQuestion" />
+          </div>
+        </UiDialog>
       </div>
 
-      <div v-else-if="tab === 'test-questions'" id="assistant-panel-test-questions" role="tabpanel" aria-labelledby="assistant-tab-test-questions" class="max-w-4xl">
+      <!-- Quality (§5.5.4): the test questions with their latest report, the latest answer evaluation and the content gaps. -->
+      <div v-else-if="tab === 'quality'" id="assistant-panel-quality" role="tabpanel" aria-labelledby="assistant-tab-quality" class="grid max-w-4xl gap-5">
         <AssistantTestsTab :assistant="assistant.data.value" :can-edit="canEdit" :collections="linkedCollections" @restored="restoredFromTests" />
+        <AnswerEvaluationCard :assistant-id="props.id" />
+        <ContentGapsCard :assistant-id="props.id" />
       </div>
 
       <div v-else-if="tab === 'versions'" id="assistant-panel-versions" role="tabpanel" aria-labelledby="assistant-tab-versions" class="grid max-w-4xl gap-4">
@@ -749,27 +744,40 @@ watch(() => props.id, () => {
         </DataTable>
       </div>
 
-      <div v-else-if="tab === 'storage'" id="assistant-panel-storage" role="tabpanel" aria-labelledby="assistant-tab-storage" class="grid max-w-[680px] gap-5">
-        <p class="text-fg-2">{{ ASSISTANT.storageLead }}</p>
-        <SelectField id="assistant-history" v-model="historyMode" class="max-w-sm" :label="ASSISTANT.historyMode" :options="historyOptions" :disabled="!canManage" />
-        <TextField
-          id="assistant-retention" v-model="retentionDays" :label="ASSISTANT.retentionDays" inputmode="numeric" short :disabled="!canManage"
-          :hint="policy ? ASSISTANT.retentionHint(policy.retentionMaxDays) : undefined" :error="retentionError"
-        />
-        <SaveBar v-if="canManage" :changes="storageDirty.changes.value" :saving="busy === 'storage'" @save="saveStorage" @discard="fillAccess(assistant.data.value!)" />
-      </div>
-
-      <div v-else-if="tab === 'statistics'" id="assistant-panel-statistics" role="tabpanel" aria-labelledby="assistant-tab-statistics" class="grid max-w-3xl gap-5">
-        <CostCard kind="assistant" :source="assistantCosts" :gateway-key-id="assistant.data.value.gatewayKeyId" :department-id="assistant.data.value.departmentId" />
-        <AnswerEvaluationCard :assistant-id="props.id" />
-        <ContentGapsCard :assistant-id="props.id" />
-      </div>
-
-      <div v-else id="assistant-panel-audience" role="tabpanel" aria-labelledby="assistant-tab-audience" class="grid max-w-[680px] gap-4">
+      <!-- Access (§5.5.4): one story top-down: who can use it, the apps that offer it, the storage of its conversations, the
+           model name apps call it by, and Check access folded at the end. One save bar for the audience and the storage. -->
+      <div v-else-if="tab === 'access'" id="assistant-panel-access" role="tabpanel" aria-labelledby="assistant-tab-access" class="grid max-w-[680px] gap-6">
         <section class="grid gap-1" data-test="who-can-use" aria-labelledby="assistant-who-can-use">
           <h3 id="assistant-who-can-use" class="font-medium">{{ ASSISTANT.whoCanUse }}</h3>
           <p v-if="whoCanUse.length === 0" class="text-fg-3">{{ ASSISTANT.whoCanUseNone }}</p>
           <ul v-else class="ml-5 list-disc"><li v-for="w in whoCanUse" :key="w">{{ w }}</li></ul>
+        </section>
+        <section class="grid gap-3" data-test="apps" aria-labelledby="assistant-apps">
+          <h3 id="assistant-apps" class="font-medium">{{ ASSISTANT.audience }}</h3>
+          <p class="text-small text-fg-2">{{ ASSISTANT.audienceHint }}</p>
+          <p v-if="clients.length === 0" class="text-fg-3">{{ ASSISTANT.noClients }}</p>
+          <fieldset v-else class="grid gap-2">
+            <legend class="sr-only">{{ ASSISTANT.audience }}</legend>
+            <CheckField
+              v-for="c in clients" :key="c.id" :model-value="audience.includes(c.id)" :label="c.name" :disabled="!canManage"
+              @update:model-value="audience = toggle(audience, c.id, $event)"
+            />
+          </fieldset>
+          <!-- Platform admins add apps; the wizard opens with this assistant ticked (admin design §5.9.1). -->
+          <p v-if="auth.can('admin')">
+            <RouterLink :to="{ name: 'platform-clients', query: { connect: id } }" class="font-medium text-accent-ink underline" data-test="connect-app">
+              {{ ASSISTANT.connectApp }}
+            </RouterLink>
+          </p>
+        </section>
+        <section class="grid gap-3" data-test="storage" aria-labelledby="assistant-storage">
+          <h3 id="assistant-storage" class="font-medium">{{ ASSISTANT.storageTitle }}</h3>
+          <p class="text-small text-fg-2">{{ ASSISTANT.storageLead }}</p>
+          <SelectField id="assistant-history" v-model="historyMode" class="max-w-sm" :label="ASSISTANT.historyMode" :options="historyOptions" :disabled="!canManage" />
+          <TextField
+            id="assistant-retention" v-model="retentionDays" :label="ASSISTANT.retentionDays" inputmode="numeric" short :disabled="!canManage"
+            :hint="policy ? ASSISTANT.retentionHint(policy.retentionMaxDays) : undefined" :error="retentionError"
+          />
         </section>
         <!-- The model name apps choose it by, with a copy button: here rather than in the page's subtitle (admin design §5.7). -->
         <section class="grid gap-1" data-test="model-name" aria-labelledby="assistant-model-name">
@@ -777,26 +785,17 @@ watch(() => props.id, () => {
           <p class="text-small text-fg-2">{{ ASSISTANT.modelNameHint }}</p>
           <CopyValue :value="assistant.data.value.slug" :copy-label="ASSISTANT.copyModelName" />
         </section>
-        <p class="text-fg-2">{{ ASSISTANT.audienceHint }}</p>
-        <p v-if="clients.length === 0" class="text-fg-3">{{ ASSISTANT.noClients }}</p>
-        <fieldset v-else class="grid gap-2">
-          <legend class="mb-1 font-medium">{{ ASSISTANT.audience }}</legend>
-          <CheckField
-            v-for="c in clients" :key="c.id" :model-value="audience.includes(c.id)" :label="c.name" :disabled="!canManage"
-            @update:model-value="audience = toggle(audience, c.id, $event)"
-          />
-        </fieldset>
-        <SaveBar
-          v-if="canManage && clients.length" :changes="audienceDirty.changes.value" :saving="busy === 'audience'" @save="saveAudience"
-          @discard="fillAccess(assistant.data.value!)"
-        />
-        <!-- Platform admins add apps; the wizard opens with this assistant ticked (admin design §5.9.1). -->
-        <p v-if="auth.can('admin')">
-          <RouterLink :to="{ name: 'platform-clients', query: { connect: id } }" class="font-medium text-accent-ink underline" data-test="connect-app">
-            {{ ASSISTANT.connectApp }}
-          </RouterLink>
-        </p>
-        <ExplainAccess v-if="canManage && clients.length" :assistant-id="id" :clients="clients" class="mt-4" />
+        <SaveBar v-if="canManage" :changes="accessChanges" :saving="busy === 'access'" @save="saveAccess" @discard="fillAccess(assistant.data.value!)" />
+        <details v-if="canManage && clients.length" data-test="check-access">
+          <summary class="cursor-pointer font-medium">{{ ASSISTANT.checkAccessFold }}</summary>
+          <ExplainAccess :assistant-id="id" :clients="clients" class="mt-4" />
+        </details>
+      </div>
+
+      <!-- Usage (§5.5.4): the last use, the period's questions, not found and ratings, and the Cost card (§8.6). -->
+      <div v-else id="assistant-panel-usage" role="tabpanel" aria-labelledby="assistant-tab-usage" class="grid max-w-3xl gap-5">
+        <AssistantUsageCard :assistant-id="props.id" />
+        <CostCard kind="assistant" :source="assistantCosts" :gateway-key-id="assistant.data.value.gatewayKeyId" :department-id="assistant.data.value.departmentId" />
       </div>
       <ConfirmDialog
         :open="restoring !== null" :title="ASSISTANT.restoreTitle(restoring ?? 0)" :consequence="ASSISTANT.restoreConsequence(restoring ?? 0)"
@@ -808,7 +807,7 @@ watch(() => props.id, () => {
       />
       <AssistantCopyDrawer v-if="canEdit" v-model:open="copying" :assistant="assistant.data.value" @copied="copied" />
       <TestQuestionDrawer
-        v-if="canEdit" v-model:open="savingQuestion" :assistant-id="assistant.data.value.id" :question="null" :initial-question="question"
+        v-if="canEdit" v-model:open="savingQuestion" :assistant-id="assistant.data.value.id" :question="null" :initial-question="questionToSave"
         :collections="linkedCollections" @saved="ui.notify(ASSISTANT_TESTS.saved)"
       />
       <AssistantEditDrawer

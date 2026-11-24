@@ -255,15 +255,15 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(wrapper.get('[data-test=save-bar-consequence]').text()).toContain('Version 2 stays published until you publish the draft')
 
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
-    await wrapper.get('#assistant-tab-storage').trigger('click')
+    await wrapper.get('#assistant-tab-access').trigger('click')
     await flushPromises()
     expect(confirm).toHaveBeenCalledWith(UNSAVED.switchTabKept)
-    expect(wrapper.find('#assistant-panel-draft').exists()).toBe(true) // stayed
+    expect(wrapper.find('#assistant-panel-build').exists()).toBe(true) // stayed
 
     confirm.mockReturnValue(true)
-    await wrapper.get('#assistant-tab-storage').trigger('click')
+    await wrapper.get('#assistant-tab-access').trigger('click')
     await flushPromises()
-    expect(wrapper.find('#assistant-panel-storage').exists()).toBe(true)
+    expect(wrapper.find('#assistant-panel-access').exists()).toBe(true)
     confirm.mockRestore()
     wrapper.unmount()
   })
@@ -382,7 +382,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
 
     it('shows the model name with a copy button on the Audience tab (admin design §5.7)', async () => {
       const wrapper = await mountWith({ publishedVersion: 2 })
-      await wrapper.get('#assistant-tab-audience').trigger('click')
+      await wrapper.get('#assistant-tab-access').trigger('click')
       await flushPromises()
       const section = wrapper.get('[data-test=model-name]')
       expect(section.get('h3').text()).toBe('Model name')
@@ -549,7 +549,6 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
     await flushPromises()
 
-    await button(wrapper, 'Test').trigger('click')
     await wrapper.get('#assistant-question').setValue('Behöver jag bygglov för en altan?')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
@@ -562,7 +561,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(publish).toHaveBeenCalledWith('a1', { version: 'a3', draftVersion: 'd7', confirmBaseChanged: false, confirmGeneralKnowledge: false })
     expect(wrapper.get('[data-test=published]').text()).toBe('Published: version 1')
 
-    await button(wrapper, 'Audience').trigger('click')
+    await button(wrapper, 'Access').trigger('click')
     // "Who can use it" in plain words (admin design §5.5.4), from the saved audience.
     expect(wrapper.get('[data-test=who-can-use]').text()).toContain('Nobody yet')
     await wrapper.get('input[type=checkbox]').setValue(true)
@@ -580,7 +579,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     mocks()
     const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body, global: { stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
-    await button(wrapper, 'Audience').trigger('click')
+    await button(wrapper, 'Access').trigger('click')
     const link = wrapper.get('[data-test=connect-app]')
     expect(link.text()).toBe('Connect a new app')
     expect(wrapper.findAllComponents(RouterLinkStub).find((l) => l.find('[data-test=connect-app]').exists() || l.attributes('data-test') === 'connect-app')!.props('to'))
@@ -598,9 +597,9 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(wrapper.find('#assistant-panel-versions').exists()).toBe(true)
     expect(versions).toHaveBeenCalledTimes(1)
 
-    await button(wrapper, 'Test').trigger('click')
-    expect(replace).toHaveBeenLastCalledWith({ query: { tab: 'test' } })
-    await button(wrapper, 'Draft').trigger('click')
+    await button(wrapper, 'Quality').trigger('click')
+    expect(replace).toHaveBeenLastCalledWith({ query: { tab: 'quality' } })
+    await button(wrapper, 'Build').trigger('click')
     expect(replace).toHaveBeenLastCalledWith({ query: {} }) // the first tab leaves no ?tab=
   })
 
@@ -746,7 +745,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(unarchive).toHaveBeenCalledWith('a1', 'a4')
     expect(wrapper.find('[data-test=archived]').exists()).toBe(false)
 
-    await button(wrapper, 'Storage').trigger('click')
+    await button(wrapper, 'Access').trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('At most 180 days for the information class.')
     expect(wrapper.text()).toContain('Questions and answers are not saved')
@@ -803,7 +802,6 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
 
     const wrapper = mount(AssistantView, { props: { id: 'a1' } })
     await flushPromises()
-    await button(wrapper, 'Test').trigger('click')
     await wrapper.get('#assistant-question').setValue('Hur långt är det till månen?')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
@@ -826,7 +824,6 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
 
     const wrapper = mount(AssistantView, { props: { id: 'a1' } })
     await flushPromises()
-    await button(wrapper, 'Test').trigger('click')
     const options = wrapper.findAll('#assistant-test-general-knowledge option')
     expect(options.map((o) => o.attributes('value'))).toEqual(['', 'off', 'supplement', 'fallback']) // never looser than the draft's own
     expect(options[0]!.text()).toBe('The assistant’s level (Fallback)')
@@ -858,7 +855,6 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     mocks()
     const wrapper = mount(AssistantView, { props: { id: 'a1' } })
     await flushPromises()
-    await button(wrapper, 'Test').trigger('click')
     const options = wrapper.findAll('#assistant-test-general-knowledge option')
     expect(options.map((o) => o.attributes('value'))).toEqual(['', 'off'])
     expect(options[0]!.text()).toBe('The assistant’s level (Off)')
@@ -978,7 +974,6 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       })
       const wrapper = mount(AssistantView, { props: { id: 'a1' } })
       await flushPromises()
-      await button(wrapper, 'Test').trigger('click')
       await wrapper.get('#assistant-question').setValue('Berätta allt om bygglov.')
       await wrapper.get('form').trigger('submit')
       await flushPromises()
@@ -999,7 +994,6 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
         vi.spyOn(api.assistants, 'test').mockRejectedValueOnce(new ApiError(503, 'POST', { status: 503, code, params: { reason } }))
         const wrapper = mount(AssistantView, { props: { id: 'a1' } })
         await flushPromises()
-        await button(wrapper, 'Test').trigger('click')
         await wrapper.get('#assistant-question').setValue('Hej?')
         await wrapper.get('form').trigger('submit')
         await flushPromises()
@@ -1019,7 +1013,6 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       })
       const wrapper = mount(AssistantView, { props: { id: 'a1' } })
       await flushPromises()
-      await button(wrapper, 'Test').trigger('click')
       await wrapper.get('#assistant-question').setValue('Hej?')
       await wrapper.get('form').trigger('submit')
       await flushPromises()
@@ -1028,5 +1021,148 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       expect(wrapper.get('[data-test=max-tokens-sent]').text()).toBe(ASSISTANT.maxTokensSent(null, ASSISTANT.maxTokensSources.provider!))
       expect(wrapper.get('[data-test=test-cost]').text()).toBe('Cost: < 0,0001 USD') // #625 review: a cheap turn must not look free
     })
+  })
+})
+
+describe('the assistant page\'s five tabs and the test beside the draft (admin design §5.5.4, B-78)', () => {
+  const testResult = {
+    target: 'Draft', versionNumber: 1, durationMs: 812.4, generalKnowledge: 'off', condense: { used: false, outcome: null },
+    retrieval: { collections: [], coverage: null, degraded: null, candidates: [{ rank: 1, documentId: 'x', title: 'Altan', urlOrFileName: null, headingPath: 'Bygglov › Altan', text: 'Du behöver bygglov…', cited: true }] },
+    answer: { raw: 'Ja [1].', delivered: 'Ja [1].', outcome: 'answered', language: 'sv', citations: [] },
+    gateway: { model: 'fors/chat-eu', residency: 'Eu', latencyMs: 700, inputTokens: 300, outputTokens: 5, costUsd: 0.0001, costEstimated: false },
+  } as never
+
+  /** Which media queries match: `wide` is 1,280 px and up, `phone` below 760 px. */
+  function screen(size: 'wide' | 'narrow' | 'phone'): void {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query.includes('min-width: 1280px') ? size === 'wide' : query.includes('max-width: 759px') ? size === 'phone' : false,
+      media: query, addEventListener: () => undefined, removeEventListener: () => undefined,
+    }))
+  }
+
+  it('has Build, Quality, Versions, Access and Usage, each in ?tab=, and opens Build for an old or unknown value', async () => {
+    signIn(['rag-department-admin'])
+    mocks()
+    route.query = { tab: 'statistics' }
+    const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
+    await flushPromises()
+    expect(wrapper.findAll('[role=tab]').map((t) => t.text())).toEqual(['Build', 'Quality', 'Versions', 'Access', 'Usage'])
+    expect(wrapper.find('#assistant-panel-build').exists()).toBe(true)
+    for (const [label, value] of [['Quality', 'quality'], ['Versions', 'versions'], ['Access', 'access'], ['Usage', 'usage']] as const) {
+      vi.spyOn(api.feedback, 'summary').mockResolvedValue({ totals: { answers: 0, notFound: 0, thumbsUp: 0, thumbsDown: 0 }, imports: [], lastUsedOn: null })
+      vi.spyOn(api.costs, 'assistant').mockResolvedValue({ rows: [], outcomes: [] } as never)
+      vi.spyOn(api.assistants, 'versions').mockResolvedValue([])
+      await wrapper.get(`#assistant-tab-${value}`).trigger('click')
+      await flushPromises()
+      expect(replace).toHaveBeenLastCalledWith({ query: { tab: value } })
+      expect(wrapper.get(`#assistant-panel-${value}`).attributes('aria-labelledby')).toBe(`assistant-tab-${value}`)
+      expect(wrapper.get(`#assistant-tab-${value}`).text()).toBe(label)
+    }
+    wrapper.unmount()
+    vi.unstubAllGlobals()
+  })
+
+  it('puts the test panel beside the draft from 1,280 px, folds it under the form below, and keeps the answer when it moves', async () => {
+    signIn(['rag-editor'])
+    mocks()
+    vi.spyOn(api.assistants, 'test').mockResolvedValue(testResult)
+    screen('wide')
+    const wide = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
+    await flushPromises()
+    const beside = wide.get('[data-test=test-beside]')
+    expect(beside.classes()).toContain('sticky')
+    expect(wide.find('[data-test=try-draft]').exists()).toBe(false)
+    expect(beside.find('[data-test=test-panel]').exists()).toBe(true)
+    wide.unmount()
+
+    screen('narrow')
+    const narrow = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
+    await flushPromises()
+    const folded = narrow.get('[data-test=try-draft]')
+    expect(folded.element.tagName).toBe('DETAILS')
+    expect(folded.get('summary').text()).toBe(ASSISTANT.tryDraft)
+    // Under the form: after the draft form in the panel's order.
+    const panel = narrow.get('#assistant-panel-build').element
+    expect([...panel.children].indexOf(folded.element)).toBeGreaterThan([...panel.children].indexOf(narrow.get('[data-test=draft-form]').element))
+    await folded.get('#assistant-question').setValue('Behöver jag bygglov för en altan?')
+    await folded.get('form').trigger('submit')
+    await flushPromises()
+    expect(folded.get('[data-test=answer]').text()).toContain('Ja [1].')
+    narrow.unmount()
+    vi.unstubAllGlobals()
+  })
+
+  it('on a phone, opens the test as a full-height sheet from Try the draft in the save bar, with the unsaved draft kept', async () => {
+    signIn(['rag-editor'])
+    mocks()
+    vi.spyOn(api.assistants, 'test').mockResolvedValue(testResult)
+    HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) { this.open = true }
+    HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) { this.open = false }
+    screen('phone')
+    const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
+    await flushPromises()
+    expect(wrapper.find('[data-test=test-panel]').exists()).toBe(false) // not in the page's flow
+    // With nothing unsaved, Try the draft is the bar's only action.
+    await wrapper.get('[data-test=save-bar-phone] [data-test=try-draft-phone]').trigger('click')
+    await flushPromises()
+    expect(document.body.querySelector('[data-test=try-draft-sheet] [data-test=test-panel]')).not.toBeNull()
+
+    // With unsaved changes it sits beside Discard and Save changes, and the form keeps them.
+    await wrapper.get('#assistant-prompt').setValue('Svara kort.')
+    expect(wrapper.find('[data-test=save-bar] [data-test=try-draft-phone]').exists()).toBe(true)
+    expect(wrapper.get('[data-test=save-bar-count]').text()).toBe('1 unsaved change')
+    expect((wrapper.get('#assistant-prompt').element as HTMLTextAreaElement).value).toBe('Svara kort.')
+    wrapper.unmount()
+    vi.unstubAllGlobals()
+  })
+
+  it('tells one story on Access with one save bar for the apps and the storage, and folds Check access', async () => {
+    signIn(['rag-department-admin'])
+    mocks()
+    vi.spyOn(api.dataProtection, 'get').mockResolvedValue({
+      classification: 'internal', allowedHistoryModes: ['none'], defaultHistoryMode: 'none', retentionDefaultDays: 90, retentionMaxDays: 180, version: '1',
+    })
+    const audiences = vi.spyOn(api.assistants, 'audiences').mockResolvedValue({ ...assistant, audienceClientIds: ['k1'], version: 'a4' })
+    const retention = vi.spyOn(api.assistants, 'retention').mockResolvedValue({ ...assistant, audienceClientIds: ['k1'], retentionDays: 30, version: 'a5' })
+    route.query = { tab: 'access' }
+    const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
+    await flushPromises()
+    const order = ['who-can-use', 'apps', 'storage', 'model-name', 'check-access']
+    const panel = wrapper.get('#assistant-panel-access').element
+    const at = (t: string) => [...panel.children].indexOf(panel.querySelector(`[data-test=${t}]`)!)
+    expect(order.map(at)).toEqual([...order.map(at)].sort((a, b) => a - b))
+    expect(wrapper.get('[data-test=check-access]').element.tagName).toBe('DETAILS')
+
+    await wrapper.get('[data-test=apps] input[type=checkbox]').setValue(true)
+    await wrapper.get('#assistant-retention').setValue('30')
+    expect(wrapper.findAll('[data-test=save-bar]')).toHaveLength(1)
+    expect(wrapper.get('[data-test=save-bar-count]').text()).toBe('2 unsaved changes')
+    await wrapper.get('[data-test=save-bar-save]').trigger('click')
+    await flushPromises()
+    expect(audiences).toHaveBeenCalledWith('a1', { clientIds: ['k1'], version: 'a3' })
+    expect(retention).toHaveBeenCalledWith('a1', { historyMode: 'none', retentionDays: 30, version: 'a4' })
+    expect(wrapper.find('[data-test=save-bar]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('shows on Usage the last use and the period\'s questions, not found and ratings, above the Cost card', async () => {
+    signIn(['rag-department-admin'])
+    mocks()
+    const summary = vi.spyOn(api.feedback, 'summary').mockResolvedValue({
+      totals: { answers: 1240, notFound: 31, thumbsUp: 40, thumbsDown: 0 }, imports: [], lastUsedOn: '2026-11-20',
+    })
+    vi.spyOn(api.costs, 'assistant').mockResolvedValue({ rows: [], outcomes: [] } as never)
+    route.query = { tab: 'usage' }
+    const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
+    await flushPromises()
+    expect(summary).toHaveBeenCalledWith(expect.objectContaining({ assistantId: 'a1' }))
+    expect(wrapper.get('[data-test=usage-last-used]').text()).toContain('Last used')
+    expect(wrapper.get('[data-test=usage-questions]').text()).toBe(formatNumber(1240))
+    expect(wrapper.get('[data-test=usage-not-found]').text()).toBe('31')
+    expect(wrapper.get('[data-test=usage-ratings]').text()).toBe('40 up · 0 down')
+    const panel = wrapper.get('#assistant-panel-usage').element
+    expect(panel.firstElementChild?.getAttribute('data-test')).toBe('usage-card')
+    expect(panel.querySelector('[data-test=cost-card]')).not.toBeNull()
+    wrapper.unmount()
   })
 })
