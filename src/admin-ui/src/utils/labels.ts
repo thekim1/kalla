@@ -724,6 +724,8 @@ export const TOPICS = {
   documents: 'Documents',
   none: 'No topics yet. They appear once a source with path rules has been fetched.',
   noRule: 'No rule any more',
+  /** A published rule's tag before its source has been processed again (§5.5.2). */
+  pending: 'pending',
 } as const
 
 /** The Map as a table (admin design §5.5.6). */

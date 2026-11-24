@@ -53,7 +53,10 @@ onMounted(load)
           </span>
           <span v-else class="text-fg-3">{{ TOPICS.noRule }}</span>
         </template>
-        <template #cell-documents="{ row }"><span class="tabular" :class="quietZero(row.documents)">{{ formatNumber(row.documents) }}</span></template>
+        <template #cell-documents="{ row }">
+          <span v-if="row.pending" class="text-fg-3" data-test="topic-pending">{{ TOPICS.pending }}</span>
+          <span v-else class="tabular" :class="quietZero(row.documents ?? 0)">{{ formatNumber(row.documents ?? 0) }}</span>
+        </template>
       </DataTable>
     </AsyncState>
   </div>

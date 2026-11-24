@@ -383,7 +383,7 @@ describe('Knowledge base (admin design §5.5.2)', () => {
       shared: true,
     })
     const sources = vi.spyOn(api.collections, 'sources')
-    const topics = vi.spyOn(api.collections, 'topics').mockResolvedValue({ collectionId: 'c9', topics: [{ tag: 'bygglov', documents: 412, rules: null }] })
+    const topics = vi.spyOn(api.collections, 'topics').mockResolvedValue({ collectionId: 'c9', topics: [{ tag: 'bygglov', documents: 412, rules: null, pending: false }] })
 
     const wrapper = mount(CollectionView, { props: { id: 'c9' } })
     await flushPromises()
@@ -409,8 +409,9 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     vi.spyOn(api.collections, 'get').mockResolvedValue(base)
     vi.spyOn(api.collections, 'sources').mockResolvedValue([])
     vi.spyOn(api.collections, 'topics').mockResolvedValue({ collectionId: 'c1', topics: [
-      { tag: 'bygglov', documents: 412, rules: [{ sourceId: 's1', sourceName: 'umea.se/bygga', on: 'path', match: 'www.umea.se/bygga/**' }] },
-      { tag: 'altan', documents: 3, rules: [] },
+      { tag: 'bygglov', documents: 412, rules: [{ sourceId: 's1', sourceName: 'umea.se/bygga', on: 'path', match: 'www.umea.se/bygga/**' }], pending: false },
+      { tag: 'altan', documents: 3, rules: [], pending: false },
+      { tag: 'politik', documents: null, rules: [{ sourceId: 's1', sourceName: 'umea.se/bygga', on: 'path', match: '/kommun-och-politik/' }], pending: true },
     ] })
 
     const wrapper = mount(CollectionView, { props: { id: 'c1' } })
@@ -422,6 +423,8 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     expect(table.text()).toContain('Rule')
     expect(table.text()).toContain('www.umea.se/bygga/** · umea.se/bygga')
     expect(table.text()).toContain('No rule any more')
+    // A published rule's tag before the re-chunk reads pending, not a count (§5.5.2).
+    expect(table.get('[data-test=topic-pending]').text()).toBe('pending')
   })
 
   it('saves the sharing with selected departments, lists who uses it, and names the assistants when a narrowing is refused (V35)', async () => {
