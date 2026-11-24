@@ -238,7 +238,7 @@ design meanwhile.
   views.
 - **Read:** admin §5.7, §5.10, §5.12 (rules 3, 5, 8, *Every page*); `proposals/admin-ui-ux-pass.md` *Page by page*.
 
-### [x] B-76 One primary action and ⋯ menus in headers and rows (UX pass step 2, UX4 C) (#PR)
+### [x] B-76 One primary action and ⋯ menus in headers and rows (UX pass step 2, UX4 C) (#1032)
 - **Do:** `MenuButton` (APG menu button; a bottom sheet on a phone, admin §5.12's accessibility table); the headers of
   the knowledge base (§5.5.2: *Publish* or *Add content*; *Edit name and contact*, *Change department*, *Delete* in ⋯),
   the assistant (§5.5.4: *Publish draft* and *Compare with published*; *Edit name and contact*, *Copy*, *Change
