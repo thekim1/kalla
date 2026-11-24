@@ -289,7 +289,7 @@ onMounted(() => {
     </section>
     <p class="mt-2 text-small text-fg-3" data-test="folder-hint">
       {{ FILES.folderHint }}
-      <a v-if="topicsLink" href="?tab=topics" class="link" data-test="topics-link" @click.prevent="emit('topics')">{{ FILES.topicsLink }}</a>
+      <a v-if="topicsLink" href="?tab=topics" class="text-accent-ink underline" data-test="topics-link" @click.prevent="emit('topics')">{{ FILES.topicsLink }}</a>
     </p>
     <template v-if="pending.length">
       <div class="mt-3 flex flex-wrap items-center gap-3 text-small" data-test="pending-summary">

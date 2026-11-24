@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { actorText, formatDate, formatDateTime, formatDateTimeToday, formatDecimal, formatRelative, formatUsdCost, lastDaysIso, quietZero } from './format'
+import { actorText, formatDate, formatDateTime, formatDateTimeToday, formatDecimal, formatRelative, formatUsdCost, lastDaysIso, partOfDay, quietZero } from './format'
 
 describe('formatUsdCost', () => {
   it('keeps up to four decimals under one dollar, so small costs are visible', () => {
@@ -61,5 +61,20 @@ describe('actorText (admin design §5.7)', () => {
     expect(actorText('oid:1', 'Anna Andersson')).toBe('Anna Andersson')
     expect(actorText('system:retention')).toBe('system:retention')
     expect(actorText(null)).toBe('')
+  })
+})
+
+describe('partOfDay (the greeting, admin design §5.7; #1036)', () => {
+  it('takes the hour in Europe/Stockholm: morning from 05, afternoon from 12, evening from 18 until 05', () => {
+    // November: Stockholm is UTC+1.
+    expect(partOfDay(new Date('2026-11-24T03:59:00Z'))).toBe('evening') // 04:59
+    expect(partOfDay(new Date('2026-11-24T04:00:00Z'))).toBe('morning') // 05:00
+    expect(partOfDay(new Date('2026-11-24T10:59:00Z'))).toBe('morning') // 11:59
+    expect(partOfDay(new Date('2026-11-24T11:00:00Z'))).toBe('afternoon') // 12:00
+    expect(partOfDay(new Date('2026-11-24T16:59:00Z'))).toBe('afternoon') // 17:59
+    expect(partOfDay(new Date('2026-11-24T17:00:00Z'))).toBe('evening') // 18:00
+    expect(partOfDay(new Date('2026-11-24T23:30:00Z'))).toBe('evening') // 00:30
+    // Summer time: UTC+2, so 04:00 UTC is 06:00 in Stockholm.
+    expect(partOfDay(new Date('2026-07-01T04:00:00Z'))).toBe('morning')
   })
 })

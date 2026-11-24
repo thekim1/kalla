@@ -14,7 +14,7 @@ import UiCard from '@/components/ui/UiCard.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useLoadable } from '@/stores/loadable'
 import { useUiStore } from '@/stores/ui'
-import { formatNumber, formatRelative, formatUsdCost, quietZero, TIME_ZONE } from '@/utils/format'
+import { formatNumber, formatRelative, formatUsdCost, partOfDay, quietZero } from '@/utils/format'
 import { DEPARTMENT_SOURCE_LABEL, OVERVIEW, ROLE_LABEL, SETUP, type Tone } from '@/utils/labels'
 import { readStoredIds, writeStoredIds } from '@/utils/storedIds'
 
@@ -43,10 +43,6 @@ onMounted(() => {
 // The greeting (admin design §5.7): "Good morning, Anna" by the hour in Europe/Stockholm, and under it the departments
 // and roles, so the person sees at once whose page this is.
 const firstName = computed(() => auth.user?.name?.trim().split(/\s+/)[0] || null)
-const partOfDay = (now: Date): 'morning' | 'afternoon' | 'evening' => {
-  const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: TIME_ZONE, hour: '2-digit', hour12: false }).format(now)) % 24
-  return hour >= 5 && hour < 12 ? 'morning' : hour >= 12 && hour < 18 ? 'afternoon' : 'evening'
-}
 const greeting = computed(() => OVERVIEW.greeting(partOfDay(new Date()), firstName.value))
 const roles = computed(() => auth.roles.filter((r): r is Role => r in ROLE_LABEL))
 const departments = computed(() =>
