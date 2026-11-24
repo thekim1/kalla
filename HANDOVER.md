@@ -264,11 +264,11 @@ On `~/research/rag` (the user's machine), as the main session, while `thekim1`'s
   ([run 45197573594](https://github.com/thekim1/kalla/actions/runs/45197573594), #1009); 0.10.0 has the fixes
   (#1010) and is scanned from the next run. The dated exceptions are in *Watch*.
 - **What a deployer types in Portainer:** 1 value since 0.7.0 (`FORS_DOMAIN`, no secret).
-- **On `main`, unreleased** (session 57's six items, B-74, B-75 and #1007's follow-ups; no upgrade note; three migrations, each adding one `chat`
-  table with its grants: `AssistantDailyOutcomes`, `AssistantDailyGaps`, `DocumentDailyFeedback`): cost per outcome
-  on the *Cost* card (B-61), the content-gap report (B-62), downvotes per document with its attention item (B-66),
-  `kalla.progress` and `kalla.timings` (B-72), `topics` on related documents and `kalla.nearest` (B-73), an upload
-  with a known name replaces the file (B-83).
+- **On `main`, unreleased** (session 57's six items, B-74, B-75 and #1007's follow-ups; no upgrade note; three
+  migrations, each adding one `chat` table with its grants: `AssistantDailyOutcomes`, `AssistantDailyGaps`,
+  `DocumentDailyFeedback`): cost per outcome on the *Cost* card (B-61), the content-gap report (B-62), downvotes per
+  document with its attention item (B-66), `kalla.progress` and `kalla.timings` (B-72), `topics` on related documents
+  and `kalla.nearest` (B-73), an upload with a known name replaces the file (B-83).
 - **Queues:** stream a: the live block (A-L1 to A-L10), A-34 and A-35 with only their live checks open, and its
   issues (*Start here*, 3, 7 and 8, and #974, #987). Stream b: the UX pass, in `thekim1`'s hands (B-74 and B-75 merged;
   B-76 #1032, B-82 #1033 and B-77 #1035 open; then B-78, B-79, B-80, B-81; B-78 and B-79 no longer wait on anything
