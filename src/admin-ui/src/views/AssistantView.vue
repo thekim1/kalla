@@ -56,10 +56,10 @@ import MoveDepartmentDrawer from '@/components/organisation/MoveDepartmentDrawer
 import { ERROR_MESSAGES, formatMessage } from '@/utils/messages'
 import { problemMessage } from '@/utils/problem'
 
-// Assistent (admin design §5.5.4, §5.4 steps 9–12; #278 slice 3): the draft (model, instructions, collections) with the
-// V-rule warnings, Testa on the draft (POST /api/assistants/{id}/test, nothing stored), Publicera (V34, V8 at the gateway),
-// Målgrupp (the clients that offer it), Versioner with Återställ (publishes an earlier version again as a new one), Lagring
-// (history mode and retention days within the level's policy, V10) and Arkivera / Ta fram igen.
+// The assistant (admin design §5.5.4, §5.4 steps 9–12): the draft (model, instructions, knowledge bases) with the V-rule
+// warnings and the test panel beside it (POST /api/assistants/{id}/test, nothing stored), Publish draft (V34, V8 at the
+// gateway), the apps and the storage on Access (history mode and retention within the level's policy, V10), Versions with
+// Restore (an earlier version published again as a new one), and Archive / Unarchive in the header's ⋯ menu.
 // The five tabs (§5.5.4, UX pass UX3 C): Build (the draft and the test panel beside it), Quality, Versions, Access and Usage.
 type Tab = 'build' | 'quality' | 'versions' | 'access' | 'usage'
 const props = defineProps<{ id: string }>()
@@ -69,7 +69,10 @@ const router = useRouter()
 const assistant = useLoadable<Assistant | null>(null)
 /** The tab is kept in `?tab=`, so a reload or a link opens it. */
 const TABS: [Tab, ...Tab[]] = ['build', 'quality', 'versions', 'access', 'usage']
-const tab = useTabQuery<Tab>(TABS)
+// The seven tabs' old values open the tab their content moved to (bookmarks keep working).
+const tab = useTabQuery<Tab>(TABS, {
+  draft: 'build', test: 'build', 'test-questions': 'quality', statistics: 'usage', audience: 'access', storage: 'access',
+})
 /** The Usage tab's Cost card (admin design §8.6). */
 const assistantCosts = (query: CostQuery) => api.costs.assistant(props.id, query)
 const draft = ref<AssistantDraft | null>(null)
@@ -117,7 +120,8 @@ const testedLevel = computed(() => levelOf(querySteps.value))
 const tester = useAssistantTest(() => props.id, testedLevel)
 /** The panel's place (§5.5.4 *Build*): beside the draft from 1,280 px, folded under it below, a full-height sheet on a phone. */
 const wide = useMedia('(min-width: 1280px)')
-const phone = useMedia('(max-width: 759px)')
+// The phone is below Tailwind's md (768 px), as for the save bar's Try the draft and the shell's bottom menu.
+const phone = useMedia('(max-width: 767px)')
 const trying = ref(false)
 /** The question *Save as test question* opens the drawer with. */
 const questionToSave = ref('')
@@ -236,7 +240,7 @@ const portals = computed(() =>
 const whoCanUse = computed(() =>
   clients.value.filter((c) => assistant.data.value?.audienceClientIds.includes(c.id)).map((c) => (ASSISTANT.whoByKind[c.kind] ?? ASSISTANT.whoFallback)(c.name)),
 )
-/** The Draft tab's lead (admin design §5.5.4 Wording): what saving does in the assistant's current state. */
+/** The draft form's lead on Build (admin design §5.5.4 Wording): what saving does in the assistant's current state. */
 const draftLead = computed(() => {
   const a = assistant.data.value
   if (!a?.publishedVersion) return ASSISTANT.draftLead.unpublished
@@ -380,7 +384,7 @@ async function load(): Promise<void> {
     api.collections.list({ pageSize: 200, view: 'all' }).then((p) => p.items).catch(() => []),
     api.clients.list().catch(() => []),
   ])
-  // Opened on Versions or Storage (a link or a reload): the tab watch fires only on a change.
+  // Opened on Versions or Access (a link or a reload): the tab watch fires only on a change.
   openTab(tab.value)
 }
 
@@ -552,7 +556,8 @@ async function saveStorage(): Promise<void> {
   ui.notify(ASSISTANT.storageSaved)
 }
 
-// Test questions (B-57): the knowledge bases the draft links, for the expected-document picker; Save as test question in Test.
+// Test questions (B-57): the knowledge bases the draft links, for the expected-document picker; Save as test question in the
+// test panel.
 const linkedCollections = computed(() => links.value.map((l) => ({ id: l.collectionId, name: collections.value.find((c) => c.id === l.collectionId)?.name ?? l.collectionId })))
 const savingQuestion = ref(false)
 
@@ -700,17 +705,17 @@ watch(() => props.id, () => {
         </div>
         <template v-if="!phone">
           <UiCard v-if="wide" :title="ASSISTANT.testPanelTitle" class="sticky top-4 max-h-[calc(100dvh-2rem)] overflow-auto" data-test="test-beside">
-            <AssistantTestPanel :test="tester" :can-edit="canEdit" @save-question="saveQuestion" />
+            <AssistantTestPanel :test="tester" :can-edit="canEdit" :unsaved="draftDirty.dirty.value" @save-question="saveQuestion" />
           </UiCard>
           <details v-else class="material max-w-[680px] rounded-card p-5" data-test="try-draft">
             <summary class="cursor-pointer font-medium">{{ ASSISTANT.tryDraft }}</summary>
-            <div class="mt-4"><AssistantTestPanel :test="tester" :can-edit="canEdit" @save-question="saveQuestion" /></div>
+            <div class="mt-4"><AssistantTestPanel :test="tester" :can-edit="canEdit" :unsaved="draftDirty.dirty.value" @save-question="saveQuestion" /></div>
           </details>
         </template>
         <UiDialog v-else :open="trying" :title="ASSISTANT.tryDraft" @update:open="trying = $event">
           <!-- Full height: the sheet is the panel's whole screen; the unsaved draft stays in the form behind it. -->
           <div class="min-h-[calc(100dvh-12rem)]" data-test="try-draft-sheet">
-            <AssistantTestPanel :test="tester" :can-edit="canEdit" @save-question="saveQuestion" />
+            <AssistantTestPanel :test="tester" :can-edit="canEdit" :unsaved="draftDirty.dirty.value" @save-question="saveQuestion" />
           </div>
         </UiDialog>
       </div>

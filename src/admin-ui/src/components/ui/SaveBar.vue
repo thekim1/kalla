@@ -22,6 +22,8 @@ const slots = defineSlots<{ phone?: () => unknown }>()
 const emit = defineEmits<{ (e: 'save'): void; (e: 'discard'): void }>()
 
 const bar = ref<HTMLElement | null>(null)
+/** The phone's strip with the page's action while nothing is unsaved (hidden from 768 px, then it covers nothing). */
+const strip = ref<HTMLElement | null>(null)
 const announcement = ref('')
 const discarding = ref(false)
 const height = ref(0)
@@ -43,8 +45,7 @@ document.addEventListener('focusin', onFocusIn)
  * How much of the window's bottom the bar takes: from its top to the window's bottom, so on a phone the bottom menu under
  * it counts too (at least the bar's own height, e.g. while it is still out of view).
  */
-function coveredHeight(): number {
-  const el = bar.value
+function coveredHeight(el: HTMLElement | null = bar.value): number {
   if (!el) return 0
   const rect = el.getBoundingClientRect()
   const fromBottom = rect.height > 0 ? Math.round(window.innerHeight - rect.top) : 0
@@ -64,7 +65,8 @@ watch(
     announcement.value = shown ? L.count(props.changes) : ''
     const focusInBar = !shown && !!bar.value?.contains(document.activeElement)
     await nextTick()
-    pad(shown ? coveredHeight() : 0)
+    // While nothing is unsaved, the phone's strip covers the bottom instead (nothing where it is hidden).
+    pad(shown ? coveredHeight() : strip.value && strip.value.getBoundingClientRect().height > 0 ? coveredHeight(strip.value) : 0)
     if (shown) revealFocused()
     if (focusInBar || (!shown && document.activeElement === document.body)) {
       if (lastField?.isConnected) lastField.focus()
@@ -102,6 +104,7 @@ onBeforeUnmount(() => {
   </section>
   <div
     v-if="changes === 0 && slots.phone"
+    ref="strip"
     class="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-topbar flex p-3 md:hidden [&>*]:h-11 [&>*]:flex-1"
     data-test="save-bar-phone"
   >

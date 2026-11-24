@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, watch } from 'vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import SelectField from '@/components/ui/SelectField.vue'
 import TextAreaField from '@/components/ui/TextAreaField.vue'
@@ -13,16 +14,24 @@ import type { AssistantTest } from './useAssistantTest'
  * The test panel (admin design §4.9, §5.5.4 *Build*): a question on the draft (the published version when there is no
  * draft) with the general-knowledge level to test, the answer as plain text with its outcome, the model, time, cost and
  * length limit sent, the sources searched with the cited ones marked, and *Save as test question*. Nothing is stored
- * but the usage. The state is the page's (`useAssistantTest`), so the panel can move without losing the answer.
+ * but the usage. The state is the page's (`useAssistantTest`), so the panel can move without losing the answer. It tests
+ * the saved draft, and says so while the form has unsaved changes. Each answer is announced politely in a log
+ * (§5.12's accessibility table).
  */
-const props = defineProps<{ test: AssistantTest; canEdit: boolean }>()
+const props = defineProps<{ test: AssistantTest; canEdit: boolean; unsaved?: boolean }>()
 const emit = defineEmits<{ (e: 'save-question', question: string): void }>()
 const { question, level, levelOptions, result, busy, error, ask } = props.test
+const announcements = ref<string[]>([])
+watch(result, (r) => {
+  if (r) announcements.value = [...announcements.value, ASSISTANT.answerReady(ASSISTANT.outcome[r.answer.outcome.replace('-', '')] ?? r.answer.outcome)]
+})
 const cost = (usd: number) => (usd > 0 && usd < 0.00005 ? ASSISTANT.costBelow(formatDecimal(0.0001, 4, 4)) : formatDecimal(usd, 4, 4))
 </script>
 
 <template>
   <div class="grid gap-5" data-test="test-panel">
+    <div role="log" aria-live="polite" class="sr-only" data-test="test-log"><p v-for="(a, i) in announcements" :key="i">{{ a }}</p></div>
+    <p v-if="unsaved" class="text-small text-warn" data-test="test-unsaved">{{ ASSISTANT.testsSavedDraft }}</p>
     <form class="grid gap-3" @submit.prevent="ask">
       <TextAreaField id="assistant-question" v-model="question" :label="ASSISTANT.question" :hint="ASSISTANT.askHint" :rows="2" />
       <SelectField id="assistant-test-general-knowledge"

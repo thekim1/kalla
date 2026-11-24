@@ -1130,7 +1130,7 @@ export interface Assistant {
   generalKnowledge: GeneralKnowledge | null
   /** The rerankers the platform has a model for (`chat`, `gateway`); empty when it has none, which is the usual setup. */
   rerankers: Reranker[]
-  /** The platform answer ceiling `Settings.Chat.maxAnswerTokens` (chat §6.3), null when unset; shown on the Draft tab when lower. */
+  /** The platform answer ceiling `Settings.Chat.maxAnswerTokens` (chat §6.3), null when unset; shown on the Build tab when lower. */
   maxAnswerTokens?: number | null
   draft: { number: number; updatedAt: IsoDateTime; baseChanged: boolean; version: string } | null
   /** The assigned gateway key its calls run as (V39); null = the platform's credential key. */
@@ -1215,7 +1215,7 @@ export interface AnswerRunSummary {
   losses: number | null
 }
 
-/** The Statistics tab's answer evaluation (admin design §5.5.4): the last finished run, the one before, the live uncited rate. */
+/** The Quality tab's answer evaluation (admin design §5.5.4): the last finished run, the one before, the live uncited rate. */
 export interface AnswerEvaluation {
   enabled: boolean
   questionsPerNight: number

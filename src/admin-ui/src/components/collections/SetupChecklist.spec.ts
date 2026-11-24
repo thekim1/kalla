@@ -37,7 +37,7 @@ describe('Get started: the last step (admin design §5.4)', () => {
     expect(mountWith(true, setupOf({ available: true })).get('[data-test=step-available]').attributes('data-state')).toBe('done')
   })
 
-  it('without Open WebUI names an app with a key, opens the Audience tab, and is done once an app offers the assistant', () => {
+  it('without Open WebUI names an app with a key, opens the Access tab, and is done once an app offers the assistant', () => {
     const wrapper = mountWith(false, setupOf())
     const step = wrapper.get('[data-test=step-available]')
     expect(step.text()).toContain(SETUP.steps.availableApp)
