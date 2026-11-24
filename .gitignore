@@ -50,3 +50,5 @@ deploy/upload-backup/
 deploy/openwebui-data/
 # The gateway CA certificate that init-deployment.sh --gateway-ca-file copies.
 deploy/gateway-ca/
+# A node_modules link (a worktree sharing another's packages) is a file, which node_modules/ above does not match.
+node_modules
