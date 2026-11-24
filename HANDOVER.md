@@ -68,19 +68,20 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
   its pull request what you are about to write; review its pull requests as comments (claims checked against the code).
 - **A decision for the user is asked as four alternatives with one recommendation** (the question tool).
 
-**Open when this was written** (2026-11-24, about 07:00 UTC): `thekim1`'s stacked UX-pass pull requests #1032
-(B-76, on `main`), #1033 (B-82, on #1032's branch) and #1035 (B-77, on #1033's), each **reviewed as a comment with
-points to fix before it merges**; Dependabot's #958. Nothing of the main session's is open. In order:
+**Open when this was written** (2026-11-24, about 10:15 UTC): `thekim1`'s #1041 (B-78 part 1, the assistant page's
+five tabs), **reviewed as a comment with points to fix before it merges**; Dependabot's #958. The UX stack is merged:
+#1032 (B-76), #1033 (B-82) and #1035 (B-77), each after its review's points were fixed. #1038 (admin §3.4's
+`Feedback` policy, the user's decision on #1014) is merged too. In order:
 
-1. **Follow the stack #1032 → #1033 → #1035.** The reviews (comments of 2026-11-24 on each) ask, before merging:
-   **#1032** focus back on the ⋯ button after a dialog opened from the menu closes (`ModalDialog` takes the removed
-   menu item as its opener), and row menus not clipped by `DataTable`'s `overflow-hidden` (*Restore* on the bottom
-   rows of *Versions*); **#1033** fresh warnings in the Publish dialog (it shows the draft's warnings from the last
-   draft save, so a contact added through *Edit name and contact* still blocks *Publish* until a reload); **#1035**
-   publishing with unsaved draft edits drops them without asking (and a header action does the same to a knowledge
-   base's unsaved sharing or search settings), and the leave guard misses *Copy*, a `?tab=` link and *Try without
-   saving*. Re-review each fix against its comment. Merging #1032 with `--delete-branch` closes #1033 (handbook,
-   *Stacked pull requests*); after each merge the next one wants a rebase on `main`.
+1. **#1041, B-78 part 1.** The review (comment of 2026-11-24, from the main session on `~/git/ume-rag-platform`)
+   asks, before merging: **`answers_below_median` links to *Usage*** but the answer evaluation is on *Quality*
+   (`attention.ts:31-32`, and `OverviewView.spec.ts:136` asserts the wrong tab); **a dead *Try the draft* at 760 to
+   767 px** (`AssistantView.vue:120` uses `max-width: 759px`, the SaveBar's phone slot `md:hidden`, 768 px); **no
+   hint that the test panel tests the saved draft** while the form has unsaved changes. Smaller: no `role="log"` live
+   region in the panel (§5.12's accessibility table), the phone strip can hide a focused field, old `?tab=` values
+   open *Build* (an alias map is optional), comments that name the old tabs. Re-review each fix against the comment.
+   Its hand-offs: #1039 (stream a, the runbook's *Usage → Cost*) and #1040 (the main session: the NVDA checklist,
+   once B-78 and B-79 have both landed).
 2. **#1036, #1029's follow-ups** (reviewed after its merge; no browser spec broke, no `docs/` page names an old
    text): "N own · M shared" on Organisation reads "0 own · 3 shared" when every knowledge base is shared. The main
    session proposed own = everything the department owns, shared = how many of those reach other departments
@@ -284,15 +285,16 @@ On `~/research/rag` (the user's machine), as the main session, while `thekim1`'s
   and `kalla.nearest` (B-73), an upload with a known name replaces the file (B-83).
 - **Queues:** stream a: the live block (A-L1 to A-L10), A-34 and A-35 with only their live checks open, and its issues
   (*Start here*, 3, 7 and 8, and #974, #987). Stream b: the UX pass, in `thekim1`'s hands (B-74 and B-75 merged; B-76
-  #1032, B-82 #1033 and B-77 #1035 open, reviewed; then B-78, B-79, B-80, B-81; B-78 and B-79 no longer wait on anything
-  of session 57's), B-64 and B-65 (the topics editor), B-67 to B-69 (P2 wave 2), B-71, B-42 to B-46 (the gateway phases'
-  live checks) and its live items. An item someone has started says **Taken** in the queue. Main: M-4.
-- **Open issues that matter:** #1036 (B-75's follow-ups, stream b), #992 to #995, #1028, #1030 and #1034 (the docs
-  and the platform pages, stream a's), #1009
-  (the Audit), #987 (the grading script), #980 (code quality's tracker), #974 (code
-  quality, stream a's part), #781 and #921 (watch), #920 (the VM's upgrade, `thekim1`'s), #929 (topics; closes with
-  B-65), #667 (M-16's issue: the work is done, `thekim1`'s to close), #1015, #333, #511, #580 and #550. In Fors: no
-  open pull request; proposals #108 and #109, #99, #91, and a flaky test #124.
+  #1032, B-82 #1033 and B-77 #1035 merged; B-78 part 1 #1041 open, reviewed; then B-79, B-80, B-81; B-78 and B-79 no
+  longer wait on anything of session 57's), B-64 and B-65 (the topics editor), B-67 to B-69 (P2 wave 2), B-71, B-42 to
+  B-46 (the gateway phases' live checks) and its live items. An item someone has started says **Taken** in the queue.
+  Main: M-4.
+- **Open issues that matter:** #1036 (B-75's follow-ups, stream b), #1040 (the NVDA checklist, the main session's),
+  #1039, #992 to #995, #1028, #1030 and #1034 (the docs and the platform pages, stream a's), #1009 (the Audit), #987
+  (the grading script), #980 (code quality's tracker), #974 (code quality, stream a's part), #781 and #921 (watch), #920
+  (the VM's upgrade, `thekim1`'s), #929 (topics; closes with B-65), #667 (M-16's issue: the work is done, `thekim1`'s to
+  close), #1015, #333, #511, #580 and #550. In Fors: no open pull request; proposals #108 and #109, #99, #91, and a
+  flaky test #124.
 - **Dependabot works:** grouped pull requests; `.github/dependabot.yml`'s header lists where a pin is repeated.
   Playwright is bumped by hand, in the package list, the renderer image and its lockfile together (#907).
 - **The user's machine (`~/research/rag`), not the machine of session 56:** the main clone on `main`, no worktrees
