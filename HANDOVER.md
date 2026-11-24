@@ -1,13 +1,13 @@
 # Handover
 
-State of the Källa work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`).
-**Last release `v0.10.0`** (2026-11-23, tag at `5a74afb8`, on Fors `v0.13.0`): P2 wave 1. **`main` has unreleased code
-since the tag:** six stream-b items built on the user's machine in session 57, and the UX pass's first steps (*State*).
-The user's VM runs 0.5.0. Three machines have worked on it: `~/research/rag` (the user's, sessions 49 to 55 and 57),
-`~/git/ume-rag-platform` (the user's WSL machine, session 56) and `thekim1`'s (stream b, stream a, the releases, and a
-coordinating session that writes proposals). Several sessions post as `ume-nichlas` at the same hour: look before you
-write. *Start here* says what does not travel between machines. Branch `main`, remote `origin` =
-https://github.com/thekim1/kalla.
+State of the Källa work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`). **Last
+release `v0.10.0`** (2026-11-23, tag at `5a74afb8`, on Fors `v0.13.0`): P2 wave 1. **`main` has unreleased code since
+the tag:** six stream-b items built on the user's machine in session 57, and the UX pass up to B-77 (*State*). The
+user's VM runs 0.5.0. Three machines have worked on it: `~/research/rag` (the user's, sessions 49 to 55 and 57),
+`~/git/ume-rag-platform` (the user's WSL machine, session 56, which ran beside session 57 until 2026-11-24) and
+`thekim1`'s (stream b, stream a, the releases, and a coordinating session that writes proposals). Several sessions post
+as `ume-nichlas` at the same hour: look before you write. *Start here* says what does not travel between machines.
+Branch `main`, remote `origin` = https://github.com/thekim1/kalla.
 
 ## What this is
 
@@ -28,7 +28,7 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
    `plans/archive/work/`), results in `results-a.md`, `results-b.md` and `results-main.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here (session 58)
+## Start here (session 59)
 
 **What does not travel between machines:**
 - **Claude Code's own memory stays on the machine it was written on.** Everything that binds is in
@@ -68,10 +68,11 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
   its pull request what you are about to write; review its pull requests as comments (claims checked against the code).
 - **A decision for the user is asked as four alternatives with one recommendation** (the question tool).
 
-**Open when this was written** (2026-11-24, about 10:15 UTC): `thekim1`'s #1041 (B-78 part 1, the assistant page's
-five tabs), **reviewed as a comment with points to fix before it merges**; Dependabot's #958. The UX stack is merged:
-#1032 (B-76), #1033 (B-82) and #1035 (B-77), each after its review's points were fixed. #1038 (admin §3.4's
-`Feedback` policy, the user's decision on #1014) is merged too. In order:
+**Open when this was written** (2026-11-24, about 10:30 UTC): `thekim1`'s #1041 (B-78 part 1, the assistant page's
+five tabs), **reviewed as a comment with points to fix before it merges**; Dependabot's #958. Nothing of the main
+session's is open. The UX stack is merged: #1032 (B-76), #1033 (B-82) and #1035 (B-77), each after its review's points
+were fixed; so are #1038 (admin §3.4's `Feedback` policy, the user's decision on #1014) and #1037 (the previous
+version of this file). In order:
 
 1. **#1041, B-78 part 1.** The review (comment of 2026-11-24, from the main session on `~/git/ume-rag-platform`)
    asks, before merging: **`answers_below_median` links to *Usage*** but the answer evaluation is on *Quality*
@@ -114,8 +115,8 @@ five tabs), **reviewed as a comment with points to fix before it merges**; Depen
     #994 (project vocabulary in operator pages), #995 (gaps: **Portainer backup and restore with a drill**, the
     nightly answer run, *Needs attention*, a new department, key expiry, an upgrade from 0.9.x), #1030 (the
     not-scanned mark), #1028 (B-75's platform pages) and #1034 (B-77's save bar on the Settings sections).
-11. **The Audit** was red on 0.9.2's images (#1009); #1010's fixes are in 0.10.0. The first nightly run after the
-    release had not run yet: green closes #1009.
+11. **The Audit** was red on 0.9.2's images (#1009); #1010's fixes are in 0.10.0. No Audit has run since the tag
+    (the last, 2026-11-23 14:45 UTC, was before it): the next green one closes #1009.
 12. **#925's steps 2 to 4** (personal-data verdicts, *reject*, the false-positive summary): the Decisions entry and
     the design changes are `thekim1`'s session's (said on #925). Step 1 is B-63 (#963, merged).
 13. **The VM's upgrade is `thekim1`'s** (#920): 0.5.0 straight to the current release. No report yet.
@@ -169,6 +170,27 @@ five tabs), **reviewed as a comment with points to fix before it merges**; Depen
 - **Tests that share the job queue:** the nightly purge re-queues `delete-source` for every deleted source with live
   content (#884), so a test that queues a command for a deleted source can lose its lease (#897).
 - **The demo seed's slug in a test:** `openwebui.spec.ts` leaves out the assistant named `demo-assistent` (#882).
+
+## What session 56 did after #989 (2026-11-23 evening and 2026-11-24 morning)
+
+On `~/git/ume-rag-platform` (the user's WSL machine), beside session 57. Its first part (the UX decisions, the
+security read of B-54 to B-57, the reads of the never-read documents) is in #989's version of this file.
+
+- **Reviews as comments** (a review agent per pull request, the main claims checked in the files, the touched tests
+  run): #996, #997 (after its merge; the narrower read became #998, built in #1013), #999 (#983's fix), #1000, #1001,
+  #1002 (merged before the review: its points became #1003, fixed in #1006 and reviewed after its merge), #1005
+  (merged before the review: #1007), #1010, #1013, #1014 and #1041.
+- **The user's decisions, recorded:** a paused source's header (*Resume* primary, *Fetch now* and *Continue*
+  hidden) and no *Pause* on an upload source (#1004, built in #1024); Feedback's list and summary for its four
+  roles in the API (#1038, built in #1014); the estimate ratio by answer model (chat §17, #991, built in #1000).
+- **Design:** #991 (B-58, B-59, B-63 and #999's deviations), #1004 (the test-run cap, an unfinished test run after a
+  restart, pausing a source), #1038.
+- **Filed:** #1009 (the red Audit; fixed by #1010 in 0.10.0).
+- **Approved as `Crotalus` on the user's word and merged:** #989, #990, #991, then #1038 and #1037 (brought up to date
+  on the user's request).
+- **A lesson:** `thekim1` merges its own pull requests within minutes of opening them. A review that arrives after the
+  merge goes into a follow-up issue (#998, #1003, #1007); say on the pull request at once that a review is coming
+  (#1041) so the merge can wait for it.
 
 ## What session 57 did (2026-11-23 and 24)
 
@@ -278,11 +300,13 @@ On `~/research/rag` (the user's machine), as the main session, while `thekim1`'s
   ([run 45197573594](https://github.com/thekim1/kalla/actions/runs/45197573594), #1009); 0.10.0 has the fixes
   (#1010) and is scanned from the next run. The dated exceptions are in *Watch*.
 - **What a deployer types in Portainer:** 1 value since 0.7.0 (`FORS_DOMAIN`, no secret).
-- **On `main`, unreleased** (session 57's six items, B-74, B-75 and #1007's follow-ups; no upgrade note; three
+- **On `main`, unreleased** (session 57's six items, B-74 to B-77, B-82, #1007's follow-ups; no upgrade note; three
   migrations, each adding one `chat` table with its grants: `AssistantDailyOutcomes`, `AssistantDailyGaps`,
   `DocumentDailyFeedback`): cost per outcome on the *Cost* card (B-61), the content-gap report (B-62), downvotes per
   document with its attention item (B-66), `kalla.progress` and `kalla.timings` (B-72), `topics` on related documents
-  and `kalla.nearest` (B-73), an upload with a known name replaces the file (B-83).
+  and `kalla.nearest` (B-73), an upload with a known name replaces the file (B-83); the phone's bottom menu (B-74), the
+  layout rules and names (B-75), one primary action and ⋯ menus (B-76), the Publish dialog (B-82), the save bar and
+  the leave guard (B-77).
 - **Queues:** stream a: the live block (A-L1 to A-L10), A-34 and A-35 with only their live checks open, and its issues
   (*Start here*, 3, 7 and 8, and #974, #987). Stream b: the UX pass, in `thekim1`'s hands (B-74 and B-75 merged; B-76
   #1032, B-82 #1033 and B-77 #1035 merged; B-78 part 1 #1041 open, reviewed; then B-79, B-80, B-81; B-78 and B-79 no
