@@ -90,7 +90,8 @@ async function save(): Promise<void> {
     <form id="assistant-create" class="grid gap-5" novalidate @submit.prevent="save">
       <!-- Start from as template cards, one line each (admin design §5.12, Drawers); the hint says what is copied. -->
       <fieldset
-        v-if="templates.length" id="assistant-template" tabindex="-1" class="grid gap-2" aria-describedby="assistant-template-hint"
+        v-if="templates.length" id="assistant-template" tabindex="-1" class="grid gap-2"
+        :aria-describedby="form.errors.templateId ? 'assistant-template-error assistant-template-hint' : 'assistant-template-hint'"
         data-test="start-from"
       >
         <legend class="mb-1 font-medium">{{ ASSISTANTS.template }}</legend>
@@ -102,11 +103,11 @@ async function save(): Promise<void> {
           <input :id="`assistant-template-${t.value || 'none'}`" v-model="templateId" type="radio" name="assistant-template" :value="t.value" class="mt-1" />
           <span class="min-w-0">
             <span class="block font-medium">{{ t.label }}</span>
-            <span v-if="t.line" class="block truncate text-small text-fg-2" :title="t.line">{{ t.line }}</span>
+            <span v-if="t.line" class="block text-small text-fg-2" data-test="start-from-line">{{ t.line }}</span>
           </span>
         </label>
         <p id="assistant-template-hint" class="text-small text-fg-2">{{ ASSISTANTS.templateHint }}</p>
-        <p v-if="form.errors.templateId" class="text-small text-danger">{{ form.errors.templateId }}</p>
+        <p v-if="form.errors.templateId" id="assistant-template-error" class="text-small text-danger">{{ form.errors.templateId }}</p>
       </fieldset>
       <TextField id="assistant-name" v-model="name" :label="ASSISTANTS.name" :error="form.errors.name" autocomplete="off" />
       <SelectField

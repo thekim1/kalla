@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { api } from '@/api'
+import { ApiError } from '@/api/client'
 import type { Assistant, AssistantTemplate, Department } from '@/api/types'
 import { ASSISTANTS } from '@/utils/labels'
 import AssistantCreateDrawer from './AssistantCreateDrawer.vue'
@@ -59,7 +60,8 @@ describe('Create assistant: the template (admin design §5 step 9, B-54)', () =>
     expect(labels).toEqual(['Handläggningsstöd', 'Allmän rådgivning', 'Intern policy', ASSISTANTS.templateNone])
     expect(radios().find((r) => r.checked)!.value).toBe('t2')
     // One line each: the template's description.
-    expect(document.body.querySelector('[data-test=start-from-t2] .truncate')!.textContent).toBe('Allmän rådgivning: beskrivning.')
+    expect(document.body.querySelector('[data-test=start-from-t2] [data-test=start-from-line]')!.textContent).toBe('Allmän rådgivning: beskrivning.')
+    expect(cards()!.getAttribute('aria-describedby')).toBe('assistant-template-hint')
     // The department select asks for a choice.
     expect(document.body.querySelector('#assistant-department option[disabled]')?.textContent).toBe(ASSISTANTS.chooseDepartment)
 
@@ -77,6 +79,18 @@ describe('Create assistant: the template (admin design §5 step 9, B-54)', () =>
     choose('')
     await fillAndSave()
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ templateId: null }))
+    wrapper.unmount()
+  })
+
+  it('reads out a server error on the template with the Start from group, and focuses the group', async () => {
+    vi.spyOn(api.assistantTemplates, 'list').mockResolvedValue([template('t2', 'Allmän rådgivning')])
+    vi.spyOn(api.assistants, 'create').mockRejectedValue(new ApiError(400, 'POST', { errors: { templateId: ['The template is no longer active.'] } }))
+    const wrapper = await open()
+    await fillAndSave()
+    const group = cards()!
+    expect(group.getAttribute('aria-describedby')).toBe('assistant-template-error assistant-template-hint')
+    expect(document.getElementById('assistant-template-error')!.textContent).toContain('no longer active')
+    expect(document.activeElement).toBe(group)
     wrapper.unmount()
   })
 

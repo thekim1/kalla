@@ -57,6 +57,12 @@ function add(c: CollectionSummary): void {
 
 function remove(id: string): void {
   emit('update:modelValue', props.modelValue.filter((l) => l.collectionId !== id))
+  // Added again later, the link starts folded.
+  if (limiting.value.has(id)) {
+    const next = new Set(limiting.value)
+    next.delete(id)
+    limiting.value = next
+  }
 }
 
 function addTopic(id: string): void {
