@@ -389,14 +389,14 @@ onMounted(load)
             :quiet="!lastRun" :detail="lastRun ? (RUN_STATE_LABEL[lastRun.state] ?? lastRun.state) : undefined"
             :attention="lastRun?.state === 'failed' ? COLLECTION.tiles.fetchFailed : null" data-test="tile-last-fetch"
           >
-            <RouterLink v-if="lastRun" :to="{ name: 'run', params: { id: lastRun.id } }" class="link">{{ COLLECTION.tiles.openRun }}</RouterLink>
+            <RouterLink v-if="lastRun" :to="{ name: 'run', params: { id: lastRun.id } }" class="text-accent-ink underline">{{ COLLECTION.tiles.openRun }}</RouterLink>
           </SummaryTile>
           <SummaryTile
             :title="COLLECTION.tiles.quality(quality?.k ?? 10)" :value="quality ? formatDecimal(quality.recallAtK!, 2, 2) : COLLECTION.tiles.notMeasured"
             :quiet="!quality" :detail="quality ? formatDateTime(quality.finishedAt) : undefined"
             :attention="qualityWorse ? COLLECTION.tiles.qualityWorse : null" data-test="tile-quality"
           >
-            <button v-if="!quality && canEdit" type="button" class="link" data-test="create-questions" @click="switchTab('quality')">{{ COLLECTION.tiles.createQuestions }}</button>
+            <button v-if="!quality && canEdit" type="button" class="text-accent-ink underline" data-test="create-questions" @click="switchTab('quality')">{{ COLLECTION.tiles.createQuestions }}</button>
           </SummaryTile>
           <SummaryTile
             :title="COLLECTION.tiles.usedBy" :value="COLLECTION.tiles.assistants(users.length)" :quiet="users.length === 0"
@@ -405,7 +405,7 @@ onMounted(load)
             <span v-if="users.length" data-test="used-by">
               <template v-for="(u, i) in users" :key="u.id">
                 <template v-if="i > 0">, </template>
-                <RouterLink :to="{ name: 'assistant', params: { id: u.id } }" class="link inline-flex min-h-6 items-center" :data-test="`used-by-${u.id}`">{{ u.label }}</RouterLink>
+                <RouterLink :to="{ name: 'assistant', params: { id: u.id } }" class="inline-flex min-h-6 items-center text-accent-ink underline" :data-test="`used-by-${u.id}`">{{ u.label }}</RouterLink>
               </template>
             </span>
           </SummaryTile>
@@ -451,7 +451,7 @@ onMounted(load)
       <div v-else-if="tab === 'content'" id="collection-panel-content" role="tabpanel" aria-labelledby="collection-tab-content" class="grid gap-4">
         <div v-if="uploadOnly" class="flex flex-wrap items-center gap-3" data-test="upload-only">
           <span class="min-w-0 flex-1">{{ COLLECTION.uploadOnly(sources.data.value[0]!.name, formatNumber(sources.data.value[0]!.documents)) }}</span>
-          <RouterLink :to="sourceTo(sources.data.value[0]!)" class="link text-small">{{ COLLECTION.openSource }}</RouterLink>
+          <RouterLink :to="sourceTo(sources.data.value[0]!)" class="text-small text-accent-ink underline">{{ COLLECTION.openSource }}</RouterLink>
           <UiButton v-if="canEdit" icon="add" data-test="add-source" @click="adding = true">{{ SOURCE.add }}</UiButton>
         </div>
         <template v-else>

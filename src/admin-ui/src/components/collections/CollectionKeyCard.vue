@@ -36,7 +36,7 @@ onMounted(load)
       </p>
       <KeyUnavailableBadge class="mb-2" :gateway-key-id="gatewayKeyId" :department-id="departmentId" />
       <KeyBudgetStatus class="mb-2" :gateway-key-id="gatewayKeyId" />
-      <a v-if="link" :href="link" target="_blank" rel="noopener noreferrer" class="link text-small" data-test="key-link">{{ GATEWAY_KEY.openInGateway }}</a>
+      <a v-if="link" :href="link" target="_blank" rel="noopener noreferrer" class="text-small text-accent-ink underline" data-test="key-link">{{ GATEWAY_KEY.openInGateway }}</a>
     </template>
   </UiCard>
 </template>
