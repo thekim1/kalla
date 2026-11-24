@@ -54,7 +54,7 @@ After P2 wave 1, or beside it when a wave item waits. Each adds its table in a m
 
 Beside P2 wave 1: take B-64 when a wave item waits, or after it. `proposals/topics-editor.md` is the record of why.
 
-### [x] B-64 Topics picked from the sections found, on the Topics tab (#1059, #PART2)
+### [x] B-64 Topics picked from the sections found, on the Topics tab (#1059, #1060)
 - **Do:** admin §4.5's `GET /api/collections/{id}/topic-suggestions` (first level, `under=` for one section's next
   level, sections under 5 documents left out, `coveredBy` through A-42's matcher, owning department only, nothing
   logged) and the `pending` flag on `GET …/topics`; on the Topics tab (§5.5.2) the list grouped by tag with the rule in
