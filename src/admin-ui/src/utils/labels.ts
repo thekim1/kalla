@@ -742,6 +742,9 @@ export const MAP = {
   none: '–',
   empty: 'Nothing to show for this choice.',
   caption: 'Map of knowledge bases, assistants and channels',
+  filters: 'Filter the map',
+  /** The filter row's count (admin design §5.12 *Filters*). */
+  shown: (n: number) => `${n} ${n === 1 ? 'row' : 'rows'}`,
 } as const
 
 export const SOURCE = {
@@ -2297,6 +2300,8 @@ export const AUDIT = {
   onlyThis: 'Only this object',
   onlyThisLabel: (name: string) => `Only this object: ${name}`,
   moreFilters: 'More filters',
+  /** The filter row's count (admin design §5.12 *Filters*). */
+  shown: (n: number, more: boolean) => `${n} ${n === 1 ? 'event' : 'events'}${more ? ' shown, more below' : ''}`,
 } as const
 
 /**

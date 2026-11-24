@@ -4,9 +4,13 @@ import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
 import type { MapRow } from '@/api/types'
 import { department } from '@/test/fixtures'
+import { FILTERS, MAP } from '@/utils/labels'
 import MapView from './MapView.vue'
 
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
+// `?department=` and `?show=` through a route the tests set; filter changes go to router.replace.
+const route = vi.hoisted(() => ({ query: {} as Record<string, string> }))
+const replace = vi.hoisted(() => vi.fn())
+vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push: vi.fn(), replace }) }))
 
 const own: MapRow = {
   collection: {
@@ -58,14 +62,23 @@ describe('Map (admin design §5.5.6, as a table)', () => {
       { name: 'collection', params: { id: 'c1' } }, { name: 'assistant', params: { id: 'a1' } }, { name: 'assistant', params: { id: 'a2' } },
     ])
 
-    await wrapper.get('#map-show').setValue('unlinked')
+    // The department and what to show are chips kept in the address (admin design §5.12 Filters), with the count.
+    expect(wrapper.get('[data-test=filter-count]').text()).toBe(MAP.shown(3))
+    await wrapper.get('[data-test="chip-Show"] select').setValue('unlinked')
     expect(wrapper.findAll('[data-test=map] tbody tr')).toHaveLength(1)
-    await wrapper.get('#map-show').setValue('shared')
+    await wrapper.get('[data-test="chip-Show"] select').setValue('shared')
     expect(wrapper.findAll('[data-test=map] tbody tr')).toHaveLength(2)
+    await flushPromises()
+    expect(replace).toHaveBeenLastCalledWith({ query: { show: 'shared' } })
 
-    await wrapper.get('#map-department').setValue('d2')
+    await wrapper.get('[data-test="chip-Department"] select').setValue('d2')
     await flushPromises()
     expect(map).toHaveBeenLastCalledWith('d2')
     expect(wrapper.text()).toContain('Nothing to show for this choice.')
+    expect(wrapper.get('[data-test="chip-Department"] [data-test=chip-remove]').attributes('aria-label')).toBe(FILTERS.remove('Department'))
+    await wrapper.get('[data-test=clear-filters]').trigger('click')
+    await flushPromises()
+    expect((wrapper.get('[data-test="chip-Show"] select').element as HTMLSelectElement).value).toBe('all')
+    expect(map.mock.calls.slice(-2).map((c) => c[0])).toEqual(['d1', 'd2']) // every department again
   })
 })

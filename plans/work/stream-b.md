@@ -299,9 +299,7 @@ design meanwhile.
 - **Waits on:** B-78; B-66 (its Overview card); the code-quality fixes #3 and #5.
 - **Read:** admin §5.4, §5.5.2, §5.5.7, §7.1, §8.6, §8.8, §5.12.
 
-### [ ] B-80 Filters as chips, kept in the address (UX pass step 6, UX5 C)
-- **Taken** 2026-11-24, `b/B-80-filter-chips` (part 1: the chips, the period picker, the address, Feedback and Costs;
-  part 2: the Audit log, the Map and the lists' search).
+### [x] B-80 Filters as chips, kept in the address (UX pass step 6, UX5 C) (#1047, #1053)
 - **Do:** admin §5.12 *Filters*: `FilterChip` and `PeriodPicker`, and one composable that reads and writes the
   filters in the address, on Feedback, Costs (*Export* with *By day* and *By month* in the header), the Audit log
   (*Who* and *Type of object* as chips, the rest under *More filters*), the Map (with B-67's switch on the row if it
