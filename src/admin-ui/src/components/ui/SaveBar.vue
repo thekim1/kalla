@@ -8,7 +8,7 @@ import UiButton from './UiButton.vue'
  * The save bar (admin design §5.12 rule 7 and *Saving*): "n unsaved changes · Discard · Save changes", with the
  * consequence when there is one. A labelled region that appears with a polite announcement; sticky at the bottom of the
  * page, and on a phone fixed above the bottom menu with 44 px buttons sharing the width. While it shows, the page's
- * scroll-padding-bottom is its height, so a focused field is never hidden behind it (the field being edited when it
+ * scroll-padding-bottom is what it covers (its height, and on a phone the bottom menu under it), so a focused field is never hidden behind it (the field being edited when it
  * appears is scrolled clear of it too), and on a phone a spacer of its
  * height under the form keeps the end of the page clear of it. Discard asks once. When the bar goes (after a save or a
  * discard) with focus in it, focus returns to the field last edited, not to the body. Built in Källa until Fors takes
@@ -39,6 +39,18 @@ const onFocusIn = (e: FocusEvent) => {
 }
 document.addEventListener('focusin', onFocusIn)
 
+/**
+ * How much of the window's bottom the bar takes: from its top to the window's bottom, so on a phone the bottom menu under
+ * it counts too (at least the bar's own height, e.g. while it is still out of view).
+ */
+function coveredHeight(): number {
+  const el = bar.value
+  if (!el) return 0
+  const rect = el.getBoundingClientRect()
+  const fromBottom = rect.height > 0 ? Math.round(window.innerHeight - rect.top) : 0
+  return Math.max(el.offsetHeight, fromBottom)
+}
+
 /** The bar appears while a field has focus (the one just edited): when it now covers the field, scroll it clear. */
 function revealFocused(): void {
   const active = document.activeElement as HTMLElement | null
@@ -52,7 +64,7 @@ watch(
     announcement.value = shown ? L.count(props.changes) : ''
     const focusInBar = !shown && !!bar.value?.contains(document.activeElement)
     await nextTick()
-    pad(shown ? (bar.value?.offsetHeight ?? 0) : 0)
+    pad(shown ? coveredHeight() : 0)
     if (shown) revealFocused()
     if (focusInBar || (!shown && document.activeElement === document.body)) {
       if (lastField?.isConnected) lastField.focus()
