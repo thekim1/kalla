@@ -30,6 +30,14 @@ const periodOptions = Object.entries(COSTS.periods).map(([value, label]) => ({ v
 const period = computed(() => lastDays(Number(days.value)))
 /** Show the ratings opens the Feedback page, whose reads are the Feedback policy's (§3.3). */
 const canShowRatings = computed(() => auth.can('feedback'))
+/**
+ * Show the ratings opens Feedback on this document over the card's own period (#1051): the last 30 days is Feedback's
+ * preset; 90 days or 12 months go as a custom range of the same days.
+ */
+const ratingsTo = (documentId: string) => ({
+  name: 'feedback',
+  query: days.value === '30' ? { documentId } : { documentId, period: 'custom', from: period.value.from, to: period.value.to },
+})
 
 async function load(): Promise<void> {
   showAll.value = false
@@ -70,7 +78,7 @@ function key(row: DocumentFeedbackRow): string {
               data-test="document-feedback-link"
             >{{ row.title }}</RouterLink>
             <RouterLink
-              v-if="canShowRatings" :to="{ name: 'feedback', query: { documentId: row.documentId } }" class="block text-small text-accent-ink underline"
+              v-if="canShowRatings" :to="ratingsTo(row.documentId)" class="block text-small text-accent-ink underline"
               data-test="document-feedback-ratings"
             >{{ L.showRatings }}</RouterLink>
           </template>
