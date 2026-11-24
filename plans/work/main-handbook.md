@@ -119,6 +119,20 @@ learned, not every session (the session's state is in [`../../HANDOVER.md`](../.
 - **After a GitHub outage** runs can sit `queued` with jobs that have a start time but no runner: cancel and re-run
   them (the user allows cancelling stuck CI). A run that fails at an artifact upload with `Unexpected token '<'`:
   look at https://www.githubstatus.com first.
+- **A force push is stopped here, on the session's own branch too** (2026-11-23, after a rebase onto a release):
+  bring a pushed branch up to date with `gh pr update-branch <n>` (a plain merge; the squash-merge makes it the same),
+  and rebase only what is not pushed yet.
+- **A stream-b item that adds a table goes on a `main-session/` branch** (#1018, #1022, #1023): its grants in
+  `deploy/postgres/app-roles.sql` make the required `deploy-checks` ask for a regenerated
+  `deploy/portainer/compose.portainer.yaml` (`sh deploy/portainer/build-stack.sh current`, then `--check`) in the
+  same pull request, and that file is stream a's, which a `b/` branch may not touch.
+- **A pull request built on another's branch conflicts once the base is squash-merged**, wherever it adds lines right
+  after the base's (thirteen files for #1023 on #1022); two sides adding the same lines is not enough for Git when one
+  adds more. Open the second after the first is merged. If it is open already: merge `main` into it, and when `main`
+  is the same tree as the base branch it was built on (`git diff <base tip> origin/main` prints nothing),
+  `git merge -s ours origin/main` gives the right result. The push starts the checks again.
+- **`scripts/check-ownership.py <branch>` reads the changed paths from standard input** (`verify.yml` pipes
+  `git diff --name-only` into it): run bare it waits for ever, or reports "0 changed paths" on an empty input.
 
 ### CI and releases
 
@@ -163,6 +177,10 @@ learned, not every session (the session's state is in [`../../HANDOVER.md`](../.
   `Kalla.AdminApi.Tests` process wait for one another, so CI runs it as five processes
   (`scripts/ci/backend-tests.sh`). Database classes go into one of `AdminDatabaseGroup1`..`4`, the shortest by
   measured time; the test executable's `-xml <file>` gives every test's time.
+- **While a release dry run or the release itself runs, keep other backend jobs off the runners** (2026-11-23): a
+  pull request's `Verify` queued beside the dry run was cancelled (`gh run cancel`) and ran again after the tag;
+  pull requests that are ready wait as local branches. Afterwards open them one at a time and start the next when
+  the previous one's `backend` job is done.
 
 ### Code and deployment
 
@@ -203,6 +221,15 @@ learned, not every session (the session's state is in [`../../HANDOVER.md`](../.
   the tests there, commit, push; then remove the agent's worktree and its `worktree-agent-…` branch.
 - **Splitting a feature into an API agent and a UI agent** against a contract written first in the design worked
   well (#532): integrate on one branch and check both sides agree.
+- **A lane of dependent items** (2026-11-23, six stream-b items in an evening): one implementor per item in its own
+  worktree, the next one started from the previous one's branch tip when it extends the same code (the writer step,
+  the shared EF model snapshot), at most two building at once. Each report was checked by reading the diff against
+  the design and re-running its test classes; a point found in review went back to the same agent (`SendMessage`
+  keeps its context). Two of five agents would not run any `git` write: commit their work yourself.
+- **One agent can own the local stack for the browser checks** of several branches in turn: give it the stack in the
+  brief, have it start the AppHost from the branch's worktree, and ask what looked wrong to a user as well as for the
+  screenshots and an API read-back. It found what the tests could not (a column header that wrapped, an empty cell).
+  A fixed claim in the brief ("the card has an assistants column") comes back as a finding: say what is an assumption.
 
 ### Browser checks and this harness
 
@@ -251,3 +278,15 @@ learned, not every session (the session's state is in [`../../HANDOVER.md`](../.
   -pyflakes=` (it hung once without). `shellcheck` and `pwsh` are not installed.
 - **`grep` here is ugrep**, which reads `$` mid-pattern as an anchor (`grep '${A:-'` doesn't match `${A:-x}`). Use
   `grep -F` for literal `${...}`; the runner has GNU grep.
+- **Port 5174 was held by another project's Vite server** (`~/research/snowbattle`, seen 2026-11-23): Aspire's proxy
+  for the admin UI then never binds, and Keycloak redirects only to 5174 and 7402. The session's browser scripts went
+  through a local forward of `localhost:5174` to the admin UI's real Vite port (`aspire logs admin-ui` names it);
+  stopping the other server is simpler. Look with `ss -ltnp | grep 5174` before a browser check.
+- **The ClamAV signatures in `kalla-clamav-db` go stale** (older than 7 days): the worker is then unhealthy and every
+  file waits with `clamav.unavailable`. For a UI check start with `ClamAv__Mode=off`.
+- **Chatting with the development stack from a script:** the seed's only client is Open WebUI's, whose key alone is
+  refused (401 `user_jwt_missing`): it also needs `X-OpenWebUI-User-Jwt`, an HS256 token signed as Open WebUI signs
+  it (the AppHost secret `Parameters:openwebui-jwt-secret`, `iss` `open-webui`), and the `kalla` extension is
+  ignored for that client kind. For `kalla` members create an integration client as `rag-platform-admin`
+  (`POST /api/clients`) and add it to the assistant's audience. On the FakeGateway almost any real-sounding question
+  is answered; a string of nonsense words ends *not found*.
