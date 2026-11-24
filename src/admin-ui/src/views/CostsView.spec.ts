@@ -74,20 +74,20 @@ describe('Costs (admin design §8.6; B-41)', () => {
 
   it('takes the department from the link, asks again on a filter change, and Export carries the filters', async () => {
     const get = vi.spyOn(api.costs, 'report').mockResolvedValue(report([]))
-    vi.spyOn(api.organisation, 'departments').mockResolvedValue([{ id: 'd1', name: 'Bygg' }] as never)
-    const wrapper = await mountView('/costs?departmentId=d1')
+    vi.spyOn(api.organisation, 'departments').mockResolvedValue([{ id: '00000000-0000-4000-8000-0000000000d1', name: 'Bygg' }] as never)
+    const wrapper = await mountView('/costs?departmentId=00000000-0000-4000-8000-0000000000d1')
 
-    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ departmentId: 'd1' }))
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ departmentId: '00000000-0000-4000-8000-0000000000d1' }))
     expect(wrapper.text()).toContain(COST_MESSAGES.empty)
     // The department chip shows the value from the link, set and removable.
     expect(wrapper.get('[data-test="chip-Department"] [data-test=chip-remove]').attributes('aria-label')).toBe(FILTERS.remove('Department'))
 
     await wrapper.get('[data-test="chip-Kind"] select').setValue('collection')
     await flushPromises()
-    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ departmentId: 'd1', kind: 'collection', granularity: 'month' }))
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ departmentId: '00000000-0000-4000-8000-0000000000d1', kind: 'collection', granularity: 'month' }))
     const url = new URL(wrapper.get('[data-test=costs-csv-day]').attributes('href')!, 'https://admin.example')
     expect(url.pathname).toBe('/api/costs')
-    expect(Object.fromEntries(url.searchParams)).toEqual(expect.objectContaining({ format: 'csv', departmentId: 'd1', kind: 'collection', granularity: 'day' }))
+    expect(Object.fromEntries(url.searchParams)).toEqual(expect.objectContaining({ format: 'csv', departmentId: '00000000-0000-4000-8000-0000000000d1', kind: 'collection', granularity: 'day' }))
     expect(url.searchParams.get('from')).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 
@@ -127,5 +127,20 @@ describe('Costs (admin design §8.6; B-41)', () => {
     expect(router.currentRoute.value.query).toEqual({})
     expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ kind: undefined }))
     expect(wrapper.get('[data-test=filter-count]').attributes('aria-live')).toBe('polite')
+  })
+
+  it('ends an open custom range today, so a long one downloads by month only, and turns a backwards range round (#1051)', async () => {
+    const get = vi.spyOn(api.costs, 'report').mockResolvedValue(report([]))
+    vi.spyOn(api.organisation, 'departments').mockResolvedValue([] as never)
+    const today = new Date()
+    const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const longAgo = new Date(today.getFullYear() - 2, 0, 1)
+    const open = await mountView(`/costs?period=custom&from=${iso(longAgo)}`)
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ from: iso(longAgo), to: iso(today) }))
+    expect(open.find('[data-test=costs-csv-day]').exists()).toBe(false) // over 400 days: by month only
+    open.unmount()
+
+    await mountView('/costs?period=custom&from=2026-11-10&to=2026-11-01')
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ from: '2026-11-01', to: '2026-11-10' }))
   })
 })

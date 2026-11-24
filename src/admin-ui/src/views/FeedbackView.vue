@@ -13,11 +13,11 @@ import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import { useKeysetList } from '@/composables/useKeysetList'
-import { useQueryFilters } from '@/composables/useQueryFilters'
+import { IS_DAY, IS_ID, ONE_OF, useQueryFilters } from '@/composables/useQueryFilters'
 import { useAuthStore } from '@/stores/auth'
 import { formatDateTime, formatNumber, formatRatio } from '@/utils/format'
 import { FEEDBACK, FILTERS, PAGE } from '@/utils/labels'
-import { periodRange } from '@/utils/period'
+import { PERIODS, periodRange } from '@/utils/period'
 import { problemMessage } from '@/utils/problem'
 
 // Feedback (admin design §8.1, chat design §14.4): ratings of the department's assistants without content (no
@@ -33,8 +33,14 @@ const auth = useAuthStore()
 const summary = ref<FeedbackSummary | null>(null)
 const assistants = ref<AssistantSummary[]>([])
 const { filters, active, clear } = useQueryFilters({
-  period: '30d', from: '', to: '', assistant: '', rating: '', outcome: '', state: 'open', documentId: '',
+  period: '30d', from: '', to: '', assistant: '', rating: '', outcome: '', comment: '', state: 'open', documentId: '',
+}, {
+  // A value outside a key's set reads as its default, so nothing the API would refuse is sent (#1051).
+  period: ONE_OF(PERIODS), from: IS_DAY, to: IS_DAY, assistant: IS_ID, rating: ONE_OF(['up', 'down']),
+  outcome: ONE_OF(Object.keys(FEEDBACK.outcomes)), comment: ONE_OF(['with', 'without']), state: ONE_OF(['all', 'reviewed', 'dismissed']),
+  documentId: IS_ID,
 })
+const filterRow = ref<HTMLElement | null>(null)
 /** The address says `up` or `down`; the API takes 1 or -1. */
 const RATING_VALUE: Record<string, string> = { up: '1', down: '-1' }
 const range = computed(() => periodRange(filters.period, filters.from, filters.to))
@@ -54,6 +60,8 @@ const columns = computed<Column[]>(() => [
 const assistantOptions = computed(() => assistants.value.map((a) => ({ value: a.id, label: a.name })))
 const ratingOptions = [{ value: 'up', label: FEEDBACK.up }, { value: 'down', label: FEEDBACK.down }]
 const outcomeOptions = Object.entries(FEEDBACK.outcomes).map(([value, label]) => ({ value, label }))
+// §8.1's *has comment*: the comment is never shown, only whether there is one.
+const commentOptions = [{ value: 'with', label: FEEDBACK.withComment }, { value: 'without', label: FEEDBACK.withoutComment }]
 // Open is the default; the chip's other choices are every state, Handled and Dismissed.
 const stateOptions = [{ value: 'all', label: FEEDBACK.allStates }, ...Object.entries(FEEDBACK.states).filter(([v]) => v !== 'open').map(([value, label]) => ({ value, label }))]
 
@@ -67,7 +75,8 @@ function day(value: string, next = false): string | undefined {
 
 const feedback = useKeysetList((after?: string) => api.feedback.list({
   from: day(range.value.from), to: day(range.value.to, true), assistantId: filters.assistant || undefined, rating: RATING_VALUE[filters.rating],
-  outcome: filters.outcome || undefined, state: filters.state === 'all' ? undefined : filters.state || undefined,
+  outcome: filters.outcome || undefined, hasComment: filters.comment ? filters.comment === 'with' : undefined,
+  state: filters.state === 'all' ? undefined : filters.state || undefined,
   documentId: filters.documentId || undefined, after, limit: 50,
 }))
 
@@ -131,13 +140,14 @@ onMounted(async () => {
   </div>
 
   <!-- One row of chips (admin design §5.12 Filters), kept in the address; the count at its end, politely announced. -->
-  <form class="mb-6 flex flex-wrap items-center gap-2" role="search" :aria-label="FEEDBACK.filters" data-test="filters" @submit.prevent="load()">
+  <form ref="filterRow" class="mb-6 flex flex-wrap items-center gap-2" role="search" :aria-label="FEEDBACK.filters" data-test="filters" @submit.prevent="load()">
     <PeriodPicker v-model:period="filters.period" v-model:from="filters.from" v-model:to="filters.to" id-prefix="feedback" />
     <FilterChip v-model="filters.assistant" :label="FEEDBACK.assistant" :options="assistantOptions" :any="FEEDBACK.allAssistants" />
     <FilterChip v-model="filters.rating" :label="FEEDBACK.rating" :options="ratingOptions" :any="FEEDBACK.allRatings" />
     <FilterChip v-model="filters.outcome" :label="FEEDBACK.outcome" :options="outcomeOptions" :any="FEEDBACK.allOutcomes" />
+    <FilterChip v-model="filters.comment" :label="FEEDBACK.comment" :options="commentOptions" :any="FEEDBACK.anyComment" />
     <FilterChip v-model="filters.state" :label="FEEDBACK.state" :options="stateOptions" :any="FEEDBACK.states.open!" unset="open" />
-    <UiButton v-if="active.length" size="sm" variant="quiet" data-test="clear-filters" @click="clear()">{{ FILTERS.clear }}</UiButton>
+    <UiButton v-if="active.length" size="sm" variant="quiet" data-test="clear-filters" @click="clear(filterRow)">{{ FILTERS.clear }}</UiButton>
     <p class="ml-auto text-small text-fg-2" aria-live="polite" data-test="filter-count">
       {{ feedback.loaded.value ? FEEDBACK.shown(feedback.items.value.length, !!feedback.next.value) : '' }}
     </p>

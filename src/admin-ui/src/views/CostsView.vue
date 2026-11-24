@@ -9,11 +9,11 @@ import PeriodPicker from '@/components/ui/PeriodPicker.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import { useLoadable } from '@/stores/loadable'
-import { useQueryFilters } from '@/composables/useQueryFilters'
-import { groupTotals, stepLabel, sumTotals, totalCost } from '@/components/costs/costs'
+import { IS_DAY, IS_ID, ONE_OF, useQueryFilters } from '@/composables/useQueryFilters'
+import { groupTotals, isoDay, stepLabel, sumTotals, totalCost } from '@/components/costs/costs'
 import { formatNumber, quietZero, formatUsdCost } from '@/utils/format'
 import { COSTS, FILTERS, PAGE } from '@/utils/labels'
-import { periodRange } from '@/utils/period'
+import { PERIODS, periodRange } from '@/utils/period'
 import { COST_MESSAGES } from '@/utils/messages'
 
 // Costs (admin design §8.6, FOLLOW-UP; department and platform admins): per department, one row per assistant and
@@ -40,8 +40,16 @@ interface DepartmentGroup {
 
 const report = useLoadable<CostReport | null>(null)
 const departments = ref<{ id: string; name: string }[]>([])
-const { filters, active, clear } = useQueryFilters({ period: '30d', from: '', to: '', departmentId: '', kind: '' })
-const range = computed(() => periodRange(filters.period, filters.from, filters.to))
+const { filters, active, clear } = useQueryFilters(
+  { period: '30d', from: '', to: '', departmentId: '', kind: '' },
+  { period: ONE_OF(PERIODS), from: IS_DAY, to: IS_DAY, departmentId: IS_ID, kind: ONE_OF(['assistant', 'collection']) },
+)
+const filterRow = ref<HTMLElement | null>(null)
+/** The server reads an empty end as its own default, so an open custom range ends today here, as it is shown (#1051). */
+const range = computed(() => {
+  const r = periodRange(filters.period, filters.from, filters.to)
+  return { from: r.from, to: r.to || isoDay(new Date()) }
+})
 const open = ref(new Set<string>())
 
 const departmentOptions = computed(() => departments.value.map((d) => ({ value: d.id, label: d.name })))
@@ -137,11 +145,11 @@ onMounted(async () => {
   <p v-if="csvByMonthOnly" class="-mt-4 mb-4 text-small text-fg-2" data-test="costs-csv-month-only">{{ COSTS.csvMonthOnly }}</p>
 
   <!-- One row of chips (admin design §5.12 Filters), kept in the address; the count at its end, politely announced. -->
-  <form class="mb-6 flex flex-wrap items-center gap-2" role="search" :aria-label="COSTS.filters" data-test="filters" @submit.prevent="load()">
+  <form ref="filterRow" class="mb-6 flex flex-wrap items-center gap-2" role="search" :aria-label="COSTS.filters" data-test="filters" @submit.prevent="load()">
     <PeriodPicker v-model:period="filters.period" v-model:from="filters.from" v-model:to="filters.to" id-prefix="costs" />
     <FilterChip v-model="filters.departmentId" :label="COSTS.department" :options="departmentOptions" :any="COSTS.allDepartments" />
     <FilterChip v-model="filters.kind" :label="COSTS.kind" :options="kindOptions" :any="COSTS.kinds['']!" />
-    <UiButton v-if="active.length" size="sm" variant="quiet" data-test="clear-filters" @click="clear()">{{ FILTERS.clear }}</UiButton>
+    <UiButton v-if="active.length" size="sm" variant="quiet" data-test="clear-filters" @click="clear(filterRow)">{{ FILTERS.clear }}</UiButton>
     <p class="ml-auto text-small text-fg-2" aria-live="polite" data-test="filter-count">{{ report.loaded.value ? COSTS.shown(objectCount) : '' }}</p>
   </form>
 

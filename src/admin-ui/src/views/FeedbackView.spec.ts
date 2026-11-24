@@ -132,16 +132,16 @@ describe('Feedback (admin design §8.1)', () => {
 
   it('filters by the cited document from ?documentId=, names it from a row, and shows all documents again', async () => {
     signIn(['rag-department-admin'])
-    route.query = { documentId: 'd1', tab: 'x' }
+    route.query = { documentId: '00000000-0000-4000-8000-0000000000d1', tab: 'x' }
     const list = vi.spyOn(api.feedback, 'list').mockResolvedValue({
-      items: [item({ citedDocuments: [{ id: 'd0', title: 'Bygglov' }, { id: 'd1', title: 'Altan och uteplats' }] })], next: null,
+      items: [item({ citedDocuments: [{ id: 'd0', title: 'Bygglov' }, { id: '00000000-0000-4000-8000-0000000000d1', title: 'Altan och uteplats' }] })], next: null,
     })
     vi.spyOn(api.feedback, 'summary').mockResolvedValue({ lastUsedOn: null, totals: { answers: 0, notFound: 0, thumbsUp: 0, thumbsDown: 0 }, imports: [] })
     vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 } as never)
     const wrapper = mount(FeedbackView)
     await flushPromises()
 
-    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ documentId: 'd1' }))
+    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ documentId: '00000000-0000-4000-8000-0000000000d1' }))
     expect(wrapper.get('[data-test=cited-filter]').text()).toContain(FEEDBACK.citedFilter('Altan och uteplats'))
 
     list.mockResolvedValue({ items: [], next: null })
@@ -154,7 +154,7 @@ describe('Feedback (admin design §8.1)', () => {
 
   it('names no document while no row has loaded, and sends no document filter without ?documentId=', async () => {
     signIn(['rag-viewer'])
-    route.query = { documentId: 'd9' }
+    route.query = { documentId: '00000000-0000-4000-8000-0000000000d9' }
     const list = vi.spyOn(api.feedback, 'list').mockResolvedValue({ items: [], next: null })
     vi.spyOn(api.feedback, 'summary').mockResolvedValue({ lastUsedOn: null, totals: { answers: 0, notFound: 0, thumbsUp: 0, thumbsDown: 0 }, imports: [] })
     vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 } as never)
@@ -183,7 +183,7 @@ describe('Feedback (admin design §8.1)', () => {
       const wrapper = mount(FeedbackView, { attachTo: document.body })
       await flushPromises()
       const chips = wrapper.findAll('[data-test=chip-select]')
-      expect(chips).toHaveLength(5)
+      expect(chips).toHaveLength(6)
       for (const c of chips) expect(wrapper.find(`label[for="${c.attributes('id')}"]`).exists()).toBe(true)
       const rating = wrapper.get('[data-test="chip-Rating"]')
       expect(rating.get('label').text()).toBe('Rating:')
@@ -195,6 +195,12 @@ describe('Feedback (admin design §8.1)', () => {
       expect((rating.get('select').element as HTMLSelectElement).selectedOptions[0]!.text).toBe('Thumbs down')
       expect(rating.get('[data-test=chip-remove]').attributes('aria-label')).toBe(FILTERS.remove('Rating'))
       expect(rating.classes()).toContain('bg-accent-soft')
+      // The × goes with its own click: focus moves to the chip's select, not to the body (#1051).
+      ;(rating.get('[data-test=chip-remove]').element as HTMLButtonElement).focus()
+      await rating.get('[data-test=chip-remove]').trigger('click')
+      await flushPromises()
+      expect(document.activeElement).toBe(rating.get('select').element)
+      await rating.get('select').setValue('down')
       await wrapper.get('[data-test=clear-filters]').trigger('click')
       expect((rating.get('select').element as HTMLSelectElement).value).toBe('')
       wrapper.unmount()
@@ -222,6 +228,30 @@ describe('Feedback (admin design §8.1)', () => {
       await flushPromises()
       expect(replace).toHaveBeenLastCalledWith({ query: {} })
       wrapper.unmount()
+    })
+
+    it('filters by whether a rating has a comment, never showing the comment (§8.1; #1051)', async () => {
+      signIn(['rag-viewer'])
+      const { list } = mocks()
+      const wrapper = mount(FeedbackView)
+      await flushPromises()
+      expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ hasComment: undefined }))
+      await wrapper.get('[data-test="chip-Comment"] select').setValue('with')
+      await flushPromises()
+      expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ hasComment: true }))
+      await wrapper.get('[data-test="chip-Comment"] select').setValue('without')
+      await flushPromises()
+      expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ hasComment: false }))
+    })
+
+    it('sends nothing the API refuses for a bad value in the address: the defaults instead (#1051)', async () => {
+      signIn(['rag-viewer'])
+      route.query = { period: 'foo', state: 'bogus', assistant: 'not-a-guid', rating: 'sideways' }
+      const { list } = mocks()
+      mount(FeedbackView)
+      await flushPromises()
+      expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ state: 'open', assistantId: undefined, rating: undefined }))
+      route.query = {}
     })
 
     it('says the count at the end of the row in a polite live region', async () => {

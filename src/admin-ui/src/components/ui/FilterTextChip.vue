@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, useId } from 'vue'
+import { computed, nextTick, ref, useId } from 'vue'
 import { FILTERS } from '@/utils/labels'
 import { NO_PASSWORD_MANAGER } from './noAutofill'
 
@@ -12,6 +12,12 @@ const props = defineProps<{ label: string; modelValue: string; any: string; hint
 const emit = defineEmits<{ (e: 'update:modelValue', value: string): void }>()
 const id = `chip-${useId()}`
 const set = computed(() => props.modelValue.trim() !== '')
+const input = ref<HTMLInputElement | null>(null)
+/** The × goes with its own click: focus moves to the chip's field, not to the body (WCAG 2.4.3). */
+function remove(): void {
+  emit('update:modelValue', '')
+  void nextTick(() => input.value?.focus())
+}
 </script>
 
 <template>
@@ -22,13 +28,13 @@ const set = computed(() => props.modelValue.trim() !== '')
   >
     <label :for="id" class="cursor-pointer pl-3 font-medium">{{ label }}:</label>
     <input
-      :id="id" :value="modelValue" type="text" :name="id" :placeholder="any" :title="hint" autocomplete="off" v-bind="NO_PASSWORD_MANAGER"
+      :id="id" ref="input" :value="modelValue" type="text" :name="id" :placeholder="any" :title="hint" autocomplete="off" v-bind="NO_PASSWORD_MANAGER"
       class="h-full w-36 rounded-full bg-transparent px-1 text-small" :class="set ? '' : 'mr-2'" data-test="chip-input"
       @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
     />
     <button
-      v-if="set" type="button" class="mr-1 grid size-7 place-items-center rounded-full hover:bg-hover max-md:size-9"
-      :aria-label="FILTERS.remove(label)" data-test="chip-remove" @click="emit('update:modelValue', '')"
+      v-if="set" type="button" class="mr-1 grid size-7 place-items-center rounded-full hover:bg-hover max-md:size-11"
+      :aria-label="FILTERS.remove(label)" data-test="chip-remove" @click="remove"
     >
       <span aria-hidden="true">×</span>
     </button>

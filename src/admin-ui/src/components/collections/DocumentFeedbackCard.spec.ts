@@ -56,6 +56,12 @@ describe('the Feedback on documents card (admin design §8.8, B-66)', () => {
     expect(ratings[0]!.text()).toBe(L.showRatings)
     expect(ratings[0]!.findComponent(RouterLinkStub).props('to')).toEqual({ name: 'feedback', query: { documentId: 'd1' } })
     expect(ratings[1]!.findComponent(RouterLinkStub).props('to')).toEqual({ name: 'feedback', query: { documentId: 'd2' } })
+    // Over 12 months, the link opens Feedback over the same days, as a custom range (#1051).
+    await wrapper.get('select').setValue('365')
+    await flushPromises()
+    const to = wrapper.findAll('[data-test=document-feedback-ratings]')[0]!.findComponent(RouterLinkStub).props('to') as { query: Record<string, string> }
+    expect(to.query).toEqual(expect.objectContaining({ documentId: 'd1', period: 'custom' }))
+    expect((Date.parse(to.query.to!) - Date.parse(to.query.from!)) / 86_400_000).toBe(364)
 
     // No assistant is named: the count of assistants is not a column of the card (it is in the CSV).
     expect(wrapper.text()).not.toContain('assistant')
