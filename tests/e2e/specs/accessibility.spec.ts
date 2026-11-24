@@ -98,6 +98,8 @@ test('the save bar passes axe, and a focused field is never hidden behind it (ad
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 700 })
     await ready(page, `/assistants/${assistant.id}`)
+    // The page fills the draft form after its requests settle; an edit before that is overwritten.
+    await page.waitForLoadState('networkidle')
     const prompt = page.getByRole('textbox', { name: 'Instructions' })
     await prompt.fill(`${await prompt.inputValue()} `)
     const bar = page.getByRole('region', { name: 'Unsaved changes' })
