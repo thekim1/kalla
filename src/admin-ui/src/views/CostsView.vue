@@ -1,25 +1,27 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
 import type { CostGranularity, CostReport, CostReportQuery, CostTotals, DepartmentCostRow } from '@/api/types'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
-import SegmentedControl from '@/components/ui/SegmentedControl.vue'
-import SelectField from '@/components/ui/SelectField.vue'
-import TextField from '@/components/ui/TextField.vue'
+import FilterChip from '@/components/ui/FilterChip.vue'
+import PeriodPicker from '@/components/ui/PeriodPicker.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import { useLoadable } from '@/stores/loadable'
-import { groupTotals, lastDays, stepLabel, sumTotals, totalCost } from '@/components/costs/costs'
+import { useQueryFilters } from '@/composables/useQueryFilters'
+import { groupTotals, stepLabel, sumTotals, totalCost } from '@/components/costs/costs'
 import { formatNumber, quietZero, formatUsdCost } from '@/utils/format'
-import { COSTS, PAGE } from '@/utils/labels'
+import { COSTS, FILTERS, PAGE } from '@/utils/labels'
+import { periodRange } from '@/utils/period'
 import { COST_MESSAGES } from '@/utils/messages'
 
 // Costs (admin design §8.6, FOLLOW-UP; department and platform admins): per department, one row per assistant and
 // knowledge base with its cost, highest first, expandable by step, department totals, and the CSV with the same filters.
 // The gateway's cost and the estimate are shown apart; the gateway is the record for charging. The page shows neither the
-// period nor the client, so it asks by month (fewer rows to sum, #710); the chosen granularity is the CSV's.
+// period nor the client, so it asks by month (fewer rows to sum, #710). The filters are one row of chips kept in the
+// address (§5.12 *Filters*; `?period=7d&departmentId=…&kind=assistant`), and *Export* in the header downloads the CSV
+// with the same filters, by day or by month.
 interface ObjectRow {
   key: string
   kind: DepartmentCostRow['kind']
@@ -36,38 +38,32 @@ interface DepartmentGroup {
   objects: ObjectRow[]
 }
 
-const route = useRoute()
 const report = useLoadable<CostReport | null>(null)
 const departments = ref<{ id: string; name: string }[]>([])
-const initial = lastDays(30)
-const filters = reactive({
-  departmentId: typeof route.query.departmentId === 'string' ? route.query.departmentId : '',
-  kind: '' as '' | 'assistant' | 'collection',
-  from: initial.from,
-  to: initial.to,
-  granularity: 'day' as CostGranularity,
-})
+const { filters, active, clear } = useQueryFilters({ period: '30d', from: '', to: '', departmentId: '', kind: '' })
+const range = computed(() => periodRange(filters.period, filters.from, filters.to))
 const open = ref(new Set<string>())
 
-const departmentOptions = computed(() => [{ value: '', label: COSTS.allDepartments }, ...departments.value.map((d) => ({ value: d.id, label: d.name }))])
-const kindOptions = Object.entries(COSTS.kinds).map(([value, label]) => ({ value, label }))
-const granularityOptions = (['day', 'month'] as const).map((value) => ({ value, label: COSTS.granularities[value]! }))
+const departmentOptions = computed(() => departments.value.map((d) => ({ value: d.id, label: d.name })))
+const kindOptions = Object.entries(COSTS.kinds).filter(([value]) => value).map(([value, label]) => ({ value, label }))
 
 /** The on-screen report's query: by month whatever the granularity, so a granularity change doesn't ask again. */
 const query = computed<CostReportQuery>(() => ({
-  from: filters.from || undefined,
-  to: filters.to || undefined,
+  from: range.value.from || undefined,
+  to: range.value.to || undefined,
   granularity: 'month',
   departmentId: filters.departmentId || undefined,
-  kind: filters.kind || undefined,
+  kind: (filters.kind || undefined) as CostReportQuery['kind'],
 }))
 /** Day rows cover at most 400 days on the server (period_too_long), so a longer range downloads by month. */
 const csvByMonthOnly = computed(() => {
-  if (!filters.from || !filters.to) return false
-  return (Date.parse(filters.to) - Date.parse(filters.from)) / 86_400_000 + 1 > 400
+  const { from, to } = range.value
+  if (!from || !to) return false
+  return (Date.parse(to) - Date.parse(from)) / 86_400_000 + 1 > 400
 })
-const csvGranularity = computed<CostGranularity>(() => (csvByMonthOnly.value ? 'month' : filters.granularity))
-const csvUrl = computed(() => api.costs.csvUrl({ ...query.value, granularity: csvGranularity.value }))
+const csvUrl = (granularity: CostGranularity) => api.costs.csvUrl({ ...query.value, granularity })
+/** The objects the report lists, for the count at the end of the filter row. */
+const objectCount = computed(() => groups.value.reduce((n, d) => n + d.objects.length, 0))
 
 function objectName(row: DepartmentCostRow): string {
   return row.deleted || !row.objectName ? COSTS.deleted(row.objectId) : row.objectName
@@ -124,22 +120,29 @@ onMounted(async () => {
 </script>
 
 <template>
-  <PageHeader :title="PAGE.costs.title" :description="PAGE.costs.description" />
+  <PageHeader :title="PAGE.costs.title" :description="PAGE.costs.description">
+    <!-- Export in the header (§5.12 Filters): the CSV with the filters below, by day or by month. -->
+    <span class="flex flex-wrap items-center gap-2" role="group" :aria-label="COSTS.export" data-test="costs-export">
+      <span class="text-small font-medium text-fg-2" aria-hidden="true">{{ COSTS.export }}</span>
+      <a
+        v-if="!csvByMonthOnly" :href="csvUrl('day')" class="btn h-ctl bg-surface px-3 text-fg shadow-inset-strong hover:bg-surface-2" download
+        :aria-label="COSTS.exportBy(COSTS.byDay)" data-test="costs-csv-day"
+      >{{ COSTS.byDay }}</a>
+      <a
+        :href="csvUrl('month')" class="btn h-ctl bg-surface px-3 text-fg shadow-inset-strong hover:bg-surface-2" download
+        :aria-label="COSTS.exportBy(COSTS.byMonth)" data-test="costs-csv-month"
+      >{{ COSTS.byMonth }}</a>
+    </span>
+  </PageHeader>
+  <p v-if="csvByMonthOnly" class="-mt-4 mb-4 text-small text-fg-2" data-test="costs-csv-month-only">{{ COSTS.csvMonthOnly }}</p>
 
-  <!-- The same filter layout as Feedback: every label above its field, even columns. -->
-  <form class="mb-6 grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-3" role="search" :aria-label="COSTS.filters" @submit.prevent="load()">
-    <SelectField id="costs-department" v-model="filters.departmentId" :label="COSTS.department" :options="departmentOptions" />
-    <SelectField id="costs-kind" v-model="filters.kind" :label="COSTS.kind" :options="kindOptions" />
-    <TextField id="costs-from" v-model="filters.from" type="date" :label="COSTS.from" />
-    <TextField id="costs-to" v-model="filters.to" type="date" :label="COSTS.to" />
-    <div class="flex flex-col gap-1.5">
-      <span class="font-medium" aria-hidden="true">{{ COSTS.csvGranularity }}</span>
-      <div class="flex flex-wrap items-center gap-3">
-        <SegmentedControl v-model="filters.granularity" :label="COSTS.csvGranularity" :options="granularityOptions" />
-        <a :href="csvUrl" class="link text-small" download data-test="costs-csv">{{ COSTS.downloadCsv }}</a>
-      </div>
-      <span v-if="csvByMonthOnly" class="text-small text-fg-2" data-test="costs-csv-month-only">{{ COSTS.csvMonthOnly }}</span>
-    </div>
+  <!-- One row of chips (admin design §5.12 Filters), kept in the address; the count at its end, politely announced. -->
+  <form class="mb-6 flex flex-wrap items-center gap-2" role="search" :aria-label="COSTS.filters" data-test="filters" @submit.prevent="load()">
+    <PeriodPicker v-model:period="filters.period" v-model:from="filters.from" v-model:to="filters.to" id-prefix="costs" />
+    <FilterChip v-model="filters.departmentId" :label="COSTS.department" :options="departmentOptions" :any="COSTS.allDepartments" />
+    <FilterChip v-model="filters.kind" :label="COSTS.kind" :options="kindOptions" :any="COSTS.kinds['']!" />
+    <UiButton v-if="active.length" size="sm" variant="quiet" data-test="clear-filters" @click="clear()">{{ FILTERS.clear }}</UiButton>
+    <p class="ml-auto text-small text-fg-2" aria-live="polite" data-test="filter-count">{{ report.loaded.value ? COSTS.shown(objectCount) : '' }}</p>
   </form>
 
   <AsyncState :loading="report.loading.value" :error="report.error.value" :empty="groups.length === 0" :empty-text="COST_MESSAGES.empty" @retry="load()">
