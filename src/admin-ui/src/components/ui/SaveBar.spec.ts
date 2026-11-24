@@ -65,7 +65,14 @@ describe('SaveBar (admin design §5.12 rule 7, Saving)', () => {
     wrapper.unmount()
   })
 
+  /** The bar's computed position: `fixed` on a phone, `sticky` wider (no stylesheet in jsdom). */
+  function position(value: 'fixed' | 'sticky'): void {
+    const real = window.getComputedStyle.bind(window)
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((el, pseudo) => ({ ...real(el, pseudo), position: value }) as CSSStyleDeclaration)
+  }
+
   it('pads the scroll by what it covers on a phone: its height and the bottom menu under it', async () => {
+    position('fixed')
     const wrapper = mount(SaveBar, { props: { changes: 0 }, attachTo: document.body })
     vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(120)
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
@@ -77,7 +84,21 @@ describe('SaveBar (admin design §5.12 rule 7, Saving)', () => {
     wrapper.unmount()
   })
 
+  it('pads the scroll by its own height on a wider screen, where it is sticky and may sit mid-window at the form\'s end', async () => {
+    position('sticky')
+    const wrapper = mount(SaveBar, { props: { changes: 0 }, attachTo: document.body })
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(72)
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      top: 500, bottom: 572, left: 0, right: 680, width: 680, height: 72, x: 0, y: 500, toJSON: () => ({}),
+    })
+    await wrapper.setProps({ changes: 1 })
+    await flushPromises()
+    expect(document.documentElement.style.scrollPaddingBottom).toBe('72px') // not innerHeight - 500
+    wrapper.unmount()
+  })
+
   it('pads the scroll by the phone\'s strip while nothing is unsaved, so a focused field is not hidden behind it', async () => {
+    position('fixed')
     vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(68)
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
       top: window.innerHeight - 132, bottom: window.innerHeight - 64, left: 0, right: 390, width: 390, height: 68, x: 0, y: window.innerHeight - 132, toJSON: () => ({}),
