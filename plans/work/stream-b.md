@@ -266,7 +266,7 @@ design meanwhile.
 - **Waits on:** B-76; the code-quality fixes #3 and #5.
 - **Read:** admin §5.5.4 (*Wording*), §5.7, §5.12 (rule 7, *Saving*).
 
-### [ ] B-78 The assistant page: five tabs, the test beside the draft (UX pass step 4, UX3 C)
+### [x] B-78 The assistant page: five tabs, the test beside the draft (UX pass step 4, UX3 C) (#1041, #1043)
 - **Do:** admin §5.5.4: the tabs *Build*, *Quality*, *Versions*, *Access*, *Usage* (`?tab=` values renamed, every
   link to the old ones changed); the test panel beside the draft, sticky, folded under the form below 1,280 px and a
   full-height sheet from the save bar on a phone, keeping all of §4.9; *General knowledge* as one radio scale with the
