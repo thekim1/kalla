@@ -284,7 +284,7 @@ design meanwhile.
 - **Waits on:** B-77; B-58, B-61, B-62 (their cards move here); the code-quality fixes #3 and #5.
 - **Read:** admin §4.9, §5.4, §5.5.4, §7.4, §8.6, §8.7, §5.12; V36.
 
-### [ ] B-79 The knowledge base page: six tabs and the Overview's tiles (UX pass step 5, UX2 C)
+### [x] B-79 The knowledge base page: six tabs and the Overview's tiles (UX pass step 5, UX2 C) (#1044, #1045)
 - **Do:** admin §5.5.2: the tabs *Overview*, *Content*, *Documents*, *Topics*, *Quality*, *Sharing* (`?tab=` values
   renamed and the setup checklist's links with them); `SummaryTile` and the Overview's four tiles, then *Get started*,
   the sources, the *Gateway key*, *Cost* and *Feedback on documents* cards; *Content* with the sources and the file

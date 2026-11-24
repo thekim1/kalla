@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, nextTick, onMounted, reactive, ref, watch, type DirectiveBinding } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api'
 import { useKeysetList } from '@/composables/useKeysetList'
 import { useTabQuery } from '@/composables/useTabQuery'
@@ -16,6 +16,8 @@ import FilesPanel from '@/components/files/FilesPanel.vue'
 import { createUploadSource } from '@/components/files/files'
 import SourceDrawer from '@/components/sources/SourceDrawer.vue'
 import CollectionEditDrawer from '@/components/collections/CollectionEditDrawer.vue'
+import CollectionKeyCard from '@/components/collections/CollectionKeyCard.vue'
+import SummaryTile from '@/components/ui/SummaryTile.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import CheckField from '@/components/ui/CheckField.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
@@ -33,22 +35,21 @@ import UiDialog from '@/components/ui/UiDialog.vue'
 import UiTabs from '@/components/ui/UiTabs.vue'
 import { useLoadable } from '@/stores/loadable'
 import CostCard from '@/components/costs/CostCard.vue'
-import KeyBudgetStatus from '@/components/gateway/KeyBudgetStatus.vue'
-import KeyUnavailableBadge from '@/components/gateway/KeyUnavailableBadge.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatDecimal, formatNumber, quietZero } from '@/utils/format'
-import { COLLECTION, COLLECTIONS, DELETE, EDIT_DRAWER, EVALUATION, LEVEL_LABEL, MENU, MOVE_DEPARTMENT, PAGE, RETRIEVAL, RUN_STATE_LABEL, SOURCE, SOURCE_TYPE_LABEL, UNSAVED } from '@/utils/labels'
+import { COLLECTION, COLLECTIONS, DELETE, EDIT_DRAWER, LEVEL_LABEL, MENU, MOVE_DEPARTMENT, PAGE, RUN_STATE_LABEL, SOURCE, SOURCE_TYPE_LABEL, UNSAVED } from '@/utils/labels'
 import MoveDepartmentDrawer from '@/components/organisation/MoveDepartmentDrawer.vue'
 import { problemMessage } from '@/utils/problem'
 import PiiActions from '@/components/documents/PiiActions.vue'
 
-// Kunskapsbank (admin design §5.5.2): Översikt (state, contact, used by), Filer (§5.5.7: the Files card of an upload
-// source, with a picker when there are several; shown when there is one, and Add files on Källor creates it), Källor,
-// Dokument with the personal-data filter (§4.5 documents), Topics, Testfrågor och kvalitet, Sökinställningar (§7.1) and
-// Sharing (§3.2). A department the knowledge base is shared with opens it read-only: Overview (owner, contact, level,
-// document count) and Topics.
-type Tab = 'overview' | 'files' | 'sources' | 'documents' | 'topics' | 'evaluation' | 'retrieval' | 'sharing'
+// The knowledge base (admin design §5.5.2, UX pass UX2 C): six tabs. Overview (four tiles, then Get started, the sources,
+// the Gateway key, Cost and Feedback on documents cards), Content (the sources and an upload source's file list, §5.5.7;
+// straight onto the file list when an upload is the only source), Documents with the personal-data filter (§4.5),
+// Topics, Quality (the test questions and the evaluation, then Tune the search, §7.1) and Sharing (§3.2). A dot marks a
+// tab that needs action. A department the knowledge base is shared with opens it read-only: Overview (owner, contact,
+// level, document count) and Topics.
+type Tab = 'overview' | 'content' | 'documents' | 'topics' | 'quality' | 'sharing'
 const props = defineProps<{ id: string }>()
 const auth = useAuthStore()
 const ui = useUiStore()
@@ -65,16 +66,24 @@ const onlyPii = ref(router.currentRoute?.value?.query.pii === 'flagged')
 // The Documents tab; toggling the filter while a page loads keeps only the newest answer (#279 review).
 const documents = useKeysetList((after?: string) =>
   api.documents.list({ collectionId: props.id, pii: onlyPii.value ? 'flagged' : undefined, after, limit: 50 }))
-const TABS: [Tab, ...Tab[]] = ['overview', 'files', 'sources', 'documents', 'topics', 'evaluation', 'retrieval', 'sharing']
+const TABS: [Tab, ...Tab[]] = ['overview', 'content', 'documents', 'topics', 'quality', 'sharing']
+/** The eight tabs' old values open the tab their content moved to (bookmarks and old links keep working). */
+const ALIASES: Record<string, Tab> = { files: 'content', sources: 'content', evaluation: 'quality', retrieval: 'quality' }
+const parseTab = (value: unknown): Tab => (TABS.includes(value as Tab) ? (value as Tab) : (ALIASES[String(value)] ?? TABS[0]))
+/**
+ * Opened as `?tab=files` (Create knowledge base with Files, an old link): Content, with the file list asked for, so a
+ * missing upload source is said beside Add files.
+ */
+const openedOnFiles = useRoute()?.query.tab === 'files'
 /** The tab is kept in `?tab=` (the setup checklist links to them; a reload keeps it). */
-const tab = useTabQuery(TABS)
+const tab = useTabQuery(TABS, ALIASES)
 // A tab with unsaved changes (its form's save bar, admin design §5.12 *Saving*) asks before the tab changes.
 const unsaved = reactive({ sharing: false, search: false })
 const confirmTabChange = () => !(unsaved.sharing || unsaved.search) || window.confirm(UNSAVED.leave)
 // Leaving the page, or a tab change by a link (`?tab=`, which unmounts the form), asks while a form has changes.
 useUnsavedGuard(() => unsaved.sharing || unsaved.search, {
   current: () => tab.value,
-  of: (r) => (TABS.includes(r.query.tab as Tab) ? (r.query.tab as Tab) : TABS[0]),
+  of: (r) => parseTab(r.query.tab),
   confirm: confirmTabChange,
 })
 function switchTab(next: string): void {
@@ -101,6 +110,18 @@ const quality = computed(() => {
   const finished = (evaluation.value?.latestRuns ?? []).filter((r) => r.finishedAt && !r.candidate && r.recallAtK !== null)
   return finished.find((r) => r.variant === 'hybrid') ?? finished[0] ?? null
 })
+/** Quality's latest finished run did worse than the one it was compared with (more losses than wins). */
+const qualityWorse = computed(() => !!quality.value && (quality.value.losses ?? 0) > (quality.value.wins ?? 0))
+/** The assistants' departments, for the Used by tile. */
+const userDepartments = computed(() => new Set((collection.data.value?.usedBy ?? []).map((u) => u.departmentId)).size)
+/** The tabs that need action (§5.5.2): a failed fetch on Content, a worse or missing evaluation on Quality. */
+const attention = computed<Partial<Record<Tab, boolean>>>(() => ({
+  content: sources.data.value.some((s) => s.lastRun?.state === 'failed'),
+  quality: (collection.data.value?.documentCount ?? 0) > 0 && evaluationLoaded.value && (!quality.value || qualityWorse.value),
+}))
+const evaluationLoaded = ref(false)
+/** Content when an upload is the only source (§5.5.2): straight onto the file list, the source on one line above it. */
+const uploadOnly = computed(() => sources.data.value.length === 1 && sources.data.value[0]!.type === 'upload')
 /** The Overview's Cost card (admin design §8.6). */
 const collectionCosts = (query: CostQuery) => api.costs.collection(collection.data.value!.id, query)
 const canPublish = computed(() => auth.can('manage'))
@@ -149,20 +170,35 @@ async function deleteCollection(): Promise<void> {
 }
 const proposal = ref<{ coverageMaxDistance?: number; coverageMinKeywordScore?: number } | null>(null)
 
+/** A tab with a dot when it needs action (the dot's meaning is in the tab's name, set above). */
+const DOT = 'fiber_manual_record'
 const tabs = computed(() => shared.value ? [
   { value: 'overview' as const, label: COLLECTION.tabs.overview },
   { value: 'topics' as const, label: COLLECTION.tabs.topics },
 ] : [
   { value: 'overview' as const, label: COLLECTION.tabs.overview },
-  ...(uploadSources.value.length ? [{ value: 'files' as const, label: COLLECTION.tabs.files }] : []),
   // The count only once loaded (#279 review: no "(0)" while loading).
-  { value: 'sources' as const, label: sources.loaded.value ? `${COLLECTION.tabs.sources} (${sources.data.value.length})` : COLLECTION.tabs.sources },
-  { value: 'documents' as const, label: COLLECTION.tabs.documents },
+  {
+    value: 'content' as const, label: sources.loaded.value ? `${COLLECTION.tabs.content} (${sources.data.value.length})` : COLLECTION.tabs.content,
+    ...(attention.value.content ? { icon: DOT } : {}),
+  },
+  { value: 'documents' as const, label: `${COLLECTION.tabs.documents} (${formatNumber(collection.data.value?.documentCount ?? 0)})` },
   { value: 'topics' as const, label: COLLECTION.tabs.topics },
-  { value: 'evaluation' as const, label: EVALUATION.tab },
-  { value: 'retrieval' as const, label: RETRIEVAL.tab },
+  { value: 'quality' as const, label: COLLECTION.tabs.quality, ...(attention.value.quality ? { icon: DOT } : {}) },
   { value: 'sharing' as const, label: COLLECTION.tabs.sharing },
 ])
+// UiTabs (Fors, unchanged) renders an icon hidden from assistive technology: the tab's name says what the dot means. A
+// directive on the tab list sets it whenever the list mounts or updates (it renders once the knowledge base has loaded).
+const dotNames = computed(() => Object.fromEntries(tabs.value.map((t) => [t.value, attention.value[t.value] ? COLLECTION.needsAttention(t.label) : null])))
+function nameDots(el: HTMLElement, binding: DirectiveBinding<Record<string, string | null>>): void {
+  for (const [value, name] of Object.entries(binding.value)) {
+    const tab = el.querySelector<HTMLElement>(`[role=tab][id$="-tab-${value}"]`)
+    if (!tab) continue
+    if (name) tab.setAttribute('aria-label', name)
+    else tab.removeAttribute('aria-label')
+  }
+}
+const vDotNames = { mounted: nameDots, updated: nameDots }
 const sourceColumns: Column[] = [
   { key: 'name', label: COLLECTION.sourceName },
   { key: 'type', label: COLLECTION.sourceType },
@@ -185,19 +221,18 @@ async function load(): Promise<void> {
   await sources.run(() => api.collections.sources(props.id))
   pickFileSource()
   evaluation.value = await api.collections.evaluation(props.id).catch(() => null)
+  evaluationLoaded.value = evaluation.value !== null
   // Kom igång (§5.4): computed by the API; hidden once done or when it can't be read.
   setup.value = await api.collections.setup(props.id).catch(() => null)
   // Opened on Documents (a link or a reload): the tab watch below fires only on a change.
   if (tab.value === 'documents' && !documents.loaded.value) void documents.reload()
 }
 
-/** The upload source the Files tab shows: the one picked while it still exists, else the first; none sends Files to Sources. */
+/** The upload source Content's file list shows: the one picked while it still exists, else the first. */
 function pickFileSource(): void {
   if (!uploadSources.value.some((s) => s.id === fileSourceId.value)) fileSourceId.value = uploadSources.value[0]?.id ?? ''
-  if (tab.value === 'files' && !fileSourceId.value && sources.loaded.value) {
-    tab.value = 'sources'
-    noFilesSource.value = true
-  }
+  // Asked for the files (`?tab=files`) without an upload source: Content says so beside Add files.
+  if (openedOnFiles && !fileSourceId.value && sources.loaded.value) noFilesSource.value = true
 }
 
 async function loadFileSource(): Promise<void> {
@@ -208,7 +243,7 @@ async function loadFileSource(): Promise<void> {
   if (fileSourceId.value !== id && !fileSource.error.value) await loadFileSource()
 }
 
-/** Add files (§5.5.7): the upload source a knowledge base of files gets, then its Files tab. */
+/** Add files (§5.5.7): the upload source a knowledge base of files gets, then its file list on Content. */
 async function addFiles(): Promise<void> {
   if (!collection.data.value) return
   addingFiles.value = true
@@ -218,7 +253,7 @@ async function addFiles(): Promise<void> {
     await sources.run(() => api.collections.sources(props.id))
     fileSourceId.value = source.id
     noFilesSource.value = false
-    tab.value = 'files'
+    tab.value = 'content'
   } catch (e) {
     addFilesError.value = e
   } finally {
@@ -257,10 +292,16 @@ function sourceSaved(source: Source, syncing: boolean): void {
   void router.push({ name: 'source', params: { id: source.id } })
 }
 
-/** The report's coverage-threshold proposal goes to Sökinställningar, filled in for the editor to save (§7.1). */
-function useProposal(values: { coverageMaxDistance?: number; coverageMinKeywordScore?: number }): void {
+/** The report's coverage-threshold proposal goes to Tune the search on the same tab, filled in for the editor to save (§7.1). */
+async function useProposal(values: { coverageMaxDistance?: number; coverageMinKeywordScore?: number }): Promise<void> {
   proposal.value = { ...values }
-  tab.value = 'retrieval'
+  await nextTick()
+  document.getElementById('collection-tune')?.scrollIntoView?.({ block: 'start' })
+}
+
+/** Try without saving started a run: back up to the evaluation, where it shows. */
+function tried(): void {
+  document.getElementById('collection-panel-quality')?.scrollIntoView?.({ block: 'start' })
 }
 
 function retrievalSaved(saved: Collection): void {
@@ -279,7 +320,7 @@ watch(tab, (t) => {
 })
 watch(onlyPii, () => void documents.reload())
 watch([tab, fileSourceId], ([t]) => {
-  if (t !== 'files') return
+  if (t !== 'content') return
   if (sources.loaded.value && !fileSourceId.value) pickFileSource()
   else void loadFileSource()
 })
@@ -332,92 +373,56 @@ onMounted(load)
         <MenuButton v-if="headerMenu.length" :label="MENU.more(collection.data.value.name)" :items="headerMenu" @select="onHeaderMenu" />
       </PageHeader>
       <InlineError v-if="publishError" :message="problemMessage(publishError)" class="mb-4" />
-      <UiTabs id="collection" :model-value="tab" :tabs="tabs" :label="COLLECTION.tabsLabel" class="mb-6" @update:model-value="switchTab" />
+      <UiTabs id="collection" v-dot-names="dotNames" :model-value="tab" :tabs="tabs" :label="COLLECTION.tabsLabel" class="mb-6" @update:model-value="switchTab" />
 
+      <!-- Overview (§5.5.2): four summary tiles, then Get started while unpublished, the sources, and the Gateway key, Cost
+           and Feedback on documents cards. A tile that needs action has a coloured border and says so. -->
       <div v-if="tab === 'overview'" id="collection-panel-overview" role="tabpanel" aria-labelledby="collection-tab-overview" class="grid gap-6">
-        <SetupChecklist v-if="setup && !setup.done" :setup="setup" />
-        <UiCard :title="COLLECTIONS.state">
-          <KeyUnavailableBadge class="mb-2" :gateway-key-id="collection.data.value.gatewayKeyId" :department-id="collection.data.value.departmentId" />
-          <KeyBudgetStatus class="mb-3" :gateway-key-id="collection.data.value.gatewayKeyId" />
-          <p v-if="!collection.data.value.publishedAt" class="mb-2">{{ COLLECTIONS.notPublishedHint }}</p>
-          <dl>
-            <DetailRow :label="COLLECTION.contact">
-              <span v-if="collection.data.value.contactName || collection.data.value.contactEmail" data-test="contact">
-                {{ [collection.data.value.contactName, collection.data.value.contactEmail].filter(Boolean).join(', ') }}
-              </span>
-              <span v-else class="flex flex-wrap items-center gap-3">
-                <span class="text-fg-3">{{ COLLECTION.noContact }}</span>
-                <UiButton v-if="canEdit" size="sm" icon="add" data-test="add-contact" @click="editing = true">{{ COLLECTION.addContact }}</UiButton>
-              </span>
-            </DetailRow>
-            <DetailRow :label="COLLECTION.usedBy">
-              <span v-if="users.length === 0" class="text-fg-3">{{ COLLECTION.notUsed }}</span>
-              <span v-else data-test="used-by">
-                <template v-for="(u, i) in users" :key="u.id">
-                  <template v-if="i > 0">, </template>
-                  <RouterLink :to="{ name: 'assistant', params: { id: u.id } }" class="link inline-flex min-h-6 items-center" :data-test="`used-by-${u.id}`">{{ u.label }}</RouterLink>
-                </template>
-              </span>
-            </DetailRow>
-            <!-- The live documents, as on the knowledge base list (#374). -->
-            <DetailRow :label="COLLECTION.documents"><span class="tabular" data-test="document-count">{{ formatNumber(collection.data.value.documentCount) }}</span></DetailRow>
-            <template v-if="sources.loaded.value">
-              <DetailRow :label="COLLECTION.lastFetch">
-                <span v-if="lastRun" data-test="last-fetch">
-                  <span class="tabular">{{ formatDateTime(lastRun.finishedAt ?? lastRun.startedAt) }}</span> · {{ RUN_STATE_LABEL[lastRun.state] ?? lastRun.state }}
-                </span>
-                <span v-else class="text-fg-3">{{ COLLECTION.notFetched }}</span>
-              </DetailRow>
-            </template>
-            <DetailRow :label="COLLECTION.quality(quality?.k ?? 10)">
-              <span v-if="quality" data-test="quality">
-                <span class="tabular">{{ formatDecimal(quality.recallAtK!, 2, 2) }}</span>
-                <span class="text-fg-2"> · {{ formatDateTime(quality.finishedAt) }}</span>
-              </span>
-              <span v-else class="text-fg-3">{{ COLLECTION.notMeasured }}</span>
-            </DetailRow>
-          </dl>
-        </UiCard>
-        <!-- Admin §8.6: indexing and evaluation of the last 30 days; this panel is the owning department's (a shared one sees no cost). -->
-        <CostCard
-          kind="collection" :source="collectionCosts" :gateway-key-id="collection.data.value.gatewayKeyId" :department-id="collection.data.value.departmentId"
-          :costs-link="canPublish ? { name: 'costs', query: { departmentId: collection.data.value.departmentId } } : null"
-        />
-        <!-- Admin §8.8: the ratings of the answers that cited its documents, over every assistant; the owning department's only. -->
-        <DocumentFeedbackCard :collection-id="collection.data.value.id" />
-      </div>
-
-      <div v-else-if="tab === 'files'" id="collection-panel-files" role="tabpanel" aria-labelledby="collection-tab-files" class="grid gap-4">
-        <div v-if="uploadSources.length > 1" class="max-w-sm">
-          <SelectField
-            id="files-source" v-model="fileSourceId" :label="COLLECTION.filesSource" :options="uploadSources.map((s) => ({ value: s.id, label: s.name }))"
+        <p v-if="!collection.data.value.publishedAt" class="text-fg-2">{{ COLLECTIONS.notPublishedHint }}</p>
+        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" data-test="tiles">
+          <SummaryTile
+            :title="COLLECTION.tiles.documents" :value="formatNumber(collection.data.value.documentCount)" :quiet="collection.data.value.documentCount === 0"
+            :detail="collection.data.value.documentCount ? COLLECTION.tiles.searchable : COLLECTION.tiles.noneSearchable" data-test="tile-documents"
           />
-        </div>
-        <AsyncState
-          :loading="sources.loading.value || (fileSource.loading.value && fileSource.data.value?.id !== fileSourceId)" :error="fileSource.error.value"
-          @retry="loadFileSource"
-        >
-          <FilesPanel
-            v-if="fileSource.data.value && fileSource.data.value.id === fileSourceId" :key="fileSource.data.value.id" :source="fileSource.data.value"
-            :can-edit="canEdit" topics-link :used-by="usedBy" @topics="tab = 'topics'"
-          />
-        </AsyncState>
-      </div>
-
-      <div v-else-if="tab === 'sources'" id="collection-panel-sources" role="tabpanel" aria-labelledby="collection-tab-sources">
-        <div v-if="canEdit" class="mb-4 flex flex-wrap items-center justify-end gap-2">
-          <p v-if="noFilesSource && sources.loaded.value && uploadSources.length === 0" class="mr-auto text-small text-fg-2" data-test="no-files-source">
-            {{ COLLECTION.noFilesSource }}
-          </p>
-          <UiButton
-            v-if="sources.loaded.value && uploadSources.length === 0" icon="upload_file" :loading="addingFiles" data-test="add-files" @click="addFiles"
+          <SummaryTile
+            :title="COLLECTION.tiles.lastFetch" :value="lastRun ? formatDateTime(lastRun.finishedAt ?? lastRun.startedAt) : COLLECTION.tiles.never"
+            :quiet="!lastRun" :detail="lastRun ? (RUN_STATE_LABEL[lastRun.state] ?? lastRun.state) : undefined"
+            :attention="lastRun?.state === 'failed' ? COLLECTION.tiles.fetchFailed : null" data-test="tile-last-fetch"
           >
-            {{ COLLECTION.addFiles }}
-          </UiButton>
-          <UiButton variant="primary" icon="add" data-test="add-source" @click="adding = true">{{ SOURCE.add }}</UiButton>
+            <RouterLink v-if="lastRun" :to="{ name: 'run', params: { id: lastRun.id } }" class="text-accent-ink underline">{{ COLLECTION.tiles.openRun }}</RouterLink>
+          </SummaryTile>
+          <SummaryTile
+            :title="COLLECTION.tiles.quality(quality?.k ?? 10)" :value="quality ? formatDecimal(quality.recallAtK!, 2, 2) : COLLECTION.tiles.notMeasured"
+            :quiet="!quality" :detail="quality ? formatDateTime(quality.finishedAt) : undefined"
+            :attention="qualityWorse ? COLLECTION.tiles.qualityWorse : null" data-test="tile-quality"
+          >
+            <button v-if="!quality && canEdit" type="button" class="text-accent-ink underline" data-test="create-questions" @click="switchTab('quality')">{{ COLLECTION.tiles.createQuestions }}</button>
+          </SummaryTile>
+          <SummaryTile
+            :title="COLLECTION.tiles.usedBy" :value="COLLECTION.tiles.assistants(users.length)" :quiet="users.length === 0"
+            :detail="users.length ? COLLECTION.tiles.departments(userDepartments) : COLLECTION.notUsed" data-test="tile-used-by"
+          >
+            <span v-if="users.length" data-test="used-by">
+              <template v-for="(u, i) in users" :key="u.id">
+                <template v-if="i > 0">, </template>
+                <RouterLink :to="{ name: 'assistant', params: { id: u.id } }" class="inline-flex min-h-6 items-center text-accent-ink underline" :data-test="`used-by-${u.id}`">{{ u.label }}</RouterLink>
+              </template>
+            </span>
+          </SummaryTile>
         </div>
-        <InlineError v-if="addFilesError" :message="problemMessage(addFilesError)" class="mb-4" />
-        <AsyncState :loading="sources.loading.value" :error="sources.error.value" :empty="sources.data.value.length === 0" :empty-text="COLLECTION.noSources" @retry="load">
+        <p data-test="contact-line">
+          <span class="text-fg-2">{{ COLLECTION.contact }}: </span>
+          <span v-if="collection.data.value.contactName || collection.data.value.contactEmail" data-test="contact">
+            {{ [collection.data.value.contactName, collection.data.value.contactEmail].filter(Boolean).join(', ') }}
+          </span>
+          <span v-else class="inline-flex flex-wrap items-center gap-3">
+            <span class="text-fg-3">{{ COLLECTION.noContact }}</span>
+            <UiButton v-if="canEdit" size="sm" icon="add" data-test="add-contact" @click="editing = true">{{ COLLECTION.addContact }}</UiButton>
+          </span>
+        </p>
+        <SetupChecklist v-if="setup && !setup.done" :setup="setup" />
+        <section v-if="sources.data.value.length" class="grid gap-3" aria-labelledby="collection-overview-sources" data-test="overview-sources">
+          <h2 id="collection-overview-sources" class="text-heading">{{ COLLECTION.sources }}</h2>
           <DataTable :columns="sourceColumns" :rows="sources.data.value" :row-key="(s) => s.id" :caption="COLLECTION.sources" :row-to="sourceTo">
             <template #cell-name="{ row }"><span class="font-medium">{{ row.name }}</span></template>
             <template #cell-type="{ row }">{{ SOURCE_TYPE_LABEL[row.type as SourceSummary['type']] }}</template>
@@ -430,7 +435,69 @@ onMounted(load)
             <template #cell-documents="{ row }"><span class="tabular" :class="quietZero(row.documents)">{{ formatNumber(row.documents) }}</span></template>
             <template #cell-state="{ row }">{{ COLLECTION.sourceStates[row.state] ?? row.state }}</template>
           </DataTable>
-        </AsyncState>
+        </section>
+        <CollectionKeyCard :gateway-key-id="collection.data.value.gatewayKeyId" :department-id="collection.data.value.departmentId" />
+        <!-- Admin §8.6: indexing and evaluation of the last 30 days; this panel is the owning department's (a shared one sees no cost). -->
+        <CostCard
+          kind="collection" :source="collectionCosts" :gateway-key-id="collection.data.value.gatewayKeyId" :department-id="collection.data.value.departmentId"
+          :costs-link="canPublish ? { name: 'costs', query: { departmentId: collection.data.value.departmentId } } : null"
+        />
+        <!-- Admin §8.8: the ratings of the answers that cited its documents, over every assistant; the owning department's only. -->
+        <DocumentFeedbackCard :collection-id="collection.data.value.id" />
+      </div>
+
+      <!-- Content (§5.5.2, §5.5.7): the sources with Add source, then an upload source's file list (a picker with several);
+           when an upload is the only source, the source folded to one line above the file list. -->
+      <div v-else-if="tab === 'content'" id="collection-panel-content" role="tabpanel" aria-labelledby="collection-tab-content" class="grid gap-4">
+        <div v-if="uploadOnly" class="flex flex-wrap items-center gap-3" data-test="upload-only">
+          <span class="min-w-0 flex-1">{{ COLLECTION.uploadOnly(sources.data.value[0]!.name, formatNumber(sources.data.value[0]!.documents)) }}</span>
+          <RouterLink :to="sourceTo(sources.data.value[0]!)" class="text-small text-accent-ink underline">{{ COLLECTION.openSource }}</RouterLink>
+          <UiButton v-if="canEdit" icon="add" data-test="add-source" @click="adding = true">{{ SOURCE.add }}</UiButton>
+        </div>
+        <template v-else>
+          <div v-if="canEdit" class="flex flex-wrap items-center justify-end gap-2">
+            <p v-if="noFilesSource && sources.loaded.value && uploadSources.length === 0" class="mr-auto text-small text-fg-2" data-test="no-files-source">
+              {{ COLLECTION.noFilesSource }}
+            </p>
+            <UiButton
+              v-if="sources.loaded.value && uploadSources.length === 0" icon="upload_file" :loading="addingFiles" data-test="add-files" @click="addFiles"
+            >
+              {{ COLLECTION.addFiles }}
+            </UiButton>
+            <UiButton variant="primary" icon="add" data-test="add-source" @click="adding = true">{{ SOURCE.add }}</UiButton>
+          </div>
+          <InlineError v-if="addFilesError" :message="problemMessage(addFilesError)" />
+          <AsyncState :loading="sources.loading.value" :error="sources.error.value" :empty="sources.data.value.length === 0" :empty-text="COLLECTION.noSources" @retry="load">
+            <DataTable :columns="sourceColumns" :rows="sources.data.value" :row-key="(s) => s.id" :caption="COLLECTION.sources" :row-to="sourceTo">
+              <template #cell-name="{ row }"><span class="font-medium">{{ row.name }}</span></template>
+              <template #cell-type="{ row }">{{ SOURCE_TYPE_LABEL[row.type as SourceSummary['type']] }}</template>
+              <template #cell-lastRun="{ row }">
+                <template v-if="row.lastRun">
+                  <span class="tabular">{{ formatDateTime(row.lastRun.finishedAt ?? row.lastRun.startedAt) }}</span> · {{ RUN_STATE_LABEL[row.lastRun.state] ?? row.lastRun.state }}
+                </template>
+                <span v-else class="text-fg-3">{{ COLLECTION.sourceNoRun }}</span>
+              </template>
+              <template #cell-documents="{ row }"><span class="tabular" :class="quietZero(row.documents)">{{ formatNumber(row.documents) }}</span></template>
+              <template #cell-state="{ row }">{{ COLLECTION.sourceStates[row.state] ?? row.state }}</template>
+            </DataTable>
+          </AsyncState>
+        </template>
+        <template v-if="uploadSources.length">
+          <div v-if="uploadSources.length > 1" class="max-w-sm">
+            <SelectField
+              id="files-source" v-model="fileSourceId" :label="COLLECTION.filesSource" :options="uploadSources.map((s) => ({ value: s.id, label: s.name }))"
+            />
+          </div>
+          <AsyncState
+            :loading="sources.loading.value || (fileSource.loading.value && fileSource.data.value?.id !== fileSourceId)" :error="fileSource.error.value"
+            @retry="loadFileSource"
+          >
+            <FilesPanel
+              v-if="fileSource.data.value && fileSource.data.value.id === fileSourceId" :key="fileSource.data.value.id" :source="fileSource.data.value"
+              :can-edit="canEdit" topics-link :used-by="usedBy" @topics="tab = 'topics'"
+            />
+          </AsyncState>
+        </template>
       </div>
 
       <div v-else-if="tab === 'topics'" id="collection-panel-topics" role="tabpanel" aria-labelledby="collection-tab-topics">
@@ -441,15 +508,16 @@ onMounted(load)
         <CollectionSharing :collection="collection.data.value" :can-manage="canPublish" @saved="sharingSaved" @dirty="unsaved.sharing = $event" />
       </div>
 
-      <div v-else-if="tab === 'evaluation'" id="collection-panel-evaluation" role="tabpanel" aria-labelledby="collection-tab-evaluation">
+      <!-- Quality (§5.5.2, §7.1): the test questions and the latest evaluation, then the search settings under Tune the search. -->
+      <div v-else-if="tab === 'quality'" id="collection-panel-quality" role="tabpanel" aria-labelledby="collection-tab-quality" class="grid gap-8">
         <EvaluationTab :collection-id="collection.data.value.id" :can-edit="canEdit" @use-proposal="useProposal" />
-      </div>
-
-      <div v-else-if="tab === 'retrieval'" id="collection-panel-retrieval" role="tabpanel" aria-labelledby="collection-tab-retrieval">
-        <RetrievalSettingsForm
-          :collection="collection.data.value" :can-edit="canEdit" :proposal="proposal" @saved="retrievalSaved" @tried="tab = 'evaluation'"
-          @dirty="unsaved.search = $event"
-        />
+        <section id="collection-tune" aria-labelledby="collection-tune-title" class="grid gap-4" data-test="tune-search">
+          <h2 id="collection-tune-title" class="text-heading">{{ COLLECTION.tuneSearch }}</h2>
+          <RetrievalSettingsForm
+            :collection="collection.data.value" :can-edit="canEdit" :proposal="proposal" @saved="retrievalSaved" @tried="tried"
+            @dirty="unsaved.search = $event"
+          />
+        </section>
       </div>
 
       <div v-else id="collection-panel-documents" role="tabpanel" aria-labelledby="collection-tab-documents">
