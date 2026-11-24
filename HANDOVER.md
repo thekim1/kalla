@@ -2,11 +2,11 @@
 
 State of the Källa work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`).
 **Last release `v0.10.0`** (2026-11-23, tag at `5a74afb8`, on Fors `v0.13.0`): P2 wave 1. **`main` has unreleased code
-since the tag:** six stream-b items built on the user's machine in session 57 (*State*). The user's VM runs 0.5.0.
-Three machines have worked on it: `~/research/rag` (the user's, sessions 49 to 55 and 57), `~/git/ume-rag-platform`
-(the user's WSL machine, session 56) and `thekim1`'s (stream b, stream a, the releases, and a coordinating session
-that writes proposals). Several sessions post as `ume-nichlas` at the same hour: look before you write. *Start
-here* says what does not travel between machines. Branch `main`, remote `origin` =
+since the tag:** six stream-b items built on the user's machine in session 57, and the UX pass's first steps (*State*).
+The user's VM runs 0.5.0. Three machines have worked on it: `~/research/rag` (the user's, sessions 49 to 55 and 57),
+`~/git/ume-rag-platform` (the user's WSL machine, session 56) and `thekim1`'s (stream b, stream a, the releases, and a
+coordinating session that writes proposals). Several sessions post as `ume-nichlas` at the same hour: look before you
+write. *Start here* says what does not travel between machines. Branch `main`, remote `origin` =
 https://github.com/thekim1/kalla.
 
 ## What this is
@@ -68,52 +68,60 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
   its pull request what you are about to write; review its pull requests as comments (claims checked against the code).
 - **A decision for the user is asked as four alternatives with one recommendation** (the question tool).
 
-**Open when this was written** (2026-11-24, about 06:30 UTC): `thekim1`'s stacked UX-pass pull requests #1032
-(B-76, on `main`), #1033 (B-82, on #1032's branch) and #1035 (B-77, on #1033's), none reviewed yet; Dependabot's
-#958; and the main session's own pull request with this file, the handbook's lessons and the design deviations of
-session 57's six items. `thekim1` merged #1024, #1025, #1027 and #1029 overnight. In order:
+**Open when this was written** (2026-11-24, about 07:00 UTC): `thekim1`'s stacked UX-pass pull requests #1032
+(B-76, on `main`), #1033 (B-82, on #1032's branch) and #1035 (B-77, on #1033's), each **reviewed as a comment with
+points to fix before it merges**; Dependabot's #958. Nothing of the main session's is open. In order:
 
-1. **Review the stack #1032, #1033, #1035** (as comments; claims checked in the code). Mind the handbook's lesson
-   on stacked pull requests: merging the base with `--delete-branch` closes the one on top. **#1029 (B-75 part 2,
-   the names of admin §5.7) was merged without a review**: it renamed tabs, buttons and filters, and the browser
-   tests don't run on pull requests, so grep `tests/e2e/specs/` and `docs/` for every old name before the next
-   release (or run `e2e.yml` once with the runners idle). #1027 took all nine review points; the not-scanned
-   docs hand-off is #1030.
-2. **Session 57's design deviations are in this file's pull request** (admin §5.5.7, §8.6, §8.7, §8.8, §5.5.1;
-   chat §9.10, §12.2, §17, §18.9; data-model §8). Two things in it are still to build, neither queued yet:
-   **the chat stage metrics of chat §17** (`rag.chat.stage.duration`, `rag.chat.ttft`, `rag.chat.overhead` were
-   never emitted; B-72 takes its own timestamps), and **a filter for files not scanned for malware** in the file
-   list (the row mark is gone with #1027).
-3. **B-83's hand-off, stream a's:** `e2e.yml` runs only the `pilot` and `accessibility` projects; the new `upload`
+1. **Follow the stack #1032 → #1033 → #1035.** The reviews (comments of 2026-11-24 on each) ask, before merging:
+   **#1032** focus back on the ⋯ button after a dialog opened from the menu closes (`ModalDialog` takes the removed
+   menu item as its opener), and row menus not clipped by `DataTable`'s `overflow-hidden` (*Restore* on the bottom
+   rows of *Versions*); **#1033** fresh warnings in the Publish dialog (it shows the draft's warnings from the last
+   draft save, so a contact added through *Edit name and contact* still blocks *Publish* until a reload); **#1035**
+   publishing with unsaved draft edits drops them without asking (and a header action does the same to a knowledge
+   base's unsaved sharing or search settings), and the leave guard misses *Copy*, a `?tab=` link and *Try without
+   saving*. Re-review each fix against its comment. Merging #1032 with `--delete-branch` closes #1033 (handbook,
+   *Stacked pull requests*); after each merge the next one wants a rebase on `main`.
+2. **#1036, #1029's follow-ups** (reviewed after its merge; no browser spec broke, no `docs/` page names an old
+   text): "N own · M shared" on Organisation reads "0 own · 3 shared" when every knowledge base is shared. The main
+   session proposed own = everything the department owns, shared = how many of those reach other departments
+   ("3 own · 3 shared"); **write that into admin §5.7** unless `thekim1` objects on #1036. Also the search field's
+   accessible name (WCAG 2.5.3), the raw `<input>` without `TextField`'s password-manager attributes, and a
+   clock-independent test of the greeting.
+3. **Not queued yet, decide and queue** (design is on `main`): **the chat stage metrics of chat §17**
+   (`rag.chat.stage.duration`, `rag.chat.ttft`, `rag.chat.overhead`, marked not built; B-72 takes its own
+   timestamps), and **a filter for files not scanned for malware** in the file list (the row mark is gone since
+   #1027).
+4. **B-83's hand-off, stream a's:** `e2e.yml` runs only the `pilot` and `accessibility` projects; the new `upload`
    project (`tests/e2e/specs/upload.spec.ts`) runs by hand. Add it to the workflow, or decide it stays by hand.
-4. **A paused upload source on 0.10.0** (said on #1024): 0.10.0 shipped *Pause* on upload sources, and
+5. **A paused upload source on 0.10.0** (said on #1024): 0.10.0 shipped *Pause* on upload sources, and
    `POST /api/upload-batches/{id}/commit` still takes a batch for a paused one, whose sync job the worker drops.
    #1024 stops new pauses and keeps *Resume*; refusing the commit with `source_paused` is open.
-5. **The cards of session 57 and the UX pass:** B-78 moves *Content gaps* to the assistant's *Quality* tab and the
+6. **Before the next release, run `e2e.yml` once with the runners idle:** B-74, B-75 and the stack change many
+   names and buttons; the specs were updated by hand and run locally by `thekim1`, not in CI.
+7. **The cards of session 57 and the UX pass:** B-78 moves *Content gaps* to the assistant's *Quality* tab and the
    *Cost* card's outcome tables to *Usage*; B-79 places *Feedback on documents* on the new Overview. The new cards
-   print their counts without `quietZero` (#1027's rule 8): whoever lands second adds it. On the *Cost* card a cost
-   below 0.00005 US$ reads "0,00 US$" (the existing `formatUsdCost`).
-6. **#981's follow-ups** (on #981, for #980) and **#978's smaller points** (its review) are as handover 57 left
-   them: `TestQuestionDrawer.vue`'s hand-rolled debounce, `AssistantTestsTab`'s fixed poll, `RunView` and
-   `PublicationView` not reloading on a `props.id` change; weak tests for the key item on a knowledge base.
-7. **#958, the parser's bumps:** `LICENSES.md` has to be regenerated on the branch; stream a's. Best taken with
+   print their counts without `quietZero` (B-75's rule 8): whoever touches them next adds it. On the *Cost* card a
+   cost below 0.00005 US$ reads "0,00 US$" (the existing `formatUsdCost`).
+8. **#981's follow-ups** (on #981, for #980) and **#978's smaller points** (its review): `TestQuestionDrawer.vue`'s
+   hand-rolled debounce, `AssistantTestsTab`'s fixed poll, `RunView` and `PublicationView` not reloading on a
+   `props.id` change; weak tests for the key item on a knowledge base.
+9. **#958, the parser's bumps:** `LICENSES.md` has to be regenerated on the branch; stream a's. Best taken with
    **opencv 5.1 from 2026-11-25** (*Watch*): try `opencv-python-headless` 5.1.0.95 once the parser's uv cutoff lets
    it in; it may retire the FFmpeg exceptions before 2026-12-17.
-8. **The docs issues, stream a's:** #992 (instructions that fail: `KALLA_OTEL_ENDPOINT` does not exist, it is
-   `FORS_OTEL_ENDPOINT`; `deployment/rag-*`; the runbook's Portainer backup list), #993 (stale facts), #994 (project
-   vocabulary in operator pages), #995 (gaps: **Portainer backup and restore with a drill**, the nightly answer
-   run, *Needs attention*, a new department, key expiry, an upgrade from 0.9.x), #1030 (the not-scanned mark) and
-   #1028 (B-75's platform pages: Settings groups, Models tabs, *Apps and keys*, in `src/admin-ui/src/platform/**`).
-9. **The Audit** was red on 0.9.2's images (#1009); #1010's fixes are in 0.10.0. Look at the first nightly run
-   after the release: green closes #1009.
-10. **#925's steps 2 to 4** (personal-data verdicts, *reject*, the false-positive summary): the Decisions entry and
+10. **The docs and platform issues, stream a's:** #992 (instructions that fail: `KALLA_OTEL_ENDPOINT` does not
+    exist, it is `FORS_OTEL_ENDPOINT`; `deployment/rag-*`; the runbook's Portainer backup list), #993 (stale facts),
+    #994 (project vocabulary in operator pages), #995 (gaps: **Portainer backup and restore with a drill**, the
+    nightly answer run, *Needs attention*, a new department, key expiry, an upgrade from 0.9.x), #1030 (the
+    not-scanned mark), #1028 (B-75's platform pages) and #1034 (B-77's save bar on the Settings sections).
+11. **The Audit** was red on 0.9.2's images (#1009); #1010's fixes are in 0.10.0. The first nightly run after the
+    release had not run yet: green closes #1009.
+12. **#925's steps 2 to 4** (personal-data verdicts, *reject*, the false-positive summary): the Decisions entry and
     the design changes are `thekim1`'s session's (said on #925). Step 1 is B-63 (#963, merged).
-11. **The VM's upgrade is `thekim1`'s** (#920): 0.5.0 straight to the current release. No report yet.
-12. **Repository variables:** the workflows read `vars.KALLA_TEST_HOST_RUNNER`, `vars.KALLA_TEST_HOST_DEPLOY_ENV`,
+13. **The VM's upgrade is `thekim1`'s** (#920): 0.5.0 straight to the current release. No report yet.
+14. **Repository variables:** the workflows read `vars.KALLA_TEST_HOST_RUNNER`, `vars.KALLA_TEST_HOST_DEPLOY_ENV`,
     `vars.KALLA_R1_*` and `secrets.KALLA_R1_API_KEY`, and none exist; `thekim1` was asked on #905 (2026-11-21), no
     answer yet.
-13. **#1015** (the release's merge hold) is still open though `v0.10.0` is tagged and published: `thekim1`'s to
-    close.
+15. **#1015** (the release's merge hold) is still open though `v0.10.0` is published: `thekim1`'s to close.
 
 ### Waiting on the user
 
@@ -161,7 +169,7 @@ session 57's six items. `thekim1` merged #1024, #1025, #1027 and #1029 overnight
   content (#884), so a test that queues a command for a deleted source can lose its lease (#897).
 - **The demo seed's slug in a test:** `openwebui.spec.ts` leaves out the assistant named `demo-assistent` (#882).
 
-## What session 57 did (2026-11-23)
+## What session 57 did (2026-11-23 and 24)
 
 On `~/research/rag` (the user's machine), as the main session, while `thekim1`'s machine released 0.10.0. Session
 56's work is in this file's history.
@@ -180,9 +188,14 @@ On `~/research/rag` (the user's machine), as the main session, while `thekim1`'s
   points, each checked in the files).
 - **Kept off the release:** nothing of this went to `main` between #1015's hold and the tag; #1018's `Verify` run
   was cancelled while the dry run ran and ran again after it.
-- **This file's pull request:** the design deviations of the six items, the handbook's lessons (a force push is
-  stopped; a table-adding stream-b item needs a `main-session/` branch; stacking on an unmerged branch; agents for a
-  lane and for browser checks; port 5174) and this handover.
+- **#1031:** the design deviations of the six items (admin §5.5.7, §8.1, §8.6, §8.7, §8.8, §5.5.1, §4.5; chat
+  §9.10, §12.2, §17, §18.9; data-model §8), the handbook's lessons (a force push is stopped; a table-adding stream-b
+  item needs a `main-session/` branch; stacking on an unmerged branch; agents for a lane and for browser checks;
+  port 5174) and the roadmap. Approved on the user's word and merged.
+- **After the overnight merges (2026-11-24 morning):** #1029 reviewed after its merge, follow-ups filed as #1036;
+  the stack #1032, #1033, #1035 reviewed as comments (a review agent, the main points checked in the files).
+- **The session's model** went from Fable to Opus 5.5 when Fable's usage limit was reached (2026-11-24); a resumed
+  agent keeps the model it started on, so a stopped agent had to be started again.
 
 ## Known gaps, documented, not fixed
 
@@ -269,12 +282,13 @@ On `~/research/rag` (the user's machine), as the main session, while `thekim1`'s
   `DocumentDailyFeedback`): cost per outcome on the *Cost* card (B-61), the content-gap report (B-62), downvotes per
   document with its attention item (B-66), `kalla.progress` and `kalla.timings` (B-72), `topics` on related documents
   and `kalla.nearest` (B-73), an upload with a known name replaces the file (B-83).
-- **Queues:** stream a: the live block (A-L1 to A-L10), A-34 and A-35 with only their live checks open, and its
-  issues (*Start here*, 3, 7 and 8, and #974, #987). Stream b: the UX pass, in `thekim1`'s hands (B-74 and B-75 merged;
-  B-76 #1032, B-82 #1033 and B-77 #1035 open; then B-78, B-79, B-80, B-81; B-78 and B-79 no longer wait on anything
-  of session 57's), B-64 and B-65 (the topics editor), B-67 to B-69 (P2 wave 2), B-71, B-42 to B-46 (the gateway
-  phases' live checks) and its live items. An item someone has started says **Taken** in the queue. Main: M-4.
-- **Open issues that matter:** #992 to #995, #1028 and #1030 (the docs and the platform pages, stream a's), #1009
+- **Queues:** stream a: the live block (A-L1 to A-L10), A-34 and A-35 with only their live checks open, and its issues
+  (*Start here*, 3, 7 and 8, and #974, #987). Stream b: the UX pass, in `thekim1`'s hands (B-74 and B-75 merged; B-76
+  #1032, B-82 #1033 and B-77 #1035 open, reviewed; then B-78, B-79, B-80, B-81; B-78 and B-79 no longer wait on anything
+  of session 57's), B-64 and B-65 (the topics editor), B-67 to B-69 (P2 wave 2), B-71, B-42 to B-46 (the gateway phases'
+  live checks) and its live items. An item someone has started says **Taken** in the queue. Main: M-4.
+- **Open issues that matter:** #1036 (B-75's follow-ups, stream b), #992 to #995, #1028, #1030 and #1034 (the docs
+  and the platform pages, stream a's), #1009
   (the Audit), #987 (the grading script), #980 (code quality's tracker), #974 (code
   quality, stream a's part), #781 and #921 (watch), #920 (the VM's upgrade, `thekim1`'s), #929 (topics; closes with
   B-65), #667 (M-16's issue: the work is done, `thekim1`'s to close), #1015, #333, #511, #580 and #550. In Fors: no
