@@ -65,6 +65,18 @@ describe('SaveBar (admin design §5.12 rule 7, Saving)', () => {
     wrapper.unmount()
   })
 
+  it('pads the scroll by what it covers on a phone: its height and the bottom menu under it', async () => {
+    const wrapper = mount(SaveBar, { props: { changes: 0 }, attachTo: document.body })
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(120)
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      top: window.innerHeight - 184, bottom: window.innerHeight - 64, left: 0, right: 390, width: 390, height: 120, x: 0, y: window.innerHeight - 184, toJSON: () => ({}),
+    })
+    await wrapper.setProps({ changes: 1 })
+    await flushPromises()
+    expect(document.documentElement.style.scrollPaddingBottom).toBe('184px')
+    wrapper.unmount()
+  })
+
   it('scrolls the field being edited clear of it when it appears over that field', async () => {
     const changes = ref(0)
     const Form = defineComponent({ setup: () => () => h('form', [h('textarea', { id: 'prompt' }), h(SaveBar, { changes: changes.value })]) })
