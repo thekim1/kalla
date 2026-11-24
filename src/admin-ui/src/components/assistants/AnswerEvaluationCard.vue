@@ -8,7 +8,7 @@ import { useLoadable } from '@/stores/loadable'
 import { formatDate, formatNumber, quietZero, formatRatio } from '@/utils/format'
 import { ANSWER_EVALUATION as L } from '@/utils/labels'
 
-// The Statistics tab's latest answer evaluation (admin design §5.5.4, processing §14.8; B-58): faithfulness and citation
+// The Quality tab's latest answer evaluation (admin design §5.5.4, processing §14.8; B-58): faithfulness and citation
 // precision of the last finished nightly run with its counts, the run it compares with, and the live rate of answers without a
 // citation. While the run is switched off (Settings, Evaluation) the card says so and keeps the last run's figures.
 const props = defineProps<{ assistantId: string }>()

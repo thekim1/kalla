@@ -140,6 +140,12 @@ describe('MenuButton (admin design §5.12 rule 1 and its accessibility table)', 
     await flushPromises()
     const style = (openMenu().element as HTMLElement).style
     expect([style.top, style.bottom]).toEqual(['', '44px'])
+
+    // A scroll moves the button: the menu stays open and follows it.
+    button.getBoundingClientRect = () => rect(200)
+    window.dispatchEvent(new Event('scroll'))
+    await flushPromises()
+    expect((openMenu().element as HTMLElement).style.top).toBe('236px')
     wrapper.unmount()
   })
 

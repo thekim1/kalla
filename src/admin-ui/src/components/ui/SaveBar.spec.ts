@@ -65,6 +65,67 @@ describe('SaveBar (admin design §5.12 rule 7, Saving)', () => {
     wrapper.unmount()
   })
 
+  /** The bar's computed position: `fixed` on a phone, `sticky` wider (no stylesheet in jsdom). */
+  function position(value: 'fixed' | 'sticky'): void {
+    const real = window.getComputedStyle.bind(window)
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((el, pseudo) => ({ ...real(el, pseudo), position: value }) as CSSStyleDeclaration)
+  }
+
+  it('pads the scroll by what it covers on a phone: its height and the bottom menu under it', async () => {
+    position('fixed')
+    const wrapper = mount(SaveBar, { props: { changes: 0 }, attachTo: document.body })
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(120)
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      top: window.innerHeight - 184, bottom: window.innerHeight - 64, left: 0, right: 390, width: 390, height: 120, x: 0, y: window.innerHeight - 184, toJSON: () => ({}),
+    })
+    await wrapper.setProps({ changes: 1 })
+    await flushPromises()
+    expect(document.documentElement.style.scrollPaddingBottom).toBe('184px')
+    wrapper.unmount()
+  })
+
+  it('pads the scroll by its own height on a wider screen, where it is sticky and may sit mid-window at the form\'s end', async () => {
+    position('sticky')
+    const wrapper = mount(SaveBar, { props: { changes: 0 }, attachTo: document.body })
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(72)
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      top: 500, bottom: 572, left: 0, right: 680, width: 680, height: 72, x: 0, y: 500, toJSON: () => ({}),
+    })
+    await wrapper.setProps({ changes: 1 })
+    await flushPromises()
+    expect(document.documentElement.style.scrollPaddingBottom).toBe('72px') // not innerHeight - 500
+    wrapper.unmount()
+  })
+
+  it('pads the scroll by the phone\'s strip while nothing is unsaved, so a focused field is not hidden behind it', async () => {
+    position('fixed')
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(68)
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      top: window.innerHeight - 132, bottom: window.innerHeight - 64, left: 0, right: 390, width: 390, height: 68, x: 0, y: window.innerHeight - 132, toJSON: () => ({}),
+    })
+    const wrapper = mount(SaveBar, { props: { changes: 0 }, slots: { phone: '<button>Try the draft</button>' }, attachTo: document.body })
+    await flushPromises()
+    expect(document.documentElement.style.scrollPaddingBottom).toBe('132px')
+    wrapper.unmount()
+    expect(document.documentElement.style.scrollPaddingBottom).toBe('')
+  })
+
+  it('scrolls the field being edited clear of it when it appears over that field', async () => {
+    const changes = ref(0)
+    const Form = defineComponent({ setup: () => () => h('form', [h('textarea', { id: 'prompt' }), h(SaveBar, { changes: changes.value })]) })
+    const wrapper = mount(Form, { attachTo: document.body })
+    const field = wrapper.get('#prompt').element as HTMLTextAreaElement
+    field.focus()
+    const scroll = vi.fn()
+    field.scrollIntoView = scroll
+    field.getBoundingClientRect = () => ({ top: 500, bottom: 700, left: 0, right: 300, width: 300, height: 200, x: 0, y: 500, toJSON: () => ({}) })
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ top: 600, bottom: 680, left: 0, right: 300, width: 300, height: 80, x: 0, y: 600, toJSON: () => ({}) })
+    changes.value = 1
+    await flushPromises()
+    expect(scroll).toHaveBeenCalledWith({ block: 'nearest' })
+    wrapper.unmount()
+  })
+
   it('keeps a spacer of its height under the form while it shows, for the phone where it is fixed', async () => {
     const wrapper = mount(SaveBar, { props: { changes: 0 }, attachTo: document.body })
     vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(120)
@@ -74,6 +135,20 @@ describe('SaveBar (admin design §5.12 rule 7, Saving)', () => {
     const spacer = wrapper.get('[data-test=save-bar-spacer]')
     expect(spacer.attributes('style')).toContain('height: 120px')
     expect(spacer.classes()).toContain('md:hidden')
+    wrapper.unmount()
+  })
+
+  it('holds the page\'s phone action: on its own while nothing is unsaved (not the Unsaved changes region), beside the buttons after', async () => {
+    const wrapper = mount(SaveBar, { props: { changes: 0 }, slots: { phone: '<button data-test="try">Try the draft</button>' }, attachTo: document.body })
+    expect(wrapper.find('[data-test=save-bar]').exists()).toBe(false)
+    const idle = wrapper.get('[data-test=save-bar-phone]')
+    expect(idle.classes()).toContain('md:hidden')
+    expect(idle.find('[data-test=try]').exists()).toBe(true)
+    expect(wrapper.get('[data-test=save-bar-spacer]').attributes('style')).toContain('height: 68px')
+    await wrapper.setProps({ changes: 1 })
+    await flushPromises()
+    expect(wrapper.find('[data-test=save-bar-phone]').exists()).toBe(false)
+    expect(wrapper.get('[data-test=save-bar] [data-test=try]').element.parentElement?.className).toContain('md:hidden')
     wrapper.unmount()
   })
 

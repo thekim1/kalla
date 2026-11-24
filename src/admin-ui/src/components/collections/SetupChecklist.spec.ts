@@ -37,13 +37,13 @@ describe('Get started: the last step (admin design §5.4)', () => {
     expect(mountWith(true, setupOf({ available: true })).get('[data-test=step-available]').attributes('data-state')).toBe('done')
   })
 
-  it('without Open WebUI names an app with a key, opens the Audience tab, and is done once an app offers the assistant', () => {
+  it('without Open WebUI names an app with a key, opens the Access tab, and is done once an app offers the assistant', () => {
     const wrapper = mountWith(false, setupOf())
     const step = wrapper.get('[data-test=step-available]')
     expect(step.text()).toContain(SETUP.steps.availableApp)
     expect(wrapper.text()).not.toContain('Open WebUI')
     expect(step.attributes('data-state')).toBe('todo')
-    expect(target(wrapper)).toEqual({ name: 'assistant', params: { id: 'a1' }, query: { tab: 'audience' } })
+    expect(target(wrapper)).toEqual({ name: 'assistant', params: { id: 'a1' }, query: { tab: 'access' } })
 
     expect(mountWith(false, setupOf({ available: true })).get('[data-test=step-available]').attributes('data-state')).toBe('done')
     // No assistant yet: the step opens the assistants list, as the assistant steps do.

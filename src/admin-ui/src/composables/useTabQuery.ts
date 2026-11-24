@@ -7,10 +7,11 @@ import { useRoute, useRouter } from 'vue-router'
  * another tab of the same page). The first tab is the default and leaves no `tab` in the query; an unknown value
  * opens it.
  */
-export function useTabQuery<T extends string>(tabs: readonly [T, ...T[]]): Ref<T> {
+export function useTabQuery<T extends string>(tabs: readonly [T, ...T[]], aliases: Record<string, T> = {}): Ref<T> {
   const route = useRoute()
   const router = useRouter()
-  const parse = (value: unknown): T => (tabs.includes(value as T) ? (value as T) : tabs[0])
+  // A renamed tab's old value (a bookmark, an old link) opens the tab it became.
+  const parse = (value: unknown): T => (tabs.includes(value as T) ? (value as T) : (aliases[String(value)] ?? tabs[0]))
   const tab = ref(parse(route?.query.tab)) as Ref<T>
 
   watch(tab, (t) => {

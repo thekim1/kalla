@@ -8,7 +8,7 @@ import UiTabs from '@/components/ui/UiTabs.vue'
 import { formatNumber } from '@/utils/format'
 import { ASSISTANT, LEVEL_LABEL } from '@/utils/labels'
 
-// Knowledge on the Draft tab (admin design §5.5.4): each link shows the knowledge base, its owning department when it is
+// Knowledge on the Build tab (admin design §5.5.4): each link shows the knowledge base, its owning department when it is
 // shared, and its topics (chips and a field labelled "Limit to topics (empty: all topics)"; read-only, "All topics" when
 // there are none); Add knowledge base opens a picker with Ours, Shared with us and All, showing level, document count and
 // topics. "Ours" is the assistant's own department.

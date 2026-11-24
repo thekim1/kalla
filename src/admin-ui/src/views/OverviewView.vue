@@ -22,7 +22,7 @@ import { readStoredIds, writeStoredIds } from '@/utils/storedIds'
 // wizard that expires within 30 days (§5.11) and the deployment notices (retired variables the stack still sets), each hideable in
 // this browser; the platform's first-run step for a platform admin, the
 // embedding profile, until it exists (Decisions "Deploy configuration"); Live, a card per published assistant over the
-// last 7 days linking to its Statistics tab; Health, the runs of the last 24 hours per department, the job queue and the
+// last 7 days linking to its Usage tab; Health, the runs of the last 24 hours per department, the job queue and the
 // organisation and model syncs; Get started, the empty state with Create knowledge base or a checklist per collection not
 // done (folded when its knowledge base is published, each hideable in this browser); and the signed-in user's roles and
 // departments with where each came from (identity design §1.5, P0 checklist #9). The attention items join in P2.
@@ -113,7 +113,7 @@ function showHidden(): void {
       <ul class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <li v-for="a in live" :key="a.assistantId">
           <RouterLink
-            :to="{ name: 'assistant', params: { id: a.assistantId }, query: { tab: 'statistics' } }"
+            :to="{ name: 'assistant', params: { id: a.assistantId }, query: { tab: 'usage' } }"
             class="block h-full rounded-control bg-sunken p-4 hover:bg-hover"
             data-test="live-card"
           >

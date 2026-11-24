@@ -24,7 +24,8 @@ export interface MenuItem {
  * components).
  *
  * The open menu is teleported to the body with fixed coordinates, so a table's or card's overflow (and a glass theme's
- * backdrop filter, which makes a containing block) cannot clip it; it opens upwards when there is no room below.
+ * backdrop filter, which makes a containing block) cannot clip it; it opens upwards when there is no room below and
+ * follows the button when the page scrolls or the window resizes.
  * Choosing an item focuses the ⋯ button before `select` is emitted, so a dialog the parent opens takes the button as
  * its opener and returns focus there when it closes. Disabled items stay focusable, as APG keeps them.
  */
@@ -113,10 +114,11 @@ function onDocumentClick(e: MouseEvent): void {
   if (!menu.value?.contains(target) && !button.value?.contains(target)) close(false)
 }
 
+/** A scroll or resize moves the button: the open menu follows it (closing would drop a click already on its way). */
 function onViewportChange(e: Event): void {
   if (!open.value || phone.value) return
-  if (e.type === 'scroll' && menu.value?.contains(e.target as Node)) return
-  close(false)
+  if (e.type === 'scroll' && e.target instanceof Node && menu.value?.contains(e.target)) return
+  place()
 }
 
 onMounted(() => {

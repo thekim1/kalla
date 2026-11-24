@@ -132,6 +132,30 @@ test('the save bar passes axe, and a focused field is never hidden behind it (ad
   }
 })
 
+test('the assistant page passes axe on each of its five tabs, and the test as a sheet on a phone (admin design §5.5.4, B-78)', async ({ page }) => {
+  await login(page, 'rag-department-admin')
+  const assistant = ((await getJson(page, '/api/assistants')).items ?? [])[0]
+  test.skip(!assistant, 'needs an assistant (the pilot journey makes one)')
+  await page.setViewportSize({ width: 1280, height: 900 })
+  for (const tab of ['Build', 'Quality', 'Versions', 'Access', 'Usage']) {
+    await ready(page, `/assistants/${assistant.id}${tab === 'Build' ? '' : `?tab=${tab.toLowerCase()}`}`)
+    await expect(page.getByRole('tab', { name: tab, exact: true })).toHaveAttribute('aria-selected', 'true')
+    await page.waitForLoadState('networkidle')
+    await scan(page, `the assistant's ${tab} tab`)
+  }
+  // Build at 1,280 px: the test panel beside the draft; on a phone, Try the draft opens it as a sheet.
+  await ready(page, `/assistants/${assistant.id}`)
+  await expect(page.getByRole('textbox', { name: 'Question' })).toBeVisible()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(page.getByRole('textbox', { name: 'Question' })).toBeHidden()
+  await page.getByRole('button', { name: 'Try the draft' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Try the draft' })
+  await expect(sheet.getByRole('textbox', { name: 'Question' })).toBeVisible()
+  await scan(page, 'the test sheet at 390px')
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('button', { name: 'Try the draft' })).toBeFocused()
+})
+
 test('all pages reflow at 320px and at 200 percent text size', async ({ page }) => {
   await login(page, 'rag-platform-admin')
   const pages = await allPages(page)

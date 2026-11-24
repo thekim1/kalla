@@ -1694,7 +1694,7 @@ export const VERSION_DIFF = {
 } as const
 
 /** An assistant's test questions and their report (admin design §7.2, §7.4; B-57). */
-/** The Statistics tab's latest answer evaluation (admin design §5.5.4, processing §14.8; B-58). */
+/** The Quality tab's latest answer evaluation (admin design §5.5.4, processing §14.8; B-58). */
 export const ANSWER_EVALUATION = {
   title: 'Answer evaluation',
   lead: 'Each night the published version answers test questions of its knowledge bases, and a judge checks the answers against the sources they cite.',
@@ -1831,7 +1831,16 @@ export const ASSISTANTS = {
 } as const
 
 export const ASSISTANT = {
-  tabs: { draft: 'Draft', test: 'Test', testQuestions: 'Test questions', versions: 'Versions', audience: 'Audience', storage: 'Storage', statistics: 'Statistics' },
+  /** The five tabs (admin design §5.5.4, UX pass UX3 C), each named in `?tab=`. */
+  tabs: { build: 'Build', quality: 'Quality', versions: 'Versions', access: 'Access', usage: 'Usage' },
+  /** The test panel beside the draft; folded under it below 1,280 px and a sheet on a phone (§5.5.4 *Build*). */
+  testPanelTitle: 'Test',
+  testsSavedDraft: 'Tests the saved draft. Save to try your changes.',
+  answerReady: (outcome: string) => `The answer is ready: ${outcome}.`,
+  tryDraft: 'Try the draft',
+  storageTitle: 'Storage of conversations',
+  /** *Check access*, folded at the end of *Access* as a tool for when something is wrong (§5.5.4). */
+  checkAccessFold: 'Check access: why someone can or cannot use it',
   tabsLabel: 'Parts of the assistant',
   /** On *Access*, with a copy button, not in the page's subtitle (admin design §5.7). */
   modelNameLabel: 'Model name',
@@ -1890,7 +1899,7 @@ export const ASSISTANT = {
   noTopicChoice: 'Choose a topic',
   removeTopic: (topic: string) => `Remove the topic ${topic}`,
   removeCollection: (name: string) => `Remove ${name}`,
-  /** The Draft tab's lead (admin design §5.5.4 Wording, UI4 B): what saving does. */
+  /** The draft form's lead on Build (admin design §5.5.4 Wording, UI4 B): what saving does. */
   draftLead: {
     unpublished: 'Saving keeps a draft; publish it to make the assistant available.',
     published: (n: number) => `Saving starts a draft from version ${n}; version ${n} stays live until you publish.`,
@@ -2429,7 +2438,7 @@ export const FEEDBACK = {
   importAlert: (runs: number) => `The last ${runs} imports failed, so no ratings arrive. Check the Open WebUI address and admin key.`,
 } as const
 
-/** Explain access on the assistant's Audience tab (admin design §4.5, identity design §4.9). */
+/** Explain access (Check access) on the assistant's Access tab (admin design §4.5, identity design §4.9). */
 export const EXPLAIN = {
   title: 'Check access',
   lead: 'Why a person or an application can or cannot use this assistant through a client. Nothing is opened or logged as access.',
@@ -2482,6 +2491,17 @@ export const UNSAVED = {
   /** The assistant keeps a tab's changes while another tab shows. */
   switchTabKept: 'You have unsaved changes on this tab. Switch anyway? They stay here until you save or discard them.',
   publishFirst: 'Save or discard the draft\'s changes before you publish.',
+} as const
+
+/** The assistant's *Usage* tab (admin design §5.5.4): the last use and a period's questions, not found and ratings. */
+export const USAGE = {
+  title: 'Use',
+  lastUsed: (date: string) => `Last used ${date}.`,
+  neverUsed: 'Not used yet.',
+  questions: 'Questions',
+  notFound: 'Not found',
+  ratings: 'Ratings',
+  thumbs: (up: string, down: string) => `${up} up · ${down} down`,
 } as const
 
 /** The ⋯ menu of a header or a row (admin design §5.12 rule 1); its name says whose actions they are. */
@@ -2807,7 +2827,7 @@ export const COSTS = {
   filters: 'Cost filters',
 } as const
 
-/** Content gaps (admin design §8.7; Decisions "Content-gap report"): the card on the assistant's Statistics tab. */
+/** Content gaps (admin design §8.7; Decisions "Content-gap report"): the card on the assistant's Quality tab. */
 export const CONTENT_GAPS = {
   card: 'Content gaps',
   caption: 'The documents the unanswered questions came nearest to, most first',

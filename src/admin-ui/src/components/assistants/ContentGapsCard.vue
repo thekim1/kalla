@@ -13,7 +13,7 @@ import { formatNumber, quietZero, formatRatio } from '@/utils/format'
 import { CONTENT_GAPS as L, COSTS } from '@/utils/labels'
 import { CONTENT_GAP_MESSAGES } from '@/utils/messages'
 
-// The Content gaps card of admin design §8.7 (Decisions "Content-gap report") on the assistant's Statistics tab: the share of the
+// The Content gaps card of admin design §8.7 (Decisions "Content-gap report") on the assistant's Quality tab: the share of the
 // period's questions that ended not found or were answered from general knowledge, and the documents those questions came
 // nearest to, most first, with the whole list (at most 200) and its CSV. Counts only: no question, answer or subject.
 const props = defineProps<{ assistantId: string }>()
