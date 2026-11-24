@@ -2412,8 +2412,6 @@ export const FEEDBACK = {
   lead: 'Thumbs up and down from the people using your assistants.',
   noContent: 'Questions, answers and comments are not stored, so only the rating, the reason and the cited documents show here.',
   filters: 'Filter feedback',
-  from: 'From',
-  to: 'To',
   assistant: 'Assistant',
   allAssistants: 'All assistants',
   rating: 'Rating',
@@ -2431,6 +2429,11 @@ export const FEEDBACK = {
     cancelled: 'Cancelled',
   } as Record<string, string>,
   coverage: { ok: 'Covered', low: 'Low coverage', unknown: 'Coverage unknown', skipped: 'No search' } as Record<string, string>,
+  /** §8.1's has-comment filter: whether a comment is stored, never what it says. */
+  comment: 'Comment',
+  anyComment: 'With or without',
+  withComment: 'Has a comment',
+  withoutComment: 'No comment',
   state: 'State',
   allStates: 'All states',
   states: { open: 'Open', reviewed: 'Handled', dismissed: 'Dismissed' } as Record<string, string>,
@@ -2560,7 +2563,6 @@ export const FILTERS = {
   to: 'To',
   remove: (filter: string) => `Remove the ${filter.toLowerCase()} filter`,
   clear: 'Clear filters',
-  any: 'Any',
 } as const
 
 /** The ⋯ menu of a header or a row (admin design §5.12 rule 1); its name says whose actions they are. */
@@ -2813,7 +2815,6 @@ export const COSTS = {
   periods: { '30': 'Last 30 days', '90': 'Last 90 days', '365': 'Last 12 months' } as Record<string, string>,
   granularity: 'Per',
   granularities: { day: 'Day', month: 'Month' } as Record<string, string>,
-  csvGranularity: 'CSV rows per',
   csvMonthOnly: 'Ranges over 400 days download by month.',
   total: 'Total',
   gateway: 'From the AI gateway',
@@ -2870,8 +2871,6 @@ export const COSTS = {
   allDepartments: 'All departments',
   kind: 'Kind',
   kinds: { '': 'Assistants and knowledge bases', assistant: 'Assistants', collection: 'Knowledge bases' } as Record<string, string>,
-  from: 'From',
-  to: 'To',
   object: 'Assistant or knowledge base',
   kindAssistant: 'Assistant',
   kindCollection: 'Knowledge base',

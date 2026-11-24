@@ -17,11 +17,11 @@ import UiButton from '@/components/ui/UiButton.vue'
 import UiDrawer from '@/components/ui/UiDrawer.vue'
 import { useDebouncedWatch } from '@/composables/useDebouncedWatch'
 import { useKeysetList } from '@/composables/useKeysetList'
-import { useQueryFilters } from '@/composables/useQueryFilters'
+import { IS_DAY, ONE_OF, useQueryFilters } from '@/composables/useQueryFilters'
 import { SETTINGS_SECTIONS, type SettingsSectionName } from '@/platform/settingsPage'
 import { actorText, formatDateTime } from '@/utils/format'
 import { AUDIT, AUDIT_EVENTS, AUDIT_OBJECT_TYPES, FILTERS, PAGE, PLATFORM } from '@/utils/labels'
-import { periodRange } from '@/utils/period'
+import { PERIODS, periodRange } from '@/utils/period'
 import { problemMessage } from '@/utils/problem'
 
 // Audit log (admin design §9.1): the audit log newest first by keyset, filtered by period, actor, event, type of object,
@@ -34,7 +34,10 @@ const entries = useKeysetList((after?: number) => api.audit.list({ ...query.valu
 /** `event` is an `AUDIT_EVENTS` key (`entityType.action`); picking one sets the type of object to its type. */
 const { filters, active, clear } = useQueryFilters({
   period: '30d', from: '', to: '', actor: '', entityType: '', event: '', service: '', entityId: '',
+}, {
+  period: ONE_OF(PERIODS), from: IS_DAY, to: IS_DAY, entityType: ONE_OF(Object.keys(AUDIT_OBJECT_TYPES)), event: ONE_OF(Object.keys(AUDIT_EVENTS)),
 })
+const filterRow = ref<HTMLElement | null>(null)
 const range = computed(() => periodRange(filters.period, filters.from, filters.to))
 /** More filters opens itself while one of its filters is set. */
 const moreOpen = ref(!!(filters.event || filters.service || filters.entityId))
@@ -152,11 +155,11 @@ onMounted(() => entries.reload())
   <PageHeader :title="PAGE.audit.title" :description="AUDIT.lead" />
   <!-- One row of chips (admin design §5.12 Filters), kept in the address; Event, Service and the object under More filters. -->
   <form class="mb-6 grid gap-3" role="search" :aria-label="AUDIT.filters" @submit.prevent="entries.reload()">
-    <div class="flex flex-wrap items-center gap-2" data-test="filters">
+    <div ref="filterRow" class="flex flex-wrap items-center gap-2" data-test="filters">
       <PeriodPicker v-model:period="filters.period" v-model:from="filters.from" v-model:to="filters.to" id-prefix="audit" />
       <FilterTextChip v-model="filters.actor" :label="AUDIT.actor" :any="AUDIT.actorHint" />
       <FilterChip v-model="filters.entityType" :label="AUDIT.entityType" :options="typeOptions" :any="AUDIT.any" />
-      <UiButton v-if="active.length" size="sm" variant="quiet" data-test="clear" @click="clear()">{{ FILTERS.clear }}</UiButton>
+      <UiButton v-if="active.length" size="sm" variant="quiet" data-test="clear" @click="clear(filterRow)">{{ FILTERS.clear }}</UiButton>
       <p class="ml-auto text-small text-fg-2" aria-live="polite" data-test="filter-count">
         {{ entries.loaded.value ? AUDIT.shown(entries.items.value.length, !!entries.next.value) : '' }}
       </p>

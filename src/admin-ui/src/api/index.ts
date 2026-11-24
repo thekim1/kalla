@@ -365,7 +365,8 @@ export const api = {
   },
   feedback: {
     list: (query: {
-      from?: string; to?: string; assistantId?: string; rating?: string; outcome?: string; state?: string; documentId?: string; after?: string; limit?: number
+      from?: string; to?: string; assistantId?: string; rating?: string; outcome?: string; hasComment?: boolean; state?: string; documentId?: string
+      after?: string; limit?: number
     }) => http.get<KeysetPage<FeedbackItem>>('/api/feedback', query),
     summary: (query: { from?: string; to?: string; assistantId?: string } = {}) => http.get<FeedbackSummary>('/api/feedback/summary', query),
     setReviewState: (id: string, state: 'open' | 'reviewed' | 'dismissed') =>

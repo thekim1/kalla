@@ -7,7 +7,7 @@ import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import FilterChip from '@/components/ui/FilterChip.vue'
 import UiButton from '@/components/ui/UiButton.vue'
-import { useQueryFilters } from '@/composables/useQueryFilters'
+import { IS_ID, ONE_OF, useQueryFilters } from '@/composables/useQueryFilters'
 import { useLoadable } from '@/stores/loadable'
 import { FILTERS, MAP, PAGE, SHARING_LABEL } from '@/utils/labels'
 
@@ -20,7 +20,8 @@ interface Row extends MapRow {
   department: string
 }
 const departments = ref<Department[]>([])
-const { filters, active, clear } = useQueryFilters({ department: '', show: 'all' })
+const { filters, active, clear } = useQueryFilters({ department: '', show: 'all' }, { department: IS_ID, show: ONE_OF(['all', 'shared', 'unlinked']) })
+const filterRow = ref<HTMLElement | null>(null)
 const maps = useLoadable<DepartmentMap[]>([])
 const departmentOptions = computed(() => departments.value.map((d) => ({ value: d.id, label: d.name })))
 const showOptions = (['shared', 'unlinked'] as Show[]).map((v) => ({ value: v, label: MAP.showOptions[v]! }))
@@ -69,10 +70,10 @@ onMounted(async () => {
 <template>
   <PageHeader :title="PAGE.map.title" :description="MAP.lead" />
   <!-- One row of chips (admin design §5.12 Filters), kept in the address; the count at its end, politely announced. -->
-  <form class="mb-4 flex flex-wrap items-center gap-2" role="search" :aria-label="MAP.filters" data-test="filters" @submit.prevent>
+  <form ref="filterRow" class="mb-4 flex flex-wrap items-center gap-2" role="search" :aria-label="MAP.filters" data-test="filters" @submit.prevent>
     <FilterChip v-if="departments.length > 1" v-model="filters.department" :label="MAP.department" :options="departmentOptions" :any="MAP.allDepartments" />
     <FilterChip v-model="filters.show" :label="MAP.show" :options="showOptions" :any="MAP.showOptions.all!" unset="all" />
-    <UiButton v-if="active.length" size="sm" variant="quiet" data-test="clear-filters" @click="clear()">{{ FILTERS.clear }}</UiButton>
+    <UiButton v-if="active.length" size="sm" variant="quiet" data-test="clear-filters" @click="clear(filterRow)">{{ FILTERS.clear }}</UiButton>
     <p class="ml-auto text-small text-fg-2" aria-live="polite" data-test="filter-count">{{ maps.loaded.value ? MAP.shown(rows.length) : '' }}</p>
   </form>
   <AsyncState :loading="maps.loading.value" :error="maps.error.value" :empty="rows.length === 0" :empty-text="MAP.empty" @retry="load">
