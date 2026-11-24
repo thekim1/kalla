@@ -8,7 +8,8 @@ import UiButton from './UiButton.vue'
  * The save bar (admin design §5.12 rule 7 and *Saving*): "n unsaved changes · Discard · Save changes", with the
  * consequence when there is one. A labelled region that appears with a polite announcement; sticky at the bottom of the
  * page, and on a phone fixed above the bottom menu with 44 px buttons sharing the width. While it shows, the page's
- * scroll-padding-bottom is its height, so a focused field is never hidden behind it, and on a phone a spacer of its
+ * scroll-padding-bottom is its height, so a focused field is never hidden behind it (the field being edited when it
+ * appears is scrolled clear of it too), and on a phone a spacer of its
  * height under the form keeps the end of the page clear of it. Discard asks once. When the bar goes (after a save or a
  * discard) with focus in it, focus returns to the field last edited, not to the body. Built in Källa until Fors takes
  * it (§5.12, Shared components).
@@ -38,6 +39,13 @@ const onFocusIn = (e: FocusEvent) => {
 }
 document.addEventListener('focusin', onFocusIn)
 
+/** The bar appears while a field has focus (the one just edited): when it now covers the field, scroll it clear. */
+function revealFocused(): void {
+  const active = document.activeElement as HTMLElement | null
+  if (!active || active === document.body || !bar.value || bar.value.contains(active)) return
+  if (active.getBoundingClientRect().bottom > bar.value.getBoundingClientRect().top) active.scrollIntoView?.({ block: 'nearest' })
+}
+
 watch(
   () => props.changes > 0,
   async (shown) => {
@@ -45,6 +53,7 @@ watch(
     const focusInBar = !shown && !!bar.value?.contains(document.activeElement)
     await nextTick()
     pad(shown ? (bar.value?.offsetHeight ?? 0) : 0)
+    if (shown) revealFocused()
     if (focusInBar || (!shown && document.activeElement === document.body)) {
       if (lastField?.isConnected) lastField.focus()
     }

@@ -65,6 +65,22 @@ describe('SaveBar (admin design §5.12 rule 7, Saving)', () => {
     wrapper.unmount()
   })
 
+  it('scrolls the field being edited clear of it when it appears over that field', async () => {
+    const changes = ref(0)
+    const Form = defineComponent({ setup: () => () => h('form', [h('textarea', { id: 'prompt' }), h(SaveBar, { changes: changes.value })]) })
+    const wrapper = mount(Form, { attachTo: document.body })
+    const field = wrapper.get('#prompt').element as HTMLTextAreaElement
+    field.focus()
+    const scroll = vi.fn()
+    field.scrollIntoView = scroll
+    field.getBoundingClientRect = () => ({ top: 500, bottom: 700, left: 0, right: 300, width: 300, height: 200, x: 0, y: 500, toJSON: () => ({}) })
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ top: 600, bottom: 680, left: 0, right: 300, width: 300, height: 80, x: 0, y: 600, toJSON: () => ({}) })
+    changes.value = 1
+    await flushPromises()
+    expect(scroll).toHaveBeenCalledWith({ block: 'nearest' })
+    wrapper.unmount()
+  })
+
   it('keeps a spacer of its height under the form while it shows, for the phone where it is fixed', async () => {
     const wrapper = mount(SaveBar, { props: { changes: 0 }, attachTo: document.body })
     vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(120)
