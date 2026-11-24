@@ -390,7 +390,7 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 | `GET /api/collections/{id}/topics` | Read (also a department the collection is shared with) | the tags on the collection's live chunks with document counts; for the owning department also the path rules that set each one (`sourceId`, `sourceName`, `on`, `match`), `rules: null` for a department it is only shared with (path rules are source settings, §3.2); read from `content`, no text. For the owning department, a tag that a published rule sets while the source's `reprocess` sync is queued or running, and which no live chunk carries yet, is listed with `pending: true` and no count (§5.5.2) |
 | `GET /api/collections/{id}/topic-suggestions?sourceId=&under=` | Read, owning department only (404 for a department it is only shared with) | Decisions "Topics editor": per source (or the one named), the sections of its live documents: the first path segment of `Documents.Url` (website) or the first folder of `DisplayName` (upload); with `under=/bygga-bo-och-miljo/` the next level under that one section only. Each: `path`, `documents`, `title` (the live document whose path is the section itself, if crawled), `suggestedTag` (the segment, lower case, cut to the tag format of processing §7) and `coveredBy` (the existing topics whose `path` rules match the section path, through the shared matcher of processing §7). Sections under 5 documents are left out. A grouping query over `content."Documents"` from the source ids in scope (§4.8); no URL or display name is logged |
 | `POST /api/collections/{id}/topic-rules/preview` `{ sourceId, rule }` | EditPipelines, owning department only | one rule of the processing §7 shape against the source's live documents, through the shared matcher: `{ matched, total, sample: [{ documentId, title, url \| displayName }] }` (≤ 10). `title-regex` matches the stored title; `mediaType` the document's type. Validation as V24 for the one rule (an invalid regex is 400). Nothing is saved |
-| `GET /api/collections/{id}/feedback` `?from=&to=` (+ `&format=csv`) | Read, owning department only | Decisions "Downvotes per document": per document of the collection, most downvotes first, at most 200: `documentId`, `title` (a deleted one "(deleted)"), `thumbsDown`, `thumbsUp`, `assistants` (how many assistants' rated answers cited it); summed from `chat."DocumentDailyFeedback"` over every assistant (§8.8) |
+| `GET /api/collections/{id}/feedback` `?from=&to=` (+ `&format=csv`) | Read, owning department only | Decisions "Downvotes per document": per document of the collection, most downvotes first, at most 200 (the CSV as well): `documentId`, `title` (null for a deleted document, with `deleted: true`; the CSV gives its id and "(deleted)"), `deleted`, `thumbsDown`, `thumbsUp`, `assistants` (how many assistants' rated answers cited it); summed from `chat."DocumentDailyFeedback"` over every assistant (§8.8); a document whose two counts are both 0 is left out |
 | `PUT /api/collections/{id}/retrieval-settings` | Edit | saved directly within the V16 ranges; enqueues an advisory evaluation run (§4.7) whose report is compared with the previous run (none when the collection has no evaluation set) |
 | `POST /api/collections/{id}/test-retrieval` | Edit, EditPipelines | retrieval-only test panel (§4.9), incl. unpublished |
 | `POST /api/collections/{id}/publish` | Manage | sets `PublishedAt`; the latest evaluation report (if any) is shown before confirm; never blocked |
@@ -1144,7 +1144,7 @@ item with another entry is added to the list by the work that entry names, and i
 | A template version without a supporting worker (`content."WorkerNodeSupport"`, engine design) | the list |
 | An assistant test run with fewer questions as expected than the previous version's (§7.4) | the assistant test questions (§7.4) |
 | The nightly `answers` run's faithfulness or citation precision 5 points below its median of the last 28 days (processing §14.8; Decisions "Nightly answer run") | the nightly answer run |
-| A document cited in 3 or more downvoted answers in the last 7 days (`DocumentDailyFeedback`, §8.8), for the knowledge base's owning department, linked to its *Feedback on documents* card | *Feedback on documents* (§8.8) |
+| A document cited in 3 or more downvoted answers in the last 7 Europe/Stockholm days, today included (`DocumentDailyFeedback`, §8.8), not raised for a deleted document: an item about the knowledge base, for its owning department, that names the document in its details and links to the knowledge base's Overview, where its *Feedback on documents* card is | *Feedback on documents* (§8.8) |
 | A published assistant without a message in 90 days (`AssistantDailyTotals`; published ≥ 90 days ago), with **Archive** (`…/archive`) and **Keep** (`…/keep`: not raised again while `UnusedKeptUntil` is ahead, 90 days) (simplification pass §15) | P2 wave 2 |
 | Site-profile proposals (platform admins; weakness review §1) | site-profile learning (a later wave) |
 | Tool drift and pending approvals | tools (a later wave) |
@@ -1573,17 +1573,21 @@ pages treat that as a first-class case, not as a crawl source without a crawl:
    anything failed; *Load more*. States: *processing* is `received`, `clean` and `unscanned`; *indexed*; *failed* is
    `refused` and `malware`, each with its reason in plain language (`messages.ts`). A file that is `unscanned`, or
    `indexed` with no `scannedAt`, carries the note *Not scanned for malware* in its details, and the summary says it
-   once for the list ("13 files not scanned for malware: the scan is off in this deployment"; rule 5 of §5.12), not each
-   row (the deployment runs with the scan off, connectors §11). A row is name, folder, size, state, uploaded, and a ⋯
-   menu with *Replace*, *Download* and *Delete*. A run whose report says `malwareScan: "off"` shows *Files in this run
-   were not scanned for malware* in its summary, on a crawl source's page as well.
+   once for the list ("13 files were not scanned for malware: the scan was off when they were stored"; rule 5 of
+   §5.12), not each row (the deployment runs with the scan off, connectors §11). A row is name, folder, size, state,
+   uploaded, and a ⋯ menu with *Replace*, *Download* and *Delete*. A run whose report says `malwareScan: "off"` shows
+   *Files in this run were not scanned for malware* in its summary, on a crawl source's page as well.
 5. **Folders are kept.** A dropped or picked folder sends each file's relative path (`HR/Policys/semester.pdf`) in
    `X-File-Name` (§4.5). The list groups by folder, and the list says that a topic rule on the path
    (`HR/**`, Topics tab) tags a folder's documents. Files picked one by one have no folder.
 6. **A file with a known name replaces by default** (user, 2026-11-23; support case SA-11). When an added file's name
    and folder match a live file of the same source, the upload asks once for the batch: *Replace the existing files*
    (the default: each is sent as that file's replacement, as the row's *Replace* does, so the document keeps its id)
-   or *Keep both*. The dialog lists the matching names. Byte-identical files stay skipped as today.
+   or *Keep both*. The dialog lists the matching names. Byte-identical files stay skipped as today. The match compares
+   the stored relative path, case ignored, against the source's live files read through `GET /api/sources/{id}/files`
+   (filtered on the start the added paths share, every page), not only the rows the card has loaded; a live file is
+   matched by at most one file of an upload. The dialog also has *Cancel*: closing it sends nothing and leaves the
+   files in the list.
 6. **File details.** A row opens a panel: name and path, size, type, uploaded by and when, replaced when, state and
    reason, a download link, and for an indexed file the document's chunks (`/api/documents/{id}`, `/chunks`) and the
    assistants that use the knowledge base. *Replace* and *Delete* are there too.
@@ -2224,7 +2228,8 @@ review, `sensitive` flow, access log) are built when A1 allows stored content.
   labels in `labels.ts`.
 - `ReviewState` (`open`/`reviewed`/`dismissed`) set by `FeedbackComments` holders ("Mark as handled"). Filters:
   period, assistant, rating, outcome, has comment, state, cited document (`documentId`: the rows whose message cited it;
-  the link from §8.8). Totals from `AssistantDailyTotals`.
+  the link from §8.8). Totals from `AssistantDailyTotals`; they do not follow the cited-document filter, as that table
+  has no split per document.
 - Import health per Open WebUI client from `FeedbackImportState` (last run, outcome, unmapped) (chat §14.2–§14.3).
 
 ### 8.2 Comment reveal (`FeedbackComments`; when A1 allows stored content)
@@ -2284,7 +2289,10 @@ gateway's cost and the estimated cost (calls without a gateway cost, priced from
 - **Who pays which call** follows cost-attribution §4.1: an assistant's query embeddings and rerank count under the
   assistant, also on another department's shared knowledge base; a knowledge base's cost is its indexing, preview and
   evaluation. Test-panel calls are the assistant's, under the client `admin-console` (§4.9), so they show apart from
-  real use.
+  real use. A test-panel turn that fails before any model call writes no outcome row. Judge calls
+  (`assistant-test-judge`, `eval-answer`) are no turns: their cost is in `AssistantDailyUsage` only, so the
+  `admin-console` client's outcomes can sum to less than its usage. The follow-up and escalation calls of a
+  non-streamed chat answer add their cost to that turn's outcome and count no further turn (chat §12.2).
 - **CSV**: `;` as `ReportEndpoints.cs:152-158`, English headers `period;department;kind;object;step;client;calls;`
   `input_tokens;cached_input_tokens;output_tokens;cost_usd;estimated_cost_usd;estimated_calls` (client empty for
   knowledge bases). Reads and exports are not audited: they hold no content.
@@ -2307,7 +2315,7 @@ gateway's cost and the estimated cost (calls without a gateway cost, priced from
   *Follow-up suggestions*, *Rerank*, *Query embedding*; P2 agent steps and test runs as their own rows) and by client
   (*Test panel* for `admin-console`), and a table by outcome (*Answered*, *Answered from general knowledge*, *Not
   found*, *Unavailable*, *Refused*, *Error*, *Cancelled*) with the turns, the cost and the cost per turn, real use
-  and the test panel apart.
+  and the test panel apart (headed *By outcome* and *By outcome in the test panel*).
 - **Knowledge base Overview** (§5.5.2): a *Cost* card for the last 30 days, split into indexing (`embed`) and
   evaluation (`eval-generate`, `eval-judge`, `eval-dedup`, `query-embed`, `rerank`), with a link to the Costs page
   filtered to the knowledge base's department for those who see that page.
@@ -2325,35 +2333,43 @@ each `not-found` and `answered-general` turn.
 
 | Method and path | Policy | Returns |
 |---|---|---|
-| `GET /api/assistants/{id}/gaps` `?from=&to=` (+ `&format=csv`) | Read | `turns` (`Messages`), `notFound`, `answeredGeneral` for the period; and per nearest document, most first, at most 200: `collectionId`, `documentId`, the knowledge base's name and the document's title (from the admin's snapshot and `content."Documents"`; a deleted one "(deleted)"), `notFound`, `answeredGeneral`; *no hit* as its own row |
+| `GET /api/assistants/{id}/gaps` `?from=&to=` (+ `&format=csv`) | Read | `from`, `to`, and `turns` (`Messages`), `notFound`, `answeredGeneral` for the period; and per nearest document, most first, at most 200 (the CSV as well): `collectionId`, `documentId`, `noHit`, the knowledge base's name and the document's title (read by id from `config."Collections"` and `content."Documents"`; null for a deleted one, with `deleted: true`, which the card and the CSV show as "(deleted)"), `deleted`, `notShared`, `canOpen`, `notFound`, `answeredGeneral`; *no hit* as its own row |
 
 - **Periods and scope** as §8.6: inclusive Europe/Stockholm dates, default the last 30 days, at most 400 days (else
-  400 `period_too_long`); the caller's departments by the rows' `DepartmentId`. A knowledge base of another
-  department that the assistant links shows its name and the document's title, as the citations do.
+  400 `period_too_long`); the caller's departments by the rows' `DepartmentId`. A knowledge base and its documents are
+  named only while the assistant's department may link the knowledge base today (its own, or shared with it) or the
+  caller's departments own it; otherwise the row keeps its counts and is `notShared`, shown as "A knowledge base that
+  is no longer shared with this department" and `(not shared)` in the CSV (#983).
 - **CSV**: `;`, English headers `knowledge_base;document;not_found;answered_general`. Reads and exports are not
   audited: they hold no content.
-- **UI**: on the assistant's Quality tab (§5.5.4), a *Content gaps* card: the period picker, the line
-  "{share} of the questions in this period were not answered from the knowledge ({notFound} not found, {general}
-  answered from general knowledge).", a table of the 20 nearest documents (title linked to the document in its
-  knowledge base for those who may open it, knowledge base, the two counts) with *Show all* and **Download CSV**,
-  and an empty state when the period has no such turn. Every label in `labels.ts`, every sentence in `messages.ts`.
+- **UI**: on the assistant's Quality tab (§5.5.4; until that tab exists, on Statistics), a *Content gaps* card: the
+  period picker, the line "{share} of the questions in this period were not answered from the knowledge ({notFound}
+  not found, {general} answered from general knowledge).", a table of the 20 nearest documents (title linked to the
+  knowledge base's Documents tab for those who may open it, as there is no page for one document; knowledge base, a
+  dash for a row without one; the two counts, the last headed *General knowledge*) with *Show all* and **Download
+  CSV**, and an empty state when the period has no such turn. Every label in `labels.ts`, every sentence in
+  `messages.ts`.
 
 ### 8.8 Feedback on documents (Decisions "Downvotes per document")
 
 Which documents the downvoted answers cited, as counts: read from `chat."DocumentDailyFeedback"` (data-model §2.3),
-written with every rating (chat §14.1, §14.2). **No content**: no question, answer or comment.
+written with every rating (chat §14.1, §14.2); ratings made before the table existed are not counted (no backfill).
+**No content**: no question, answer or comment.
 
 - **API:** `GET /api/collections/{id}/feedback` (§4.5). Periods as §8.6 (default 30 days, at most 400). Scope: the
   collection's owning department, summed over every assistant that cites it, its own and other departments'
   (assistants are counted, never named across departments). A department the collection is shared with doesn't see it.
 - **CSV**: `;`, English headers `document;thumbs_down;thumbs_up;assistants`. Not audited: no content.
 - **UI**: on the knowledge base's Overview (§5.5.2), for the owning department, a *Feedback on documents* card: the
-  period picker, the 10 documents with the most downvotes (title linked to the document, the downvotes, the upvotes),
-  *Show all* and **Download CSV**, and under each title **Show the ratings**, which opens the Feedback page (§8.1)
-  filtered by that document (the caller's own assistants' rows). The card says: "A document counts each time an answer
+  period picker, the 10 documents with the most downvotes (title linked to the knowledge base's Documents tab, the
+  downvotes, the upvotes), *Show all* and **Download CSV**, and under each title, for those who hold the Feedback
+  policy, **Show the ratings**, which opens the Feedback page (§8.1) filtered by that document (the caller's own
+  assistants' rows). The card says: "A document counts each time an answer
   that cited it was rated. A downvote may be about the answer, not the document." Empty state: "No rated answer cited
   this knowledge base in this period." Every label in `labels.ts`, every sentence in `messages.ts`.
-- **Attention item** (§5.5.1): a document with 3 or more downvotes in the last 7 days.
+- **Attention item** (§5.5.1): a document with 3 or more downvotes in the last 7 Europe/Stockholm days, today
+  included, not raised for a deleted document. The item is about the knowledge base (it links to its Overview, where
+  the card is) and names the document in its details.
 
 ## 9. Audit log and security-relevant views
 

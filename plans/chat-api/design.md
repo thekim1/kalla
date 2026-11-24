@@ -955,11 +955,11 @@ asked for, and a request without them gets today's answer byte for byte.
 | Progress chunk | with `kalla.progress: true` and `stream: true`, a turn that gets a model answer starts its stream with one chunk in the `kalla` chunk's shape (§3.8): `{"id":…,"object":"chat.completion.chunk","created":…,"model":…,"choices":[],"kalla":{"progress":"writing"}}`. It is written and flushed **after step 13's checks have passed** (§4.1: the gateway has accepted the answer call, and its status, residency and delegation echo are checked) and before the role chunk |
 | Why there | every refusal still comes as an HTTP error before the first byte (§3.6): a spent budget or an unusable key refuses the answer call itself, at step 13. Written before the call was opened, the chunk would turn those refusals into error chunks inside a `200` stream. The gateway starts its own response when the provider has accepted the call, before the first event, so the chunk still comes ahead of a reasoning model's wait |
 | Sources in it | when the request also asked for `kalla.related_documents` with 1 or more, the progress chunk carries that list (§9.7) without `cited` and `number`, which are not known yet. The first `kalla` chunk after the text carries the list again, complete. Without `related_documents` the progress chunk has `progress` only |
-| No chunk | a fixed text (not found, unavailable; §10) and a refused turn have no progress chunk; a conversational message that gets a model answer has one, without sources. A non-streamed request ignores `progress` |
+| No chunk | a fixed text (not found, unavailable; §10) and a refused turn have no progress chunk; a conversational message that gets a model answer has one, without sources (`related_documents: []` when that list was asked for). A non-streamed request ignores `progress` |
 | Order | progress chunk → role chunk → content → final chunk → `kalla` chunk(s) → usage → `[DONE]`. An error after it is §9.6's error chunk, as after any first byte |
-| Timings | with `kalla.timings: true` the answer's `kalla` (the first `kalla` chunk after the text, or the non-streamed object) has `"timings": {"condense": 840, "retrieve": 120, "first_token": 610, "total": 3900}`: whole milliseconds, each member left out when its step did not run. `condense` and `retrieve` are the stage times of §17 (`rag.chat.stage.duration`); `first_token` is the time from opening the answer call to the model's first event (the stages `gateway_headers` and `first_event` together), left out for a fixed text; `total` is from `ReceivedAt` to the end of the answer's text. A non-streamed answer also gets the header `Server-Timing: condense;dur=840, retrieve;dur=120, first_token;dur=610, total;dur=3900` |
+| Timings | with `kalla.timings: true` the answer's `kalla` (the first `kalla` chunk after the text, or the non-streamed object) has `"timings": {"condense": 840, "retrieve": 120, "first_token": 610, "total": 3900}`: whole milliseconds, each member left out when its step did not run. The times are the turn's own timestamps (`TurnTimings`), not read from the metrics of §17; `condense` is the condense call's time, present only when that call was made, and `retrieve` the retrieval's; `first_token` is the time from opening the answer call to the model's first event (the stages `gateway_headers` and `first_event` together), left out for a fixed text; `total` is from `ReceivedAt`, the start of the chat handler (before authentication and the parsing of the body; what runs before the handler is not included), to the end of the answer's text. Each part is rounded down, so the parts never add up to more than `total`. A non-streamed answer also gets the header `Server-Timing: condense;dur=840, retrieve;dur=120, first_token;dur=610, total;dur=3900` |
 | Not included | the time of the follow-up and escalation calls (they run after the text, §9.5), and no model name, residency or host: the times of this caller's own turn only |
-| Cost | no model call, no SQL statement: the times are the ones already measured for the metrics |
+| Cost | no model call, no SQL statement: a few clock reads per turn (`TurnTimings`), measured on every turn and shown only to a request with `kalla.timings` |
 | Open WebUI | never: `kalla` is ignored for that client kind (§3.8) |
 
 ### 9.11 Nearest subject (`kalla.nearest`)
@@ -1132,10 +1132,14 @@ embedding were paid) is enqueued as a **usage-only** turn: no conversation or me
    client, level, step) with the summed calls, tokens, gateway cost and estimated cost of the batch's usage records
    (data-model §2.3: statistics never depend on rows retention removes), the **`AssistantDailyOutcomes`** upserts per
    (day, assistant, client, level, outcome) with the turns and their summed gateway and estimated cost (a usage-only
-   turn counts under `unavailable` or `error`; Decisions "Cost per outcome"), and the **`AssistantDailyGaps`** upserts
-   per (day, assistant, client, level, outcome, nearest collection, nearest document) for the `not-found` and
-   `answered-general` turns (Decisions "Content-gap report"), all placed **last** in sorted key order, so the
-   hot totals row locks are held only until the commit that follows. `Messages.CostUsd` is the answer call's cost
+   turn counts under `unavailable` or `error`; the follow-up and escalation calls of a non-streamed answer are made
+   after the turn is queued, and their cost adds to that turn's outcome without counting a further turn; Decisions
+   "Cost per outcome"), and the **`AssistantDailyGaps`** upserts per (day, assistant, client, level, outcome, nearest
+   collection, nearest document) for the `not-found` and `answered-general` turns, counted where the day's totals count
+   `NotFound` and `GeneralAnswers` (a written turn: a usage-only record, a turn of another owner, a duplicate answer id
+   and a broken-off stream add none, so a day's gap rows sum to those two totals; Decisions "Content-gap report"), all
+   placed **last** in sorted key order, so the hot totals row locks are held only until the commit that follows.
+   `Messages.CostUsd` is the answer call's cost
    (gateway or estimated); the turn's full cost is the sum of its usage records. Each statement is its own round trip (`ConversationWriter.WriteAsync`; a turn with 5 sources is about 10);
    folding the lock, `Seq` and the inserts into one `NpgsqlBatch` is built only if the R1 performance test shows the
    writer falling behind (#392, stream A A-L6; to-verify #20).
@@ -1364,6 +1368,7 @@ totals).
 | `rag.gateway.request.duration`, `rag.gateway.residency_refusals` (existing names) | histogram, counter | `step` |
 | `rag.gateway.status` | counter | `step`, `status` (`503_retry_after`, `403_max_residency_not_met`, …) |
 
+- **Not built yet**: `rag.chat.ttft`, `rag.chat.overhead` and `rag.chat.stage.duration`; kalla-api emits none of them.
 - **Traces**: `rag.chat` with children `rag.chat.condense` (its HTTP span continues into the gateway), `rag.retrieve`
   (knowledge §15), `rag.chat.prompt`, `rag.chat.answer` (HTTP span); attributes: assistant id, level, client kind,
   history mode, coverage, degraded, outcome, token counts, cited count, condense outcome, config version. **Never**
@@ -1557,8 +1562,9 @@ Unit (`Kalla.Api.Tests`) and API tests against FakeGateway (scripted answers per
   no row or column holds the question.
 - **Open WebUI**: a request with `kalla` from the `open-webui` client streams exactly as without it (recorded fixture).
 - **Progress chunk** (§9.10): with `kalla.progress` and `stream: true` the first chunk is `{"kalla":{"progress":
-  "writing"}}`, before the role chunk; with `related_documents` 3 it carries three entries without `cited` and
-  `number`, and the chunk after the text has them complete; a not-found text, an unavailable text and a non-streamed
+  "writing"}}`, before the role chunk; with `related_documents` 3 it carries the list (at most three entries; the
+  fixture's question finds two) without `cited` and `number`, and the chunk after the text has the same documents and
+  ranks, complete; a not-found text, an unavailable text and a non-streamed
   request have none; a FakeGateway key with `BudgetExceeded` gives HTTP 402 and no byte of a stream; without
   `progress` the stream is byte-identical to today's.
 - **Timings** (§9.10): `kalla.timings` gives whole milliseconds with `total` ≥ the sum of the others; no `condense`
