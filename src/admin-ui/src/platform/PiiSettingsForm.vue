@@ -1,22 +1,24 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { request } from '@/api/client'
 import InlineError from '@/components/ui/InlineError.vue'
 import SelectField from '@/components/ui/SelectField.vue'
 import TextAreaField from '@/components/ui/TextAreaField.vue'
 import TextField from '@/components/ui/TextField.vue'
-import UiButton from '@/components/ui/UiButton.vue'
+import SaveBar from '@/components/ui/SaveBar.vue'
 import UiSwitch from '@/components/ui/UiSwitch.vue'
+import { useDirty } from '@/composables/useDirty'
 import { useFormErrors } from '@/composables/useFormErrors'
-import { COMMON, PII_RULES as P } from '@/utils/labels'
+import { PII_RULES as P } from '@/utils/labels'
 import { PII_TYPES, piiRulesForm, piiRulesRequest, type PiiRulesForm } from './piiRules'
 
 // The Personal data section of the Settings page (admin design §5.10; processing design §9.4): our own e-mail domains, the
 // lowest name certainty, and the flag rules as a table, one row per type, with the list-of-people rule below. Every type
 // is sent: a type the stored rules leave out never flags, so the table always says so explicitly. The server checks the
 // rules as the worker reads them.
-const props = defineProps<{ initial: Record<string, unknown>; url: string; submitLabel: string }>()
-const emit = defineEmits<{ (e: 'saved', response: unknown): void; (e: 'cancel'): void }>()
+// The save bar (admin §5.12 rule 7): Discard emits `cancel`, so the parent mounts the form again from the values loaded.
+const props = defineProps<{ initial: Record<string, unknown>; url: string }>()
+const emit = defineEmits<{ (e: 'saved', response: unknown): void; (e: 'cancel'): void; (e: 'dirty', dirty: boolean): void }>()
 
 // Mounted per load (the parent keys it), so the values are read from the props once.
 const form = reactive<PiiRulesForm>(piiRulesForm(props.initial))
@@ -25,6 +27,10 @@ const ids: Record<string, string> = { ownDomains: 'pii-ownDomains', nerMinScore:
 for (const t of PII_TYPES) ids[`min.${t}`] = `pii-min-${t}`
 const errors = useFormErrors(ids)
 const modeOptions = Object.entries(P.modes).map(([value, label]) => ({ value, label }))
+const dirty = useDirty(() => ({ ...form }))
+dirty.reset()
+watch(dirty.dirty, (d) => emit('dirty', d))
+onBeforeUnmount(() => emit('dirty', false))
 
 async function save(): Promise<void> {
   const { body, problems } = piiRulesRequest(form)
@@ -90,9 +96,6 @@ async function save(): Promise<void> {
     </fieldset>
 
     <InlineError v-if="errors.formError.value" :message="errors.formError.value" />
-    <div class="flex gap-2">
-      <UiButton variant="primary" type="submit" :loading="saving" data-test="save">{{ submitLabel }}</UiButton>
-      <UiButton variant="quiet" @click="emit('cancel')">{{ COMMON.cancel }}</UiButton>
-    </div>
+    <SaveBar :changes="dirty.changes.value" :saving="saving" @save="save" @discard="emit('cancel')" />
   </form>
 </template>

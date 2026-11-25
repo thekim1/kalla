@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import SelectField from '@/components/ui/SelectField.vue'
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { SETTINGS_PAGE } from '@/utils/labels'
 import PlatformResourceView from './PlatformResourceView.vue'
 import PromptTextsPanel from './PromptTextsPanel.vue'
@@ -17,6 +18,10 @@ const router = useRouter()
 const groups = settingsGroups()
 const current = computed(() => settingsSection(props.section) ?? SETTINGS_PAGE_SECTIONS[0]!)
 const options = SETTINGS_PAGE_SECTIONS.map((s) => ({ value: s.id, label: s.label }))
+// Leaving the open section with unsaved changes asks first (admin §5.12, *Saving*): another section is another address,
+// so the section list and the phone's picker ask through the route guard, as does leaving the page or the browser tab.
+const dirty = ref(false)
+useUnsavedGuard(() => dirty.value)
 
 function go(id: string): void {
   void router.push({ name: 'platform-settings', params: { section: id } })
@@ -48,8 +53,8 @@ function go(id: string): void {
     <section class="min-w-0" aria-labelledby="settings-section-title" data-test="settings-section">
       <h2 id="settings-section-title" class="text-title-3 font-semibold">{{ current.label }}</h2>
       <p class="mb-6 mt-1 text-fg-2">{{ SETTINGS_PAGE.descriptions[current.id] }}</p>
-      <SettingsSectionForm v-if="current.kind === 'settings'" :key="current.id" :section="current.id" :label="current.label" />
-      <PromptTextsPanel v-else-if="current.kind === 'prompt-texts'" />
+      <SettingsSectionForm v-if="current.kind === 'settings'" :key="current.id" :section="current.id" :label="current.label" @dirty="dirty = $event" />
+      <PromptTextsPanel v-else-if="current.kind === 'prompt-texts'" @dirty="dirty = $event" />
       <PlatformResourceView v-else :key="current.id" :resource="current.id" embedded />
     </section>
   </div>
