@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { api } from '@/api'
 import type { Assistant, TestQuestion, TestResult, TestRunReport, TestRunSummary } from '@/api/types'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
@@ -8,6 +8,7 @@ import SelectField from '@/components/ui/SelectField.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
+import { usePoll } from '@/composables/usePoll'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime } from '@/utils/format'
 import { ASSISTANT_TESTS as L } from '@/utils/labels'
@@ -32,7 +33,6 @@ const kept = ref<string | null>(null)
 const target = ref<'Draft' | 'Published'>(props.assistant.draft ? 'Draft' : 'Published')
 const starting = ref(false)
 const initial = ref('')
-let poll: ReturnType<typeof setTimeout> | undefined
 
 const latest = computed(() => runs.value[0] ?? null)
 const running = computed(() => latest.value !== null && latest.value.finishedAt === null)
@@ -48,7 +48,7 @@ const decide = computed(() => {
     : null
 })
 
-async function load(): Promise<void> {
+async function fetchAll(): Promise<void> {
   error.value = null
   try {
     ;[questions.value, runs.value] = await Promise.all([api.assistantTests.questions(props.assistant.id), api.assistantTests.runs(props.assistant.id)])
@@ -57,8 +57,18 @@ async function load(): Promise<void> {
   } catch (e) {
     error.value = e
   }
-  if (poll) clearTimeout(poll)
-  if (running.value) poll = setTimeout(() => void load(), 3000)
+}
+
+// While the latest run is going, every 3 s until it has finished (usePoll, #980); the poll ends with the tab.
+const poller = usePoll(async () => {
+  await fetchAll()
+  return !running.value
+}, () => 3000)
+
+async function load(): Promise<void> {
+  poller.stop()
+  await fetchAll()
+  if (running.value) poller.start(false)
 }
 
 function add(): void {
@@ -110,7 +120,6 @@ function resultLine(r: TestResult): string[] {
 }
 
 onMounted(load)
-onBeforeUnmount(() => poll && clearTimeout(poll))
 defineExpose({ load })
 </script>
 
