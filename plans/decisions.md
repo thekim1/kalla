@@ -1167,18 +1167,21 @@ display name, so path rules can set topics per folder. Detail: `admin/design.md`
 Topics are set on the knowledge base's **Topics tab**, by **picking from the sections found**: per source, the first
 path segment of its live documents' URLs (website) or the first folder of their display names (upload), each with its
 document count; a section's next level is loaded on demand, one section at a time; sections under 5 documents are
-left out. A picked section's topic is named after its path segment, lower case, editable before saving. A form covers
+left out. A picked section's topic is named after its path segment, lower case, editable before saving; on a website
+source its rule is host-first (`www.umea.se/omsorg/`, one rule per host the section was found on), on an upload
+source the folder path. A form covers
 the other rules (Advanced keeps every rule kind) and the source page's JSON field becomes read-only. Before saving,
 the tab shows what a rule matches ("212 of 2 323 documents", a warning on 0), computed by the same matcher the worker
 applies. Storage is unchanged: the tab writes the processing's `pathRules` through the publication plan, so editing
 needs `EditPipelines`; `Edit` and `Read` see the topics read-only. The re-chunk count shown at saving is the plan's
-own; topics stay *pending* until the re-chunk is done. One topic may span sources (the same tag from rules on each,
+own; new topics stay *pending* and removed topics *pending removal* (still listed, with their count) until the
+re-chunk is done. One topic may span sources (the same tag from rules on each,
 grouped by tag, saved as one plan per processing). The suggestions show URLs and display names to the owning
 department only, never to a department the knowledge base is shared with, and never in logs. Detail:
 `admin/design.md` §4.5, §5.5.2; `ingestion-worker/design-processing.md` §7.
 
 *From:* proposal `proposals/topics-editor.md` (#929, #932) with the main session's answers; decided by user,
-2026-11-22.
+2026-11-22. Host-first rules and *pending removal*: user, 2026-11-25 (#1075, #1076).
 
 ## Skills, tools and MCP (P2)
 
