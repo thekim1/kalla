@@ -96,7 +96,7 @@ can't be used (rerank output that doesn't parse, a condense that fails its check
 
 Where to read them (each view shows the gateway part and the estimate apart):
 
-- **Assistant → Statistics → Cost**: the last 30 days, 90 days or 12 months, per day or month, by step and by client
+- **Assistant → Usage → Cost**: the last 30 days, 90 days or 12 months, per day or month, by step and by client
   (*Test panel* is `admin-console`). Anyone who can read the assistant sees it.
 - **Knowledge base → Overview → Cost**: the last 30 days, split into *Indexing* (`embed`) and *Evaluation* (the other
   steps). Only the owning department sees it; a department the knowledge base is shared with does not.
@@ -857,7 +857,7 @@ open it again; the next re-open needs another new value.
 | `kalla-renderer` restarts in a loop; its log says "No usable sandbox" | Chromium cannot create the user namespaces of its sandbox: with `--hardened`, the seccomp profile is not applied (`images/renderer/seccomp.json` missing next to `deploy/`), or the host restricts unprivileged user namespaces (AppArmor on Ubuntu 23.10+). Don't turn the sandbox off: production-setup.md, *Renderer* |
 | `kalla-renderer` exits at once: "KALLA_RENDER_WS_PATH is required" | `kalla-secrets/renderer/ws-path` is missing or empty: `dc up -d --wait`, so `kalla-bootstrap` writes it again (it keeps every other secret), then `dc logs kalla-bootstrap` |
 | Uploads and fetched files wait with `clamav.unavailable`; `dc ps` lists no `kalla-clamav` | The worker's malware scan is `on` but `kalla-clamav` does not run: `COMPOSE_PROFILES` or the containers changed without an `up`. `dc up -d --wait` starts `kalla-clamav` while the profile `clamav` is on, and otherwise recreates the worker with the mode that follows the profiles (`kalla-bootstrap` writes it); to store files unscanned, take `clamav` out (`init-deployment.sh --profiles`) |
-| Worker log warns at every start that the malware scan is off; security event 5106 `rag.malware.scan_off`; files show *Not scanned for malware* | `COMPOSE_PROFILES` lacks `clamav`: intended there, or re-run `init-deployment.sh --profiles` with `clamav` in the list, then `dc up -d --wait`. Files stored meanwhile stay unscanned (production-setup.md, *Malware scan*) |
+| Worker log warns at every start that the malware scan is off; security event 5106 `rag.malware.scan_off`; the Files card's summary counts files not scanned for malware | `COMPOSE_PROFILES` lacks `clamav`: intended there, or re-run `init-deployment.sh --profiles` with `clamav` in the list, then `dc up -d --wait`. Files stored meanwhile stay unscanned (production-setup.md, *Malware scan*) |
 | Sources with fetch mode `browser` wait with `render.not_configured`; `dc ps` lists no `kalla-renderer` | The renderer is off (its Compose profile `render`, production-setup.md, *Renderer*): re-run `init-deployment.sh --profiles` with `render` in the list, then `dc up -d --wait` |
 | Every render fails with `render.unavailable` and `dc ps` lists no `kalla-renderer` | The worker has `kalla-secrets/worker/Render__Endpoint` but `kalla-renderer` does not run: `COMPOSE_PROFILES` or the containers changed without an `up`. `dc up -d --wait` starts `kalla-renderer` while the profile `render` is on, and otherwise recreates the worker without the endpoint |
 | The parser stays unhealthy for minutes after a start | It warms its slots and runs a self-test first; the worker reports it in its own health and retries |

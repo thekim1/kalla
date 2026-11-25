@@ -196,8 +196,8 @@ example overlay includes it. The worker's mode is the ConfigMap literal `ClamAv_
 the base sets `on`, so a worker without `kalla-clamav` fails closed and its files wait with `clamav.unavailable`. To run
 **without a malware scan**, do both in your overlay: remove `- ../components/clamav`, and uncomment
 `- ClamAv__Mode=off` under `kalla-worker-config` (the overlay's value replaces the base's). The worker then stores
-files unscanned and says so: a warning and security event 5106 at every start, *Not scanned for malware* in the admin
-UI ([production setup](production-setup.md), *Malware scan*, which also says what turning it on later does not do).
+files unscanned and says so: a warning and security event 5106 at every start, and in the admin UI the Files card's
+summary counts the files not scanned for malware ([production setup](production-setup.md), *Malware scan*, which also says what turning it on later does not do).
 The mode is not derived from the component on purpose: forgetting one of the two steps stops ingestion instead of
 silently storing unscanned files.
 
