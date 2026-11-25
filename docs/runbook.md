@@ -531,9 +531,9 @@ drilled yet.
 
 ## Updates and restarts
 
-Upgrades follow the [upgrade guide](upgrade-guide.md): announce the window, take a full backup and verify the escrow,
-replace `deploy/`, run the superuser steps if the release lists them, then `dc up -d --wait`, which runs `kalla-migrate`
-first (after `kalla-bootstrap`). With one slot each (the default) `kalla-api` and `kalla-admin` are replaced together in
+Upgrades follow the [upgrade guide](upgrade-guide.md#upgrade-procedure-compose-host): `deploy/doctor.sh` first, announce
+the window, take a full backup and verify the escrow, replace `deploy/`, run the superuser steps if the release lists them, then `dc up -d --wait`, which runs `kalla-migrate`
+first (after `kalla-bootstrap`), and the doctor again. With one slot each (the default) `kalla-api` and `kalla-admin` are replaced together in
 one announced window. With `init-deployment.sh --rolling` there are two of each behind your own proxy, and `deploy/rolling-update.sh` replaces them one
 at a time for releases marked *Rolling update: yes* ([Updates without downtime](zero-downtime-updates.md)).
 

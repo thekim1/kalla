@@ -306,7 +306,8 @@ and the release preparation folds the notes in here and writes the release's *Ro
     `admin/Setup__Secret`, and Open WebUI's secret to rag-api's and rag-admin's secret files). A leftover
     `UME_RAG_OIDC_CLIENT_SECRET=CHANGE` declares a wrong secret and keeps the wizard closed: `rag-bootstrap`'s checklist
     names it; remove it.
-  - **Compose apply** (an existing 0.6.0 deployment; steps 1–3 and 7–8 of *Upgrade procedure* below stay as they are):
+  - **Compose apply** (an existing 0.6.0 deployment; steps 1–4 and 8–10 of *Upgrade procedure (Compose host)* below
+    stay as they are):
     1. Replace `deploy/` with the release's, keeping `deploy/.env`, `deploy/certs` and `deploy/secrets`, and set the
        image pins.
     2. Re-run `init-deployment.sh` with your options. The `--oidc-*` options are optional and, in 0.7.0, never prompted; a re-run
@@ -515,13 +516,28 @@ A deployment older than 0.5.0 first moves to 0.5.1 by the sections for 0.2.0 to 
 [`docs/upgrade-guide.md` at `v0.7.0`](https://github.com/thekim1/kalla/blob/v0.7.0/docs/upgrade-guide.md), as
 [portainer.md](portainer.md) (*Upgrade from before 0.5.0*) does. From 0.5.x, one update to this release.
 
-## Upgrade procedure (single slot)
+## Upgrade procedure (Compose host)
 
-1. **Read** this guide's section for every release between yours and the target: *Rolling update*, migrations, new
+The one procedure for a host that runs the bundle with `docker compose` (one slot; with two, [Updates without
+downtime](zero-downtime-updates.md); the Portainer stack, [portainer.md](portainer.md#upgrade)). A release's own section
+above lists only what it adds to these steps. `deploy/doctor.sh` comes first and last: it is read-only, and exits 1 on
+what blocks an upgrade.
+
+1. **Check the host:**
+
+   ```bash
+   sudo deploy/doctor.sh --escrow-dir /media/<escrow>
+   ```
+
+   It names the project, the services' versions, where each volume's data is on the host and its free space, the
+   overlays and profiles, the pgBackRest stanza, the WAL backlog and the newest backups, the newest key set, and which
+   deploy directory the host units run from. Fix every `BLOCK` line before going on, and read the `warn` lines: each
+   one that applies is in *Your host differs from the bundle* below. Keep the output for step 9.
+2. **Read** this guide's section for every release between yours and the target: *Rolling update*, migrations, new
    grants, superuser steps, settings. Review the release's image digests, SBOM and advisories.
-2. **Announce** the window. `kalla-api` and `kalla-admin` are replaced together: the admin's test panel and answer judge
+3. **Announce** the window. `kalla-api` and `kalla-admin` are replaced together: the admin's test panel and answer judge
    run the same answering code as the api.
-3. **Back up and check the escrow:**
+4. **Back up and check the escrow:**
 
    ```bash
    sudo deploy/backup-postgres.sh --type full --start-fast
@@ -529,13 +545,13 @@ A deployment older than 0.5.0 first moves to 0.5.1 by the sections for 0.2.0 to 
    ```
 
    Note the time: with the WAL archive, any later moment is restorable too (runbook, *Restore*).
-4. **New files and images.** Replace `deploy/` with the release's (keep `deploy/.env`; the certificates and secrets
+5. **New files and images.** Replace `deploy/` with the release's (keep `deploy/.env`; the certificates and secrets
    are in the Docker volumes), and remove or update any image pins you set in `deploy/.env` (below). Re-run
-   `sudo deploy/host/install.sh` when `deploy/host/` changed.
-5. **Superuser steps**, only if the release lists them (below), all before step 6. Role caps and per-role settings
+   `sudo deploy/host/install.sh` when `deploy/host/` changed, or when step 1 said the units run from another directory.
+6. **Superuser steps**, only if the release lists them (below), all before step 7. Role caps and per-role settings
    run against the running database. With a new `KALLA_POSTGRES_IMAGE`, first replace kalla-postgres alone with
    `dc up -d --wait kalla-postgres` (a short outage of every service), then update the extension.
-6. **Migrate and replace.** Nothing is stopped first, also for a release marked *Rolling update: no*: `up` runs the
+7. **Migrate and replace.** Nothing is stopped first, also for a release marked *Rolling update: no*: `up` runs the
    migration while the old containers are still running, `kalla-migrate` keeps the ones that can't run beside it out of
    the database, and they are replaced right after.
 
@@ -545,15 +561,36 @@ A deployment older than 0.5.0 first moves to 0.5.1 by the sections for 0.2.0 to 
 
    Compose recreates every container whose image or settings changed. `kalla-bootstrap` runs first, then
    `kalla-migrate`; api, admin and the worker start only after it has finished successfully, so no service runs against
-   an older schema. The worker is stopped before its replacement starts (its leases make the pause harmless; an overlap
-   would exceed its role's connection limit). The parser and ClamAV are recreated only if their image changed.
-7. **Verify:** `dc ps` all healthy, `/health/ready` and `/version` of api and admin, `dc logs kalla-migrate` shows the
-   expected migration, a test question in the admin's test panel (once it exists), and the backup-status metrics are
-   back to normal within a few minutes.
-8. **Record** the release, the image digests, the schema migration and the test evidence in change management.
+   an older schema. The worker is stopped before its replacement starts (its leases make the pause harmless; an
+   overlap would exceed its role's connection limit). The parser and ClamAV are recreated only if their image changed.
+8. **Verify:** `dc ps` all healthy, `/health/ready` and `/version` of api and admin, `dc logs kalla-migrate` shows the
+   expected migration, a test question in the admin's test panel, and the backup-status metrics are back to normal
+   within a few minutes.
+9. **Check the host again** with `sudo deploy/doctor.sh --escrow-dir /media/<escrow>`: the new versions, the same
+   project, volumes and host paths as in step 1, the units running from the new `deploy/`, and no `BLOCK` line.
+10. **Record** the release, the image digests, the schema migration, both doctor outputs and the test evidence in
+    change management.
+
+> **Your host differs from the bundle** when step 1 shows any of these. Each one changes a step above; none of them is
+> a reason to copy data.
+>
+> - **Another project name** than `kalla` (a `warn` line under *Project*): every `dc` command needs it. Set
+>   `COMPOSE_PROJECT_NAME=<name>` in `deploy/.env` once, or Compose starts a second, empty deployment named `kalla`
+>   beside yours. With two projects on the host, pass `--project <name>` to the doctor.
+> - **Data on a host disk** (a *bind-backed volume* or a *bind* under *Volumes*): the data stays where it is. Keep the
+>   overlay or the volume definitions that put it there, and check in step 9 that the same host paths are listed. An
+>   upgrade never moves data that is already on a host path.
+> - **Changed ports or a hand-edited Compose file**: carry the change over to the new `deploy/` in step 5 as an overlay
+>   of your own in `COMPOSE_FILE`, not as an edit of the release's files, which step 5 replaces. Compare with
+>   `dc config` before and after.
+> - **Host units from another directory** (a `warn` line under *Host units*): they run the old bundle's scripts, or
+>   none when that directory is gone. Re-run `sudo deploy/host/install.sh` from the new `deploy/` in step 5.
+> - **No backups configured** (no `compose.backup.yaml`): there is nothing to restore from if step 7 fails. Set up a
+>   backup target first ([production-setup](production-setup.md)), or take a copy of the volumes with the services
+>   stopped.
 
 **Rolling back.** An image rollback is safe only when the previous version supports the new schema (a release with
-*Rolling update: yes*). Never run a destructive down-migration: restore the backup of step 3 in place
+*Rolling update: yes*). Never run a destructive down-migration: restore the backup of step 4 in place
 (`restore-pitr.sh`, runbook) and start the previous images.
 
 ## Image pins
