@@ -50,7 +50,7 @@ mkdir -p "$dest" "$stage/$name/docs" "$stage/$name/images/renderer" "$stage/$nam
 cd "$here"
 cp compose.rag.yaml compose.backup.yaml compose.hardened.yaml compose.host-24g.yaml compose.clamav-conf.yaml \
   compose.rolling.yaml init-deployment.sh rolling-update.sh backup-postgres.sh backup-uploads.sh restore-pitr.sh \
-  escrow-keys.sh "$dest/"
+  escrow-keys.sh doctor.sh "$dest/"
 # compose.rag.yaml's static files (postgres/, openwebui/, proxy/) and its default for the host directories (empty/);
 # redis/ is P2: copied once it exists.
 for dir in postgres pgbackrest redis proxy otel host kubernetes openwebui keycloak upgrade empty; do
