@@ -5,7 +5,7 @@ import { api } from '@/api'
 import type { Pipeline, Publication, Source, SourceTopicSuggestions, Topic } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { bffUser } from '@/test/fixtures'
-import { TOPICS } from '@/utils/labels'
+import { openMenu } from '@/test/helpers'
 import CollectionTopics from './CollectionTopics.vue'
 
 const sources = [{ id: 's1', name: 'umea.se' }, { id: 's2', name: 'Filer' }]
@@ -50,31 +50,7 @@ async function tick(wrapper: ReturnType<typeof mountTab>, path: string) {
   await box.trigger('change')
 }
 
-/** A RouterLink that renders its target, so a spec can read where a link goes. */
-const LinkStub = { props: ['to'], template: '<a :data-to="JSON.stringify(to)"><slot /></a>' }
-
 describe('The Topics tab (admin design §5.5.2; Decisions "Topics editor")', () => {
-  it('tells an editor of processing where the rules are edited, links each source and shows how to write one (#929)', async () => {
-    setup(['rag-pipeline-editor'])
-    vi.spyOn(api.collections, 'topics').mockResolvedValue({ collectionId: 'c1', topics: [] })
-    const wrapper = mount(CollectionTopics, { props: { collectionId: 'c1', sources }, global: { stubs: { RouterLink: LinkStub } } })
-    await flushPromises()
-
-    const help = wrapper.get('[data-test=topics-help]')
-    expect(help.text()).toContain(TOPICS.editRules)
-    expect(help.findAll('[data-test=topics-source]').map((a) => [a.text(), JSON.parse(a.attributes('data-to')!)])).toEqual([
-      ['umea.se', { name: 'source', params: { id: 's1' } }],
-      ['Filer', { name: 'source', params: { id: 's2' } }],
-    ])
-    expect(help.text()).toContain(TOPICS.howTitle)
-    // The example is valid rules JSON, as the Topics field takes it.
-    expect(JSON.parse(TOPICS.example)).toEqual([
-      { match: 'https://www.umea.se/bygga-bo-och-miljo/bygglov/', on: 'path', tags: ['bygglov'] },
-      { match: '/kommun-och-politik/', on: 'path', tags: ['politik'] },
-    ])
-    expect(wrapper.text()).toContain(TOPICS.none)
-  })
-
   it('lists one row per tag with its rules in words, their sources, and pending before the re-chunk', async () => {
     setup(['rag-pipeline-editor'])
     const wrapper = mountTab()
@@ -83,7 +59,7 @@ describe('The Topics tab (admin design §5.5.2; Decisions "Topics editor")', () 
     const rows = wrapper.get('[data-test=topics]').findAll('tbody tr')
     expect(rows.map((r) => r.get('.font-mono').text())).toEqual(['bygga', 'protokoll', 'kommun'])
     expect(rows[0]!.text()).toContain('under /bygga/')
-    expect(rows[1]!.findAll('[data-test=topic-rule]').map((r) => r.text())).toEqual(['whose title contains “Protokoll”', 'PDF files'])
+    expect(rows[1]!.findAll('[data-test=topic-rule-words]').map((r) => r.text())).toEqual(['whose title contains “Protokoll”', 'PDF files'])
     expect(rows[1]!.text()).toContain('umea.se, Filer') // a tag set on two sources is one row naming both
     expect(rows[2]!.get('[data-test=topic-pending]').text()).toBe('pending')
     wrapper.unmount()
@@ -222,13 +198,94 @@ describe('The Topics tab (admin design §5.5.2; Decisions "Topics editor")', () 
     wrapper.unmount()
   })
 
+  it('edits one rule of a topic from its stored form and saves it through the plan', async () => {
+    setup(['rag-pipeline-editor'])
+    const stored = [{ match: '/bygga/', on: 'path', tags: ['bygga'] }, { match: 'Protokoll', on: 'title-regex', tags: ['protokoll'] }]
+    vi.spyOn(api.sources, 'get').mockResolvedValue({ id: 's1', pipelineId: 'p1', collectionId: 'c1' } as Source)
+    vi.spyOn(api.pipelines, 'get').mockResolvedValue({
+      id: 'p1', name: 'umea.se processing', templateId: 'website', departmentId: 'd1', publishedVersionId: 'v1', version: '4',
+      versions: [{ id: 'v1', number: 1, state: 'published', definition: { schema: 1, template: 'website', templateVersion: 1, params: { chunkTokens: 500, pathRules: stored } }, publishedAt: null }],
+    })
+    vi.spyOn(api.collections, 'previewTopicRule').mockResolvedValue({ matched: 12, total: 2323, sample: [] })
+    const plan = vi.spyOn(api.pipelines, 'plan').mockResolvedValue({ publicationId: 'pub', pipelineId: 'p1', draftVersionId: 'd', draftNumber: 2, copiedOnWrite: false })
+    vi.spyOn(api.publications, 'get').mockResolvedValue({
+      id: 'pub', state: 'succeeded', lastError: null, pipelineId: 'p1', pipelineVersionId: 'v', draftNumber: 2, draftState: 'draft', version: 'ver',
+      published: false, superseded: false, plan: { pipelineVersionId: 'v', documents: 2323, sources: [{ sourceId: 's1', documents: 2323 }] },
+    })
+    const confirm = vi.spyOn(api.publications, 'confirm').mockResolvedValue({} as Publication)
+    const wrapper = mountTab()
+    await flushPromises()
+
+    const protokoll = wrapper.get('[data-test=topics]').findAll('tbody tr')[1]!
+    await protokoll.findAll('[data-test=edit-rule]')[0]!.trigger('click')
+    await flushPromises()
+    const title = document.body.querySelector<HTMLInputElement>('#topic-title')!
+    expect(title.value).toBe('Protokoll') // the stored rule, shown in words
+    title.value = 'Protokoll (KF)'
+    title.dispatchEvent(new Event('input'))
+    await flushPromises()
+    document.body.querySelector<HTMLFormElement>('[data-test=topic-form]')!.dispatchEvent(new Event('submit', { cancelable: true }))
+    await flushPromises()
+
+    expect(plan).toHaveBeenCalledWith('p1', { parameters: { chunkTokens: 500, pathRules: [
+      stored[0], { match: 'Protokoll \\(KF\\)', on: 'title-regex', tags: ['protokoll'] },
+    ] }, version: '4' })
+    expect(document.body.textContent).toContain('Save the topic protokoll?')
+    document.body.querySelector<HTMLButtonElement>('[data-test=confirm]')!.click()
+    await flushPromises()
+    expect(confirm).toHaveBeenCalledWith('pub', 'ver')
+    wrapper.unmount()
+  })
+
+  it('removes a topic from every source that sets it, in one confirm', async () => {
+    setup(['rag-pipeline-editor'])
+    const pipelines: Record<string, Pipeline> = {
+      p1: { id: 'p1', name: 'umea.se processing', templateId: 'website', departmentId: 'd1', publishedVersionId: 'v1', version: '4', versions: [
+        { id: 'v1', number: 1, state: 'published', publishedAt: null, definition: { schema: 1, template: 'website', templateVersion: 1, params: { pathRules: [
+          { match: '/bygga/', on: 'path', tags: ['bygga'] }, { match: 'Protokoll', on: 'title-regex', tags: ['protokoll'] },
+        ] } } },
+      ] },
+      p2: { id: 'p2', name: 'files', templateId: 'files', departmentId: 'd1', publishedVersionId: 'v2', version: '7', versions: [
+        { id: 'v2', number: 1, state: 'published', publishedAt: null, definition: { schema: 1, template: 'files', templateVersion: 1, params: { pathRules: [
+          { match: 'application/pdf', on: 'mediaType', tags: ['protokoll', 'pdf'] },
+        ] } } },
+      ] },
+    }
+    vi.spyOn(api.sources, 'get').mockImplementation(async (id: string) => ({ id, pipelineId: id === 's1' ? 'p1' : 'p2', collectionId: 'c1' }) as Source)
+    vi.spyOn(api.pipelines, 'get').mockImplementation(async (id: string) => pipelines[id]!)
+    const plan = vi.spyOn(api.pipelines, 'plan').mockImplementation(async (id: string) => ({ publicationId: `pub-${id}`, pipelineId: id, draftVersionId: 'd', draftNumber: 2, copiedOnWrite: false }))
+    vi.spyOn(api.publications, 'get').mockImplementation(async (id: string) => ({
+      id, state: 'succeeded', lastError: null, pipelineId: id, pipelineVersionId: 'v', draftNumber: 2, draftState: 'draft', version: `ver-${id}`,
+      published: false, superseded: false, plan: { pipelineVersionId: 'v', documents: 10, sources: [] },
+    }))
+    const confirm = vi.spyOn(api.publications, 'confirm').mockResolvedValue({} as Publication)
+    const wrapper = mountTab()
+    await flushPromises()
+
+    await wrapper.get('[data-test=topic-menu-protokoll] button').trigger('click')
+    await flushPromises()
+    await openMenu().get('[role=menuitem]').trigger('click')
+    await flushPromises()
+
+    expect(plan).toHaveBeenCalledWith('p1', { parameters: { pathRules: [{ match: '/bygga/', on: 'path', tags: ['bygga'] }] }, version: '4' })
+    // A rule that sets another topic too keeps it.
+    expect(plan).toHaveBeenCalledWith('p2', { parameters: { pathRules: [{ match: 'application/pdf', on: 'mediaType', tags: ['pdf'] }] }, version: '7' })
+    expect(document.body.textContent).toContain('Remove the topic protokoll?')
+    expect(document.body.textContent).toContain('The processing is published without the topic’s rules')
+    document.body.querySelector<HTMLButtonElement>('[data-test=confirm]')!.click()
+    await flushPromises()
+    expect(confirm).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
   it('is read-only for Edit and Read of the owner, and tags and counts only for a shared department', async () => {
     const suggestions = setup(['rag-editor'])
     const owner = mountTab()
     await flushPromises()
     expect(owner.get('[data-test=topics-read-only]').text()).toBe('Topics are changed by whoever may edit processing.')
     expect(owner.find('[data-test=topic-suggestions]').exists()).toBe(false)
-    expect(owner.find('[data-test=topics-help]').exists()).toBe(false)
+    expect(owner.find('[data-test=add-topic]').exists()).toBe(false)
+    expect(owner.find('[data-test=edit-rule]').exists()).toBe(false)
     expect(owner.get('[data-test=topics]').text()).toContain('under /bygga/')
     expect(suggestions).not.toHaveBeenCalled()
     owner.unmount()
@@ -241,7 +298,7 @@ describe('The Topics tab (admin design §5.5.2; Decisions "Topics editor")', () 
     expect(shared.get('[data-test=topics]').text()).not.toContain('Source')
     expect(shared.find('[data-test=topics-read-only]').exists()).toBe(false)
     expect(shared.find('[data-test=topic-suggestions]').exists()).toBe(false)
-    expect(shared.find('[data-test=topics-help]').exists()).toBe(false) // no help for rules it cannot edit
+    expect(shared.find('[data-test=add-topic]').exists()).toBe(false)
     shared.unmount()
   })
 })
