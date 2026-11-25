@@ -32,7 +32,7 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
     /// documents: five in <c>HR/Policys/</c>, one in <c>HR/</c>, one written <c>/HR/g.pdf</c> (no <c>HR/</c> rule
     /// matches it, so it is in no section), one at the top. Only the <c>/bygga/</c> documents carry a tag yet.
     /// </summary>
-    private async Task<Seed> SeedAsync()
+    private async Task<Seed> SeedAsync(bool otherHost = false)
     {
         var n = Random.Shared.Next(100_000, 999_999);
         await using var writer = new ContentFixtureWriter(database.Connection(RagDatabase.Worker), database.Connection(RagDatabase.Admin));
@@ -84,7 +84,7 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
             await writer.AddDocumentAsync(new FixtureDocumentSpec
             {
                 CollectionId = collection.Id, EmbeddingProfileId = profile, SourceId = web.Id, Classification = Classification.Internal,
-                Title = title ?? path, Url = $"https://www.umea.se{path}",
+                Title = title ?? path, Url = path.StartsWith("https://", StringComparison.Ordinal) ? path : $"https://www.umea.se{path}",
             }, [new FixtureChunk($"Sidan {path}.") { Tags = [.. tags.Where(t => t.Length > 0)] }], Ct);
         async Task File(string displayName) =>
             await writer.AddDocumentAsync(new FixtureDocumentSpec
@@ -116,6 +116,12 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
         }
 
         await Page("/");
+        if (otherHost)
+        {
+            // A second host that sorts before www.umea.se: the host-first kommun rule still covers /kommun/ (#1075).
+            await Page("https://aaa.umea.se/kommun/x");
+        }
+
         foreach (var file in new[] { "HR/Policys/a.pdf", "HR/Policys/b.pdf", "HR/Policys/c.pdf", "HR/Policys/d.pdf", "HR/Policys/e.pdf", "HR/f.pdf", "/HR/g.pdf", "h.pdf" })
         {
             await File(file);
@@ -160,6 +166,17 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
         files[0].GetProperty("documents").GetInt32().ShouldBe(6);
         files[0].GetProperty("suggestedTag").GetString().ShouldBe("hr");
         blocks.Single(b => b.GetProperty("sourceId").GetGuid() == seed.Upload).GetProperty("kind").GetString().ShouldBe("upload");
+    }
+
+    [Fact]
+    public async Task A_section_on_two_hosts_is_covered_by_a_host_first_rule_for_either()
+    {
+        var seed = await SeedAsync(otherHost: true);
+        using var viewer = await AdminDatabaseFixture.UserAsync(host.Factory, RagRoles.Viewer, seed.OwnerCode);
+        var suggestions = await viewer.GetFromJsonAsync<JsonElement>($"/api/collections/{seed.Collection}/topic-suggestions", Ct);
+        var kommun = Sections(suggestions, seed.Website).Single(s => s.GetProperty("path").GetString() == "/kommun/");
+        kommun.GetProperty("documents").GetInt32().ShouldBe(6);
+        Strings(kommun.GetProperty("coveredBy")).ShouldBe(["kommun"]);
     }
 
     [Fact]
@@ -289,6 +306,7 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
         var under = await Preview(seed.Website, new { match = "/bygga/", on = "path", tags = new[] { "bygga" } });
         under.GetProperty("matched").GetInt32().ShouldBe(6);
         under.GetProperty("total").GetInt32().ShouldBe(21);
+        (under.GetProperty("checked").GetInt32(), under.GetProperty("partial").GetBoolean()).ShouldBe((21, false)); // within the budget
         under.GetProperty("sample").EnumerateArray().Select(d => d.GetProperty("url").GetString()).ShouldContain("https://www.umea.se/bygga/");
         (await Preview(seed.Website, new { match = "https://www.umea.se/kommun/?utm=x", on = "path", tags = new[] { "kommun" } }))
             .GetProperty("matched").GetInt32().ShouldBe(5); // a pasted address, as the worker reads it

@@ -115,7 +115,7 @@ public static partial class TopicSuggestions
                 WHERE d."SourceId" = {sourceId} AND d."DeletedAt" IS NULL AND d."LiveChunkSetId" IS NOT NULL
             )
             SELECT array_to_string(segs[1:{depth}], '/') AS "Prefix",
-                   min(host) AS "Host",
+                   array_remove(array_agg(DISTINCT host), NULL) AS "Hosts",
                    (count(*) FILTER (WHERE cardinality(segs) > {depth}))::int AS "Documents",
                    min("Title") FILTER (WHERE cardinality(segs) = {depth} OR (cardinality(segs) = {depth} + 1 AND segs[{depth} + 1] = '')) AS "Title"
             FROM docs
@@ -127,7 +127,7 @@ public static partial class TopicSuggestions
             .Select(r => r with { Prefix = upload ? r.Prefix : Unescape(r.Prefix) })
             .Where(r => (r.Prefix + "/").StartsWith(parent, StringComparison.Ordinal))
             .GroupBy(r => r.Prefix + "/", StringComparer.Ordinal)
-            .Select(g => new Section(g.Key, g.Min(r => r.Host), g.Sum(r => r.Documents), upload ? null : g.Select(r => r.Title).FirstOrDefault(t => t is not null)))
+            .Select(g => new Section(g.Key, [.. g.SelectMany(r => r.Hosts).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)], g.Sum(r => r.Documents), upload ? null : g.Select(r => r.Title).FirstOrDefault(t => t is not null)))
             .Where(s => s.Documents >= MinDocuments)
             .OrderByDescending(s => s.Documents).ThenBy(s => s.Path, StringComparer.Ordinal)];
     }
@@ -146,11 +146,13 @@ public static partial class TopicSuggestions
 
     private static SectionDto Suggest(Section section, bool upload, IReadOnlyList<PathRule> rules)
     {
-        // What the worker would see for the section's own page: a URL on its host, or the folder as a display name.
-        var subject = upload
-            ? new PathRuleSubject("") { DisplayName = section.Path }
-            : new PathRuleSubject("") { Url = Uri.TryCreate($"https://{section.Host ?? "localhost"}{section.Path}", UriKind.Absolute, out var url) ? url : null };
-        var coveredBy = rules.Where(r => r.On == "path").Select(r => PathRules.Match(r, subject)).OfType<PathRuleMatch>()
+        // What the worker would see for the section's own page: a URL on each of its hosts (a rule that names one host covers
+        // the section on that host, #1075), or the folder as a display name.
+        IEnumerable<PathRuleSubject> subjects = upload
+            ? [new PathRuleSubject("") { DisplayName = section.Path }]
+            : (section.Hosts.Count > 0 ? section.Hosts : ["localhost"])
+                .Select(host => new PathRuleSubject("") { Url = Uri.TryCreate($"https://{host}{section.Path}", UriKind.Absolute, out var url) ? url : null });
+        var coveredBy = subjects.SelectMany(subject => rules.Where(r => r.On == "path").Select(r => PathRules.Match(r, subject))).OfType<PathRuleMatch>()
             .SelectMany(m => m.Tags).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
         return new SectionDto(section.Path, section.Documents, section.Title, SuggestedTag(section.Path), coveredBy);
     }
@@ -203,9 +205,9 @@ public static partial class TopicSuggestions
 
     private sealed record SourceRow(Guid Id, string Name, string Type, Guid PipelineId);
 
-    private sealed record Section(string Path, string? Host, int Documents, string? Title);
+    private sealed record Section(string Path, IReadOnlyList<string> Hosts, int Documents, string? Title);
 
-    private sealed record SectionRow(string Prefix, string? Host, int Documents, string? Title);
+    private sealed record SectionRow(string Prefix, string[] Hosts, int Documents, string? Title);
 }
 
 /// <summary>The suggestions per source of a collection (admin design §4.5).</summary>

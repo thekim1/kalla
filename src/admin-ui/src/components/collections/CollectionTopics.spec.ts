@@ -206,7 +206,7 @@ describe('The Topics tab (admin design §5.5.2; Decisions "Topics editor")', () 
       id: 'p1', name: 'umea.se processing', templateId: 'website', departmentId: 'd1', publishedVersionId: 'v1', version: '4',
       versions: [{ id: 'v1', number: 1, state: 'published', definition: { schema: 1, template: 'website', templateVersion: 1, params: { chunkTokens: 500, pathRules: stored } }, publishedAt: null }],
     })
-    vi.spyOn(api.collections, 'previewTopicRule').mockResolvedValue({ matched: 12, total: 2323, sample: [] })
+    vi.spyOn(api.collections, 'previewTopicRule').mockResolvedValue({ matched: 12, total: 2323, checked: 2323, partial: false, sample: [] })
     const plan = vi.spyOn(api.pipelines, 'plan').mockResolvedValue({ publicationId: 'pub', pipelineId: 'p1', draftVersionId: 'd', draftNumber: 2, copiedOnWrite: false })
     vi.spyOn(api.publications, 'get').mockResolvedValue({
       id: 'pub', state: 'succeeded', lastError: null, pipelineId: 'p1', pipelineVersionId: 'v', draftNumber: 2, draftState: 'draft', version: 'ver',
@@ -228,7 +228,7 @@ describe('The Topics tab (admin design §5.5.2; Decisions "Topics editor")', () 
     await flushPromises()
 
     expect(plan).toHaveBeenCalledWith('p1', { parameters: { chunkTokens: 500, pathRules: [
-      stored[0], { match: 'Protokoll \\(KF\\)', on: 'title-regex', tags: ['protokoll'] },
+      stored[0], { match: '(?i)Protokoll \\(KF\\)', on: 'title-regex', tags: ['protokoll'] },
     ] }, version: '4' })
     expect(document.body.textContent).toContain('Save the topic protokoll?')
     document.body.querySelector<HTMLButtonElement>('[data-test=confirm]')!.click()
@@ -300,5 +300,99 @@ describe('The Topics tab (admin design §5.5.2; Decisions "Topics editor")', () 
     expect(shared.find('[data-test=topic-suggestions]').exists()).toBe(false)
     expect(shared.find('[data-test=add-topic]').exists()).toBe(false)
     shared.unmount()
+  })
+})
+
+describe('The Topics tab after review (#1075, #1076)', () => {
+  const definition = (pathRules: unknown[]) => ({ schema: 1, template: 'website', templateVersion: 1, params: { pathRules } })
+  const publication = (id: string): Publication => ({
+    id, state: 'succeeded', lastError: null, pipelineId: id, pipelineVersionId: 'v', draftNumber: 2, draftState: 'draft', version: `ver-${id}`,
+    published: false, superseded: false, plan: { pipelineVersionId: 'v', documents: 5, sources: [{ sourceId: 's1', documents: 5 }] },
+  })
+  /** Two processings, s1 on p1 and s2 on p2; p1 has a draft someone left. */
+  function plans() {
+    const pipelines: Record<string, Pipeline> = {
+      p1: { id: 'p1', name: 'web', templateId: 'website', departmentId: 'd1', publishedVersionId: 'v1', version: '4', versions: [
+        { id: 'v1', number: 1, state: 'published', definition: definition([]), publishedAt: null },
+        { id: 'v2', number: 2, state: 'draft', definition: definition([]), publishedAt: null },
+      ] },
+      p2: { id: 'p2', name: 'files', templateId: 'upload', departmentId: 'd1', publishedVersionId: 'v7', version: '9', versions: [
+        { id: 'v7', number: 1, state: 'published', definition: definition([]), publishedAt: null },
+      ] },
+    }
+    vi.spyOn(api.sources, 'get').mockImplementation(async (id: string) => ({ id, pipelineId: id === 's1' ? 'p1' : 'p2', collectionId: 'c1' }) as Source)
+    vi.spyOn(api.pipelines, 'get').mockImplementation(async (id: string) => pipelines[id]!)
+    const plan = vi.spyOn(api.pipelines, 'plan').mockImplementation(async (id: string) =>
+      ({ publicationId: `pub-${id}`, pipelineId: id, draftVersionId: 'd', draftNumber: 2, copiedOnWrite: false }))
+    vi.spyOn(api.publications, 'get').mockImplementation(async (id: string) => publication(id))
+    return plan
+  }
+
+  it('retries only the plans a failed Confirm left, reads the list after each attempt, and says when a draft is replaced', async () => {
+    setup(['rag-pipeline-editor'])
+    plans()
+    const topicsCall = vi.mocked(api.collections.topics)
+    const confirm = vi.spyOn(api.publications, 'confirm')
+      .mockResolvedValueOnce(publication('pub-p1'))
+      .mockRejectedValueOnce(new Error('stale'))
+      .mockResolvedValue(publication('pub-p2'))
+    const wrapper = mountTab()
+    await flushPromises()
+    await tick(wrapper, '/utbildning/')
+    await tick(wrapper, 'HR/')
+    await wrapper.get('[data-test=add-topics]').trigger('click')
+    await flushPromises()
+    expect([...document.body.querySelectorAll('[data-test=topics-plan-draft]')]).toHaveLength(1) // p1's draft only
+
+    const reads = topicsCall.mock.calls.length
+    document.body.querySelector<HTMLButtonElement>('[data-test=confirm]')!.click()
+    await flushPromises()
+    expect(confirm.mock.calls.map((c) => c[0])).toEqual(['pub-p1', 'pub-p2'])
+    expect(topicsCall.mock.calls.length).toBe(reads + 1) // read again after the failure
+    expect(document.body.querySelector('[data-test=topics-plan]')).not.toBeNull() // the dialog stays, with the error
+    document.body.querySelector<HTMLButtonElement>('[data-test=confirm]')!.click()
+    await flushPromises()
+    expect(confirm.mock.calls.map((c) => c[0])).toEqual(['pub-p1', 'pub-p2', 'pub-p2'])
+    expect(wrapper.findAll('[data-test=topic-tag]')).toHaveLength(0)
+    wrapper.unmount()
+  })
+
+  it('starts no second change while one is planned: Add topic, Edit, the row menu and Add N are disabled', async () => {
+    setup(['rag-pipeline-editor'])
+    plans()
+    vi.spyOn(api.publications, 'get').mockImplementation(() => new Promise(() => undefined)) // the plan never finishes
+    const wrapper = mountTab()
+    await flushPromises()
+    await tick(wrapper, '/utbildning/')
+    await wrapper.get('[data-test=add-topics]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-test=add-topic]').attributes('aria-disabled') ?? wrapper.get('[data-test=add-topic]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test=edit-rule]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-test=topics-planning]').text()).toBe('Working out what needs processing again…')
+    wrapper.unmount()
+  })
+
+  it('closes the open levels when the suggestions are read again, and drops the picks under a level it closes', async () => {
+    const suggestions = setup(['rag-pipeline-editor'])
+    const wrapper = mountTab()
+    await flushPromises()
+    suggestions.mockResolvedValueOnce({ collectionId: 'c1', sources: [{ ...web, under: '/omsorg/', sections: [
+      { path: '/omsorg/aldre/', documents: 120, title: 'Äldreomsorg', suggestedTag: 'aldre', coveredBy: [] },
+    ] }] })
+    await row(wrapper, '/omsorg/').get('[data-test=show-under]').trigger('click')
+    await flushPromises()
+    expect(row(wrapper, '/omsorg/aldre/').get('[data-test=topic-pick]').attributes('aria-label')).toBe('Add Äldreomsorg, under /omsorg/, as a topic')
+    await tick(wrapper, '/omsorg/aldre/')
+    expect(wrapper.get('[data-test=add-topics]').text()).toContain('Add 1 topic')
+    await row(wrapper, '/omsorg/').get('[data-test=show-under]').trigger('click')
+    expect(wrapper.get('[data-test=add-topics]').text()).toContain('Add topics') // nothing picked that doesn't show
+
+    await row(wrapper, '/omsorg/').get('[data-test=show-under]').trigger('click') // open again (no new request)
+    expect(wrapper.find('[data-test=topic-section][data-path="/omsorg/aldre/"]').exists()).toBe(true)
+    suggestions.mockResolvedValue({ collectionId: 'c1', sources: [{ ...files }, { ...web }] }) // a new answer, as after a save
+    ;(wrapper.vm as unknown as { $: { setupState: { load: () => void } } }).$.setupState.load()
+    await flushPromises()
+    expect(wrapper.find('[data-test=topic-section][data-path="/omsorg/aldre/"]').exists()).toBe(false)
+    wrapper.unmount()
   })
 })

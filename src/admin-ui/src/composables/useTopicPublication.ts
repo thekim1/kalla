@@ -10,8 +10,11 @@ import { problemMessage } from '@/utils/problem'
 /** A change to one source's `pathRules`: the new rules from the stored ones. */
 export type RuleChange = (rules: PathRuleJson[]) => PathRuleJson[]
 
-/** One processing's plan: its publication job, the processing's name, and the plan once made. */
-export interface PlannedPublication { id: string; processing: string; publication: Publication | null }
+/**
+ * One processing's plan: its publication job, the processing's name, the plan once made, and whether it replaces a draft
+ * someone left unpublished (a plan writes the draft, #1075).
+ */
+export interface PlannedPublication { id: string; processing: string; publication: Publication | null; replacesDraft: boolean }
 
 /** The stored `pathRules` of a processing's published version (none when it has no published version). */
 export function publishedRules(pipeline: Pipeline): PathRuleJson[] {
@@ -40,6 +43,7 @@ export function useTopicPublication(collectionId: Ref<string>, sourceNames: Ref<
     planning.value = true
     error.value = null
     planned.value = []
+    published.clear()
     title.value = dialogTitle
     try {
       const sourceIds = [...changes.keys()]
@@ -56,7 +60,8 @@ export function useTopicPublication(collectionId: Ref<string>, sourceNames: Ref<
         const started = await api.pipelines.plan(pipelineId, {
           parameters: params, version: pipeline.version, ...(copyOnWrite ? { collectionId: collectionId.value } : {}),
         })
-        planned.value = [...planned.value, { id: started.publicationId, processing: pipeline.name, publication: null }]
+        const replacesDraft = pipeline.versions.some((v) => v.state === 'draft')
+        planned.value = [...planned.value, { id: started.publicationId, processing: pipeline.name, publication: null, replacesDraft }]
       }
       poll.start()
     } catch (e) {
@@ -77,9 +82,16 @@ export function useTopicPublication(collectionId: Ref<string>, sourceNames: Ref<
     return true
   })
 
-  /** Publishes every plan; the caller's dialog closes when it resolves. */
+  /** The plans already published by an earlier Confirm: a retry after a failure skips them (#1075). */
+  const published = new Set<string>()
+
+  /** Publishes every plan not yet published; the caller's dialog closes when it resolves, and stays open on a failure. */
   async function confirm(): Promise<void> {
-    for (const p of planned.value) await api.publications.confirm(p.id, p.publication!.version)
+    for (const p of planned.value) {
+      if (published.has(p.id)) continue
+      await api.publications.confirm(p.id, p.publication!.version)
+      published.add(p.id)
+    }
   }
 
   /** The sources a plan processes again: the knowledge base's by name, others counted. */

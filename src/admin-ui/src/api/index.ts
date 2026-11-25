@@ -154,8 +154,8 @@ export const api = {
     topicSuggestions: (id: string, query: { sourceId?: string; under?: string } = {}) =>
       http.get<{ collectionId: string; sources: SourceTopicSuggestions[] }>(buildUrl(`/api/collections/${id}/topic-suggestions`, query)),
     /** EditPipelines of the owning department; an invalid rule is a 400 on `rule` (V24). Nothing is saved. */
-    previewTopicRule: (id: string, body: { sourceId: string; rule: PathRuleJson }) =>
-      http.post<TopicRulePreview>(`/api/collections/${id}/topic-rules/preview`, body),
+    previewTopicRule: (id: string, body: { sourceId: string; rule: PathRuleJson }, signal?: AbortSignal) =>
+      request<TopicRulePreview>('POST', `/api/collections/${id}/topic-rules/preview`, { body, signal }),
     sharing: (id: string, body: { sharedWith: SharingLevel; departmentIds: string[]; version: string }) =>
       http.put<Collection>(`/api/collections/${id}/sharing`, body),
     create: (body: CollectionCreate) => http.post<Collection>('/api/collections', body),

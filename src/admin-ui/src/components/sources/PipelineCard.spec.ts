@@ -99,4 +99,27 @@ describe('Processing on the source page (admin design §6.6 step 1)', () => {
     expect(plan).toHaveBeenCalledWith('p1', { parameters: { chunkTokens: 500, ocr: 'auto', pathRules: rules }, version: '4' })
     wrapper.unmount()
   })
+
+  it('shows and keeps the published topics, not a draft\'s that a cancelled topic plan left, and reads a rule without topics (#1076)', async () => {
+    const router = setup(['rag-pipeline-editor'])
+    const published = [{ match: '/skola/', on: 'path', tags: ['skola'] }, { match: '/blankett/', on: 'path', documentType: 'form' }]
+    vi.spyOn(api.pipelines, 'get').mockResolvedValue({
+      ...platformPipeline, departmentId: 'd1',
+      versions: [
+        { id: 'v1', number: 1, state: 'published', definition: { ...definition, params: { chunkTokens: 500, pathRules: published } }, publishedAt: '2026-10-01T10:00:00Z' },
+        { id: 'v2', number: 2, state: 'draft', definition: { ...definition, params: { chunkTokens: 500, pathRules: [] } }, publishedAt: null },
+      ],
+    })
+    const plan = vi.spyOn(api.pipelines, 'plan').mockResolvedValue({ publicationId: 'pub1', pipelineId: 'p1', draftVersionId: 'v9', draftNumber: 3, copiedOnWrite: false })
+    const wrapper = mount(PipelineCard, { props: { source }, attachTo: document.body, global: { plugins: [router] } })
+    await flushPromises()
+
+    expect(wrapper.findAll('[data-test=pipeline-topic]').map((t) => t.text())).toEqual(['skola: under /skola/', 'under /blankett/'])
+    await wrapper.get('[data-test=edit-pipeline]').trigger('click')
+    await flushPromises()
+    document.body.querySelector<HTMLButtonElement>('[data-test=plan]')!.click()
+    await flushPromises()
+    expect(plan.mock.calls[0]![1].parameters.pathRules).toEqual(published)
+    wrapper.unmount()
+  })
 })
