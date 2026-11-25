@@ -12,6 +12,8 @@ import EvaluationTab from './EvaluationTab.vue'
 
 function signIn(roles: string[]) {
   setActivePinia(createPinia())
+  // The trend (B-69) has no runs unless a test gives it some.
+  vi.spyOn(api.collections, 'evaluationTrend').mockResolvedValue({ runs: [] })
   const auth = useAuthStore()
   auth.user = bffUser({ roles })
   auth.status = 'authenticated'
@@ -76,7 +78,7 @@ describe('Test questions and quality (admin design §7.1, §7.2)', () => {
     expect(wrapper.get('[data-test=summary]').text()).toBe('Too few questions to compare.')
     expect(wrapper.get('[data-test=worse]').text()).toContain('Fråga h2')
     expect(wrapper.get('[data-test=proposal]').text()).toContain('Largest distance: 0,42 (1 question ends up wrong)')
-    expect(wrapper.find('[data-test=history]').exists()).toBe(true)
+    expect(wrapper.find('[data-test=trend]').exists()).toBe(false) // under two runs there is no trend
 
     await wrapper.get('[data-test=use-proposal]').trigger('click')
     expect(wrapper.emitted('use-proposal')).toEqual([[{ coverageMaxDistance: 0.42, coverageMinKeywordScore: undefined }]])
@@ -256,5 +258,30 @@ describe('Test questions and quality (admin design §7.1, §7.2)', () => {
     expect(get).toHaveBeenCalledTimes(1)
     wrapper.unmount()
     vi.useRealTimers()
+  })
+
+  it('shows the trend of the latest runs as lines and the same runs as a table under it, newest first (§7.1, B-69)', async () => {
+    signIn(['rag-editor'])
+    vi.spyOn(api.collections, 'evaluation').mockResolvedValue({ hasSet: true, questions: [], latestRuns: [] })
+    vi.spyOn(api.evaluation, 'questions').mockResolvedValue({ items: [], next: null })
+    const layer = (l: string, recallAtK: number) => ({ layer: l, questions: 10, recallAtK, mrr: recallAtK / 2 })
+    vi.spyOn(api.collections, 'evaluationTrend').mockResolvedValue({ runs: [
+      { id: 'r1', kind: 'nightly', variant: 'hybrid', startedAt: '2026-11-01T02:00:00Z', questionCount: 20, recallAtK: 0.8, mrr: 0.4, layers: [layer('human', 0.7), layer('generated', 0.9)] },
+      { id: 'r2', kind: 'publish-report', variant: 'hybrid', startedAt: '2026-11-02T02:00:00Z', questionCount: 20, recallAtK: 0.85, mrr: 0.42, layers: [layer('human', 0.8), layer('generated', 0.9)] },
+    ] })
+    const wrapper = mount(EvaluationTab, { props: { collectionId: 'c1', canEdit: false } })
+    await flushPromises()
+
+    const trend = wrapper.get('[data-test=trend]')
+    expect(trend.findAll('svg path[stroke]')).toHaveLength(4) // one line per metric and layer
+    expect(trend.get('svg[role=img]').attributes('aria-label')).toContain('From your organisation · Accuracy (recall@10): highest 0,80')
+    const table = trend.get('[data-test=trend-table]')
+    expect(table.findAll('thead th').map((h) => h.text())).toEqual([
+      'Started', 'Type', 'From your organisation · Accuracy (recall@10)', 'From your organisation · MRR', 'Generated · Accuracy (recall@10)', 'Generated · MRR',
+    ])
+    const first = table.get('tbody tr').text()
+    expect(first).toContain('publication')
+    expect(first).toContain('0,80')
+    expect(first).toContain('0,40')
   })
 })

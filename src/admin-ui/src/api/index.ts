@@ -77,6 +77,7 @@ import type {
   OrgSyncStatus,
   Page,
   EvaluationOverview,
+  EvaluationTrendRun,
   EvaluationQuestion,
   EvaluationQuestionInput,
   EvaluationResult,
@@ -166,6 +167,8 @@ export const api = {
     move: (id: string, body: MoveRequest) => http.post<Collection>(`/api/collections/${id}/move`, body),
     sources: (id: string) => http.get<SourceListItem[]>(`/api/collections/${id}/sources`),
     evaluation: (id: string) => http.get<EvaluationOverview>(`/api/collections/${id}/evaluation`),
+    /** The trend chart's runs (admin design §7.1, B-69). */
+    evaluationTrend: (id: string) => http.get<{ runs: EvaluationTrendRun[] }>(`/api/collections/${id}/evaluation/trend`),
     retrievalSettings: (id: string, settings: Record<string, unknown>, version: string) =>
       http.put<Collection>(`/api/collections/${id}/retrieval-settings`, { settings, version }),
     setup: (id: string) => http.get<CollectionSetup>(`/api/collections/${id}/setup`),

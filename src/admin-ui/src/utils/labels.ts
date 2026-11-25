@@ -2267,6 +2267,11 @@ export const EVALUATION = {
   useProposal: 'Use in Tune the search',
   history: 'Earlier evaluations',
   historyCaption: 'Earlier evaluations with accuracy and MRR',
+  /** The trend (§7.1, B-69): the latest 30 finished runs. */
+  trend: 'Accuracy over time',
+  trendLead: 'The latest 30 evaluations, test questions from your organisation first. The table under the chart has the same figures.',
+  trendLabel: 'Accuracy and MRR per evaluation',
+  trendSeries: (layer: string, metric: string) => `${layer} · ${metric}`,
   started: 'Started',
   kind: 'Type',
   questionsCount: 'Questions',

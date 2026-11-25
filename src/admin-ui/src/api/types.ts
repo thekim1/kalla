@@ -826,6 +826,19 @@ export interface EvaluationRun {
   documentGone: number | null
 }
 
+/** `GET /api/collections/{id}/evaluation/trend` (admin design §7.1): the latest finished runs, oldest first. */
+export interface EvaluationTrendRun {
+  id: string
+  kind: string
+  variant: string
+  startedAt: IsoDateTime
+  questionCount: number | null
+  recallAtK: number | null
+  mrr: number | null
+  /** Per layer with answerable questions, `human` first. */
+  layers: { layer: string; questions: number; recallAtK: number; mrr: number }[]
+}
+
 /** A proposed threshold and how many human questions it misclassifies. */
 export interface ThresholdProposal {
   value: number
