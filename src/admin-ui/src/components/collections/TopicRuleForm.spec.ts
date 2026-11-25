@@ -70,6 +70,21 @@ describe('The topic form (admin design §5.5.2; Decisions "Topics editor")', () 
     wrapper.unmount()
   })
 
+  it('takes the first source when the sources arrive after the form opened', async () => {
+    const previewSpy = vi.spyOn(api.collections, 'previewTopicRule').mockResolvedValue(preview(10))
+    setActivePinia(createPinia())
+    const wrapper = mount(TopicRuleForm, { props: { open: true, collectionId: 'c1', sources: [], initial: null }, attachTo: document.body })
+    await flushPromises()
+    q<HTMLInputElement>('topic-kind-type')!.click()
+    await flushPromises()
+    await wrapper.setProps({ sources })
+    await new Promise((r) => setTimeout(r, 450))
+    await flushPromises()
+    expect(previewSpy).toHaveBeenLastCalledWith('c1', { sourceId: 's1', rule: { match: 'application/pdf', on: 'mediaType', tags: ['preview'] } })
+    expect(q('topic-preview-count')!.textContent).toMatch(/^Matches 10 of 2\s323 documents$/)
+    wrapper.unmount()
+  })
+
   it('writes the title as escaped text', async () => {
     vi.spyOn(api.collections, 'previewTopicRule').mockResolvedValue(preview(4))
     const wrapper = mountForm()

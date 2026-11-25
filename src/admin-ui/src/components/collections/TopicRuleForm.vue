@@ -69,6 +69,15 @@ watch(
   { immediate: true },
 )
 
+// The knowledge base's sources can arrive after the form opened (the page loads them beside the topics): a form without
+// one of them takes the first.
+watch(
+  () => props.sources.map((s) => s.id).join(),
+  () => {
+    if (!props.sources.some((s) => s.id === form.sourceId)) form.sourceId = props.sources[0]?.id ?? ''
+  },
+)
+
 /** The rule the form describes, or null while it is incomplete (or its JSON is not one rule). */
 const rule = computed<PathRuleJson | null>(() => {
   const tags = [normaliseTag(form.tag)]
