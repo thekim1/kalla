@@ -1161,7 +1161,7 @@ as `GatewayMetrics` does (`src/Fors.Gateway/Pipeline/UsageWriter.cs:616-636`); d
 
 ### 16.4 Evaluation in CI
 
-- `verify.yml` **evaluation-smoke** (repo-and-deployment §8.2): ingest `tests/evaluation/smoke`, run the 30 questions
+- `verify.yml`'s **evaluation smoke**, inside `backend` (repo-and-deployment §8.2): ingest `tests/evaluation/smoke`, run the 30 questions
   through `POST /v1/retrieve`; recall@10 ≥ 0.8 and every answer cited. With FakeGateway this tests the pipeline, not
   embedding quality. The smoke collection's own `coverageMaxDistance` is 0.85 (FakeGateway distances, §7); the
   evaluator == API contract test (§16.3) runs over the smoke set; both live in `Kalla.Worker.Tests`, which hosts
