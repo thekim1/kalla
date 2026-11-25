@@ -33,6 +33,12 @@ the browser ("The server cannot be reached") although the same commit passed alo
   read its log lines.
 - **A flaky test can be a real bug** (#471): read the failed attempt's full log (`gh run view <id> --attempt 1
   --log-failed`) before calling it a race.
+- **`/tmp` on the runner host is a tmpfs** (half the RAM, about 5.5 GiB), not disk. A tool that unpacks images or
+  large archives there fills it and takes the RAM with it: the 0.11.0 tag run's Syft scan left 2.9 GiB behind, and the
+  next attempts failed with *no space left on device* and out-of-memory kills of test containers (#1069).
+  `release.yml` points Syft's `TMPDIR` at `$RUNNER_TEMP` and stops a leftover scan at the start and the end of the
+  job; give any new tool of that kind a `TMPDIR` under `$RUNNER_TEMP` too. If a release job dies hard, check the host
+  for `syft scan` processes and `stereoscope-*` directories (`/usr/local/sbin/runner-cleanup.sh` prunes old ones).
 - `gh pr checks --watch` right after a push returns at once with "no checks reported": wait about 30 s first.
 - **Fixed test subnets:** the renderer image test uses `10.214.0.0/24` and `10.214.1.0/24`, the worker's renderer
   container test in `verify.yml` `10.215.0.0/24`. Both runners share one Docker daemon, so two renderer jobs at once can

@@ -365,7 +365,12 @@ jobs:
           # The dry run's registry speaks plain HTTP.
           SYFT_REGISTRY_INSECURE_USE_HTTP: ${{ github.event_name != 'push' }}
         run: |
-          syft_dir="$RUNNER_TEMP/syft"; mkdir -p "$syft_dir"; : > "$syft_dir/refs"
+          # A scan a cancelled attempt left behind still holds its unpacked image (#1069): stop it first. The match is on
+          # this runner's workspace, which is in every scan's output path, so the other runner's scans are left alone.
+          pkill -f "spdx-json=$GITHUB_WORKSPACE/sbom/" || true
+          # Syft unpacks each image under TMPDIR (the parser's needs about 3 GB). The runner host's /tmp is a tmpfs of
+          # half the RAM, so it goes to RUNNER_TEMP on disk, which the runner also empties after the job (#1069).
+          syft_dir="$RUNNER_TEMP/syft"; mkdir -p "$syft_dir/tmp"; : > "$syft_dir/refs"
           for name in postgres clamav renderer parser; do
             digest_var="${name^^}_DIGEST"; ref="$PREFIX/$name:$VERSION@${!digest_var}"
             echo "KALLA_${name^^}_IMAGE=$ref" | tee -a images.env
@@ -375,9 +380,11 @@ jobs:
           # background part is redirected, or the runner would wait for it before ending the step.
           # shellcheck disable=SC2016 # the inner script's variables expand in the inner shell
           (
-            bash -c 'set -e
+            # No -q: Syft's own messages (a full disk, a refused pull) go to the log the step below prints (#1069).
+            TMPDIR="$syft_dir/tmp" bash -c 'set -e
               while read -r name ref; do
-                syft scan "registry:$ref" -o "spdx-json=sbom/kalla-$name-$VERSION.spdx.json" -q
+                echo "== $name"
+                syft scan "registry:$ref" -o "spdx-json=$PWD/sbom/kalla-$name-$VERSION.spdx.json"
               done < "$1/refs"' _ "$syft_dir" > "$syft_dir/log" 2>&1 || rc=$?
             echo "${rc:-0}" > "$syft_dir/exit"
           ) < /dev/null > /dev/null 2>&1 &
@@ -426,6 +433,10 @@ jobs:
           cat "$syft_dir/log"
           [ "$(cat "$syft_dir/exit")" = 0 ] || { echo "::error::Syft failed (exit $(cat "$syft_dir/exit"))"; exit 1; }
           ls -l sbom
+      - name: Stop a Syft scan still running
+        # The background scan outlives a failed or cancelled job otherwise, with gigabytes unpacked and its memory (#1069).
+        if: always()
+        run: pkill -f "spdx-json=$GITHUB_WORKSPACE/sbom/" || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release
