@@ -290,7 +290,7 @@ backup holds and a restore needs (the pepper, the blob master key, the pgBackRes
 the conversation id key, the Data Protection certificate and the internal CA) is in the escrow set (*Key escrow*). The
 other files in `kalla-secrets` and `kalla-certs` are generated again by `kalla-bootstrap` when they are missing, and a new
 one breaks nothing a backup restores. Open WebUI's data (the volume `kalla-openwebui-data`) is **not backed up by any
-script in P0** (*Public-records requests*).
+script yet** (*Public-records requests*).
 
 ```bash
 systemctl list-timers 'rag-*'
@@ -395,7 +395,7 @@ would open the wizard again for an hour. The client secrets the wizard stored ne
    not built yet. A missing **upload** is restored from the upload copy
    (*Upload copy*).
 
-**Timings.** The local drill (PR #40; a 30 MB database, local repository) took **23.0 s** end to end: archive and stop
+**Timings.** The local drill (a 30 MB database, local repository) took **23.0 s** end to end: archive and stop
 2.1 s, restore 0.9 s, recovery to the target 2.9 s, promote 1.6 s, check 0.3 s, services healthy 15.2 s. A second
 restore on the new timeline took 22.7 s. Restore and recovery grow with the database size and the WAL since the chosen
 backup, and a share or S3 target is slower than a local volume: the test-host drill measures realistic numbers.
@@ -424,8 +424,8 @@ land in production's repository.
 
 ## Restore drill
 
-§7.4 rule 3: a drill after the first deployment, then **every quarter**. The P0 drill was run locally (PR #40, timings
-above). The **first drill on the test host is scheduled before go-live (P1b)**, together with the test-host deployment
+§7.4 rule 3: a drill after the first deployment, then **every quarter**. The first drill was run locally (timings
+above). The **first drill on the test host is scheduled before go-live**, together with the test-host deployment
 (decisions table, "M2 and test hosting"); it is still open, and its specifics are in [test-host.md](test-host.md).
 Record the date, the achieved RPO and RTO, and anything that went wrong.
 
@@ -455,7 +455,7 @@ generates or derives on each start:
 - `kalla-secrets/.pepper`: the key pepper. Without it no API key or client key verifies.
 - `kalla-secrets/keys/rag-blob-*`: the blob master keys of the file key provider (`rag-blob-internal`). Without them the
   `internal` blobs cannot be decrypted. Chat master keys (`rag-chat-<level>`) join only once stored chat content is
-  allowed (register A1).
+  allowed (the archive-law decision: whether chat logs are public records).
 - `kalla-secrets/pgbackrest/cipher-pass`, with a backup target: the repository passphrase. Without it no backup can be read.
 - `kalla-secrets/postgres/*_password`: the passwords of the database roles (`bootstrap`, the superuser, and the four
   service roles). A restored cluster keeps the roles it had, with these passwords: with new ones the services can't log
@@ -489,7 +489,7 @@ project's labels) when they don't exist yet, and refuses to replace a file that 
   fails with "differs from the deployment's key" until the new key is escrowed. The upgrade guide verifies the escrow
   before each upgrade.
 - **Seal the media in two places** (or use the key service's own backup). The files are in the clear: whoever holds
-  the media can read every `internal` blob and every backup. Where the escrow lives is agreed with IT (to-verify #145).
+  the media can read every `internal` blob and every backup. Where the escrow lives is agreed with IT.
 - **Keep each set as long as the data and backups it protects.**
 - **A restore reads them back**: `--restore` before the first start (*Restoring onto another host*), then `--verify`
   against the set; every drill does this.
@@ -501,7 +501,7 @@ runs the profiled Compose service `rag-upload-backup` of `compose.backup.yaml` (
 as uid 1654, the blob volume read-only, no network) with `KALLA_UPLOAD_BACKUP_DIR` (or, with a `local` target, the
 volume `kalla-upload-copy`) mounted as the target. Each new file is written under a
 temporary name and renamed; a file already in the copy is skipped. Deletions are not propagated: prune the copy with
-the backup retention (35 days). With an S3 target there is no upload copy yet (not built in P0).
+the backup retention (35 days). With an S3 target there is no upload copy yet (not built).
 
 ```bash
 sudo deploy/backup-uploads.sh          # by hand; --env-file FILE, --state-dir DIR
@@ -575,7 +575,7 @@ journalctl -u rag-restart-unhealthy.service --since today
 through environment variables, for hosts without shell access. It is the gateway's
 `deploy/compose.portainer.yaml`, unchanged but for the default of its `FORS_INTEGRATION_MANIFEST` (below), plus RAG's
 services from `deploy/compose.rag.yaml`, the same file a Compose host runs (all named `kalla-…`): kalla-postgres, kalla-migrate, kalla-api (8543), kalla-admin (9543), kalla-worker, kalla-parser and,
-with their profiles, kalla-clamav (`clamav`) and kalla-renderer (`render`) and kalla-openwebui (`openwebui`, #657). Step by
+with their profiles, kalla-clamav (`clamav`) and kalla-renderer (`render`) and kalla-openwebui (`openwebui`). Step by
 step for a new VM or an upgrade: [portainer.md](portainer.md).
 
 **Deploy.** In the gateway's existing stack, *Editor*: replace the file with this one, keep the stack name (the
@@ -687,7 +687,7 @@ back-off on 429/503, a 30-minute pause when half of the last 100 answers fail, a
 night window (connectors design §5.1, §6.3–§6.6). A platform admin can change that **per host** in the admin UI:
 *Settings → Website fetching → Host politeness*. Each row is one host name (no scheme or port) with a
 preset (`polite`, `municipal`, `fast`, `custom`) and the settings that override it; it is stored in
-`Settings.Crawl.HostOverrides`, checked on save (V37, `crawl_politeness_invalid`) and audited as `settings.update`.
+`Settings.Crawl.HostOverrides`, checked on save (`crawl_politeness_invalid`) and audited as `settings.update`.
 
 ```json
 "hostOverrides": {
@@ -715,9 +715,9 @@ preset (`polite`, `municipal`, `fast`, `custom`) and the settings that override 
 `none`), so a request for a conversation is answered from Open WebUI's own copy, the primary copy (weakness review §4,
 plan §8). With the pilot settings in `deploy/compose.rag.yaml` (`ENABLE_ADMIN_CHAT_ACCESS=false`,
 `ENABLE_ADMIN_EXPORT=false`) **no Open WebUI admin can find, open or export another user's conversation**. The only
-route that works today is the user's own export. Which route the registrar uses is decided in the DPIA (register G1,
-with W2; to-verify #173) before go-live; direct SQL against Open WebUI's database is ruled out. This section gets the
-procedure once G1 has decided it.
+route that works today is the user's own export. Which route the registrar uses is decided in the DPIA, with the decision on how long
+Open WebUI keeps its chat copies, before go-live; direct SQL against Open WebUI's database is ruled out. This section gets the
+procedure once the DPIA has decided it.
 
 What the pinned Open WebUI (v0.12.5) does, read from its source at tag `v0.12.5` (paths below `backend/open_webui/`
 unless they start with `src/`):
@@ -735,7 +735,7 @@ unless they start with `src/`):
 | The feedback service account itself | created as the store's first user, so as admin, from `WEBUI_ADMIN_EMAIL` and `WEBUI_ADMIN_PASSWORD` when Open WebUI starts with no users; with `ENABLE_PASSWORD_AUTH=false` (our default) it cannot sign in, and `ENABLE_LOGIN_FORM=false` only hides the form | `main.py:399-403`; `utils/auth.py:631-662`; `routers/auths.py:663-674`; `config.py:1704-1708` |
 | A chat the user deletes | is removed from the database (rows deleted, not flagged) | `models/chats.py:2824-2832` |
 
-**Until G1 decides, a request is handled like this** (it depends on the user):
+**Until the DPIA decides, a request is handled like this** (it depends on the user):
 
 1. The registrar (`<owner>`) records the request and identifies the user and the conversation (date, title).
 2. The user opens the conversation in Open WebUI, chooses *Download > Export chat (.json)* (or exports all chats
@@ -743,8 +743,8 @@ unless they start with `src/`):
 3. If the user cannot or will not export it, or has deleted it, there is no admin route with the pilot settings:
    escalate to the records owner and the data protection officer (open points below).
 
-**The three candidate routes, until G1 picks one** (weakness review §4 "Export route", chat design §13.3, register G1
-with W2, to-verify #173). None of them is the registrar's procedure until G1 has decided; then this section keeps the
+**The three candidate routes, until the DPIA picks one** (weakness review §4 "Export route", chat design §13.3). None
+of them is the registrar's procedure until the DPIA has decided; then this section keeps the
 chosen one and drops the others.
 
 1. *The user's own export.* Works with the pilot settings and is the interim handling above. It depends on the user:
@@ -753,18 +753,18 @@ chosen one and drops the others.
    an admin signs in and uses *Admin > Users > Chats*, then the flag goes back and the container is recreated again.
    While it is on, **every** Open WebUI admin can read **every** chat. In the pilot stack the only admin is the
    feedback service account (production-setup.md, *Open WebUI*): nobody signs in as it, and its key reaches only the
-   feedback routes. So the window needs a person with the admin role for its duration, which W2 prefers to avoid, and
+   feedback routes. So the window needs a person with the admin role for its duration, which the chat-copy retention decision prefers to avoid, and
    how the window is logged is not settled. Not tested.
-3. *Another route G1 names.* The chat design lists a read-only query as the third option, but direct SQL against Open
+3. *Another route the DPIA names.* The chat design lists a read-only query as the third option, but direct SQL against Open
    WebUI's database is ruled out (weakness review §4, which overrides the chat design). With the pilot settings Open
-   WebUI's API has no admin route to another user's conversation (table above), so this route exists only once G1
+   WebUI's API has no admin route to another user's conversation (table above), so this route exists only once the DPIA
    defines one.
 
-Also for G1 and W2:
+Also for the DPIA and the chat-copy retention decision:
 
 - *Feedback snapshots* cover only rated conversations, as of the rating.
-- *Backups of Open WebUI's data (the volume `kalla-openwebui-data`)*: none in P0, so a deleted conversation cannot be recovered.
-- Open WebUI (the profile `openwebui`) is off by default and not deployed in P0 (production-setup.md, *Open WebUI*).
+- *Backups of Open WebUI's data (the volume `kalla-openwebui-data`)*: none yet, so a deleted conversation cannot be recovered.
+- Open WebUI (the profile `openwebui`) is off by default and not deployed in the pilot (production-setup.md, *Open WebUI*).
 
 ## Adding a department
 
@@ -889,7 +889,7 @@ open it again; the next re-open needs another new value.
 | `rag_backup_wal_archive_age_seconds` above 300 | WAL is not being archived: `dc logs --since 30m kalla-postgres`, and `SELECT * FROM pg_stat_archiver` through `dc exec -T kalla-postgres psql -U postgres -d ragdb` |
 | `rag-backup.service` failed | `journalctl -u rag-backup.service`; a failed run leaves the previous backups intact. Run it again by hand once the cause is fixed |
 | Upload copy: "the upload copy's directory … does not exist (is the backup share mounted?)" | Mount the share; the next run catches up |
-| `kalla-clamav` unhealthy after a signature update | On a 16 GB host a failed reload leaves clamd without an engine (it still answers PING; every scan fails). The restart timer restarts it within a few minutes; meanwhile nothing can be scanned (the worker's scan step, P1, fails closed). `journalctl -u rag-restart-unhealthy.service`, `dc logs kalla-clamav`. On a 24 GB host clamd keeps its old engine during a reload |
+| `kalla-clamav` unhealthy after a signature update | On a 16 GB host a failed reload leaves clamd without an engine (it still answers PING; every scan fails). The restart timer restarts it within a few minutes; meanwhile nothing can be scanned (the worker's scan step fails closed). `journalctl -u rag-restart-unhealthy.service`, `dc logs kalla-clamav`. On a 24 GB host clamd keeps its old engine during a reload |
 | Admin API answers 503 `config_busy` | Another config change held the config version lock for more than 5 s. Retry; if it persists, look for a long transaction holding the lock on `config."ConfigVersion"` in `pg_stat_activity` |
 | `kalla-migrate` exited non-zero; api, admin and worker do not start | `dc logs kalla-migrate`. They wait for a successful migration, so the old schema is untouched; fix the cause and `dc up -d --wait` again |
 | A service exits at once with a permission error on `/run/app-secrets` or `/run/certs` | The files in the volumes belong to the wrong user: `kalla-bootstrap` gives them to their users at every start, so `dc up -d --wait` again and read `dc logs kalla-bootstrap` |
@@ -921,7 +921,7 @@ open it again; the next re-open needs another new value.
 - **The Data Protection certificate and the pepper** are never regenerated: a new one makes the stored data
   unreadable (protected values, every key hash).
 - **The blob master key and the pgBackRest passphrase** are generated once and escrowed. There is no rotation
-  procedure yet (key provider decision K1).
+  procedure yet (the decision on the key service, Azure Key Vault being the target).
 - **The api's keys** (`Security__DownloadGrantKeys__<kid>`, `Security__ConversationIdKeys__<kid>`): a rotation adds a
   new key id next to `k1`.
 - **The gateway credential keys** (`kalla-secrets/{api,admin,worker}/Gateway__Key`, one per service of the gateway
