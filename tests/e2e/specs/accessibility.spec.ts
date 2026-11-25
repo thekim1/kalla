@@ -18,6 +18,8 @@ async function allPages(page: Page): Promise<string[]> {
   const collection = await first('/api/collections')
   if (collection) {
     pages.push(`/collections/${collection.id}`)
+    // Quality, with the evaluation trend once the knowledge base has two runs or more (§7.1, B-69).
+    pages.push(`/collections/${collection.id}?tab=quality`)
     const sources = await getJson(page, `/api/collections/${collection.id}/sources`)
     if (sources[0]) {
       pages.push(`/sources/${sources[0].id}`)
@@ -26,7 +28,7 @@ async function allPages(page: Page): Promise<string[]> {
   }
   const assistant = await first('/api/assistants')
   if (assistant) pages.push(`/assistants/${assistant.id}`)
-  expect(pages.slice(listPages.length), 'detail pages to scan: knowledge base, source, run, assistant (the pilot journey makes them)').toHaveLength(4)
+  expect(pages.slice(listPages.length), 'detail pages to scan: knowledge base and its Quality, source, run, assistant (the pilot journey makes them)').toHaveLength(5)
   return pages
 }
 

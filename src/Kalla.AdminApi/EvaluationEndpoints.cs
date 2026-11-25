@@ -29,6 +29,9 @@ public static class EvaluationEndpoints
         return await admin.Db.EvaluationRuns.AsNoTracking().Where(r => ids.Contains(r.Id)).ToDictionaryAsync(r => r.Id, r => r.RecallAtK, ct);
     }
 
+    /// <summary>The runs the trend shows (admin design §7.1).</summary>
+    public const int TrendRuns = 30;
+
     public static RouteGroupBuilder MapEvaluation(this RouteGroupBuilder api)
     {
         ArgumentNullException.ThrowIfNull(api);
@@ -47,6 +50,41 @@ public static class EvaluationEndpoints
                     [.. runs.Select(r => EvaluationRunDto.Of(r, gone.GetValueOrDefault(r.Id), r.ComparedRunId is { } c ? before.GetValueOrDefault(c) : null))]);
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("GetEvaluation").WithSummary("A collection's evaluation set by layer and state, and its latest runs");
+
+        // The trend (admin design §7.1; B-69): the latest finished runs under the saved settings (no candidate), oldest
+        // first, with recall@10 and MRR per layer from their results as the worker scores them (answerable questions only:
+        // `Hit` is set for those), the human layer first.
+        evaluation.MapGet("/trend", async (Guid id, AdminContext admin, CancellationToken ct) =>
+            {
+                _ = await Collection(admin, id, ct);
+                var sets = admin.Db.EvaluationSets.AsNoTracking().Where(s => s.CollectionId == id).Select(s => s.Id);
+                var runs = await admin.Db.EvaluationRuns.AsNoTracking()
+                    .Where(r => r.SetId != null && sets.Contains(r.SetId.Value) && r.FinishedAt != null && !r.Candidate)
+                    .OrderByDescending(r => r.StartedAt).Take(TrendRuns)
+                    .Select(r => new { r.Id, r.Kind, r.Variant, r.StartedAt, r.QuestionCount, r.RecallAtK, r.Mrr })
+                    .ToListAsync(ct);
+                Guid[] ids = [.. runs.Select(r => r.Id)];
+                var layers = (await (from x in admin.Db.EvaluationResults.AsNoTracking()
+                                     join q in admin.Db.EvaluationQuestions.AsNoTracking() on x.QuestionId equals q.Id
+                                     where ids.Contains(x.RunId) && x.Hit != null
+                                     group x by new { x.RunId, q.Layer } into g
+                                     select new
+                                     {
+                                         g.Key.RunId, g.Key.Layer, Questions = g.Count(), Found = g.Count(x => x.Hit == true),
+                                         Reciprocal = g.Sum(x => x.Hit == true && x.ExpectedRank != null ? 1m / x.ExpectedRank.Value : 0m),
+                                     }).ToListAsync(ct))
+                    .ToLookup(l => l.RunId);
+                return new EvaluationTrendDto(
+                [
+                    .. runs.OrderBy(r => r.StartedAt).Select(r => new EvaluationTrendRunDto(r.Id, r.Kind, r.Variant, r.StartedAt, r.QuestionCount, r.RecallAtK, r.Mrr,
+                    [
+                        .. layers[r.Id].OrderBy(l => l.Layer == EvaluationLayers.Human ? 0 : 1).ThenBy(l => l.Layer, StringComparer.Ordinal)
+                            .Select(l => new EvaluationTrendLayerDto(l.Layer, l.Questions, Math.Round((decimal)l.Found / l.Questions, 4), Math.Round(l.Reciprocal / l.Questions, 4))),
+                    ])),
+                ]);
+            })
+            .RequireAuthorization(AdminPolicies.Read).WithName("GetEvaluationTrend")
+            .WithSummary("The latest finished runs, oldest first, with recall@10 and MRR per layer (the trend chart)");
 
         evaluation.MapGet("/questions", async (Guid id, string? layer, string? state, string? q, Guid? after, int? limit, AdminContext admin, CancellationToken ct) =>
             {
@@ -374,6 +412,15 @@ public static class EvaluationEndpoints
 }
 
 public sealed record QuestionCount(string Layer, string State, int Count);
+
+/// <summary>The trend's runs, oldest first (admin design §7.1).</summary>
+public sealed record EvaluationTrendDto(IReadOnlyList<EvaluationTrendRunDto> Runs);
+
+/// <summary>A run with its overall figures and each layer's (<c>human</c> first); a layer without answerable questions is absent.</summary>
+public sealed record EvaluationTrendRunDto(Guid Id, string Kind, string Variant, DateTimeOffset StartedAt, int? QuestionCount, decimal? RecallAtK, decimal? Mrr,
+    IReadOnlyList<EvaluationTrendLayerDto> Layers);
+
+public sealed record EvaluationTrendLayerDto(string Layer, int Questions, decimal RecallAtK, decimal Mrr);
 
 public sealed record EvaluationOverview(bool HasSet, IReadOnlyList<QuestionCount> Questions, IReadOnlyList<EvaluationRunDto> LatestRuns);
 

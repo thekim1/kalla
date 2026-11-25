@@ -163,6 +163,44 @@ public sealed class EvaluationEndpointsTests(AdminDatabaseFixture database, Admi
     }
 
     [Fact]
+    public async Task The_trend_lists_the_latest_finished_runs_oldest_first_with_recall_and_mrr_per_layer_human_first()
+    {
+        // §7.1 (B-69): per layer from the results, as the worker scores (answerable questions only); no candidate or unfinished run.
+        var seed = await SeedAsync();
+        await using var db = TestPostgres.Context(database.Connection(null));
+        var set = await db.EvaluationSets.AsNoTracking().SingleAsync(s => s.CollectionId == seed.Collection, Ct);
+        Guid human = Guid.CreateVersion7(), unanswerable = Guid.CreateVersion7();
+        db.EvaluationQuestions.AddRange(
+            new EvaluationQuestion { Id = human, SetId = set.Id, Classification = Classification.Public, Layer = EvaluationLayers.Human, Question = "Hur söker jag bygglov?" },
+            new EvaluationQuestion { Id = unanswerable, SetId = set.Id, Classification = Classification.Public, Layer = EvaluationLayers.Human, Question = "Vad heter månen?" });
+        var now = DateTimeOffset.UtcNow;
+        EvaluationRun Run(int hoursAgo, bool finished = true, bool candidate = false) => new()
+        {
+            SetId = set.Id, Classification = "public", Kind = "nightly", StartedAt = now.AddHours(-hoursAgo), FinishedAt = finished ? now.AddHours(-hoursAgo).AddMinutes(5) : null,
+            Candidate = candidate, RecallAtK = 0.5m, Mrr = 0.25m, QuestionCount = 2,
+        };
+        var (older, newer, cand, running) = (Run(48), Run(24), Run(12, candidate: true), Run(1, finished: false));
+        db.EvaluationRuns.AddRange(older, newer, cand, running);
+        await db.SaveChangesAsync(Ct);
+        EvaluationResult Result(EvaluationRun run, Guid question, int? rank, bool? hit) =>
+            new() { RunId = run.Id, QuestionId = question, Classification = "public", ExpectedRank = rank, Hit = hit };
+        db.EvaluationResults.AddRange(
+            Result(older, human, null, false), Result(older, seed.Generated, 4, true), Result(older, unanswerable, null, null),
+            Result(newer, human, 2, true), Result(newer, seed.Generated, 1, true), Result(newer, unanswerable, null, null));
+        await db.SaveChangesAsync(Ct);
+        using var viewer = await AdminDatabaseFixture.UserAsync(database.HeaderFactory(), RagRoles.Viewer, seed.Code);
+
+        var runs = (await viewer.GetFromJsonAsync<JsonElement>($"/api/collections/{seed.Collection}/evaluation/trend", Ct)).GetProperty("runs").EnumerateArray().ToList();
+        runs.Select(r => r.GetProperty("id").GetGuid()).ShouldBe([older.Id, newer.Id]);
+        var layers = runs[1].GetProperty("layers").EnumerateArray()
+            .Select(l => (l.GetProperty("layer").GetString(), l.GetProperty("questions").GetInt32(), l.GetProperty("recallAtK").GetDecimal(), l.GetProperty("mrr").GetDecimal())).ToList();
+        layers.ShouldBe([("human", 1, 1m, 0.5m), ("generated", 1, 1m, 1m)]);
+        runs[0].GetProperty("layers")[0].GetProperty("recallAtK").GetDecimal().ShouldBe(0m);
+        runs[0].GetProperty("layers")[1].GetProperty("mrr").GetDecimal().ShouldBe(0.25m);
+        (await viewer.GetAsync($"/api/collections/{Guid.CreateVersion7()}/evaluation/trend", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
     public async Task A_run_needs_a_set()
     {
         var seed = await SeedAsync(withSet: false);

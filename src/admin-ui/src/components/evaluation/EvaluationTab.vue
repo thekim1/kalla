@@ -3,23 +3,22 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
 import type { EvaluationOverview, EvaluationRun, GenerationForecast } from '@/api/types'
 import AsyncState from '@/components/ui/AsyncState.vue'
-import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import InlineError from '@/components/ui/InlineError.vue'
-import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import UiDialog from '@/components/ui/UiDialog.vue'
 import { useJobPoll } from '@/composables/useJobPoll'
 import { useLoadable } from '@/stores/loadable'
 import { useUiStore } from '@/stores/ui'
-import { formatDateTime, formatDecimal, formatNumber, quietZero, formatUsdCost } from '@/utils/format'
+import { formatNumber, formatUsdCost } from '@/utils/format'
 import { COMMON, EVALUATION } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 import EvaluationQuestions from './EvaluationQuestions.vue'
 import EvaluationReport from './EvaluationReport.vue'
+import EvaluationTrend from './EvaluationTrend.vue'
 
 // Testfrågor och kvalitet (admin design §7.1): the set by layer with Skapa fler and its forecast, Kör utvärdering, the
-// latest report (§7.2), earlier runs as a table (the trend's table view), and the questions.
+// latest report (§7.2), the trend of the latest runs with their table (EvaluationTrend), and the questions.
 const props = defineProps<{ collectionId: string; canEdit: boolean }>()
 const emit = defineEmits<{ (e: 'use-proposal', values: { coverageMaxDistance?: number; coverageMinKeywordScore?: number }): void }>()
 const ui = useUiStore()
@@ -49,14 +48,6 @@ const report = computed(() => {
   return finished.find((r) => r.variant === 'hybrid') ?? finished[0] ?? null
 })
 const hasGenerated = computed(() => (counts.value.generated?.active ?? 0) + (counts.value.generated?.stale ?? 0) > 0)
-const historyColumns: Column[] = [
-  { key: 'started', label: EVALUATION.started },
-  { key: 'kind', label: EVALUATION.kind },
-  { key: 'count', label: EVALUATION.questionsCount, align: 'right' },
-  { key: 'recall', label: EVALUATION.recall, align: 'right' },
-  { key: 'mrr', label: EVALUATION.mrr, align: 'right' },
-]
-const decimals = (v: number | null) => (v == null ? '–' : formatDecimal(v, 2, 2))
 
 async function load(): Promise<void> {
   await overview.run(() => api.collections.evaluation(props.collectionId))
@@ -159,19 +150,8 @@ onMounted(load)
       <EvaluationReport v-if="report" :run="report" :compared="compared" :can-edit="canEdit" @use-proposal="emit('use-proposal', $event)" />
       <UiCard v-else :title="EVALUATION.report"><p class="text-fg-2">{{ EVALUATION.noReport }}</p></UiCard>
 
-      <UiCard v-if="runs.length > 1" :title="EVALUATION.history" data-test="history">
-        <DataTable :columns="historyColumns" :rows="runs" :row-key="(r) => r.id" :caption="EVALUATION.historyCaption">
-          <template #cell-started="{ row }"><span class="tabular">{{ formatDateTime(row.startedAt) }}</span></template>
-          <template #cell-kind="{ row }">
-            {{ EVALUATION.kinds[row.kind] ?? row.kind }}
-            <UiBadge v-if="row.candidate" :label="EVALUATION.candidate" class="ml-1" />
-            <UiBadge v-if="!row.finishedAt" tone="accent" :label="EVALUATION.unfinished" class="ml-1" />
-          </template>
-          <template #cell-count="{ row }"><span class="tabular" :class="quietZero(row.questionCount)">{{ formatNumber(row.questionCount) }}</span></template>
-          <template #cell-recall="{ row }"><span class="tabular">{{ decimals(row.recallAtK) }}</span></template>
-          <template #cell-mrr="{ row }"><span class="tabular">{{ decimals(row.mrr) }}</span></template>
-        </DataTable>
-      </UiCard>
+      <!-- The trend of the latest 30 runs, with their table as its text view (§7.1, B-69). -->
+      <EvaluationTrend :collection-id="collectionId" :refresh="runs.map((r) => r.id).join()" />
 
       <EvaluationQuestions
         ref="questions" :collection-id="collectionId" :can-edit="canEdit" :deleted="counts.human?.stale ?? 0" @changed="questionsChanged"
