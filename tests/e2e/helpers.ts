@@ -172,15 +172,21 @@ export async function scan(page: Page, label: string): Promise<void> {
 /**
  * Targets that fail WCAG 2.2 SC 2.5.8 (Target Size, Minimum, AA). Copied from the gateway: a target passes when it is at
  * least 24 x 24 px, or when a 24 px circle centred on it does not touch any other target. Checkboxes and radios are
- * skipped: their label is the target.
+ * skipped: their label is the target; so are visually hidden (`sr-only`) controls, which no pointer can hit (#1064).
  */
 export async function undersizedControls(page: Page, minimum = 24) {
   return page.evaluate(min => {
     const selector = 'button, a[href], input:not([type="hidden"]), select, textarea, summary, [role="button"], [tabindex]:not([tabindex="-1"])'
+    // Visually hidden (`sr-only`: clipped to nothing) is not a pointer target: a file input behind its drop zone and
+    // buttons, say (#1064). It stays reachable by keyboard, which this check is not about.
+    // Tailwind's `sr-only` is 1 x 1 px with `clip-path: inset(50%)` (the file inputs measured 1 x 1 with `clip: auto`), so a
+    // control of at most 1 x 1 px counts as hidden too: nothing is designed as a 1 px target.
+    const clipped = (style: CSSStyleDeclaration, rect: DOMRect) =>
+      /rect\(0(px)?,? 0(px)?,? 0(px)?,? 0(px)?\)/.test(style.clip) || style.clipPath === 'inset(50%)' || (rect.width <= 1 && rect.height <= 1)
     const visible = (element: Element) => {
       const rect = element.getBoundingClientRect()
       const style = getComputedStyle(element)
-      return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && !element.closest('[aria-hidden="true"], [inert]')
+      return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && !clipped(style, rect) && !element.closest('[aria-hidden="true"], [inert]')
     }
     const root = [...document.querySelectorAll('dialog[open]')].filter(d => d.matches(':modal')).pop() ?? document
     const all = [...root.querySelectorAll(selector)].filter(visible)
