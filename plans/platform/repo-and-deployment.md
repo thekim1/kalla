@@ -691,6 +691,12 @@ recipe: performance pass §3.1).
 | `${KALLA_UPLOAD_BACKUP_DIR}` (`DIR/uploads`) → `/backup` | rag-upload-backup (`compose.backup.yaml`; with `kalla-blobs` read-only) | the upload copy (§7.4); the volume `kalla-upload-copy` with `--backup-target local` |
 | `kalla-openwebui-data` → `/data` | kalla-openwebui (`DATA_DIR=/data`, uid 1000), kalla-openwebui-setup | its own SQLite DB (§12.8) |
 
+**On a host disk** (Decisions "Compose host layout and upgrades"): `deploy/compose.host-paths.yaml` binds
+`kalla-postgres-data`, `kalla-blobs`, `kalla-pgbackrest-repo` and `kalla-upload-copy` under `KALLA_DATA_ROOT`
+(`postgres/` owned by 999, `blobs/` by 1654, `pgbackrest/`, `upload-copy/`); `init-deployment.sh --data-root <dir>`
+selects the overlay and creates them. The upgrade scripts and `doctor.sh` read the mounts from `docker inspect`, so a
+site's own layout is found too.
+
 Open WebUI runs on SQLite with one worker and task generation off. When its trigger fires (CPU > 80 % of its VM, or
 p95 overhead > 100 ms at peak; P2 onwards, on its own VM) it gets its own Postgres (never `ragdb`), `UVICORN_WORKERS` > 1
 and `WEBSOCKET_MANAGER=redis` with its own Redis.
@@ -935,6 +941,13 @@ or scaled to 0 first, as before. **An upgrade may skip releases:** migrations ar
 ignored and named, and `release.yml` boots the oldest supported release's Portainer stack (`UPGRADE_FROM`) and applies
 the new stack file over it with nothing added, changed or stopped (`deploy/tests/portainer-upgrade-boot.sh`).
 Postgres image changes that restart Postgres itself are never rolling (a short data-plane outage, announced).
+
+**A Compose host** keeps its state (`.env`, `secrets/`, `certs/`, the host units' configuration) in `KALLA_STATE_DIR`
+(default `/etc/kalla`), outside every bundle: an upgrade unpacks the new bundle beside the old one, runs
+`deploy/doctor.sh`, and starts the new files against the same state directory; `kalla-roles` and `kalla-migrate` do the
+role renames and migrations as in the Portainer stack. Where volumes must be carried to new names, the upgrade scripts'
+shared library (`deploy/upgrade/lib.sh`) finds the project, containers and mounts and prints its plan before `--apply`
+(Decisions "Compose host layout and upgrades").
 
 ### 7.4 Backup, recovery and key escrow
 
