@@ -1,8 +1,9 @@
 # Handover
 
 State of the Källa work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`). **Last
-release `v0.10.0`** (2026-11-23, tag at `5a74afb8`, on Fors `v0.13.0`): P2 wave 1. **`main` has unreleased code since
-the tag:** six stream-b items built on the user's machine in session 57, and the UX pass up to B-77 (*State*). The
+release `v0.11.0`** (2026-11-25 00:19 UTC, tag at `a3076ed4`, on Fors `v0.13.0`): the admin UI reworked (the UX pass
+B-74 to B-82), B-64, and session 57's six items. **`main` has unreleased code since the tag:** B-65 (the topic form
+and preview) and the post-merge follow-ups (*State*). The
 user's VM runs 0.5.0. Three machines have worked on it: `~/research/rag` (the user's, sessions 49 to 55 and 57),
 `~/git/ume-rag-platform` (the user's WSL machine, session 56, which ran beside session 57 until 2026-11-24) and
 `thekim1`'s (stream b, stream a, the releases, and a coordinating session that writes proposals). Several sessions post
@@ -28,7 +29,7 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
    `plans/archive/work/`), results in `results-a.md`, `results-b.md` and `results-main.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here (session 59)
+## Start here (session 60)
 
 **What does not travel between machines:**
 - **Claude Code's own memory stays on the machine it was written on.** Everything that binds is in
@@ -68,70 +69,71 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
   its pull request what you are about to write; review its pull requests as comments (claims checked against the code).
 - **A decision for the user is asked as four alternatives with one recommendation** (the question tool).
 
-**Open when this was written** (2026-11-24, about 17:00 UTC): the main session's #1048 (drops the `node_modules`
-symlink #1047 committed; approved by the user, merges once `backend` is green), #1052 (admin design: today's
-deviations settled) and this file's #1042; Dependabot's #958. `thekim1` merged B-78 (#1041, #1043), B-79 (#1044,
-#1045), #1046 (#1036's follow-ups) and B-80 part 1 (#1047) during the day, the last four before the main session's
-reviews were done, so those reviews are follow-up issues. In order:
+**Open when this was written** (2026-11-25, morning): the main session's #1073 (#1069's `release.yml` fix) and
+this file's pull request; Dependabot's #958. `thekim1` works fast and merges with `--admin` before a review comes:
+review after the merge and file the findings as an issue labelled `stream-b` (that is how #1049, #1051, #1062 and #1063
+went, each fixed within hours). In order:
 
-1. **#1048 and #1052.** Merge #1048 first: until it does, pulling `main` on any machine but `thekim1`'s replaces the
-   ignored `src/admin-ui/node_modules` with a dangling symlink and deletes the installed packages (*Watch*). #1052
-   needs an approval; it writes into the admin design: §5.7's "own · shared" (the reading #1046 built), §5.12's
-   scroll padding (sticky: the bar's height; fixed on a phone: to the window's bottom) and filters replacing the
-   address without a history entry, the assistant's one-turn test panel and tabs without counts, the knowledge base's
-   dot before the tab name and *Topics* without a count.
-2. **Stream b's follow-ups from the post-merge reviews:** **#1049** (#1044 and #1046: *Try without saving* never
-   shows its run, since nothing reloads `EvaluationTab`; UI text naming the old tabs; *Quality*'s "worse" is
-   losses > wins while Home's `evaluation_worse` is a 5-point recall drop; the search name's WCAG 2.5.3 phrase; a
-   summer-time test that doesn't test summer time) and **#1051** (#1047: *Show the ratings* opens 30 days only; focus
-   lost on a chip's × and *Clear filters*; stale `from`/`to` after leaving *Custom…*). Re-check each fix against the
-   issue. B-80 part 2 (the Audit log, the Map, the lists' search) is still to come.
-   **#1040, the NVDA checklist** (the main session's): B-78 and B-79 have both landed, so rewrite
-   `plans/work/nvda-pass.md` for the assistant's five tabs and the knowledge base's six, then tell the user it is
-   ready for the team.
-3. **Not queued yet, decide and queue** (design is on `main`): **the chat stage metrics of chat §17**
+1. **#1073, #1069's fix** (approval needed): Syft's `TMPDIR` under `$RUNNER_TEMP`, no `-q`, a leftover scan stopped
+   at the start and in an `if: always()` step, matched on this runner's workspace so the other runner's scans live.
+   Not exercised yet: **run one release dry run with the runners idle before the next release**
+   (`gh workflow run release.yml -f version=X.Y.Z-dryrun -f e2e=false`); it can go with item 7's `e2e.yml` run.
+2. **Stream b's follow-ups from session 59's post-merge reviews** (re-check each fix against its issue):
+   - **#1075** (#1060, the Topics tab): *Add N topics* can store a path rule twice. A failed second confirm retries
+     plan 1 forever; an open next level keeps stale `coveredBy` after a save; two sources on one processing pick the
+     same section.
+   - **#1076** (#1068 and #1071, B-65): `PipelineCard` shows and re-publishes the *draft*'s topics, so a cancelled
+     topic plan goes live with the next parameter change; editing one topic of a multi-topic rule duplicates it;
+     a rule without `tags` (valid in the schema) crashes the card and *Remove*; a save during a running plan is
+     lost; the preview has no time or document budget (the compiled-rule cache would be stream a's).
+   - #1072's comment: the new audit object types have no event labels; `department` matches no writer.
+   - #1059's points 3 and 4 (comment): `under=` filtered in C#, decoded `%2F`/`?`/`#` in section paths.
+   **Two design questions for the main session** from these: whether a topic rule from the Topics tab is host-less
+   (`"<section>/"`, tags every host; §5.5.2's text) or host-first (its wireframe), and whether a removed topic shows
+   a *pending* state until the re-chunk ends (§4.5 defines it for new topics only).
+3. **The NVDA pass** can start: #1061 rewrote `plans/work/nvda-pass.md` for 0.11.0's admin UI. Tell the user's team;
+   the result goes in `results-main.md` under row 96.
+4. **Not queued yet, decide and queue** (design is on `main`): **the chat stage metrics of chat §17**
    (`rag.chat.stage.duration`, `rag.chat.ttft`, `rag.chat.overhead`, marked not built; B-72 takes its own
    timestamps), and **a filter for files not scanned for malware** in the file list (the row mark is gone since
    #1027).
-4. **B-83's hand-off, stream a's:** `e2e.yml` runs only the `pilot` and `accessibility` projects; the new `upload`
+5. **B-83's hand-off, stream a's:** `e2e.yml` runs only the `pilot` and `accessibility` projects; the new `upload`
    project (`tests/e2e/specs/upload.spec.ts`) runs by hand. Add it to the workflow, or decide it stays by hand.
-5. **A paused upload source on 0.10.0** (said on #1024): 0.10.0 shipped *Pause* on upload sources, and
+6. **A paused upload source on 0.10.0** (said on #1024): 0.10.0 shipped *Pause* on upload sources, and
    `POST /api/upload-batches/{id}/commit` still takes a batch for a paused one, whose sync job the worker drops.
    #1024 stops new pauses and keeps *Resume*; refusing the commit with `source_paused` is open.
-6. **Before the next release, run `e2e.yml` once with the runners idle:** B-74, B-75 and the stack change many
-   names and buttons; the specs were updated by hand and run locally by `thekim1`, not in CI.
-7. **The cards of session 57 and the UX pass:** B-78 moves *Content gaps* to the assistant's *Quality* tab and the
+7. **Before the next release, run `e2e.yml` once with the runners idle:** the last CI run was 2026-11-23, before
+   B-76 to B-82 and B-64/B-65 changed many names and buttons; the specs were updated by hand and run locally by
+   `thekim1`.
+8. **The cards of session 57 and the UX pass:** B-78 moves *Content gaps* to the assistant's *Quality* tab and the
    *Cost* card's outcome tables to *Usage*; B-79 places *Feedback on documents* on the new Overview. The new cards
    print their counts without `quietZero` (B-75's rule 8): whoever touches them next adds it. On the *Cost* card a
    cost below 0.00005 US$ reads "0,00 US$" (the existing `formatUsdCost`).
-8. **#981's follow-ups** (on #981, for #980) and **#978's smaller points** (its review): `TestQuestionDrawer.vue`'s
+9. **#981's follow-ups** (on #981, for #980) and **#978's smaller points** (its review): `TestQuestionDrawer.vue`'s
    hand-rolled debounce, `AssistantTestsTab`'s fixed poll, `RunView` and `PublicationView` not reloading on a
    `props.id` change; weak tests for the key item on a knowledge base.
-9. **#958, the parser's bumps:** `LICENSES.md` has to be regenerated on the branch; stream a's. Best taken with
-   **opencv 5.1 from 2026-11-25** (*Watch*): try `opencv-python-headless` 5.1.0.95 once the parser's uv cutoff lets
-   it in; it may retire the FFmpeg exceptions before 2026-12-17.
-10. **The docs and platform issues, stream a's:** #992 (instructions that fail: `KALLA_OTEL_ENDPOINT` does not
+10. **#958, the parser's bumps:** `LICENSES.md` has to be regenerated on the branch; stream a's. Best taken with
+    **opencv 5.1 from 2026-11-25** (*Watch*): try `opencv-python-headless` 5.1.0.95 once the parser's uv cutoff lets
+    it in; it may retire the FFmpeg exceptions before 2026-12-17.
+11. **The docs and platform issues, stream a's:** #992 (instructions that fail: `KALLA_OTEL_ENDPOINT` does not
     exist, it is `FORS_OTEL_ENDPOINT`; `deployment/rag-*`; the runbook's Portainer backup list), #993 (stale facts),
     #994 (project vocabulary in operator pages), #995 (gaps: **Portainer backup and restore with a drill**, the
     nightly answer run, *Needs attention*, a new department, key expiry, an upgrade from 0.9.x), #1030 (the
     not-scanned mark), #1028 (B-75's platform pages) and #1034 (B-77's save bar on the Settings sections).
-11. **The Audit** was red on 0.9.2's images (#1009); #1010's fixes are in 0.10.0. No Audit has run since the tag
-    (the last, 2026-11-23 14:45 UTC, was before it): the next green one closes #1009.
-12. **#925's steps 2 to 4** (personal-data verdicts, *reject*, the false-positive summary): the Decisions entry and
+12. **The Audit** is green again (run 45419469305, 2026-11-24, the first on 0.10.0's images); #1009 is closed.
+13. **#925's steps 2 to 4** (personal-data verdicts, *reject*, the false-positive summary): the Decisions entry and
     the design changes are `thekim1`'s session's (said on #925). Step 1 is B-63 (#963, merged).
-13. **The VM's upgrade is `thekim1`'s** (#920): 0.5.0 straight to the current release. No report yet.
-14. **Repository variables:** the workflows read `vars.KALLA_TEST_HOST_RUNNER`, `vars.KALLA_TEST_HOST_DEPLOY_ENV`,
+14. **The VM's upgrade is `thekim1`'s** (#920): 0.5.0 straight to the current release. No report yet.
+15. **Repository variables:** the workflows read `vars.KALLA_TEST_HOST_RUNNER`, `vars.KALLA_TEST_HOST_DEPLOY_ENV`,
     `vars.KALLA_R1_*` and `secrets.KALLA_R1_API_KEY`, and none exist; `thekim1` was asked on #905 (2026-11-21), no
     answer yet.
-15. **#1015** (the release's merge hold) is closed (session 59): `v0.10.0` is tagged.
 
 ### Waiting on the user
 
 - **The umea.se inventory (A-L1):** the first input of the live block (`plans/roadmap.md`); every live item waits on an
   input, A-L1 first.
-- **The NVDA pass (to-verify row 96):** the user's team runs it on Windows with `plans/work/nvda-pass.md`. Its
-  checklist names the old tabs; B-78 and B-79 have landed, so the main session rewrites it first (#1040, item 2); the
-  result goes in `results-main.md`.
+- **The NVDA pass (to-verify row 96):** the user's team runs it on Windows with `plans/work/nvda-pass.md`, rewritten
+  for 0.11.0 (#1061); the result goes in `results-main.md`.
 - **The gold set's scope:** the draft covers the 1,166-page "Kommun och politik" slice; whether DoIT extends it to the
   full umea.se crawl or accepts the slice is open (`plans/gold-set/README.md`).
 - **The support-chatbot proposal:** F3, F4, F8 built; F10, F7, F6 queued (B-61, B-62, B-66); F1, F2, F5, F9 are the
@@ -175,6 +177,22 @@ reviews were done, so those reviews are follow-up issues. In order:
 - **Tests that share the job queue:** the nightly purge re-queues `delete-source` for every deleted source with live
   content (#884), so a test that queues a command for a deleted source can lose its lease (#897).
 - **The demo seed's slug in a test:** `openwebui.spec.ts` leaves out the assistant named `demo-assistent` (#882).
+
+## What session 59 did (2026-11-24 and 25)
+
+On `~/research/rag`.
+
+- **Post-merge reviews** (a review agent per pull request; each main finding checked in the code before posting):
+  #1044 and #1046 → #1049; #1047 → #1051; #1056 → #1062; #1053 → #1063 (all fixed by `thekim1` within hours, in
+  #1057, #1058 and #1072); #1059 (comment, points 1 and 2 fixed in #1066, checked); #1060 → #1075; #1068 and #1071 →
+  #1076; #1072 (comment).
+- **#1047 committed `src/admin-ui/node_modules` as a symlink** to its author's checkout. Pulling it deleted this
+  machine's packages; #1048 removed it and ignores a `node_modules` link (*Watch*).
+- **#1052:** the admin design took the day's deviations (§5.7's own · shared, §5.12's scroll padding and filters,
+  the assistant's one-turn test panel, tabs without counts).
+- **#1061:** the NVDA checklist for 0.11.0's admin UI (#1040).
+- **#1073:** `release.yml`'s Syft fix for #1069 (open).
+- Closed #1015 (the 0.10.0 merge hold) and #1009 (the Audit, green again).
 
 ## What session 56 did after #989 (2026-11-23 evening and 2026-11-24 morning)
 
@@ -298,32 +316,22 @@ On `~/research/rag` (the user's machine), as the main session, while `thekim1`'s
 
 ## State
 
-- **Release:** `v0.10.0` published 2026-11-23 21:02 UTC (tag at `5a74afb8`, on Fors `v0.13.0`; the Portainer stack
-  is pinned to its images since #1020). `v0.9.x` are `ghcr.io/thekim1/kalla/*` too, public, Apache-2.0. `v0.8.0` and
-  earlier are Ume.Rag (`ghcr.io/thekim1/ume-rag/*`, EUPL-1.2).
-- **Audit:** red on 2026-11-22 and 2026-11-23 on 0.9.2's postgres, clamav and parser images
-  ([run 45197573594](https://github.com/thekim1/kalla/actions/runs/45197573594), #1009); 0.10.0 has the fixes
-  (#1010) and is scanned from the next run. The dated exceptions are in *Watch*.
+- **Release:** `v0.11.0` published 2026-11-25 00:19 UTC (tag at `a3076ed4`, on Fors `v0.13.0`; the Portainer stack
+  is pinned to its images since #1070). `v0.9.x` and later are `ghcr.io/thekim1/kalla/*`, public, Apache-2.0.
+  `v0.8.0` and earlier are Ume.Rag (`ghcr.io/thekim1/ume-rag/*`, EUPL-1.2).
+- **Audit:** green on 2026-11-24 (run 45419469305); #1009 closed. The dated exceptions are in *Watch*.
 - **What a deployer types in Portainer:** 1 value since 0.7.0 (`FORS_DOMAIN`, no secret).
-- **On `main`, unreleased** (session 57's six items, B-74 to B-77, B-82, #1007's follow-ups; no upgrade note; three
-  migrations, each adding one `chat` table with its grants: `AssistantDailyOutcomes`, `AssistantDailyGaps`,
-  `DocumentDailyFeedback`): cost per outcome on the *Cost* card (B-61), the content-gap report (B-62), downvotes per
-  document with its attention item (B-66), `kalla.progress` and `kalla.timings` (B-72), `topics` on related documents
-  and `kalla.nearest` (B-73), an upload with a known name replaces the file (B-83); the phone's bottom menu (B-74), the
-  layout rules and names (B-75), one primary action and ⋯ menus (B-76), the Publish dialog (B-82), the save bar and
-  the leave guard (B-77).
+- **On `main`, unreleased:** B-65 (#1068 the topic rule preview, #1071 the topic form with *Edit* and *Remove* and the
+  read-only Topics field; #929 closed), #1072 (#1062's and #1063's follow-ups) and whatever lands after.
 - **Queues:** stream a: the live block (A-L1 to A-L10), A-34 and A-35 with only their live checks open, and its issues
-  (*Start here*, 3, 7 and 8, and #974, #987). Stream b: the UX pass, in `thekim1`'s hands (B-74 and B-75 merged; B-76
-  #1032, B-82 #1033 and B-77 #1035 merged; B-78 part 1 #1041 open, reviewed; then B-79, B-80, B-81; B-78 and B-79 no
-  longer wait on anything of session 57's), B-64 and B-65 (the topics editor), B-67 to B-69 (P2 wave 2), B-71, B-42 to
-  B-46 (the gateway phases' live checks) and its live items. An item someone has started says **Taken** in the queue.
-  Main: M-4.
-- **Open issues that matter:** #1036 (B-75's follow-ups, stream b), #1040 (the NVDA checklist, the main session's),
-  #1039, #992 to #995, #1028, #1030 and #1034 (the docs and the platform pages, stream a's), #1009 (the Audit), #987
-  (the grading script), #980 (code quality's tracker), #974 (code quality, stream a's part), #781 and #921 (watch), #920
-  (the VM's upgrade, `thekim1`'s), #929 (topics; closes with B-65), #667 (M-16's issue: the work is done, `thekim1`'s to
-  close), #1015, #333, #511, #580 and #550. In Fors: no open pull request; proposals #108 and #109, #99, #91, and a
-  flaky test #124.
+  (*Start here*, items 5, 10 and 11, #1055, and #974, #987). Stream b: the UX pass, B-64 and B-65 are done; open are
+  B-67 to B-69 and B-71 (P2 wave 2), B-42 to B-46 (the gateway phases' live checks) and its live items (B-L2, B-L3,
+  B-L5); #1064 (e2e's target-size check). An item someone has started says **Taken** in the queue. Main: M-4.
+- **Open issues that matter:** #1069 (`release.yml`'s Syft, #1073 open), #1064 (stream b), #1055, #1039, #992 to #995,
+  #1028, #1030 and #1034 (stream a's), #987 (the grading script), #980 (code quality's tracker), #974 (code quality,
+  stream a's part), #781 and #921 (watch), #920 (the VM's upgrade, `thekim1`'s), #667 (M-16's issue: the work is done,
+  `thekim1`'s to close), #1065 (the pre-release review request; its window closed), #333, #511, #580 and #550. In Fors:
+  no open pull request; proposals #108 and #109, #99, #91, and a flaky test #124.
 - **Dependabot works:** grouped pull requests; `.github/dependabot.yml`'s header lists where a pin is repeated.
   Playwright is bumped by hand, in the package list, the renderer image and its lockfile together (#907).
 - **The user's machine (`~/research/rag`), not the machine of session 56:** the main clone on `main`, no worktrees
