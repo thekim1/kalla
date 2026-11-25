@@ -64,7 +64,7 @@ After wave 1, or beside it when a wave-1 item waits.
 - **Waits on:** B-59 (the attention list).
 - **Read:** admin §4.5, §5.5.1; data-model `Assistants`.
 
-### [ ] B-69 The evaluation trend chart
+### [x] B-69 The evaluation trend chart (#1085)
 - **Do:** copy the gateway's `components/usage/TimeSeriesChart.vue` (and its spec) unchanged; on Test questions and
   quality (admin §7.1) the trend of recall@10 and MRR over the latest 30 runs as a chart, the `human` layer first, with
   the table of the same runs under it as its text view.
