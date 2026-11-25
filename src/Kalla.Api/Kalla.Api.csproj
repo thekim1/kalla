@@ -3,6 +3,9 @@
     <UserSecretsId>kalla-api</UserSecretsId>
     <ContainerRepository>kalla/api</ContainerRepository>
     <KallaServiceContainer>true</KallaServiceContainer>
+    <!-- The minimal API's request delegates generated at build time, not compiled and JIT-compiled by every host at start
+         (as Kalla.AdminApi; the test hosts' JIT time, #1084). -->
+    <EnableRequestDelegateGenerator>true</EnableRequestDelegateGenerator>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
