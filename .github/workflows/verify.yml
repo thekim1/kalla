@@ -163,21 +163,18 @@ jobs:
           # the worker, so no parser or ClamAV image) into kalla/postgres as built from this commit, then the 30
           # questions through kalla-api in process on the FakeGateway: recall@10 >= 0.8 on POST /v1/retrieve and a
           # citation on every chat answer (EvaluationSmokeTests, trait Category=EvaluationSmoke). It was a job of its
-          # own that built Kalla.Worker.Tests again (#1084); here it runs on this build, beside the other tests, and its
-          # detailed output with the recall numbers is printed whether it passes or not.
-          if [ "$EVALUATION_SMOKE" = true ]; then
-            smoke_log="$RUNNER_TEMP/evaluation-smoke.log"
-            dotnet test --project tests/Kalla.Worker.Tests -c Release --no-build --filter-trait "Category=EvaluationSmoke" \
-              --output Detailed > "$smoke_log" 2>&1 &
-            smoke_pid=$!
-          fi
+          # own that built Kalla.Worker.Tests again (#1084); here it runs on this build, after the other tests: beside them,
+          # with the other runner's backend job on the same host, a test process was killed for memory (#1095's first run).
+          # Its detailed output with the recall numbers is printed whether it passes or not.
           # Tests marked [Trait(TestCategory.Name, TestCategory.Flaky)] run locally and in the weekly flake hunt, not here.
           # The script runs every test project as a process of its own, all at once, and Kalla.AdminApi.Tests as five
           # (its collections wait for one another inside one process and set this job's time); it prints each
           # process's totals and their sum.
           status=0; scripts/ci/backend-tests.sh Release || status=$?
           if [ "$EVALUATION_SMOKE" = true ]; then
-            smoke_status=0; wait "$smoke_pid" || smoke_status=$?
+            smoke_log="$RUNNER_TEMP/evaluation-smoke.log"; smoke_status=0
+            dotnet test --project tests/Kalla.Worker.Tests -c Release --no-build --filter-trait "Category=EvaluationSmoke" \
+              --output Detailed > "$smoke_log" 2>&1 || smoke_status=$?
             echo "::group::evaluation smoke (exit $smoke_status)"; cat "$smoke_log"; echo "::endgroup::"
             if [ "$smoke_status" != 0 ]; then echo "::error::the evaluation smoke failed (exit $smoke_status)"; status=1; fi
           fi

@@ -77,7 +77,9 @@ failed=0; total=0
 for i in "${!pids[@]}"; do
   name="${names[$i]}"; status=0
   wait "${pids[$i]}" || status=$?
-  summary="$(grep -a -E 'Total: [0-9]+, Errors: ' "$logs/$name.log" | tail -1 | sed -E 's/\x1b\[[0-9;]*m//g; s/^ *//')"
+  # No summary line (a process killed before it ended) is reported as a failure below, not an exit of this script that
+  # would leave the other processes running (pipefail).
+  summary="$(grep -a -E 'Total: [0-9]+, Errors: ' "$logs/$name.log" | tail -1 | sed -E 's/\x1b\[[0-9;]*m//g; s/^ *//' || true)"
   count="$(sed -nE 's/.*Total: ([0-9]+),.*/\1/p' <<< "$summary")"
   total=$((total + ${count:-0}))
   if [ "$status" -ne 0 ] || [ -z "$summary" ] || [ "${count:-0}" -eq 0 ]; then
