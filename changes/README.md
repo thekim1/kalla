@@ -10,6 +10,6 @@ requests never write the same lines:
 | `changes/<branch, "/" as "-">.upgrade.md` | `docs/upgrade-guide.md`, *Unreleased* |
 
 Each file holds one or more Markdown bullets as they would stand under *Unreleased* (`- **What changed** (#issue): ...`),
-no headings, wrapped at 120 characters. `scripts/unreleased.py check` runs in `verify.yml`'s `doc-refs` job; `show`
+no headings, wrapped at 120 characters. `scripts/unreleased.py check` runs in `verify.yml`'s guard job; `show`
 prints what the next release gets. At the release preparation the main session runs `scripts/unreleased.py fold`, which
 appends the notes in the order they were added and deletes them.
