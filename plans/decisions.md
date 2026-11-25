@@ -439,7 +439,8 @@ Order: the doctor, the upgrade page and the host units first; then the upgrade l
 then the state directory and the host-paths overlay; the upgrade test last. Stream a builds it. Detail:
 `platform/repo-and-deployment.md` §6.3, §7.1, §7.3, §7.5.
 
-*From:* proposals from the VM's upgrade (#1101, #920); decided by user, 2026-11-25 (four questions with four alternatives).
+*From:* proposals from the VM's upgrade (#1101, #920); decided by user, 2026-11-25 (four questions, four
+alternatives each).
 
 ### .NET runtime settings
 
