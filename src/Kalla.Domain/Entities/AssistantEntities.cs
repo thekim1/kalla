@@ -61,6 +61,12 @@ public sealed class Assistant
     /// </summary>
     public DateTimeOffset? DeletedAt { get; set; }
 
+    /// <summary>
+    /// <b>Keep</b> on Home's unused-assistant attention item (admin design §5.5.1): the item is not raised again before this
+    /// time (90 days after the Keep).
+    /// </summary>
+    public DateTimeOffset? UnusedKeptUntil { get; set; }
+
     public DateTimeOffset UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 

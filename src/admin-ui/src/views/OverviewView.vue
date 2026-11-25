@@ -35,11 +35,15 @@ const ui = useUiStore()
 const canCreate = computed(() => auth.can('edit'))
 const hasRole = computed(() => auth.roles.some((r) => r in ROLE_LABEL))
 const synced = ref<Department[] | null>(null)
-onMounted(() => {
-  if (!hasRole.value) return
+/** The overview, and the menu's attention count from it. */
+function loadOverview(): void {
   void overview.run(() => api.overview()).then(() => {
     if (overview.data.value) ui.attention = overview.data.value.attention.length
   })
+}
+onMounted(() => {
+  if (!hasRole.value) return
+  loadOverview()
   void api.organisation.departments().then((d) => (synced.value = d)).catch(() => undefined)
 })
 // The greeting (admin design §5.7): "Good morning, Anna" by the hour in Europe/Stockholm, and under it the departments
@@ -137,7 +141,7 @@ function showHidden(): void {
   <template v-if="overview.data.value">
     <SecretExpiryNotices v-if="auth.isPlatformAdmin && overview.data.value.secretExpiry.length" :entries="overview.data.value.secretExpiry" class="mb-6" />
     <DeploymentNotices v-if="auth.isPlatformAdmin && overview.data.value.deploymentNotices.length" :notices="overview.data.value.deploymentNotices" class="mb-6" />
-    <NeedsAttention :items="overview.data.value.attention" class="mb-6" />
+    <NeedsAttention :items="overview.data.value.attention" class="mb-6" @changed="loadOverview" />
 
     <!-- Get started: the embedding profile's first-run step first while it applies, then the checklists. -->
     <UiCard v-if="overview.data.value.needsEmbeddingProfile" :title="OVERVIEW.profileTitle" class="mb-6" data-test="needs-profile">
@@ -196,7 +200,7 @@ function showHidden(): void {
       </div>
       <!-- The per-department counts behind the fetches. -->
       <details v-if="overview.data.value.health.departments.length" class="mt-2 text-small" data-test="health-by-department">
-        <summary class="cursor-pointer text-fg-2">{{ OVERVIEW.byDepartment }}</summary>
+        <summary class="cursor-pointer py-1 text-fg-2 max-md:py-3">{{ OVERVIEW.byDepartment }}</summary>
         <ul class="mt-2 flex flex-col gap-2" data-test="health-runs">
           <li v-for="d in overview.data.value.health.departments" :key="d.departmentId" class="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span class="min-w-0 break-words font-medium">{{ d.departmentName }}</span>

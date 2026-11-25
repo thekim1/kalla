@@ -273,6 +273,8 @@ export const api = {
     copy: (id: string, body: AssistantCopyRequest) => http.post<AssistantCopyResult>(`/api/assistants/${id}/copy`, body),
     archive: (id: string, version: string) => http.post<Assistant>(`/api/assistants/${id}/archive`, { version }),
     unarchive: (id: string, version: string) => http.post<Assistant>(`/api/assistants/${id}/unarchive`, { version }),
+    /** Keep on Home's unused-assistant item: not raised again for 90 days (§5.5.1, B-68). */
+    keep: (id: string, version: string) => http.post<Assistant>(`/api/assistants/${id}/keep`, { version }),
     retention: (id: string, body: { historyMode: string; retentionDays: number; version: string }) => http.put<Assistant>(`/api/assistants/${id}/retention`, body),
   },
   dataProtection: {

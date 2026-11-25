@@ -472,6 +472,78 @@ public sealed class AttentionListTests(AdminDatabaseFixture database)
     }
 
     [Fact]
+    public async Task An_unused_assistant_is_raised_gone_after_Keep_raised_again_after_90_days_and_gone_after_Archive()
+    {
+        // §5.5.1 (B-68): published 90 days ago or more, no message in the last 90 days; Keep holds it off for 90 days.
+        await using var db = TestPostgres.Context(database.Connection(null));
+        var seed = await SeedAsync(db);
+        var today = StockholmTime.DayOf(DateTimeOffset.UtcNow);
+        async Task<Assistant> PublishedAsync(string name, int daysAgo, int? lastMessageDaysAgo)
+        {
+            var assistant = new Assistant
+            {
+                Slug = $"unused-{name}-{seed.Code}".ToLowerInvariant(), Name = $"{name} {seed.Code}", DepartmentId = seed.Department.Id, Classification = Classification.Internal,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            };
+            db.Add(assistant);
+            await db.SaveChangesAsync(Ct);
+            var version = new AssistantVersion
+            {
+                AssistantId = assistant.Id, Number = 1, GatewayModel = "fors/chat-eu", SystemPrompt = "Svara kort.", State = AssistantVersionStates.Published,
+                PublishedAt = DateTimeOffset.UtcNow.AddDays(-daysAgo), PublishedBy = "anna@umea.se", CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+            };
+            db.Add(version);
+            if (lastMessageDaysAgo is { } ago)
+            {
+                db.AssistantDailyTotals.Add(new AssistantDailyTotal
+                {
+                    Day = today.AddDays(-ago), AssistantId = assistant.Id, ClientId = Guid.CreateVersion7(), DepartmentId = seed.Department.Id,
+                    Classification = Classification.Internal, Conversations = 1, Messages = 2,
+                });
+            }
+
+            await db.SaveChangesAsync(Ct);
+            await db.Assistants.Where(a => a.Id == assistant.Id).ExecuteUpdateAsync(u => u.SetProperty(a => a.PublishedVersionId, version.Id), Ct);
+            return assistant;
+        }
+
+        var unused = await PublishedAsync("Glömd", 200, 120);
+        var used = await PublishedAsync("Använd", 200, 10);
+        var recent = await PublishedAsync("Ny", 30, null);
+        await using var factory = Factory();
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
+        using var other = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, "X" + seed.Code);
+
+        var item = (await ItemsAsync(admin, AttentionKinds.AssistantUnused, unused.Id)).ShouldHaveSingleItem();
+        (item.GetProperty("objectType").GetString(), item.GetProperty("objectName").GetString()).ShouldBe((AttentionObjects.Assistant, unused.Name));
+        var details = item.GetProperty("details");
+        (details.GetProperty("days").GetString(), details.GetProperty("lastUsed").GetString())
+            .ShouldBe(("90", today.AddDays(-120).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)));
+        (await ItemsAsync(admin, AttentionKinds.AssistantUnused, used.Id)).ShouldBeEmpty();
+        (await ItemsAsync(admin, AttentionKinds.AssistantUnused, recent.Id)).ShouldBeEmpty();
+        (await ItemsAsync(other, AttentionKinds.AssistantUnused, unused.Id)).ShouldBeEmpty();
+
+        async Task<string> VersionAsync() => (await admin.GetFromJsonAsync<JsonElement>($"/api/assistants/{unused.Id}", Ct)).GetProperty("version").GetString()!;
+
+        // Keep: not raised while kept; a stale version is refused; audited.
+        var stale = await VersionAsync();
+        (await admin.PostAsJsonAsync($"/api/assistants/{unused.Id}/keep", new { version = stale }, Ct)).EnsureSuccessStatusCode();
+        (await admin.PostAsJsonAsync($"/api/assistants/{unused.Id}/keep", new { version = stale }, Ct)).StatusCode.ShouldBe(System.Net.HttpStatusCode.Conflict);
+        (await ItemsAsync(admin, AttentionKinds.AssistantUnused, unused.Id)).ShouldBeEmpty();
+        var kept = await db.Assistants.AsNoTracking().SingleAsync(a => a.Id == unused.Id, Ct);
+        kept.UnusedKeptUntil.ShouldNotBeNull().ShouldBeInRange(DateTimeOffset.UtcNow.AddDays(89), DateTimeOffset.UtcNow.AddDays(91));
+        (await db.AuditLog.AsNoTracking().CountAsync(e => e.EntityId == unused.Id.ToString() && e.Action == "keep", Ct)).ShouldBe(1);
+
+        // 90 days later it is raised again.
+        await db.Assistants.Where(a => a.Id == unused.Id).ExecuteUpdateAsync(u => u.SetProperty(a => a.UnusedKeptUntil, DateTimeOffset.UtcNow.AddMinutes(-1)), Ct);
+        (await ItemsAsync(admin, AttentionKinds.AssistantUnused, unused.Id)).ShouldHaveSingleItem();
+
+        // Archive ends it.
+        (await admin.PostAsJsonAsync($"/api/assistants/{unused.Id}/archive", new { version = await VersionAsync() }, Ct)).EnsureSuccessStatusCode();
+        (await ItemsAsync(admin, AttentionKinds.AssistantUnused, unused.Id)).ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task A_failing_feedback_import_and_a_platform_model_out_of_the_ceiling_are_platform_admin_items()
     {
         await using var db = TestPostgres.Context(database.Connection(null));

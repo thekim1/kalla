@@ -499,6 +499,26 @@ public static class AssistantEndpoints
                 SetStateAsync(admin, id, request, AssistantStates.Archived, ct))
             .RequireAuthorization(AdminPolicies.Edit).WithName("ArchiveAssistant").WithSummary("Hide the assistant from every client; versions, audiences and statistics are kept");
 
+        // Keep on Home's unused-assistant item (admin design §4.5, §5.5.1; B-68): not raised again for 90 days.
+        assistants.MapPost("/{id:guid}/keep", async (Guid id, VersionRequest request, AdminContext admin, CancellationToken ct) =>
+            {
+                var saved = await admin.WriteAsync(async attempt =>
+                {
+                    var assistant = await LoadAsync(admin, id, attempt);
+                    admin.ExpectVersion(assistant, request.Version);
+                    var before = AssistantAudit.Of(assistant);
+                    assistant.UnusedKeptUntil = admin.Now + AttentionList.UnusedKeep;
+                    assistant.UpdatedAt = admin.Now;
+                    assistant.UpdatedBy = admin.Actor;
+                    return new AdminChange<Assistant>(assistant, "keep", AuditEntityTypes.Assistant, assistant.Id, before, AssistantAudit.Of(assistant))
+                    {
+                        DepartmentId = assistant.DepartmentId, Classification = assistant.Classification,
+                    };
+                }, ct);
+                return await DetailAsync(admin, saved, ct);
+            })
+            .RequireAuthorization(AdminPolicies.Edit).WithName("KeepAssistant").WithSummary("Keep an unused assistant: Home does not raise it as unused for 90 days");
+
         assistants.MapPost("/{id:guid}/unarchive", (Guid id, VersionRequest request, AdminContext admin, CancellationToken ct) =>
                 SetStateAsync(admin, id, request, AssistantStates.Active, ct))
             .RequireAuthorization(AdminPolicies.Edit).WithName("UnarchiveAssistant").WithSummary("Offer the assistant again with the same published version");
@@ -1163,10 +1183,10 @@ public sealed record DraftDto(int Number, string? GatewayModel, string SystemPro
 
 public sealed record AssistantAudit(
     Guid Id, string Slug, string Name, string? Description, string? ContactName, string? ContactEmail, Guid DepartmentId, Guid? OwnerTeamId, string Classification,
-    string State, Guid? PublishedVersionId, Guid? DraftVersionId, Guid? GatewayKeyId)
+    string State, Guid? PublishedVersionId, Guid? DraftVersionId, Guid? GatewayKeyId, DateTimeOffset? UnusedKeptUntil)
 {
     public static AssistantAudit Of(Assistant a) => new(a.Id, a.Slug, a.Name, a.Description, a.ContactName, a.ContactEmail, a.DepartmentId, a.OwnerTeamId,
-        a.Classification, a.State, a.PublishedVersionId, a.DraftVersionId, a.GatewayKeyId);
+        a.Classification, a.State, a.PublishedVersionId, a.DraftVersionId, a.GatewayKeyId, a.UnusedKeptUntil);
 }
 
 public sealed record DraftAudit(

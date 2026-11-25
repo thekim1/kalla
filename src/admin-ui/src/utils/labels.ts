@@ -417,8 +417,18 @@ export const ATTENTION = {
       `${d.metric === 'citationPrecision' ? 'Citation precision' : 'Faithfulness'} last night is ${d.points ?? '?'} points below the usual: ${name}`,
     document_downvoted: (d: Record<string, string>, name: string) =>
       `Cited in ${d.downvotes ?? '?'} downvoted answers in the last ${d.days ?? '7'} days: ${d.documentTitle ?? ''} in ${name}`,
+    /** `lastUsed` arrives formatted for reading (NeedsAttention). */
+    assistant_unused: (d: Record<string, string>, name: string) =>
+      `No questions in ${d.days ?? '90'} days: ${name}${d.lastUsed ? `, last asked ${d.lastUsed}` : ', never asked'}`,
   } as Record<string, (details: Record<string, string>, name: string) => string>,
   unknown: (name: string) => `${name} needs attention`,
+  /** The unused-assistant item's actions (§5.5.1, B-68). */
+  archive: 'Archive',
+  keep: 'Keep',
+  archiveFor: (name: string) => `Archive ${name}`,
+  keepFor: (name: string) => `Keep ${name}`,
+  kept: (name: string) => `${name} is kept. Home won’t raise it as unused for 90 days.`,
+  archived: (name: string) => `${name} has been archived.`,
 } as const
 
 /** V32's platform model settings by the names the Settings page shows them under. */
@@ -2423,6 +2433,7 @@ export const AUDIT_EVENTS = {
   'assistant.restore': 'Earlier assistant version restored',
   'assistant.retention': 'Assistant’s chat history changed',
   'assistant.archive': 'Assistant archived',
+  'assistant.keep': 'Unused assistant kept',
   'assistant.unarchive': 'Assistant taken out of the archive',
   'client.create': 'App created',
   'client.update': 'App changed',

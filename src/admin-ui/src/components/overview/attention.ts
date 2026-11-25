@@ -26,6 +26,8 @@ export function attentionLink(item: AttentionItem): RouteLocationRaw | null {
       return item.objectId ? { name: 'collection', params: { id: item.objectId }, query: { tab: 'quality' } } : null
     case 'personal_data_public':
       return item.objectId ? { name: 'collection', params: { id: item.objectId }, query: { tab: 'documents', pii: 'flagged' } } : null
+    case 'assistant_unused':
+      return item.objectId ? { name: 'assistant', params: { id: item.objectId } } : null
     case 'assistant_tests_worse':
       return item.objectId ? { name: 'assistant', params: { id: item.objectId }, query: { tab: 'quality' } } : null
     case 'answers_below_median':
