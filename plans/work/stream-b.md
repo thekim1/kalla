@@ -26,7 +26,7 @@ After P2 wave 1, or beside it when a wave item waits. Each adds its table in a m
 
 Beside P2 wave 1: take B-64 when a wave item waits, or after it. `proposals/topics-editor.md` is the record of why.
 
-### [x] B-65 The topic form, the match preview, and the read-only Topics field (#1068, #PART2)
+### [x] B-65 The topic form, the match preview, and the read-only Topics field (#1068, #1071)
 - **Do:** admin §4.5's `POST /api/collections/{id}/topic-rules/preview`; on the Topics tab the *Add topic* / *Edit* form
   (§5.5.2: under the address, title contains, file type, source, Advanced with every rule kind, a rule the form can't
   word shown as JSON under Advanced) with "Matches N of M documents" and the first ten, the 0-match warning asked
