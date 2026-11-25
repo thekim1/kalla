@@ -31,9 +31,17 @@ exe() { echo "tests/$1/bin/$configuration/net10.0/$1"; }
 names=(); pids=()
 start() { # start <name> <executable> [arguments]
   local name="$1"; shift
-  "$@" > "$logs/$name.log" 2>&1 &
+  # bash's own `time` (no /usr/bin/time on the runner): wall, user and system seconds of the process, into a file of its own
+  # (#1084 P3: how much of the test phase is CPU, per process).
+  ( TIMEFORMAT='%R %U %S'; { time "$@" > "$logs/$name.log" 2>&1; } 2> "$logs/$name.time" ) &
   names+=("$name"); pids+=("$!")
 }
+
+# The host's CPU over the test phase, from /proc/stat: busy and total jiffies across all CPUs. Testcontainers' Postgres
+# runs in Docker, outside the processes' own times, so only this says whether the host was saturated.
+cpu() { awk '/^cpu / { idle = $5 + $6; total = 0; for (i = 2; i <= NF; i++) total += $i; print total - idle, total }' /proc/stat; }
+read -r busy0 total0 < <(cpu)
+phase_start=$SECONDS
 
 # Every test project but the shared kit (a library) and the benchmarks (a console app run by hand).
 for dir in tests/Kalla.*/; do
@@ -89,6 +97,12 @@ for i in "${!pids[@]}"; do
   else
     echo "passed  $name: $summary"
   fi
+  if read -r real user sys < "$logs/$name.time" 2>/dev/null; then
+    awk -v n="$name" -v r="$real" -v u="$user" -v s="$sys" 'BEGIN { printf "  %-26s wall %6.1f s, cpu %6.1f s (%.1f cores)\n", n, r, u + s, (r > 0 ? (u + s) / r : 0) }' || true
+  fi
 done
+read -r busy1 total1 < <(cpu)
+awk -v b=$((busy1 - busy0)) -v t=$((total1 - total0)) -v w=$((SECONDS - phase_start)) -v c="$(nproc)" \
+  'BEGIN { printf "host cpu over the test phase: %.0f %% busy on %d CPUs for %d s\n", (t > 0 ? 100 * b / t : 0), c, w }' || true
 echo "total: $total tests in ${#pids[@]} processes; logs in $logs"
 exit "$failed"
