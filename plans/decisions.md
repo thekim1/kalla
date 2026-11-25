@@ -403,6 +403,45 @@ P2. Detail: `admin/design.md` §5.5.1; `deploy/portainer/bootstrap.sh`.
 
 *From:* decided by user, 2026-11-16 (session 43).
 
+### Compose host layout and upgrades
+
+A Compose host (the bundle run with `docker compose`, not the Portainer stack) has one supported layout that every
+release and upgrade script knows.
+
+- - **State outside the bundle.** `deploy/.env`, `secrets/`, `certs/` and the host units' configuration live in one
+  state directory, `KALLA_STATE_DIR` (default `/etc/kalla`). A release bundle never contains or writes it; an upgrade
+  unpacks the new bundle beside the old one and points it at the same state directory. `init-deployment.sh` refuses to
+  create a second state directory when one exists.
+- - **Data on a host disk is a supported layout.** `deploy/compose.host-paths.yaml` puts `kalla-postgres-data`,
+  `kalla-blobs`, `kalla-pgbackrest-repo` and `kalla-upload-copy` on bind-backed volumes under one `KALLA_DATA_ROOT`;
+  `init-deployment.sh --data-root <dir>` selects it, creates the directories with their owners and refuses a non-empty
+  directory that isn't Källa's. Named volumes stay the default, and `KALLA_DATA_ROOT` is read only with the overlay
+  (Decisions "Deployment values across releases").
+- - **Upgrade scripts read the deployment.** They share one library that finds the project (`COMPOSE_PROJECT_NAME`, the
+  state directory's `.env` or `--project`, never a guess between two), the containers by their Compose labels, and each
+  mount from `docker inspect` (a named volume, a bind-backed volume or a direct bind; data already on a host path is
+  never copied); they refuse an empty or missing source, and print their plan unless run with `--apply`. Roles are
+  renamed and migrations run by `kalla-roles` and `kalla-migrate` in the Compose form as in the Portainer stack, so no
+  script renames roles inside a container (Decisions "Upgrades in one step").
+- - **A check before every upgrade:** `deploy/doctor.sh` reports, read-only, the project and its versions, each volume's
+  host path and free space, the overlays and profiles, the pgBackRest stanza and WAL backlog, the last full backup, the
+  escrow set's date, the host units' targets and the firewall timer, and exits non-zero on what blocks an upgrade (no
+  stanza, a WAL backlog, no recent backup). The host units take the project and the deploy directory from the state
+  directory, and `install.sh --check` verifies them.
+- - **One Compose upgrade page:** `docs/upgrade-guide.md` has *Upgrade procedure (Compose host)* as a numbered
+  checklist, `doctor.sh` first and last, and a *Your host differs from the bundle* box; a release's own section lists
+  only what it adds.
+- - **Tested:** the release dry run also upgrades one stack that has every difference at once (a custom project name,
+  bind-backed volumes, a direct bind mount, custom published ports) from `UPGRADE_FROM`, keeping its row counts and
+  ports; the tag run doesn't repeat it (Decisions "CI on the self-hosted runner").
+
+Order: the doctor, the upgrade page and the host units first; then the upgrade library and the single role-rename path;
+then the state directory and the host-paths overlay; the upgrade test last. Stream a builds it. Detail:
+`platform/repo-and-deployment.md` §6.3, §7.1, §7.3, §7.5.
+
+*From:* proposals from the VM's upgrade (#1101, #920); decided by user, 2026-11-25 (four questions, four
+alternatives each).
+
 ### .NET runtime settings
 
 Every .NET container sets `DOTNET_GCHeapHardLimitPercent=0x4B` (hexadecimal). `AuditLog.Service` is the OTel service
