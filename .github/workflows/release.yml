@@ -74,6 +74,9 @@ jobs:
   verify:
     if: inputs.portainer_boot == ''
     uses: ./.github/workflows/verify.yml
+    with:
+      # verify's renderer job leaves out the worker image's Playwright driver check: build runs it on the pushed image.
+      release: true
 
   parser:
     if: inputs.portainer_boot == ''
@@ -167,9 +170,6 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/docker-config"
           echo "DOCKER_CONFIG=$RUNNER_TEMP/docker-config" >> "$GITHUB_ENV"
-          # No build-record artifact per image (docker/build-push-action's post step): nothing reads them, and during
-          # GitHub's artifact outage of 2026-11-11 each upload retried for ten minutes (40 minutes for the four images).
-          echo "DOCKER_BUILD_RECORD_UPLOAD=false" >> "$GITHUB_ENV"
       - name: Resolve version and registry
         id: version
         env:
@@ -243,6 +243,16 @@ jobs:
         # cleanup of GitHub-hosted toolchains (the runner user has no sudo).
         run: df -h / | tail -1
 
+      - name: Start the Dockerfile images' builds
+        # kalla/postgres, clamav, renderer and parser, all four at once in the background (scripts/ci/release-images.sh,
+        # #1084): one after another they took 10.6 to 12.2 minutes of a tag run. "The Dockerfile images" below waits for
+        # them. A tag release reads no build cache (#704); it still writes one, which only a trusted build does.
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PREFIX: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}
+          REVISION: ${{ github.sha }}
+          CACHE_READ: ${{ github.event_name != 'push' }}
+        run: bash scripts/ci/release-images.sh start
       - name: Build the admin UI
         # Built from the lock only (src/admin-ui/.npmrc), as in verify.yml. The admin publish below adds dist/ as
         # wwwroot/ with -p:PublishAdminUi=true (the gateway's switch, #66); Kalla.AdminApi serves it.
@@ -288,63 +298,10 @@ jobs:
             mv "$publish/_manifest/spdx_2.2/manifest.spdx.json" "sbom/kalla-$name-$VERSION.spdx.json"
             rm -rf "$publish/_manifest"
           done
-      - name: Build and push kalla/postgres
-        id: postgres
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: images/postgres/Dockerfile
-          build-args: |
-            VERSION=${{ steps.version.outputs.version }}
-            REVISION=${{ github.sha }}
-          tags: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}/postgres:${{ steps.version.outputs.version }}
-          push: true
-          provenance: false
-          # A tag release reads no build cache (#704); it still writes one, which only a trusted build does.
-          cache-from: ${{ github.event_name != 'push' && format('type=local,src={0}/postgres', env.BUILD_CACHE) || '' }}
-          cache-to: type=local,dest=${{ env.BUILD_CACHE }}/postgres-new,mode=max
-      - name: Build and push kalla/clamav
-        id: clamav
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: images/clamav
-          build-args: |
-            VERSION=${{ steps.version.outputs.version }}
-            REVISION=${{ github.sha }}
-          tags: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}/clamav:${{ steps.version.outputs.version }}
-          push: true
-          provenance: false
-          # A tag release reads no build cache (#704); it still writes one, which only a trusted build does.
-          cache-from: ${{ github.event_name != 'push' && format('type=local,src={0}/clamav', env.BUILD_CACHE) || '' }}
-          cache-to: type=local,dest=${{ env.BUILD_CACHE }}/clamav-new,mode=max
-      - name: Build and push kalla/renderer
-        id: renderer
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: images/renderer
-          build-args: |
-            VERSION=${{ steps.version.outputs.version }}
-            REVISION=${{ github.sha }}
-          tags: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}/renderer:${{ steps.version.outputs.version }}
-          push: true
-          provenance: false
-          # A tag release reads no build cache (#704); it still writes one, which only a trusted build does.
-          cache-from: ${{ github.event_name != 'push' && format('type=local,src={0}/renderer', env.BUILD_CACHE) || '' }}
-          cache-to: type=local,dest=${{ env.BUILD_CACHE }}/renderer-new,mode=max
-      - name: Build and push kalla/parser
-        id: parser
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: src/parser
-          build-args: |
-            VERSION=${{ steps.version.outputs.version }}
-            REVISION=${{ github.sha }}
-          tags: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}/parser:${{ steps.version.outputs.version }}
-          push: true
-          provenance: false
-          # A tag release reads no build cache (#704); it still writes one, which only a trusted build does.
-          cache-from: ${{ github.event_name != 'push' && format('type=local,src={0}/parser', env.BUILD_CACHE) || '' }}
-          cache-to: type=local,dest=${{ env.BUILD_CACHE }}/parser-new,mode=max
+      - name: The Dockerfile images
+        # Started above, beside the admin UI and the .NET publishes; prints each build's log and gives each digest.
+        id: images
+        run: bash scripts/ci/release-images.sh wait
       - name: Rotate the build cache
         # A local cache only grows when written over itself: keep each image's new cache and drop the old one.
         run: |
@@ -358,10 +315,10 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
           PREFIX: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}
-          POSTGRES_DIGEST: ${{ steps.postgres.outputs.digest }}
-          CLAMAV_DIGEST: ${{ steps.clamav.outputs.digest }}
-          RENDERER_DIGEST: ${{ steps.renderer.outputs.digest }}
-          PARSER_DIGEST: ${{ steps.parser.outputs.digest }}
+          POSTGRES_DIGEST: ${{ steps.images.outputs.postgres }}
+          CLAMAV_DIGEST: ${{ steps.images.outputs.clamav }}
+          RENDERER_DIGEST: ${{ steps.images.outputs.renderer }}
+          PARSER_DIGEST: ${{ steps.images.outputs.parser }}
           # The dry run's registry speaks plain HTTP.
           SYFT_REGISTRY_INSECURE_USE_HTTP: ${{ github.event_name != 'push' }}
         run: |
@@ -388,22 +345,56 @@ jobs:
               done < "$1/refs"' _ "$syft_dir" > "$syft_dir/log" 2>&1 || rc=$?
             echo "${rc:-0}" > "$syft_dir/exit"
           ) < /dev/null > /dev/null 2>&1 &
+      - name: Pull the oldest supported release's images, in the background
+        # The upgrade test below boots UPGRADE_FROM's stack: its images (the 3 GB parser among them) are pulled while the
+        # smoke test and the Portainer boot run, not after them (#1084). Best effort: the upgrade test pulls what is
+        # missing. The ghcr.io login is in a Docker config of this pull's own, so a dry run's other steps stay anonymous.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash scripts/ci/release-asset.sh "v$UPGRADE_FROM" compose.portainer.yaml "dist-from/$UPGRADE_FROM/compose.portainer.yaml"
+          pull="$RUNNER_TEMP/prepull"; mkdir -p "$pull/docker-config"
+          echo "$GH_TOKEN" | docker --config "$pull/docker-config" login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          grep -oE '[a-z0-9.-]+(/[a-z0-9._-]+)+(:[A-Za-z0-9._-]+)?@sha256:[0-9a-f]{64}' \
+            "dist-from/$UPGRADE_FROM/compose.portainer.yaml" | sort -u > "$pull/refs"
+          cat "$pull/refs"
+          # Every stream redirected and the exit code in a file, as the Syft step's.
+          (
+            while read -r ref; do docker --config "$pull/docker-config" pull -q "$ref" || echo "not pulled: $ref"; done < "$pull/refs"
+            docker --config "$pull/docker-config" logout ghcr.io
+            echo 0 > "$pull/exit"
+          ) < /dev/null > "$pull/log" 2>&1 &
       - name: Build the release bundle
         run: |
           set -a; . ./images.env; set +a
           bash deploy/build-release-bundle.sh "${{ steps.version.outputs.version }}" dist
-      - name: Smoke test the bundle
-        # deploy/compose.rag.yaml with the backup overlay; no sudo needed (kalla-bootstrap owns the files inside the
-        # volumes). --render boots with the renderer, then switches it off, so one boot covers both (#505).
+      - name: Smoke test the bundle and boot the Portainer stack, side by side
+        # release-smoke.sh: deploy/compose.rag.yaml with the backup overlay; no sudo needed (kalla-bootstrap owns the files
+        # inside the volumes). --render boots with the renderer, then switches it off, so one boot covers both (#505).
+        # portainer-boot.sh: the release's compose.portainer.yaml asset, started as Portainer starts it: the stack file
+        # and variables only, the gateway's images from the release it pins, Källa's from this run, with clamav and
+        # openwebui (deploy-configuration plan, step C0). The two ran one after the other (#1084); their Compose projects
+        # (kalla-smoke, kalla-portainer-boot), ports and work directories differ. Each log is printed when both are done,
+        # and the host's memory every 30 seconds, to see whether a third test fits beside them.
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          bash deploy/tests/release-smoke.sh "dist/kalla-${{ steps.version.outputs.version }}.tar.gz" \
-            --work-dir "$RUNNER_TEMP/smoke" --render
-      - name: Boot the Portainer stack
-        # The release's compose.portainer.yaml asset, started as Portainer starts it: the stack file and variables
-        # only, the gateway's images from the release it pins, Källa's from this run, with clamav and openwebui
-        # (deploy-configuration plan, step C0). After the smoke test, which has removed its own stack by now.
-        run: |
-          bash deploy/tests/portainer-boot.sh dist/compose.portainer.yaml --version "${{ steps.version.outputs.version }}"
+          logs="$RUNNER_TEMP/boot"; mkdir -p "$logs"
+          (while true; do echo "$(date -u +%T) $(free -m | awk 'NR == 2 { print "used " $3 " MiB, available " $7 " MiB" }')"; sleep 30; done) > "$logs/memory.log" 2>&1 &
+          memory=$!
+          bash deploy/tests/release-smoke.sh "dist/kalla-$VERSION.tar.gz" --work-dir "$RUNNER_TEMP/smoke" --render > "$logs/smoke.log" 2>&1 &
+          smoke=$!
+          bash deploy/tests/portainer-boot.sh dist/compose.portainer.yaml --version "$VERSION" > "$logs/portainer.log" 2>&1 &
+          portainer=$!
+          failed=0
+          for test in smoke:$smoke portainer:$portainer; do
+            status=0; wait "${test#*:}" || status=$?
+            echo "::group::${test%%:*} (exit $status)"; cat "$logs/${test%%:*}.log"; echo "::endgroup::"
+            if [ "$status" != 0 ]; then echo "::error::the ${test%%:*} test failed (exit $status)"; failed=1; fi
+          done
+          kill "$memory" 2>/dev/null || true
+          echo "::group::memory"; cat "$logs/memory.log"; echo "::endgroup::"
+          exit "$failed"
       - name: Upgrade the oldest supported release's Portainer stack
         # docs/portainer.md, "Upgrade": the UPGRADE_FROM stack (its release asset, its variables) is booted, then this
         # release's file is applied over it. From before 0.9.0 that is the rename's steps (--rename-0.9: the variables
@@ -417,7 +408,10 @@ jobs:
           # The earlier release's images are on ghcr.io; a dry run has not logged in there (its own images go to the
           # job's registry). The login lives in this job's own Docker config and is removed again.
           if [ "$GITHUB_EVENT_NAME" != push ]; then echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin; fi
-          bash scripts/ci/release-asset.sh "v$UPGRADE_FROM" compose.portainer.yaml "dist-from/$UPGRADE_FROM/compose.portainer.yaml"
+          # The stack file and its images came with the background pull above; wait for it so the logs don't interleave.
+          pull="$RUNNER_TEMP/prepull"; deadline=$((SECONDS + 600))
+          until [ -s "$pull/exit" ] || [ "$SECONDS" -ge "$deadline" ]; do sleep 5; done
+          cat "$pull/log"
           bash deploy/tests/portainer-upgrade-boot.sh "dist-from/$UPGRADE_FROM/compose.portainer.yaml" dist/compose.portainer.yaml \
             --from-env "deploy/tests/fixtures/stack-$UPGRADE_FROM.env" \
             --version "${{ steps.version.outputs.version }}" --rename-0.9
@@ -433,10 +427,14 @@ jobs:
           cat "$syft_dir/log"
           [ "$(cat "$syft_dir/exit")" = 0 ] || { echo "::error::Syft failed (exit $(cat "$syft_dir/exit"))"; exit 1; }
           ls -l sbom
-      - name: Stop a Syft scan still running
-        # The background scan outlives a failed or cancelled job otherwise, with gigabytes unpacked and its memory (#1069).
+      - name: Stop a Syft scan, an image build or a pull still running
+        # The background scan outlives a failed or cancelled job otherwise, with gigabytes unpacked and its memory (#1069);
+        # so do the image builds and the pull of UPGRADE_FROM's images (#1084) when the job fails before waiting for them.
         if: always()
-        run: pkill -f "spdx-json=$GITHUB_WORKSPACE/sbom/" || true
+        run: |
+          pkill -f "spdx-json=$GITHUB_WORKSPACE/sbom/" || true
+          pkill -f "metadata-file $RUNNER_TEMP/release-images/" || true
+          pkill -f "$RUNNER_TEMP/prepull/docker-config" || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release
