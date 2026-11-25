@@ -88,6 +88,21 @@ host, with 1.2 GB less reserved and one CPU fewer in the ingestion zone; the sli
 numbers. On-prem model capacity is the gateway's, measured with `scripts/capacity/`
 ([its README](../scripts/capacity/README.md)).
 
+### Hardware
+
+An estimate for Källa alone, without the language models, Keycloak and Open WebUI, from a local resource test
+(2026-11-08, [`dev/resource-test/`](../dev/resource-test/README.md), small corpus):
+
+| | vCPU | Memory | Disk (SSD) |
+|---|---|---|---|
+| **Realistic minimum** | 4 | 16 GB | 100 GB |
+| **Floor** (runs, without headroom) | 4 | 8 GB | 50 GB |
+
+At the floor, the peak working set is about 5.5–5.7 GB plus the OS, and the Compose memory reservations alone add up to
+about 6.6 GB. The pilot host's 8 vCPU mostly buy a faster first bulk load of PDFs: the parser takes about 0.75 s per PDF
+page on 2 cores, and about 1.1 s per scanned page with OCR. Retrieval costs about 8 ms of CPU per query, and the database
+grows by about 9 KB per chunk. The R1 release test sets the final numbers.
+
 ## Install
 
 ### 1. Files and images
@@ -479,12 +494,13 @@ writes it as the worker's secret file, `on` with the profile and `off` without.
   malware scan**: nothing is quarantined. The worker says so at every start with a warning and security event 5106
   `rag.malware.scan_off` ([security events](security-events.md)); its `clamav` health check stays Healthy and says that
   the scan is off; upload slots are `unscanned` (never `clean`) with no scan time, a run's report has
-  `malwareScan: "off"`, and the admin UI shows *Not scanned for malware* on those files and runs. Sizing: the
+  `malwareScan: "off"`, and in the admin UI the Files card's summary counts the files not scanned for malware, each
+  such file's details say so, and so do those runs. Sizing: the
   `kalla-clamav` row of *Sizing* (above) drops out, and the `kalla-mirror` network and `database.clamav.net` are not used.
 
 Choose `off` only where the files come from sources you trust, or where they are scanned before they reach RAG. **Files
-stored while the scan is off are not scanned when you turn it on later**: they stay as they are and keep their
-*Not scanned for malware* mark; only new and changed files are scanned from then on.
+stored while the scan is off are not scanned when you turn it on later**: they stay as they are, still counted in
+the Files card's summary and noted in their details; only new and changed files are scanned from then on.
 
 To change it, re-run `init-deployment.sh --profiles` with the new list, with or without `clamav` (for example
 `--profiles ''` or `--profiles clamav`; the list replaces the current one), then
