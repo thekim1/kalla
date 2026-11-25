@@ -15,7 +15,7 @@ import { useUiStore } from '@/stores/ui'
 import { formatNumber, quietZero } from '@/utils/format'
 import { TOPICS } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
-import { addRules, findRule, normaliseTag, removeTopic, replaceRule, ruleInWords, tagError, topicSources } from '@/utils/topics'
+import { addRules, findRule, normaliseTag, removeTopic, replaceRule, ruleForm, ruleInWords, tagError, tagsOf, topicSources } from '@/utils/topics'
 import TopicRuleForm from './TopicRuleForm.vue'
 import TopicSuggestionsBlock from './TopicSuggestionsBlock.vue'
 
@@ -46,8 +46,13 @@ const doneMessage = ref('')
 /** The ticked sections per source: path → the tag as typed. */
 const picks = reactive<Record<string, Record<string, string>>>({})
 const pickList = computed(() => Object.entries(picks).flatMap(([sourceId, paths]) => Object.entries(paths).map(([path, tag]) => ({ sourceId, path, tag }))))
-/** One topic per tag: two sections on the same tag are one topic with two rules. */
-const newTopics = computed(() => new Set(pickList.value.map((p) => normaliseTag(p.tag))).size)
+/** One topic per tag: two sections on the same tag are one topic with two rules; a tag the list has already isn't new. */
+const newTopics = computed(() => {
+  const known = new Set(topics.data.value.map((t) => t.tag))
+  return new Set(pickList.value.map((p) => normaliseTag(p.tag)).filter((t) => !known.has(t))).size
+})
+/** While a change is planned or waits for its Confirm, no second one starts (#1076: it would be lost). */
+const busy = computed(() => publication.planning.value || publication.confirming.value)
 const picksValid = computed(() => pickList.value.length > 0 && pickList.value.every((p) => tagError(p.tag) === null))
 
 function pick(sourceId: string, path: string, tag: string | null): void {
@@ -87,12 +92,17 @@ const editing = ref<{ sourceId: string; rule: PathRuleJson; tag: string } | null
 const opening = ref(false)
 const openError = ref<string | null>(null)
 
+/** A refused plan keeps the form open with why (#1076), so what was written isn't lost. */
+const formError = ref<string | null>(null)
+
 function addTopic(): void {
+  formError.value = null
   editing.value = null
   formOpen.value = true
 }
 
 async function editRule(topic: Topic, rule: { sourceId: string; on: string; match: string }): Promise<void> {
+  formError.value = null
   opening.value = true
   openError.value = null
   try {
@@ -108,30 +118,36 @@ async function editRule(topic: Topic, rule: { sourceId: string; on: string; matc
   }
 }
 
-function saveForm({ sourceId, rule }: { sourceId: string; rule: PathRuleJson }): void {
+async function saveForm({ sourceId, rule }: { sourceId: string; rule: PathRuleJson }): Promise<void> {
   const changes = new Map<string, RuleChange[]>()
   const was = editing.value
-  const tag = rule.tags.map(normaliseTag)[0] ?? ''
+  const tag = tagsOf(rule).map(normaliseTag)[0] ?? ''
   removing.value = false
+  formError.value = null
   if (!was) {
     changes.set(sourceId, [addRules([rule])])
     doneMessage.value = TOPICS.saved(1)
-    void publication.plan(changes, TOPICS.saveTitle(1))
-    return
+    await publication.plan(changes, TOPICS.saveTitle(1))
+  } else {
+    // A rule edited as its JSON had every topic in view: it is replaced as a whole (#1076).
+    const whole = ruleForm(was.rule) === 'json'
+    const replace = replaceRule(was.tag, was.rule.on, was.rule.match, rule, whole)
+    if (was.sourceId === sourceId) changes.set(sourceId, [replace])
+    else {
+      // Moved to another source: the old one loses this topic's rule, the new one gains it.
+      changes.set(was.sourceId, [(rules) => replace(rules).filter((r) => r !== rule)])
+      changes.set(sourceId, [addRules([rule])])
+    }
+    doneMessage.value = TOPICS.changed(tag)
+    await publication.plan(changes, TOPICS.editTitle(tag))
   }
-  const replace = replaceRule(was.tag, was.rule.on, was.rule.match, rule)
-  if (was.sourceId === sourceId) changes.set(sourceId, [replace])
-  else {
-    // Moved to another source: the old one loses this topic's rule, the new one gains it.
-    changes.set(was.sourceId, [(rules) => replace(rules).filter((r) => r !== rule)])
-    changes.set(sourceId, [addRules([rule])])
-  }
-  doneMessage.value = TOPICS.changed(tag)
-  void publication.plan(changes, TOPICS.editTitle(tag))
+  if (publication.error.value) formError.value = publication.error.value
+  else formOpen.value = false
 }
 
 const removing = ref(false)
 function remove(topic: Topic): void {
+  if (busy.value) return
   const changes = new Map<string, RuleChange[]>()
   for (const sourceId of new Set((topic.rules ?? []).map((r) => r.sourceId))) changes.set(sourceId, [removeTopic(topic.tag)])
   doneMessage.value = TOPICS.removed(topic.tag)
@@ -139,11 +155,15 @@ function remove(topic: Topic): void {
   void publication.plan(changes, TOPICS.removeTitle(topic.tag))
 }
 
+/** Every attempt reads the list and the suggestions again, so what is published shows also after a failure (#1075). */
 async function confirm(): Promise<void> {
-  await publication.confirm()
-  for (const sourceId of Object.keys(picks)) delete picks[sourceId]
-  ui.notify(doneMessage.value)
-  load()
+  try {
+    await publication.confirm()
+    for (const sourceId of Object.keys(picks)) delete picks[sourceId]
+    ui.notify(doneMessage.value)
+  } finally {
+    load()
+  }
 }
 
 onMounted(load)
@@ -154,7 +174,7 @@ onMounted(load)
     <div class="grid gap-4">
       <div class="flex flex-wrap items-start justify-between gap-3">
         <p class="m-0 max-w-[680px] text-fg-2">{{ TOPICS.lead }}</p>
-        <UiButton v-if="canEditTopics" icon="add" data-test="add-topic" @click="addTopic">{{ TOPICS.addTopic }}</UiButton>
+        <UiButton v-if="canEditTopics" icon="add" :disabled="busy" data-test="add-topic" @click="addTopic">{{ TOPICS.addTopic }}</UiButton>
       </div>
       <p v-if="owner && !canEditTopics" class="m-0 text-fg-2" data-test="topics-read-only">{{ TOPICS.readOnly }}</p>
       <InlineError v-if="openError" :message="openError" />
@@ -166,8 +186,8 @@ onMounted(load)
               <span v-for="r in row.rules" :key="`${r.sourceId}-${r.on}-${r.match}`" class="flex flex-wrap items-baseline gap-x-2" data-test="topic-rule">
                 <span data-test="topic-rule-words">{{ ruleInWords(r) }}</span>
                 <button
-                  v-if="canEditTopics" type="button" class="text-small text-accent-ink underline" :aria-label="TOPICS.editRule(row.tag, ruleInWords(r))"
-                  :disabled="opening" data-test="edit-rule" @click="editRule(row, r)"
+                  v-if="canEditTopics" type="button" class="inline-flex min-h-6 items-center text-small text-accent-ink underline max-md:min-h-11"
+                  :aria-label="TOPICS.editRule(row.tag, ruleInWords(r))" :disabled="opening || busy" data-test="edit-rule" @click="editRule(row, r)"
                 >{{ TOPICS.edit }}</button>
               </span>
             </span>
@@ -180,7 +200,7 @@ onMounted(load)
           </template>
           <template #cell-actions="{ row }">
             <MenuButton
-              v-if="row.rules?.length" size="sm" :label="TOPICS.rowMenu(row.tag)" :items="[{ key: 'remove', label: TOPICS.remove, icon: 'delete', danger: true }]"
+              v-if="row.rules?.length" size="sm" :label="TOPICS.rowMenu(row.tag)" :items="[{ key: 'remove', label: TOPICS.remove, icon: 'delete', danger: true, disabled: busy }]"
               :data-test="`topic-menu-${row.tag}`" @select="remove(row)"
             />
           </template>
@@ -196,15 +216,20 @@ onMounted(load)
             @pick="(path, tag) => pick(block.sourceId, path, tag)"
           />
           <div v-if="suggestions.data.value.some((b) => b.sections.length > 0)" class="grid justify-items-end gap-2">
-            <UiButton variant="primary" icon="add" :disabled="!picksValid || publication.planning.value" data-test="add-topics" @click="addPicked">
+            <UiButton variant="primary" icon="add" :disabled="!picksValid || busy" data-test="add-topics" @click="addPicked">
               {{ TOPICS.add(newTopics) }}
             </UiButton>
           </div>
         </div>
       </AsyncState>
-      <p v-if="publication.planning.value" class="m-0 text-small text-fg-2" role="status" data-test="topics-planning">{{ TOPICS.planning }}</p>
-      <InlineError v-if="publication.error.value" :message="publication.error.value" data-test="topics-save-error" />
-      <TopicRuleForm v-model:open="formOpen" :collection-id="collectionId" :sources="props.sources ?? []" :initial="editing" @save="saveForm" />
+      <!-- Always mounted, so the text is announced when it appears. -->
+      <p class="m-0 text-small text-fg-2" role="status" data-test="topics-planning">{{ publication.planning.value ? TOPICS.planning : '' }}</p>
+      <!-- A refusal while the form is open shows in the form only. -->
+      <InlineError v-if="publication.error.value && !formOpen" :message="publication.error.value" data-test="topics-save-error" />
+      <TopicRuleForm
+        v-model:open="formOpen" :collection-id="collectionId" :sources="props.sources ?? []" :initial="editing" :saving="publication.planning.value"
+        :save-error="formError" @save="saveForm"
+      />
       <ConfirmDialog
         v-model:open="publication.confirming.value" :title="publication.title.value" :confirm-label="TOPICS.saveConfirm" :danger="removing" :action="confirm"
       >
@@ -214,6 +239,7 @@ onMounted(load)
             <li v-for="p in publication.planned.value" :key="p.id" data-test="topics-plan-item">
               <span class="block">{{ TOPICS.savePlan(p.processing, formatNumber(p.publication?.plan?.documents ?? 0)) }}</span>
               <span class="block text-small text-fg-2">{{ TOPICS.saveSources(publication.affected(p)) }}</span>
+              <span v-if="p.replacesDraft" class="block text-small text-warn" data-test="topics-plan-draft">{{ TOPICS.replacesDraft }}</span>
             </li>
           </ul>
         </div>

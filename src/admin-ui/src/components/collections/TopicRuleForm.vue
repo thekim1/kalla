@@ -12,19 +12,22 @@ import UiDrawer from '@/components/ui/UiDrawer.vue'
 import { formatNumber } from '@/utils/format'
 import { COMMON, TOPICS } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
-import { MEDIA_TYPES, escapeRegex, normaliseTag, plainText, ruleForm, tagError, type RuleForm } from '@/utils/topics'
+import { IGNORE_CASE, MEDIA_TYPES, escapeRegex, normaliseTag, plainText, ruleForm, tagError, tagsOf, type RuleForm } from '@/utils/topics'
 
 // Add topic / Edit (admin design §5.5.2; Decisions "Topics editor"): *Topic*; *Documents* as one of "under the address",
 // "whose title contains" (written as `title-regex` with the text escaped), "of the file type" (`mediaType`); *Source*
 // (only with more than one); *Advanced* with every rule kind of processing §7, and a rule the form can't show in words as
 // its JSON. Under it, "Matches N of M documents" with up to ten (`POST …/topic-rules/preview`, debounced, once the rule
-// is complete). A rule that matches nothing says so and is asked again at Save, which still saves it.
+// is complete). A rule that matches nothing says so and is asked again at Save, which still saves it. The drawer stays
+// open until the parent has its plan under way: `saving` while it is made, `saveError` when it was refused (#1076).
 const props = defineProps<{
   open: boolean
   collectionId: string
   sources: { id: string; name: string }[]
   /** Edit: the rule as stored, its source and the topic it sets; Add when absent. */
   initial?: { sourceId: string; rule: PathRuleJson; tag: string } | null
+  saving?: boolean
+  saveError?: string | null
 }>()
 const emit = defineEmits<{ (e: 'update:open', value: boolean): void; (e: 'save', value: { sourceId: string; rule: PathRuleJson }): void }>()
 
@@ -39,6 +42,8 @@ const previewing = ref(false)
 const zeroOpen = ref(false)
 let timer: ReturnType<typeof setTimeout> | null = null
 let generation = 0
+/** The preview asked for last: a newer one aborts it, so typing doesn't pile up requests on the server (#1076). */
+let inFlight: AbortController | null = null
 
 const kinds = computed(() => (form.kind === 'json' ? ['json'] : ['under', 'title', 'type', 'advanced']).map((k) => ({ value: k, label: TOPICS.kinds[k] ?? TOPICS.json })))
 const typeOptions = Object.entries(MEDIA_TYPES).map(([value, label]) => ({ value, label: `${label} (${value})` }))
@@ -85,7 +90,8 @@ const rule = computed<PathRuleJson | null>(() => {
     case 'under':
       return form.address.trim() ? { match: form.address.trim(), on: 'path', tags } : null
     case 'title':
-      return form.title.trim() ? { match: escapeRegex(form.title.trim()), on: 'title-regex', tags } : null
+      // Case-insensitive: "protokoll" finds "Protokoll 2024".
+      return form.title.trim() ? { match: IGNORE_CASE + escapeRegex(form.title.trim()), on: 'title-regex', tags } : null
     case 'type':
       return { match: form.type, on: 'mediaType', tags }
     case 'advanced':
@@ -95,28 +101,40 @@ const rule = computed<PathRuleJson | null>(() => {
     default:
       try {
         const parsed = JSON.parse(form.json) as PathRuleJson
-        return parsed && typeof parsed === 'object' && typeof parsed.match === 'string' && typeof parsed.on === 'string' && Array.isArray(parsed.tags) ? parsed : null
+        return parsed && typeof parsed === 'object' && typeof parsed.match === 'string' && typeof parsed.on === 'string'
+          && (parsed.tags === undefined || (Array.isArray(parsed.tags) && parsed.tags.every((t) => typeof t === 'string'))) ? parsed : null
       } catch {
         return null
       }
   }
 })
 
-const tagProblem = computed(() => (form.kind === 'json' ? null : tagError(form.tag)))
+/** The topic's check; in JSON, every tag the rule sets, and at least one (a rule without topics isn't one on this tab). */
+const tagProblem = computed(() => {
+  if (form.kind !== 'json') return tagError(form.tag)
+  if (!rule.value) return null
+  const tags = tagsOf(rule.value)
+  return tags.length === 0 ? TOPICS.tagsRequired : tags.map(tagError).find((e) => e !== null) ?? null
+})
 const ruleProblem = computed(() => (rule.value ? null : form.kind === 'json' ? TOPICS.jsonInvalid : TOPICS.matchRequired))
 
 async function runPreview(): Promise<TopicRulePreview | null> {
   const current = rule.value
   if (!current || !form.sourceId) return null
   const mine = ++generation
+  inFlight?.abort()
+  const controller = new AbortController()
+  inFlight = controller
   previewing.value = true
   previewError.value = null
   try {
     // The preview needs a valid tag shape; the topic itself does not change what matches.
-    const answer = await api.collections.previewTopicRule(props.collectionId, { sourceId: form.sourceId, rule: { ...current, tags: current.tags.length && current.tags.every((t) => tagError(t) === null) ? current.tags : ['preview'] } })
+    const tags = tagsOf(current)
+    const answer = await api.collections.previewTopicRule(props.collectionId, { sourceId: form.sourceId, rule: { ...current, tags: tags.length && tags.every((t) => tagError(t) === null) ? tags : ['preview'] } }, controller.signal)
     if (mine === generation) preview.value = answer
     return answer
   } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') return null
     if (mine === generation) {
       preview.value = null
       previewError.value = problemMessage(e)
@@ -145,16 +163,16 @@ async function save(): Promise<void> {
   if (timer) clearTimeout(timer)
   const answer = preview.value ?? (await runPreview())
   if (previewError.value) return
-  if (answer && answer.matched === 0) {
+  if (answer && answer.matched === 0 && !answer.partial) {
     zeroOpen.value = true
     return
   }
   emitSave()
 }
 
+/** The parent plans the change and closes the drawer once the plan is under way; a refusal shows here (`saveError`). */
 function emitSave(): void {
   emit('save', { sourceId: form.sourceId, rule: rule.value! })
-  emit('update:open', false)
 }
 </script>
 
@@ -171,7 +189,7 @@ function emitSave(): void {
       />
       <fieldset class="grid gap-3">
         <legend class="mb-2 font-medium">{{ TOPICS.documentsField }}</legend>
-        <div class="flex flex-wrap gap-x-5 gap-y-2" role="radiogroup">
+        <div class="flex flex-wrap gap-x-5 gap-y-2">
           <label v-for="k in kinds" :key="k.value" class="flex cursor-pointer items-center gap-2">
             <input v-model="form.kind" type="radio" name="topic-kind" :value="k.value" :data-test="`topic-kind-${k.value}`" />
             {{ k.label }}
@@ -194,19 +212,23 @@ function emitSave(): void {
           <TextField id="topic-date" v-model="form.date" :label="TOPICS.date" :hint="TOPICS.dateHint" mono data-test="topic-form-date" />
         </template>
         <TextAreaField
-          v-else id="topic-json" v-model="form.json" :label="TOPICS.json" :hint="TOPICS.jsonHint" mono :error="tried || form.json ? ruleProblem : null"
+          v-else id="topic-json" v-model="form.json" :label="TOPICS.json" :hint="TOPICS.jsonHint" mono :error="tried || form.json ? ruleProblem ?? tagProblem : null"
           data-test="topic-form-json"
         />
       </fieldset>
 
+      <InlineError v-if="saveError" :message="saveError" data-test="topic-form-error" />
       <section class="grid gap-2 rounded-card bg-sunken p-4" aria-live="polite" data-test="topic-preview">
         <p v-if="previewing" class="m-0 text-fg-2">{{ TOPICS.previewing }}</p>
         <InlineError v-else-if="previewError" :message="previewError" data-test="topic-preview-error" />
         <template v-else-if="preview">
-          <p class="m-0 font-medium" data-test="topic-preview-count">{{ TOPICS.matches(formatNumber(preview.matched), formatNumber(preview.total)) }}</p>
-          <p v-if="preview.matched === 0" class="m-0 text-warn" data-test="topic-preview-none">{{ TOPICS.noMatch(sourceName) }}</p>
+          <p class="m-0 font-medium" data-test="topic-preview-count">
+            {{ preview.partial ? TOPICS.matchesPartial(formatNumber(preview.matched), formatNumber(preview.checked), formatNumber(preview.total))
+              : TOPICS.matches(formatNumber(preview.matched), formatNumber(preview.total)) }}
+          </p>
+          <p v-if="preview.matched === 0 && !preview.partial" class="m-0 text-warn" data-test="topic-preview-none">{{ TOPICS.noMatch(sourceName) }}</p>
           <template v-else>
-            <p class="m-0 text-small text-fg-2">{{ TOPICS.firstTen }}</p>
+            <p v-if="preview.sample.length" class="m-0 text-small text-fg-2">{{ TOPICS.firstTen }}</p>
             <ul class="m-0 grid gap-1 pl-5 text-small">
               <li v-for="d in preview.sample" :key="d.documentId" data-test="topic-preview-item">
                 {{ d.title ?? d.displayName ?? d.url }}<span v-if="d.url ?? d.displayName" class="ml-2 font-mono text-fg-3">{{ d.url ?? d.displayName }}</span>
@@ -217,7 +239,7 @@ function emitSave(): void {
       </section>
     </form>
     <template #footer>
-      <UiButton variant="primary" type="submit" form="topic-form" :loading="previewing && tried" data-test="topic-form-save">{{ TOPICS.save }}</UiButton>
+      <UiButton variant="primary" type="submit" form="topic-form" :loading="(previewing && tried) || saving" data-test="topic-form-save">{{ TOPICS.save }}</UiButton>
       <UiButton variant="quiet" @click="emit('update:open', false)">{{ COMMON.cancel }}</UiButton>
     </template>
     <ConfirmDialog

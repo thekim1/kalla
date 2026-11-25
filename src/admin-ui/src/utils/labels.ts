@@ -734,6 +734,8 @@ export const TOPICS = {
   /** A rule in words in the list (§5.5.2). */
   words: {
     under: (path: string) => `under ${path}`,
+    /** A `path` rule without a trailing `/` or a wildcard: that one address (processing §7). */
+    at: (path: string) => `at ${path}`,
     pathPattern: (glob: string) => `whose path matches ${glob}`,
     titleContains: (text: string) => `whose title contains “${text}”`,
     titleMatches: (pattern: string) => `whose title matches ${pattern}`,
@@ -747,6 +749,8 @@ export const TOPICS = {
   section: 'Section',
   tag: 'Topic',
   pick: (section: string) => `Add ${section} as a topic`,
+  pickUnder: (section: string, parent: string) => `Add ${section}, under ${parent}, as a topic`,
+  loadingUnder: (section: string) => `Loading the sections under ${section}…`,
   tagFor: (section: string) => `Topic for ${section}`,
   covered: (tags: string) => `Already a topic: ${tags}`,
   showUnder: 'show the sections under it',
@@ -755,6 +759,9 @@ export const TOPICS = {
   noSuggestions: 'No section of this source has 5 documents or more yet.',
   tagRequired: 'Write a topic.',
   tagInvalid: 'Use lower-case letters, digits and hyphens, at most 50.',
+  tagsRequired: 'Give the rule at least one topic in "tags".',
+  /** A plan writes the processing's draft (§6.6): an unpublished change made on a source page is replaced (#1075). */
+  replacesDraft: 'An unpublished change to this processing’s settings is replaced by this one.',
   /** "Add topics" until a section is ticked. */
   add: (n: number) => (n === 0 ? 'Add topics' : `Add ${n} ${n === 1 ? 'topic' : 'topics'}`),
   /** Saving: one publication plan per processing, confirmed as one (§6.6). */
@@ -809,6 +816,7 @@ export const TOPICS = {
   jsonInvalid: 'Write one rule as a JSON object with "match", "on" and "tags".',
   matchRequired: 'Write what the rule matches.',
   matches: (n: string, total: string) => `Matches ${n} of ${total} documents`,
+  matchesPartial: (n: string, checked: string, total: string) => `Matches ${n} of the first ${checked} of ${total} documents (the rest would take too long to check)`,
   previewing: 'Counting the documents…',
   noMatch: (source: string) => `No document of ${source} matches this rule yet.`,
   firstTen: 'The first ten',
@@ -1095,6 +1103,8 @@ export const PIPELINE = {
   range: (min: number, max: number) => `From ${min} to ${max}.`,
   json: 'JSON. Leave it as it is if you are unsure.',
   /** The source page's Topics field, read-only (§5.8): the rules are edited on the knowledge base's Topics tab. */
+  /** The read-only Topics row (`pathRules`, §5.8). */
+  topics: 'Topics',
   pathRulesNone: 'No topics',
   pathRulesEdit: 'Edit on the Topics tab',
   pathRulesKept: 'Topics are edited on the knowledge base\u2019s Topics tab; publishing here keeps them as they are.',

@@ -23,5 +23,5 @@
   "AdminApi.RetentionService.RunOnceAsync#2": ["Value bigint"],
   "AdminApi.RunLive.WithProgressAsync#1": ["Added integer", "Updated integer", "Unchanged integer", "Deleted integer", "Failed integer", "Processed integer", "CostUsd numeric"],
   "AdminApi.SiteProfileEndpoints.DepartmentForAsync#1": ["Value uuid"],
-  "AdminApi.TopicSuggestions.SectionsAsync#1": ["Prefix text", "Host text", "Documents integer", "Title text"]
+  "AdminApi.TopicSuggestions.SectionsAsync#1": ["Prefix text", "Hosts text[]", "Documents integer", "Title text"]
 }

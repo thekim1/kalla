@@ -10,8 +10,16 @@ import { problemMessage } from '@/utils/problem'
 /** A change to one source's `pathRules`: the new rules from the stored ones. */
 export type RuleChange = (rules: PathRuleJson[]) => PathRuleJson[]
 
-/** One processing's plan: its publication job, the processing's name, and the plan once made. */
-export interface PlannedPublication { id: string; processing: string; publication: Publication | null }
+/**
+ * One processing's plan: its publication job, the processing's name, the plan once made, and whether it replaces a draft
+ * someone left unpublished (a plan writes the draft, #1075).
+ */
+export interface PlannedPublication { id: string; processing: string; publication: Publication | null; replacesDraft: boolean }
+
+/** A version's parameters other than the topics, comparable as text (keys sorted). */
+function otherParams(params: Record<string, unknown>): string {
+  return JSON.stringify(Object.keys(params).filter((k) => k !== 'pathRules').sort().map((k) => [k, params[k]]))
+}
 
 /** The stored `pathRules` of a processing's published version (none when it has no published version). */
 export function publishedRules(pipeline: Pipeline): PathRuleJson[] {
@@ -40,6 +48,7 @@ export function useTopicPublication(collectionId: Ref<string>, sourceNames: Ref<
     planning.value = true
     error.value = null
     planned.value = []
+    published.clear()
     title.value = dialogTitle
     try {
       const sourceIds = [...changes.keys()]
@@ -56,7 +65,11 @@ export function useTopicPublication(collectionId: Ref<string>, sourceNames: Ref<
         const started = await api.pipelines.plan(pipelineId, {
           parameters: params, version: pipeline.version, ...(copyOnWrite ? { collectionId: collectionId.value } : {}),
         })
-        planned.value = [...planned.value, { id: started.publicationId, processing: pipeline.name, publication: null }]
+        // A draft that changes more than the topics (a source page's unpublished edit); a topic plan's own draft only
+        // changes pathRules, and a copy-on-write plan makes a new processing and leaves the platform's draft alone.
+        const draft = pipeline.versions.find((v) => v.state === 'draft')
+        const replacesDraft = !copyOnWrite && !!draft && otherParams(draft.definition.params) !== otherParams(published?.definition.params ?? {})
+        planned.value = [...planned.value, { id: started.publicationId, processing: pipeline.name, publication: null, replacesDraft }]
       }
       poll.start()
     } catch (e) {
@@ -77,9 +90,16 @@ export function useTopicPublication(collectionId: Ref<string>, sourceNames: Ref<
     return true
   })
 
-  /** Publishes every plan; the caller's dialog closes when it resolves. */
+  /** The plans already published by an earlier Confirm: a retry after a failure skips them (#1075). */
+  const published = new Set<string>()
+
+  /** Publishes every plan not yet published; the caller's dialog closes when it resolves, and stays open on a failure. */
   async function confirm(): Promise<void> {
-    for (const p of planned.value) await api.publications.confirm(p.id, p.publication!.version)
+    for (const p of planned.value) {
+      if (published.has(p.id)) continue
+      await api.publications.confirm(p.id, p.publication!.version)
+      published.add(p.id)
+    }
   }
 
   /** The sources a plan processes again: the knowledge base's by name, others counted. */

@@ -484,7 +484,8 @@ export interface TopicSection {
 export interface PathRuleJson {
   match: string
   on: 'path' | 'path-regex' | 'host' | 'title-regex' | 'mediaType'
-  tags: string[]
+  /** Optional in the schema: a rule may set only `documentType` or `date` (#1076). */
+  tags?: string[]
   documentType?: string
   date?: string
 }
@@ -493,6 +494,9 @@ export interface PathRuleJson {
 export interface TopicRulePreview {
   matched: number
   total: number
+  /** The matching's time budget ended after `checked` documents (#1076): `matched` counts those only. */
+  checked: number
+  partial: boolean
   sample: { documentId: string; title: string | null; url: string | null; displayName: string | null }[]
 }
 

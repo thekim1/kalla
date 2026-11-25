@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
@@ -12,17 +13,27 @@ namespace Kalla.AdminApi;
 /// processing §7 shape against one source's live documents, through the worker's matcher (<see cref="PathRules"/>), as
 /// "Matches N of M documents" with the first ten. The rule is checked against the template's schema as V24 checks
 /// <c>pathRules</c> at publish, so an invalid regular expression is a 400 here as it would be at Save. Owning department and <c>EditPipelines</c> only; nothing is saved or logged.
+/// The matching has a time budget (#1076): a pattern that backtracks on many documents answers with what it checked in
+/// <see cref="DefaultBudget"/>, marked <c>partial</c>, instead of holding a request thread for minutes.
 /// </summary>
 public static class TopicRulePreview
 {
     /// <summary>At most this many matched documents are listed.</summary>
     public const int SampleSize = 10;
 
+    /// <summary>
+    /// How long one preview may spend matching (<c>Topics:PreviewBudget</c>, a deployment knob; 3 s by default); each match
+    /// has the matcher's own 1 s regex timeout too.
+    /// </summary>
+    public static readonly TimeSpan DefaultBudget = TimeSpan.FromSeconds(3);
+
     public static RouteGroupBuilder MapTopicRulePreview(this RouteGroupBuilder collections)
     {
         ArgumentNullException.ThrowIfNull(collections);
-        collections.MapPost("/{id:guid}/topic-rules/preview", async (Guid id, TopicRulePreviewRequest request, AdminContext admin, CancellationToken ct) =>
+        collections.MapPost("/{id:guid}/topic-rules/preview", async (Guid id, TopicRulePreviewRequest request, AdminContext admin, IConfiguration configuration,
+                CancellationToken ct) =>
             {
+                var budget = configuration.GetValue("Topics:PreviewBudget", DefaultBudget);
                 var collection = await CollectionEndpoints.Scoped(admin).AsNoTracking().SingleOrDefaultAsync(c => c.Id == id, ct)
                     ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
                 var source = await (from s in admin.Db.Sources.AsNoTracking()
@@ -34,17 +45,24 @@ public static class TopicRulePreview
                     ?? throw AdminFaults.Field("sourceId", AdminErrorCodes.InvalidValue);
 
                 var rule = Check(request.Rule, source.TemplateId, source.Definition, source.Type);
-                var documents = admin.Db.Documents.AsNoTracking()
-                    .Where(d => d.SourceId == source.Id && d.DeletedAt == null && d.LiveChunkSetId != null)
+                var live = admin.Db.Documents.AsNoTracking().Where(d => d.SourceId == source.Id && d.DeletedAt == null && d.LiveChunkSetId != null);
+                var total = await live.CountAsync(ct);
+                var documents = live
                     .OrderBy(d => d.Id)
                     .Select(d => new { d.Id, d.Title, d.Url, d.DisplayName, d.MediaType })
                     .AsAsyncEnumerable();
                 var matched = 0;
-                var total = 0;
+                var @checked = 0;
                 var sample = new List<TopicRuleSampleDto>();
+                var clock = Stopwatch.StartNew();
                 await foreach (var d in documents.WithCancellation(ct))
                 {
-                    total++;
+                    if (clock.Elapsed >= budget)
+                    {
+                        break;
+                    }
+
+                    @checked++;
                     var subject = new PathRuleSubject(d.MediaType ?? "")
                     {
                         Url = d.Url is { } url && Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri : null, DisplayName = d.DisplayName, Title = d.Title,
@@ -61,7 +79,7 @@ public static class TopicRulePreview
                     }
                 }
 
-                return new TopicRulePreviewDto(matched, total, sample);
+                return new TopicRulePreviewDto(matched, total, sample) { Checked = @checked, Partial = @checked < total };
             })
             .RequireAuthorization(AdminPolicies.EditPipelines).WithName("PreviewTopicRule")
             .WithSummary("What one topic rule matches among a source's live documents, before it is saved (nothing is saved)");
@@ -104,8 +122,16 @@ public static class TopicRulePreview
 /// <summary><see cref="Rule"/>: one rule of processing §7 (<c>match</c>, <c>on</c>, <c>tags</c>, <c>documentType</c>, <c>date</c>).</summary>
 public sealed record TopicRulePreviewRequest(Guid SourceId, JsonElement Rule);
 
-/// <summary>The live documents the rule matches, of <see cref="Total"/>, with the first <see cref="TopicRulePreview.SampleSize"/>.</summary>
-public sealed record TopicRulePreviewDto(int Matched, int Total, IReadOnlyList<TopicRuleSampleDto> Sample);
+/// <summary>
+/// The live documents the rule matches, of <see cref="Total"/>, with the first <see cref="TopicRulePreview.SampleSize"/>;
+/// <see cref="Partial"/> when the budget ended the matching after <see cref="Checked"/> documents (then <see cref="Matched"/>
+/// counts those only).
+/// </summary>
+public sealed record TopicRulePreviewDto(int Matched, int Total, IReadOnlyList<TopicRuleSampleDto> Sample)
+{
+    public int Checked { get; init; }
+    public bool Partial { get; init; }
+}
 
 /// <summary>A matched document: its URL for a website, its display name for an upload.</summary>
 public sealed record TopicRuleSampleDto(Guid DocumentId, string? Title, string? Url, string? DisplayName);

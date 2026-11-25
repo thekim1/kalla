@@ -61,3 +61,38 @@ describe('Topics in words and the tag check (admin design §5.5.2, processing §
     expect(addRules([next])(rules)).toEqual([...rules, next])
   })
 })
+
+describe('The post-merge fixes of the topic rules (#1075, #1076)', () => {
+  it('words a path rule as the matcher reads it: one address, a pasted address without its query', () => {
+    expect(ruleInWords({ on: 'path', match: '/kontakt' })).toBe('at /kontakt')
+    expect(ruleInWords({ on: 'path', match: 'HR/Policys/' })).toBe('under HR/Policys/')
+    expect(ruleInWords({ on: 'path', match: 'https://www.umea.se/bygga/?utm_source=x#top' })).toBe('under www.umea.se/bygga/')
+    expect(ruleInWords({ on: 'path', match: 'https://www.umea.se/kontakt?x=1' })).toBe('at www.umea.se/kontakt')
+    expect(ruleInWords({ on: 'title-regex', match: '(?i)Protokoll' })).toBe('whose title contains “Protokoll”')
+  })
+
+  it('adds a rule that matches as an existing one does as topics on that rule, never twice', () => {
+    const rules: PathRuleJson[] = [{ match: '/omsorg/', on: 'path', tags: ['omsorg'] }]
+    const same = { match: '/omsorg/', on: 'path' as const, tags: ['omsorg'] }
+    expect(addRules([same, same])(rules)).toEqual(rules)
+    expect(addRules([{ ...same, tags: ['vard'] }])(rules)).toEqual([{ match: '/omsorg/', on: 'path', tags: ['omsorg', 'vard'] }])
+    // A document type makes it another rule.
+    expect(addRules([{ ...same, documentType: 'page' }])(rules)).toHaveLength(2)
+  })
+
+  it('replaces a rule edited as its JSON as a whole, and only this topic\'s otherwise', () => {
+    const rules: PathRuleJson[] = [{ match: '/bygga/', on: 'path', tags: ['bygg', 'lov'] }]
+    expect(replaceRule('bygg', 'path', '/bygga/', rules[0]!, true)(rules)).toEqual(rules)
+    const narrowed = { match: '/bygga/lov/', on: 'path' as const, tags: ['bygg', 'lov'] }
+    expect(replaceRule('bygg', 'path', '/bygga/', narrowed, true)(rules)).toEqual([narrowed])
+    expect(replaceRule('bygg', 'path', '/bygga/', { match: '/bygga/', on: 'path', tags: ['bygg'] })(rules))
+      .toEqual([{ match: '/bygga/', on: 'path', tags: ['lov', 'bygg'] }])
+  })
+
+  it('reads a rule without topics (only a document type) without failing', () => {
+    const rules: PathRuleJson[] = [{ match: '/blankett/', on: 'path', documentType: 'form' }, { match: '/bygga/', on: 'path', tags: ['bygga'] }]
+    expect(removeTopic('bygga')(rules)).toEqual([rules[0]])
+    expect(findRule(rules, 'bygga', 'path', '/blankett/')).toBe(-1)
+    expect(ruleForm(rules[0]!)).toBe('json')
+  })
+})

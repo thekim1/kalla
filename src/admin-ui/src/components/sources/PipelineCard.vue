@@ -14,7 +14,7 @@ import UiDrawer from '@/components/ui/UiDrawer.vue'
 import { useAuthStore } from '@/stores/auth'
 import { COMMON, PIPELINE } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
-import { ruleInWords } from '@/utils/topics'
+import { ruleInWords, tagsOf } from '@/utils/topics'
 
 // Bearbetning on the source page (admin design §6.3, §6.6 step 1): the pipeline the source uses, its version and template
 // parameters, and Ändra bearbetning: the parameters as a form from the template's paramsSchema (enum → select, integer →
@@ -56,8 +56,12 @@ const fields = computed(() =>
  */
 const editable = computed(() => fields.value.filter((f) => f.name !== 'pathRules'))
 const hasPathRules = computed(() => fields.value.some((f) => f.name === 'pathRules'))
+/**
+ * The published topics, as the Topics tab shows them: a topic plan writes the draft (§6.6), so a plan cancelled there
+ * would otherwise show here and go live with the next change of the other parameters (#1076).
+ */
 const storedPathRules = computed<PathRuleJson[]>(() => {
-  const rules = current.value?.definition.params.pathRules
+  const rules = published.value?.definition.params.pathRules
   return Array.isArray(rules) ? (rules as PathRuleJson[]) : []
 })
 const summary = computed(() =>
@@ -87,7 +91,7 @@ function edit(): void {
 }
 
 function parameters(): Record<string, unknown> | null {
-  const result: Record<string, unknown> = hasPathRules.value ? { pathRules: current.value?.definition.params.pathRules ?? [] } : {}
+  const result: Record<string, unknown> = hasPathRules.value ? { pathRules: storedPathRules.value } : {}
   let ok = true
   for (const f of editable.value) {
     const text = (values[f.name] ?? '').trim()
@@ -136,10 +140,10 @@ onMounted(load)
       <DetailRow :label="PIPELINE.name">{{ pipeline.name }}</DetailRow>
       <DetailRow v-if="published" :label="PIPELINE.version">{{ published.number }}<span v-if="draft" class="ml-2 text-fg-2">· {{ PIPELINE.draft(draft.number) }}</span></DetailRow>
       <DetailRow v-for="s in summary" :key="s.label" :label="s.label">{{ s.value }}</DetailRow>
-      <DetailRow v-if="hasPathRules" :label="PIPELINE.params.pathRules ?? 'Topics'" data-test="pipeline-topics">
+      <DetailRow v-if="hasPathRules" :label="PIPELINE.topics" data-test="pipeline-topics">
         <span class="grid gap-1">
           <span v-if="storedPathRules.length === 0" class="text-fg-3">{{ PIPELINE.pathRulesNone }}</span>
-          <span v-for="(r, i) in storedPathRules" :key="i" data-test="pipeline-topic"><span class="font-mono">{{ r.tags.join(', ') }}</span>: {{ ruleInWords(r) }}</span>
+          <span v-for="(r, i) in storedPathRules" :key="i" data-test="pipeline-topic"><span v-if="tagsOf(r).length" class="font-mono">{{ tagsOf(r).join(', ') }}: </span>{{ ruleInWords(r) }}</span>
           <RouterLink
             :to="{ name: 'collection', params: { id: source.collectionId }, query: { tab: 'topics' } }" class="text-accent-ink underline" data-test="pipeline-topics-link"
           >{{ PIPELINE.pathRulesEdit }}</RouterLink>
