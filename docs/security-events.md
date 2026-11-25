@@ -11,8 +11,8 @@ missing from the table below.
 Set `OTEL_EXPORTER_OTLP_ENDPOINT` on `kalla-api`, `kalla-worker` and `kalla-admin`. In an OpenTelemetry Collector, route
 log records whose category is `Kalla.Security` to the SIEM:
 [`deploy/otel/collector-siem.example.yaml`](../deploy/otel/collector-siem.example.yaml) does (syslog RFC 5424, with
-Splunk, Elastic and Sentinel alternatives; copied from the gateway's). With Compose, set `KALLA_OTEL_ENDPOINT` in
-`deploy/.env`; on Kubernetes `OTEL_EXPORTER_OTLP_ENDPOINT` in the overlay. The event id is the record's `EventId`, the name its `EventName`, and each attribute below is
+Splunk, Elastic and Sentinel alternatives; copied from the gateway's). With Compose, set `FORS_OTEL_ENDPOINT` in
+`deploy/.env` (`init-deployment.sh --set FORS_OTEL_ENDPOINT=…`); on Kubernetes `OTEL_EXPORTER_OTLP_ENDPOINT` in the overlay. The event id is the record's `EventId`, the name its `EventName`, and each attribute below is
 a structured field.
 
 ## Rules

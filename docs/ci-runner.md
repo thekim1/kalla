@@ -6,8 +6,7 @@ install .NET (`actions/setup-dotnet`), Node (`actions/setup-node`), the Aspire C
 Playwright browser themselves, so they are not installed by hand.
 
 The browser tests (`e2e.yml`) run by hand from the Actions tab, or from `release.yml` when asked: set the repository
-variable `RELEASE_E2E` to `true` for tag releases, or tick `e2e` on a dry run (Decisions "E2E only on release or by hand",
-"E2E optional on release").
+variable `RELEASE_E2E` to `true` for tag releases, or tick `e2e` on a dry run (Decisions "E2E optional on release").
 
 Run them **alone**: dispatch `e2e.yml` only when no other workflow is running (`gh run list --status in_progress`).
 With `verify.yml`'s backend and renderer jobs on the other runner at the same time, the admin UI's requests failed in

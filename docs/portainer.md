@@ -103,7 +103,7 @@ read the CA only at start.
 ## First deploy
 
 1. **Create the stack.** *Stacks → Add stack*, a name you will keep (the volumes are found by it), *Web editor*: paste
-   the file. Pick the `ghcr.io` registry.
+   the file.
 2. **Variables:** *Environment variables → Load variables from .env file* with
    [`deploy/portainer/stack.env.example`](../deploy/portainer/stack.env.example), then replace the one value its
    comments mark CHANGE, your domain. It is not a secret:
@@ -218,7 +218,7 @@ read the CA only at start.
    version and features with `act-as-key`, a recent organisation sync without a *degraded* reason, and the models.
    Then **create the embedding profile** (*Home* asks for it until one exists): *Models → Embedding profiles → Create
    profile*, pick the gateway's embedding model. The ceiling and the input limit come from the model; the test
-   embedding measures its dimensions (or tick *Request dimensions* and give the size, for a model such as
+   embedding measures its dimensions (or tick *Send dimensions* and give the size, for a model such as
    `text-embedding-3-large` that shortens its vectors) and is stored as the profile's canary. Every RAG credential key
    must allow the model. The first profile is the default, which new knowledge bases use.
 10. **First content:** follow *Get started* on Källa's *Home* (a knowledge base, a source, the first fetch, test

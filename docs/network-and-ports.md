@@ -36,7 +36,7 @@ flowchart LR
   subgraph clients[Municipal network]
     admin[Admin browser]
     user[Staff browser]
-    integ[API and MCP clients]
+    integ[API clients]
   end
   proxy[Reverse proxy :443]
   subgraph rag[RAG host]
@@ -95,7 +95,7 @@ repo-and-deployment §6.1: "Nothing else is published").
 
 | Listener | Host port (default) | Container port | Protocol | Who connects | Purpose | Required | Configured by |
 |---|---|---|---|---|---|---|---|
-| `kalla-api` | `${KALLA_API_BIND}:${KALLA_API_PORT}`, `0.0.0.0:8543` | 8443 | HTTPS (TLS: internal CA, or your PKI's certificate in `KALLA_PKI_DIR`) | the reverse proxy only, on behalf of: API and MCP clients with `kalla-sk-` keys, staff browsers following citation download links | chat, retrieval, MCP (`Rag__Roles: knowledge,chat,mcp`), health | yes | `KALLA_API_PORT`, `KALLA_API_BIND` (`init-deployment.sh --set`) |
+| `kalla-api` | `${KALLA_API_BIND}:${KALLA_API_PORT}`, `0.0.0.0:8543` | 8443 | HTTPS (TLS: internal CA, or your PKI's certificate in `KALLA_PKI_DIR`) | the reverse proxy only, on behalf of: API clients with `kalla-sk-` keys, staff browsers following citation download links | chat, retrieval, health (`Rag__Roles: knowledge,chat,mcp`; MCP itself is not served yet, [how it works](how-it-works.md#mcp)) | yes | `KALLA_API_PORT`, `KALLA_API_BIND` (`init-deployment.sh --set`) |
 | `kalla-admin` | `${KALLA_ADMIN_BIND}:${KALLA_ADMIN_PORT}`, `0.0.0.0:9543` | 8443 | HTTPS (as above) | the reverse proxy only, on behalf of admins' browsers | admin UI and its BFF, OIDC redirects `/signin-oidc` and `/signout-callback-oidc`, uploads, health | yes | `KALLA_ADMIN_PORT`, `KALLA_ADMIN_BIND` |
 | `kalla-api-b`, `kalla-admin-b` (only with `--rolling`) | `${KALLA_API_BIND}:${KALLA_API_B_PORT}`, `${KALLA_ADMIN_BIND}:${KALLA_ADMIN_B_PORT}`, `0.0.0.0:8544` and `:9544` | 8443 | as kalla-api and kalla-admin | the reverse proxy only | the second slots of [updates without downtime](zero-downtime-updates.md) | yes | `--rolling` |
 | `kalla-openwebui` (profile `openwebui`) | `${KALLA_OPENWEBUI_BIND}:${KALLA_OPENWEBUI_PORT}`, `127.0.0.1:3000` | 8080 | **plain HTTP**: the proxy terminates TLS | the reverse proxy only, on behalf of staff browsers | the chat UI, OIDC callback `/oauth/oidc/login/callback` | optional | `KALLA_OPENWEBUI_PORT`, `KALLA_OPENWEBUI_BIND` |
@@ -265,7 +265,7 @@ address (the host) answers at the IP level (connectors design §8.3).
 
 ### 5.1 Pilot: shared Keycloak and gateway on the gateway host
 
-Decisions "P1 pilot sign-in" and "Gateway release 1 and shared Keycloak as built": Keycloak runs on the gateway's
+Decisions "P1 pilot sign-in" and "Gateway releases": Keycloak runs on the gateway's
 host, realm `fors`, and RAG's clients come from `deploy/keycloak/rag-additions.json`.
 
 - `KALLA_OIDC_AUTHORITY=https://<keycloak host>/realms/fors`; `KALLA_GATEWAY_URL=https://<gateway host>`.

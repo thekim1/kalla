@@ -157,7 +157,7 @@ fails with `model_not_found`; #440):
 
 Then create the pilot profile in the admin UI, signed in as a dev Keycloak platform admin: *Models → Embedding
 profiles → Create profile*, name `pilot-embedding`, model `text-embedding-3-large` (the mirror lists it once the model
-sync has run), *Request dimensions* on, dimensions `1024`. The ceiling (`Eu`) and the input limit come from the model,
+sync has run), *Send dimensions* on, dimensions `1024`. The ceiling (`Eu`) and the input limit come from the model,
 and the save's test embedding is stored as the canary. It is the only profile, so it is the default.
 
 In the Aspire dashboard (`https://localhost:17470`), check that `migrations` completed and that no `fake-gateway`

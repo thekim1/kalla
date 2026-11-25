@@ -78,7 +78,7 @@ Europe/Stockholm day:
 
 | Table | What it counts | Day |
 |---|---|---|
-| `chat."AssistantDailyUsage"` | every call of a chat turn, per assistant, client and step: `chat-answer`, `condense`, `condense-long`, `follow-ups`, `query-embed` (cache misses only), `rerank`; the test panel's calls under the client `admin-console` | the turn's start |
+| `chat."AssistantDailyUsage"` | every call of a chat turn, per assistant, client and step: `chat-answer`, `condense`, `condense-long`, `follow-ups`, `query-embed` (cache misses only), `rerank`, `escalation`; the test panel's calls, the assistant tests (`assistant-test`, `assistant-test-judge`) and the nightly answer run (`eval-answer-chat`, `eval-answer`) under the client `admin-console` | the turn's start |
 | `content."CollectionDailyUsage"` | the worker's calls per knowledge base and step: `embed` (indexing, re-embedding, preview), `eval-generate`, `eval-judge`, `eval-dedup`, and the retrieval evaluation's `query-embed` and `rerank` | the call's answer |
 
 Each row holds calls, input tokens (cached ones included, as the gateway counts them), cached input tokens, output
@@ -547,7 +547,7 @@ journalctl -u rag-restart-unhealthy.service --since today
 `deploy/portainer/compose.portainer.yaml` runs the gateway and Källa as **one** Portainer stack, configured only
 through environment variables, for hosts without shell access. It is the gateway's
 `deploy/compose.portainer.yaml`, unchanged but for the default of its `FORS_INTEGRATION_MANIFEST` (below), plus RAG's
-services from `deploy/compose.rag.yaml`, the same file a Compose host runs (all named `rag-…`): kalla-postgres, kalla-migrate, kalla-api (8543), kalla-admin (9543), kalla-worker, kalla-parser and,
+services from `deploy/compose.rag.yaml`, the same file a Compose host runs (all named `kalla-…`): kalla-postgres, kalla-migrate, kalla-api (8543), kalla-admin (9543), kalla-worker, kalla-parser and,
 with their profiles, kalla-clamav (`clamav`) and kalla-renderer (`render`) and kalla-openwebui (`openwebui`, #657). Step by
 step for a new VM or an upgrade: [portainer.md](portainer.md).
 
@@ -599,11 +599,12 @@ seccomp profile from a file, so with `render` on it runs without Docker's seccom
 on); without it the crawler indexes pages as served. Certificates from your PKI go on the stack's TLS proxy; the services' own
 listeners keep the internal CA.
 
-- **Back up** `kalla-secrets/.pepper`, `kalla-secrets/keys/rag-blob-internal` and `kalla-certs/data-protection.pfx` with the
-  database (for example `docker run --rm -v <stack>_kalla-secrets:/s alpine cat /s/.pepper`). A database restored without
-  them is unusable.
+- **Back up** the stack's keys with the database: `sudo deploy/escrow-keys.sh --project <stack> /media/<escrow>` copies
+  all of them (the pepper, the blob key, the data-protection certificate, the CA, the database role passwords and the
+  conversation-id keys; [portainer.md](portainer.md), step 11). A database restored without them is unusable.
 - **Upgrade.** Read the [upgrade guide](upgrade-guide.md), paste the new release's `compose.portainer.yaml` asset over
-  the stack's file (one release at a time: [portainer.md](portainer.md)), and
+  the stack's file (from 0.5.x or later in one update, skipping the releases in between:
+  [portainer.md](portainer.md#upgrade)), and
   *Update the stack* with *Re-pull image and redeploy*. `kalla-migrate` runs before the services.
 - **Generated file.** Edit `deploy/compose.rag.yaml`, `deploy/portainer/bootstrap.sh` or
   `deploy/portainer/stack-header.txt`, then run `deploy/portainer/build-stack.sh`: it takes the gateway's
@@ -751,7 +752,7 @@ charges the call to that key's budget and limits (identity design §4.7). So two
 - **The service's credential key**: every gateway `401` is that key's own, whichever object the call was for. That is
   for the operators and the gateway admin.
 
-Rag-admin's mirror of the gateway keys (`config."GatewayKeys"`) is refreshed every 5 minutes by the organisation sync,
+kalla-admin's mirror of the gateway keys (`config."GatewayKeys"`) is refreshed every 5 minutes by the organisation sync,
 or at once with *Fetch now* on the *Organisation* page; chat and the admin UI judge a key by it.
 
 | Symptom | Meaning | Fix |
