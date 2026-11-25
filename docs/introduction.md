@@ -5,8 +5,8 @@ and documents, keeps it current, and answers questions about it in chat with a c
 built as small .NET 10 services on top of [Fors](https://github.com/thekim1/fors), the AI gateway, which every
 model call goes through, with a Python parser and PostgreSQL with pgvector.
 
-**Status:** the pilot (P1) is built and released; the live block (the real gateway, the shared sign-in, the umea.se
-crawl, the gold set and the test host) is ahead. The [changelog](../CHANGELOG.md) has every release.
+**Status:** the pilot is built and released; running it against the real gateway, the shared sign-in, the umea.se
+crawl, the gold set and the test host is ahead. The [changelog](../CHANGELOG.md) has every release.
 
 ## What it does
 

@@ -38,7 +38,7 @@ public sealed partial class SecurityEventsDocTests
         row.ShouldNotBeNull($"{id} {name} is missing from docs/security-events.md");
         row.Groups["name"].Value.ShouldBe(name);
         row.Groups["level"].Value.ShouldBe(level);
-        row.Groups["status"].Value.Trim()[..2].ShouldBeOneOf(["P0", "P1"], $"{id} is defined in code, so its row says P0 or P1");
+        row.Groups["status"].Value.Trim().ShouldBe("emitted", $"{id} is defined in code, so its row says emitted");
     }
 
     [Fact]
@@ -53,7 +53,7 @@ public sealed partial class SecurityEventsDocTests
         Doc.ShouldContain("**`Kalla.Security`**");
     }
 
-    // | 6001 | `rag.admin.change` | Information | … | P0 |
+    // | 6001 | `rag.admin.change` | Information | … | emitted |
     [GeneratedRegex(@"^\| (?<id>\d{4}) \| `(?<name>[a-z._]+)` \| (?<level>\w+) \|.*\| (?<status>[^|]+) \|$", RegexOptions.Multiline)]
     private static partial Regex Row();
 }

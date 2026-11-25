@@ -76,7 +76,7 @@ picks the profile; 16 is the default.
 During development the base Compose file caps every container at 2 CPUs or less (decisions table, "Low CPU during
 development"): `kalla-postgres` at 2.0 and `kalla-parser` at 2.0 with 1 slot × 2 threads. Only `--host-memory 24`
 (`compose.host-24g.yaml`) restores the CPUs of the table; the pilot's CPU sizing is set again before go-live with the
-R1 release test.
+performance test on the test host.
 
 The limits add up to about 12 GB on a 16 GB host and 18.75 GB on a 24 GB host (20.25 GB with Open WebUI); the OS and
 Docker keep about 2 GB, and the limits are not all reached at once. With `--hardened`, under CPU contention the data
@@ -84,7 +84,7 @@ plane (weight 1024) gets about four times the CPU of each ingestion container, a
 at five cores. On a 24 GB host ClamAV keeps its old engine during a signature reload (`ConcurrentDatabaseReload yes`)
 and test-loads updates (`TestDatabases yes`); on a 16 GB host it has no room for that. Without ClamAV (without the
 profile `clamav`, *Malware scan*, below) the limits add up to 1.5 GB less on a 16 GB host and 3 GB less on a 24 GB
-host, with 1.2 GB less reserved and one CPU fewer in the ingestion zone; the slice's cap stays as it is. The R1 release test (P1) confirms or corrects these
+host, with 1.2 GB less reserved and one CPU fewer in the ingestion zone; the slice's cap stays as it is. The performance test on the test host confirms or corrects these
 numbers. On-prem model capacity is the gateway's, measured with `scripts/capacity/`
 ([its README](../scripts/capacity/README.md)).
 
@@ -101,7 +101,7 @@ An estimate for Källa alone, without the language models, Keycloak and Open Web
 At the floor, the peak working set is about 5.5–5.7 GB plus the OS, and the Compose memory reservations alone add up to
 about 6.6 GB. The pilot host's 8 vCPU mostly buy a faster first bulk load of PDFs: the parser takes about 0.75 s per PDF
 page on 2 cores, and about 1.1 s per scanned page with OCR. Retrieval costs about 8 ms of CPU per query, and the database
-grows by about 9 KB per chunk. The R1 release test sets the final numbers.
+grows by about 9 KB per chunk. The performance test on the test host sets the final numbers.
 
 ## Install
 
@@ -172,7 +172,7 @@ the Open WebUI JWT secret, Open WebUI's session key, its key for kalla-api and t
 the worker's crawl key pepper (`worker/Security__CrawlKeyPepper`, the HMAC key of the host hash in security event 5101);
 the renderer's secret WebSocket path (`.render-ws-path`, written for the renderer as `renderer/ws-path` and, with the
 profile `render`, for the worker as `worker/Render__Endpoint`); the blob master key `keys/rag-blob-internal` (a file:
-the only key provider until postponed decision K1); and, with a backup target, the pgBackRest passphrase
+the only key provider until the key service is decided); and, with a backup target, the pgBackRest passphrase
 `pgbackrest/cipher-pass` and `pgbackrest/repo.conf`. It copies the static configuration (Postgres's `postgresql.conf`
 and `pg_hba.conf`, the database roles, the ClamAV confs, the TLS proxy's `nginx.conf`) into `kalla-config`, and gives
 each service's files to its user (uid 999, 1654, 10001, 10002 and 1000), so nothing needs a `chown`. Secrets and
@@ -229,7 +229,7 @@ When it is done the script prints the next steps, in the order below: with `--ha
 
 ### 3. Sign-in (OIDC)
 
-**The pilot signs in with the Keycloak shared with the gateway** (`plans/decisions.md` "P1 pilot sign-in";
+**The pilot signs in with the Keycloak shared with the gateway** (Decisions "P1 pilot sign-in";
 identity design §11.2): the gateway repo runs it and its realm `fors`; RAG's realm additions (`deploy/keycloak/`) add the
 clients `kalla-admin`, `open-webui` and `kalla-api`, the `rag-*` roles and the `departmentCodes` attribute. The
 provider address is `https://<keycloak host>/realms/fors`; Open WebUI's provider URL follows from it.
@@ -265,16 +265,16 @@ variable you set (`--set`: `KALLA_OIDC_CLIENT_ID`, `_ROLE_CLAIM`, `_DEPARTMENT_C
 `kalla-bootstrap` writes the client secret and refusing guests as kalla-admin's secret files at every start, and removes
 them when the variable is removed. Secrets stay out of the repository.
 
-**Roles from groups** (#468; Decisions "Role groups as a setting"). A role in the token's `roles` claim counts as it is.
+**Roles from groups** (Decisions "Role groups as a setting"). A role in the token's `roles` claim counts as it is.
 For an identity provider whose tokens carry groups instead, a platform admin maps groups to roles in RAG's admin
-(*Settings → Role groups*: one list per role, each group a `rag-` name or an Entra object id, #413); it applies at each
+(*Settings → Role groups*: one list per role, each group a `rag-` name or an Entra object id); it applies at each
 user's next sign-in. The only deployment value is the break-glass for the first platform admin,
 `KALLA_OIDC_GROUPS_PLATFORM_ADMIN` in `deploy/.env` (`;`-separated), merged with the setting and never replaced. The claim names default to `roles`, `groups`, `departmentCodes` and `teamCodes`
 (`KALLA_OIDC_ROLE_CLAIM`, `_GROUP_CLAIM`, `_DEPARTMENT_CLAIM`, `_TEAM_CLAIM`), the gateway's defaults too. Users
 keep one account and one set of groups in the shared Keycloak for both products. Whether gateway groups may also grant
-RAG roles is open in #468.
+RAG roles is still open.
 
-**Entra ID from P2:** RAG's own registrations (`kalla-admin`, `kalla-open-webui`), their app roles and groups are
+**Entra ID, later:** RAG's own registrations (`kalla-admin`, `kalla-open-webui`), their app roles and groups are
 Bicep in `infra/entra/`, applied by a GitHub workflow after IT's approval: see
 [`infra/entra/README.md`](../infra/entra/README.md). Switching is configuration (`Oidc:*`), not code.
 
@@ -393,9 +393,9 @@ never holds another service's key. The three keys come about in one of three way
      credential key's residencies as an upper bound on every key the service acts as (gateway-changes §5.3), so the cap
      also holds for the keys that assistants and knowledge bases run on. The worker's key: `OnPrem` and `Eu` (it never
      sends `External`). kalla-api's and kalla-admin's: up to the highest level assistants may use, which is `OnPrem` and
-     `Eu` under register M2, and all three once External routes exist. **These residencies are Källa's ceiling**: each
+     `Eu` while there is no on-prem model hardware, and all three once External routes exist. **These residencies are Källa's ceiling**: each
      service reads its key's residencies from the gateway's context and no call carries a higher ceiling (identity design
-     §4.7, M-17 C9), so changing them in the gateway's admin is the one place to change it.
+     §4.7), so changing them in the gateway's admin is the one place to change it.
    - **PII policy `Off` or `Allow`**, never `Redact` or `Block`: every service embeds (the worker documents, kalla-api
      queries, kalla-admin the canary check), and a redacting key would silently change text with personal identity
      numbers in it.
@@ -635,7 +635,7 @@ and [portainer.md](portainer.md) for a first deploy and each upgrade step by ste
    deployment*; identity design §5.2). The feedback import's key is minted by the one-shot `kalla-openwebui-setup` (as
    *The feedback service account* below says for Compose); `kalla-bootstrap` points
    kalla-api at the stack's own Open WebUI while the `openwebui` profile is on. As with Compose, Open WebUI keeps its own copy of each chat
-   (W2, below).
+   (*Open WebUI*, below).
 6. **The embedding profile** is not a variable: once the keys are set, a platform admin creates it in Källa's admin
    (*Models → Embedding profiles → Create profile*, [portainer.md](portainer.md) step 9). Until then no knowledge base
    can be created.
@@ -706,7 +706,7 @@ collector can serve both products.
 ## Open WebUI (optional)
 
 Open WebUI is the Compose profile `openwebui` (`kalla-openwebui` and its one-shot `kalla-openwebui-setup`), off by default.
-It is started only once the DPIA (register G1) has decided register item **W2**, how Open WebUI's own copies of the
+It is started only once the DPIA has decided how Open WebUI's own copies of the
 chats are pruned; until then they stay unpruned. It needs the 24 GB host.
 
 ```bash
@@ -747,8 +747,8 @@ Open WebUI used before), the job stops because the account is not admin: create 
 
 It has one connection only, to `kalla-api` inside the stack (`OPENAI_API_KEYS` is the `kalla-sk-` key of its client,
 generated by `kalla-bootstrap`; its JWT secret is generated once and shared with kalla-api's `OpenWebUi__JwtSecret`), signs
-in only through its own OIDC client (`open-webui` on the shared Keycloak in the pilot; Entra's `kalla-open-webui` from
-P2 with `KALLA_OPENWEBUI_OIDC_CLIENT_ID` and `KALLA_OPENWEBUI_OIDC_PROVIDER_URL`), and listens on plain HTTP on
+in only through its own OIDC client (`open-webui` on the shared Keycloak in the pilot; Entra's `kalla-open-webui` later,
+with `KALLA_OPENWEBUI_OIDC_CLIENT_ID` and `KALLA_OPENWEBUI_OIDC_PROVIDER_URL`), and listens on plain HTTP on
 `127.0.0.1:3000` (`KALLA_OPENWEBUI_BIND`, `KALLA_OPENWEBUI_PORT`), so a TLS proxy in front terminates TLS (the
 profile `proxy`, or yours: *Reverse proxy and PKI*). Its settings come from the Compose file on every start; an admin's
 edit in Open WebUI lasts until the next restart. Its fixed input warning (`WEBUI_BANNERS`) still shows a close button:

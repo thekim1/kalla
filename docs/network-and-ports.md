@@ -112,7 +112,7 @@ Docker's `DOCKER-USER` chain, not the host's `INPUT` chain: an `INPUT` rule (ufw
 them. With `--hardened`, `init-deployment.sh --proxy-address ADDR[,ADDR]` (the proxy's IPv4 addresses or CIDRs) writes
 `KALLA_PROXY_SOURCES`, and `deploy/host/docker-user-firewall.sh` (run by `rag-firewall.service` at boot, when Docker
 restarts and every 15 minutes) then rejects every new DNATed connection to `KALLA_API_PORT`, `KALLA_ADMIN_PORT`
-and, with Open WebUI, `KALLA_OPENWEBUI_PORT` whose source is not one of them (#453):
+and, with Open WebUI, `KALLA_OPENWEBUI_PORT` whose source is not one of them:
 
 ```bash
 -A UME-RAG-EGRESS -s <proxy address> -p tcp -m conntrack --ctstate DNAT --ctorigdstport 8543 -j RETURN
@@ -252,7 +252,7 @@ listeners of §2) and `ss -ltnp`.
 | `kalla-migrate` | – | one-shot client of kalla-postgres | `kalla-data` | – | `deploy/compose.rag.yaml` |
 | `kalla-roles` | – | one-shot client of kalla-postgres over its Unix socket (the volume `kalla-postgres-socket`), no network (`network_mode: none`) | – | – | `deploy/compose.rag.yaml` |
 | `kalla-bootstrap`, `rag-upload-backup` | – | no network (`network_mode: none`) | – | – | `deploy/compose.rag.yaml`, `deploy/compose.backup.yaml` |
-| Redis | – | none in the production Compose files (P2; the dev AppHost starts one only with `Redis:Enabled`) | – | – | `src/Kalla.AppHost/Program.cs` |
+| Redis | – | none in the production Compose files (planned; the dev AppHost starts one only with `Redis:Enabled`) | – | – | `src/Kalla.AppHost/Program.cs` |
 
 Docker keeps the bridge networks apart, and members of one network reach each other on it (the firewall returns
 traffic within a subnet). `kalla-data`, `kalla-ingestion`, `kalla-parser` and `kalla-render` are `internal: true`, so they have
@@ -307,7 +307,7 @@ Switching is configuration, not code (production-setup.md, *Sign-in (OIDC)*).
   Källa; agree with infra.
 - The discovery document names the JWKS and token endpoints. If one is on another host than the authority, add it
   with `--allow llm=<host>` (and `--allow kalla-edge=<host>`).
-- **No Microsoft Graph** in this release: Graph comes with P2 for the member-group lookup (repo-and-deployment §6.1,
+- **No Microsoft Graph** in this release: Graph comes later, for the member-group lookup (repo-and-deployment §6.1,
   identity design §14).
 - No Keycloak is needed, and nothing goes to the gateway host's Keycloak.
 
@@ -336,7 +336,7 @@ default), kalla-renderer with the profile `render`.
   `clamav` no `kalla-clamav` runs, so nothing uses `kalla-mirror` and the worker sends nothing to port 3310; files are
   stored without a malware scan (production-setup.md, *Malware scan*). The firewall still writes the `kalla-mirror`
   rules; they match nothing.
-- **Ingestion on its own host** (P2, repo-and-deployment §6.4): planned, not built (`compose.ingestion-remote.yaml`
+- **Ingestion on its own host** (repo-and-deployment §6.4): planned, not built (`compose.ingestion-remote.yaml`
   doesn't exist). It would publish Postgres `5432` on the data host's LAN address for the ingestion host only.
 
 ### 5.6 freshclam directly or through a proxy

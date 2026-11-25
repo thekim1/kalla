@@ -277,5 +277,5 @@ page, upload a file).
 ## Tested
 
 The manifests render in CI (Kustomize 5.7.1, the example overlay with every component, and without
-`components/clamav`). No cluster run is
-recorded yet; record the first in `plans/work/results-a.md`.
+`components/clamav`). No cluster run has been
+reported yet.

@@ -2,8 +2,8 @@
 
 The test host runs a release the way the pilot will, before go-live: behind the municipal reverse proxy, with the
 pilot's CPU caps, the real backup target and escrowed keys. It is the cheapest host that can do that (decisions table,
-"M2 and test hosting"), and production-style tests wait until the end of P1b (P1b item 21). **Status: not deployed.**
-It waits for the test host, the backup target and the key-escrow location (hand-off L10, to-verify #145).
+"M2 and test hosting"), and production-style tests run on it shortly before go-live. **Status: not deployed.**
+It waits for the test host, the backup target and the key-escrow location.
 
 Install with [production-setup.md](production-setup.md) and operate with the [runbook](runbook.md). This page lists only
 the test host's own choices and the checks to record. `dc` stands for `docker compose --env-file deploy/.env`, run from
@@ -11,20 +11,19 @@ the directory that holds `deploy/`.
 
 ## What it checks
 
-| Check | Recorded as |
-|---|---|
-| The current release runs behind the municipal proxy, health green through the proxy | P1b item 21 |
-| cgroup v2 and Docker's systemd driver on the host image; the ingestion slice caps the zone | to-verify #90 |
-| A restore drill with a realistic database size: RPO ≤ 5 minutes, RTO ≤ 4 hours, keys read back from the escrow | to-verify #129, with #90 and #123 (P1b item 21) |
-| The R1 release test under the pilot caps (`perf.yml`, repo-and-deployment §8.3); the caps are re-set from its result in `compose.host-24g.yaml` | P1b item 22, once a runner is approved or its stopgap accepted (L11) |
+- The current release runs behind the municipal proxy, with health green through the proxy.
+- cgroup v2 and Docker's systemd driver on the host image; the ingestion slice caps the zone.
+- A restore drill with a realistic database size: RPO ≤ 5 minutes, RTO ≤ 4 hours, keys read back from the escrow.
+- The performance test under the pilot caps (`perf.yml`, repo-and-deployment §8.3), once a runner for it is approved;
+  the caps are set again from its result in `compose.host-24g.yaml`.
 
 ## Host
 
 - **8 vCPU and 24 GB**, the pilot's 24 GB profile (repo-and-deployment §6.2). The `cpus` values are caps, not
-  reservations, so a smaller host starts the stack, but its R1 numbers do not stand for the pilot.
+  reservations, so a smaller host starts the stack, but its performance numbers do not stand for the pilot.
 - The [host prerequisites](production-setup.md#host-prerequisites): systemd, Docker 28+ with Compose v2.33.1+, cgroup v2
   with the systemd cgroup driver, `default-address-pools` outside `172.30.0.0/16`, an encrypted disk. Record the
-  driver check for #90:
+  driver check:
 
   ```bash
   docker info --format 'driver={{.CgroupDriver}} version={{.CgroupVersion}}'   # driver=systemd version=2
@@ -100,11 +99,11 @@ curl -fsS https://rag-api-test.intern.umea.se/version          # the release's v
 ```
 
 Each `/health/ready` answers 200. Then sign in to the admin UI through the proxy once, so the redirect URIs and the
-`Host` header the proxy forwards are proven too. Record the commands and answers for P1b item 21.
+`Host` header the proxy forwards are proven too. Record the commands and answers.
 
 ## Backup target
 
-The share or S3 store agreed with IT (to-verify #145), never `local`: the drill measures a restore from the real
+The share or S3 store agreed with IT, never `local`: the drill measures a restore from the real
 target. Mount a share before Docker starts (production-setup.md, *Backup target*). After the first full backup:
 
 ```bash
@@ -124,13 +123,13 @@ sudo deploy/escrow-keys.sh /media/<escrow>
 sudo deploy/escrow-keys.sh --verify /media/<escrow>     # PASS
 ```
 
-Label the media as the test host's. Where the escrow lives is agreed with IT (to-verify #145).
+Label the media as the test host's. Where the escrow lives is agreed with IT.
 
 ## Restore drill
 
 The runbook's *Restore drill*, with these test-host specifics:
 
-1. **A realistic size.** Run the drill once the pilot collection is crawled and parsed (the live block), so the
+1. **A realistic size.** Run the drill once the pilot collection is crawled and parsed, so the
    database, its WAL and the blob volume have the pilot's size. Note the size before the drill:
    `dc exec -T kalla-postgres psql -U postgres -d ragdb -c "SELECT pg_size_pretty(pg_database_size('ragdb'))"`.
 2. **An isolated drill host** (a second VM is enough) with a **copy** of the test host's repository and of its upload
@@ -150,4 +149,4 @@ The runbook's *Restore drill*, with these test-host specifics:
 Optional, as production-setup.md, *Open WebUI*: the 24 GB host may run it beside the stack (repo-and-deployment §6.2).
 It is the profile `openwebui` (`--profiles clamav,openwebui`). Once it runs, its one-shot `kalla-openwebui-setup` gives kalla-api the
 feedback service account's key and checks that the key reads the feedback list; `dc logs kalla-openwebui-setup` says
-*minted* or *kept*. That the key reaches only the feedback routes and password sign-in is refused is to-verify #49.
+*minted* or *kept*. That the key reaches only the feedback routes and password sign-in is refused is checked here too.

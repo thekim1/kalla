@@ -61,7 +61,7 @@ and the release preparation folds the notes in here and writes the release's *Ro
 - **Rolling update: yes** from 0.9.1: no migration, no variable changes, the same gateway (Fors 0.12.2). Paste this
   release's stack file (or set the image variables to 0.9.2's) and update the stack once. From 0.9.0 or earlier, straight
   to 0.9.2 by the 0.9.1 section below.
-- **Sources that render JavaScript** (#927): on 0.9.0 and 0.9.1 their pages failed with `render.unavailable` and went
+- **Sources that render JavaScript**: on 0.9.0 and 0.9.1 their pages failed with `render.unavailable` and went
   back to the queue. Nothing to do but update: the queued fetch jobs run once the new worker is up. A source whose fetch
   mode was set to plain HTTP as a workaround can be set back to the browser mode.
 - **Topics:** a topic rule (*Edit processing* › *Topics*) whose `match` was written as an address
@@ -208,7 +208,7 @@ and the release preparation folds the notes in here and writes the release's *Ro
 - **After the update:** escrow the keys again with the new `escrow-keys.sh` and verify the new set (*Escrow the keys
   again*, below); read the end of `rag-bootstrap`'s log.
 
-- **Migration `DropMessageParentId`** drops `chat."Messages"."ParentMessageId"` (never written or read, #792), which the
+- **Migration `DropMessageParentId`** drops `chat."Messages"."ParentMessageId"` (never written or read), which the
   previous rag-api and rag-admin still map. On one slot (Compose, Portainer) there is nothing to do: `rag-migrate` keeps
   both out of the database until their new version starts. With two slots or on Kubernetes, stop or scale down rag-api
   and rag-admin before the migration. No new variable.
@@ -280,7 +280,7 @@ and the release preparation folds the notes in here and writes the release's *Ro
   without `UME_DOMAIN` keeps its names. To switch, set `UME_DOMAIN` and remove the host variables whose value is the
   default. **Check:** `rag-bootstrap`'s certificates and the proxy's names are unchanged (no `issuing certificate` for
   rag-api or rag-admin in its log unless a name changed).
-- **Sign-in is set in the setup wizard (M-20 S1–S6; identity design §19).** rag-admin starts without an authority and,
+- **Sign-in is set in the setup wizard (identity design §19).** rag-admin starts without an authority and,
   on a first run, opens its setup wizard at `https://<admin host>/setup` with a setup code on its output: the wizard
   shows the redirect URIs, takes the client secrets (stored encrypted with Data Protection) and saves only after a test
   sign-in by a platform admin. A value the deployment sets wins and is locked in the wizard; an empty one is unset.
@@ -336,13 +336,13 @@ and the release preparation folds the notes in here and writes the release's *Ro
     log has `rag-openwebui: starting with OIDC sign-in from rag-api's sign-in settings`, and Open WebUI's sign-in page
     shows the button. `UME_RAG_SETUP_REOPEN` (Kubernetes: `Setup__Reopen`) stays empty until you want to open the
     wizard again; remove it before restoring a database.
-- **A leftover variable is named (M-21).** Rolling update, no migration, no new variable to set. A Portainer stack that
+- **A leftover variable is named.** Rolling update, no migration, no new variable to set. A Portainer stack that
   still sets a variable this version no longer reads (the ones the sections below say to remove, back to 0.5.0's; the
   per-level `UME_RAG_*GATEWAY_KEY_<level>` variables of 0.4.0 and before are not named) works
   as before; `rag-bootstrap`'s checklist now names each with what replaced it, and Home in the admin UI shows platform
   admins a notice with the names. **Apply:** nothing is required; to clear the notice, remove the named variables from
   the stack's variables and update the stack. **Check:** `rag-bootstrap`'s log has no line *is set and no longer read*.
-- **One typed value in the Portainer stack, `UME_DOMAIN`, and the gateway's own setup wizard (M-20 S8).** The stack pins
+- **One typed value in the Portainer stack, `UME_DOMAIN`, and the gateway's own setup wizard.** The stack pins
   the gateway's `v0.11.0`: **rolling update: yes**, its migrations `SignInSettings` and `SetupMode` add tables,
   columns and grants (the gateway's upgrade guide, *Portainer*). No variable has to be added and none is retired (the
   gateway's new `UME_SETUP_REOPEN` is optional).
@@ -389,12 +389,12 @@ and the release preparation folds the notes in here and writes the release's *Ro
   `UME_INTEGRATION_API_URL` (C11); keep your `UME_RAG_*_GATEWAY_KEY` variables unless you move to the manifest (C7).
 - **After the update:** create the embedding profile if none exists (C5) and check *Models* shows `act-as-key`.
 
-- **Fewer Portainer variables (M-17 C1–C3, #682, #683).** The stack sets Open WebUI's feedback address while the
+- **Fewer Portainer variables.** The stack sets Open WebUI's feedback address while the
   `openwebui` profile is on and the malware-scan mode from the `clamav` profile, so `UME_RAG_OPENWEBUI_BASE_URL` and
   `UME_RAG_CLAMAV_MODE` are no longer read; `UME_RAG_API_PUBLIC_URL` defaults to `https://<UME_RAG_API_HOST>` and is
   needed only for a public URL with a port. **Apply:** nothing is required (a leftover value is ignored); remove the two
   variables when you paste the new stack file. **Check:** `rag-bootstrap`'s checklist names nothing about them.
-- **Open WebUI's client is set up by the deployment (M-17 C4, #684).** rag-migrate creates the client *Open WebUI*
+- **Open WebUI's client is set up by the deployment.** rag-migrate creates the client *Open WebUI*
   (*Managed by the deployment*) from a key the deployment generates, and rag-api trusts Open WebUI's users **only**
   for that client. An Open WebUI client made by hand stays in the registry but is no longer trusted, so until the
   assistants' audiences move, Open WebUI users see no models. **Apply:**
@@ -409,13 +409,13 @@ and the release preparation folds the notes in here and writes the release's *Ro
   **Check:** a test user signs in to Open WebUI and sees the assistants; chat answers no `401 user_jwt_invalid`
   (what the hand-made client's requests get now). A new deployment key later: delete `.openwebui-rag-api-key` in the secrets volume
   (Compose: `secrets/.openwebui-rag-api-key`) and update the stack; rag-migrate revokes the old one.
-- **The embedding profile is created in the admin UI (M-17 C5).** rag-migrate no longer seeds it, and
+- **The embedding profile is created in the admin UI.** rag-migrate no longer seeds it, and
   `UME_RAG_EMBEDDING_MODEL`, `_DIMENSIONS`, `_REQUEST_DIMENSIONS`, `_MAX_INPUT_TOKENS` and `_MAX_RESIDENCY` (Compose,
   Portainer) and `EmbeddingProfile__*` with the `ume-rag-migrations-config` map (Kubernetes) are gone. An existing
   profile stays as it is. **Apply:** remove those variables from the stack or `deploy/.env`; Kubernetes: take the new
   base and drop the `ume-rag-migrations-config` entry from your overlay. A new deployment: a platform admin creates the
   profile under *Models → Embedding profiles → Create profile* ([portainer.md](portainer.md) step 9).
-- **The Open WebUI feedback key is minted by the stack (M-17 C6).** A one-shot job (Portainer: `rag-openwebui-setup`;
+- **The Open WebUI feedback key is minted by the stack.** A one-shot job (Portainer: `rag-openwebui-setup`;
   Compose: `open-webui-setup` in `compose.openwebui.yaml`) mints the feedback service account's key after Open WebUI
   starts, with password sign-in off, into `openwebui-feedback/OpenWebUi__AdminApiKey`, which rag-api now reads
   (`Security__ExtraSecretsDirectory`). `UME_RAG_OPENWEBUI_ADMIN_API_KEY`, `UME_RAG_OPENWEBUI_PASSWORD_AUTH` and
@@ -425,28 +425,28 @@ and the release preparation folds the notes in here and writes the release's *Ro
   main stack, then `docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d`. Until the job has
   minted the new key (a minute after Open WebUI starts), the import has none and skips its run. **Check:** the job's log says *minted*, and rag-api's next feedback import
   runs (within 15 minutes).
-- **Optional TLS proxy in the Portainer stack (M-17 C8).** `proxy` in `COMPOSE_PROFILES` starts `rag-proxy`, nginx
+- **Optional TLS proxy in the Portainer stack.** `proxy` in `COMPOSE_PROFILES` starts `rag-proxy`, nginx
   with your certificate (`UME_RAG_PROXY_CERTS_DIR`) in front of the five host names ([portainer.md](portainer.md#tls-proxy)).
   Nothing changes without the profile.
-- **The residency ceiling comes from the gateway (M-17 C9).** Each service's ceiling is its credential key's allowed
+- **The residency ceiling comes from the gateway.** Each service's ceiling is its credential key's allowed
   residencies in the gateway's context; `UME_RAG_GATEWAY_MAX_RESIDENCY` (`Gateway__MaxResidency`, Kubernetes
   `ume-rag-config`) is gone. **Apply before the update:** in the gateway's admin, give rag-api's and rag-admin's credential
-  keys the residencies `OnPrem` and `Eu` only while register M2 holds (the worker's already are); a key that allows every
+  keys the residencies `OnPrem` and `Eu` only while there is no on-prem model hardware (the worker's already are); a key that allows every
   residency would otherwise let a public assistant answer at `External`. Then remove the variable. **Check:** each
   service logs *the credential key's ceiling: Eu* at start.
-- **Role groups are a setting (M-17 C10).** Migration `IdentityRoleGroups` adds `config."Settings"."IdentityRoleGroups"`;
+- **Role groups are a setting.** Migration `IdentityRoleGroups` adds `config."Settings"."IdentityRoleGroups"`;
   *Settings → Role groups* in RAG's admin maps sign-in groups to roles, read at each sign-in.
   `UME_RAG_OIDC_GROUPS_DEPARTMENT_ADMIN`, `_PIPELINE_EDITOR`, `_REVIEWER` and `_VIEWER` are gone;
   `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` stays as the break-glass and is merged with the setting. **Apply:** if you set
   any of the four, enter the same groups on that page right after the update and remove the variables; until then, a
   user who had a role only through one of those groups doesn't have it. With the shared Keycloak the roles come in the token and nothing changes.
-- **The organisation's name comes from the gateway (M-17 C12).** RAG's admin UI names the organisation from its gateway
+- **The organisation's name comes from the gateway.** RAG's admin UI names the organisation from its gateway
   context's `organisation_name` (the gateway admin console's branding; gateway v0.10.2, feature `organisation-name`).
   `UME_RAG_ORGANISATION_NAME` (Compose), `UME_ORGANISATION_NAME` (Portainer, for rag-admin) and `Admin__OrganisationName`
   (Kubernetes, `ume-rag-admin-config`) are no longer read. **Apply:** set the organisation's name in the gateway's admin
   console (branding) if it isn't, and remove the variable. With an older gateway, or an empty name, the texts name no
   organisation. **Check:** RAG's sign-in page names the organisation.
-- **The Integration API's address comes from the gateway (M-17 C11).** rag-admin reads the address of the gateway's
+- **The Integration API's address comes from the gateway.** rag-admin reads the address of the gateway's
   Integration API (the cost and budget read-back) from its gateway context's `integration_api_url` (gateway v0.10.2,
   feature `integration-api-url`). `UME_RAG_GATEWAY_INTEGRATION_API_URL` (Compose, Portainer) and
   `Gateway__IntegrationApiUrl` (Kubernetes, `ume-rag-admin-config`) are no longer read. **Apply:** if you used the
@@ -455,11 +455,11 @@ and the release preparation folds the notes in here and writes the release's *Ro
   with the host firewall: the variable no longer adds the host to `llm`, so run `docker-user-firewall.sh` with
   `--allow llm=<gateway admin host>:<port>` (a drop-in for `rag-firewall.service` that adds it to `ExecStart`). Without the gateway's address there is no
   read-back. **Check:** `GET /api/gateway/status` has `integration.configured: true` within 5 minutes of the update.
-- **Migration `RemoveWorkerConcurrency` (M-18, #686)** drops `config."Settings"."WorkerConcurrency"`, which nothing
+- **Migration `RemoveWorkerConcurrency`** drops `config."Settings"."WorkerConcurrency"`, which nothing
   read; per-instance concurrency stays `Worker__Concurrency__<class>`. The old rag-admin still selects the column
   (its settings row through EF), so its settings pages fail between the migration and its own update; stop it first.
   rag-api and rag-worker name their columns and are not affected.
-- **The `admin-console` client is set up by the deployment (#712).** rag-migrate creates the test panel's client
+- **The `admin-console` client is set up by the deployment.** rag-migrate creates the test panel's client
   `admin-console` (type `internal`, *Managed by the deployment*) in every deployment; one made by hand becomes the managed
   one, its settings kept and any key of it revoked. Its keys can no longer be made or changed in the admin. Migration
   `ClientsManagedPerName` makes the managed clients unique per type and name instead of per type, and rag-migrate finds
@@ -467,13 +467,13 @@ and the release preparation folds the notes in here and writes the release's *Ro
   changed in the admin. **Apply:**
   nothing. **Check:** *Apps and keys* shows `admin-console` as managed; rag-migrate's log says "The admin test panel's
   client admin-console: Created" (or `Adopted`, then `Unchanged`).
-- **Migration `ChunkSetsEmbeddingProfileIndex` (#712)** adds an index on `content."ChunkSets"."EmbeddingProfileId"`
+- **Migration `ChunkSetsEmbeddingProfileIndex`** adds an index on `content."ChunkSets"."EmbeddingProfileId"`
   for the admin's embedding-profile *in use* checks. Nothing else changes; the old services run against it.
 - **The Portainer stack pins the gateway's `v0.10.3`.** Against `v0.10.2` (next entry): rolling update, no migration,
   no new variable; the only change is the gateway's Ume.Rag preset (*Integrations → Add from manifest*), whose `rag-api` and `rag-admin` keys now
   allow only `OnPrem` and `Eu`, as the stack's `UME_INTEGRATION_MANIFEST` already does. Keys made from the `v0.10.2`
   preset keep their residencies: set them to `OnPrem` and `Eu` in the gateway's admin (0.6.0, *Before the update*).
-- **The gateway creates Ume.Rag's credential keys (M-17 C7; the gateway's `v0.10.2`, in the stack's `v0.10.3`).**
+- **The gateway creates Ume.Rag's credential keys (the gateway's `v0.10.2`, in the stack's `v0.10.3`).**
   The gateway's own upgrade notes for 0.10.2 apply (rolling update, no migration; a new volume
   `<stack>_integration-secrets`; a read grant on `Branding.OrganisationName`). The gateway's `migrations` now applies
   `UME_INTEGRATION_MANIFEST` (in `stack.env.example`): it creates the integration `Ume.Rag`, its owner team and the keys
@@ -489,7 +489,7 @@ and the release preparation folds the notes in here and writes the release's *Ro
   **Check:** the gateway's `migrations` log says *'Ume.Rag' applied*; `rag-bootstrap`'s checklist names no gateway key;
   *Models* in RAG's admin shows `act-as-key`.
 
-- **Kubernetes NetworkPolicies are on by default (#706).** `base` now carries default-deny and every flow the stack
+- **Kubernetes NetworkPolicies are on by default.** `base` now carries default-deny and every flow the stack
   needs; `components/networkpolicies` is gone and the Ingress controller's rule is `components/ingress-controller`
   (namespace `ingress-nginx`). The worker's and freshclam's 80/443 egress reaches public addresses only. **Apply:** in
   your overlay replace `../components/networkpolicies` with `../components/ingress-controller` (change its namespace
@@ -497,7 +497,7 @@ and the release preparation folds the notes in here and writes the release's *Ro
   or on 8443, each `Crawl__AllowedPrivateRanges` range, and pgBackRest's S3 store. **Check:** with an enforcing CNI,
   sign in to the admin UI, ask a question, crawl a page and upload a file ([kubernetes.md](kubernetes.md), *Network
   policies*).
-- **Certificate expiry is watched (#705).** **Apply (Compose):** run `deploy/host/install.sh` again to install and
+- **Certificate expiry is watched.** **Apply (Compose):** run `deploy/host/install.sh` again to install and
   enable `rag-cert-expiry.timer` (daily; it fails below 60 days and writes `certs.prom`). Portainer: nothing; the
   checklist names expiring certificates on every deploy. **Check:** `systemctl status rag-cert-expiry.timer`.
 
