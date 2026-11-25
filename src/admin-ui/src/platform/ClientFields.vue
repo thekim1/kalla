@@ -46,7 +46,7 @@ watch(historyDisabled, (disabled) => {
     </div>
     <TextField
       v-if="shown.has('clientRetentionDays')" :id="id('clientRetentionDays')" v-model="form.clientRetentionDays" :label="L.fields.clientRetentionDays"
-      :hint="L.hints.clientRetentionDays" :error="errors.clientRetentionDays" inputmode="numeric"
+      :hint="L.hints.clientRetentionDays" :error="errors.clientRetentionDays" inputmode="numeric" short
     />
     <TextField
       v-if="shown.has('oAuthClientId')" :id="id('oAuthClientId')" v-model="form.oAuthClientId" :label="L.fields.oAuthClientId" :hint="L.hints.oAuthClientId"

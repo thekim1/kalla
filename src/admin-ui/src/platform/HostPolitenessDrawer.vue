@@ -63,28 +63,28 @@ function apply(): void {
       <FieldGroup :legend="L.title">
         <TextField
           :id="id('requestsPerSecond')" v-model="form.requestsPerSecond" :label="F.requestsPerSecond" :hint="L.hints.requestsPerSecond"
-          :error="problems.requestsPerSecond" inputmode="decimal"
+          :error="problems.requestsPerSecond" inputmode="decimal" short
         />
         <TextField
           :id="id('maxConnections')" v-model="form.maxConnections" :label="F.maxConnections" :hint="L.hints.maxConnections"
-          :error="problems.maxConnections" inputmode="numeric"
+          :error="problems.maxConnections" inputmode="numeric" short
         />
         <SelectField :id="id('crawlDelay')" v-model="form.crawlDelay" :label="F.crawlDelay" :options="crawlDelayOptions" />
         <SelectField :id="id('adaptToLatency')" v-model="form.adaptToLatency" :label="F.adaptToLatency" :options="latencyOptions" />
         <SelectField :id="id('crawlWindow')" v-model="form.crawlWindow" :label="F.crawlWindow" :options="windowOptions" />
         <TextField
           :id="id('maxRetryAfterSeconds')" v-model="form.maxRetryAfterSeconds" :label="F.maxRetryAfterSeconds" :hint="L.hints.maxRetryAfterSeconds"
-          :error="problems.maxRetryAfterSeconds" inputmode="numeric"
+          :error="problems.maxRetryAfterSeconds" inputmode="numeric" short
         />
-        <TextField :id="id('maxFactor')" v-model="form.maxFactor" :label="F.maxFactor" :error="problems.maxFactor" inputmode="decimal" />
+        <TextField :id="id('maxFactor')" v-model="form.maxFactor" :label="F.maxFactor" :error="problems.maxFactor" inputmode="decimal" short />
         <SelectField :id="id('breaker')" v-model="form.breaker" :label="F.breaker" :options="breakerOptions" />
         <template v-if="form.breaker === 'custom'">
-          <TextField :id="id('threshold')" v-model="form.threshold" :label="F.threshold" :error="problems.threshold" inputmode="decimal" />
-          <TextField :id="id('pauseMinutes')" v-model="form.pauseMinutes" :label="F.pauseMinutes" :error="problems.pauseMinutes" inputmode="numeric" />
+          <TextField :id="id('threshold')" v-model="form.threshold" :label="F.threshold" :error="problems.threshold" inputmode="decimal" short />
+          <TextField :id="id('pauseMinutes')" v-model="form.pauseMinutes" :label="F.pauseMinutes" :error="problems.pauseMinutes" inputmode="numeric" short />
         </template>
         <TextField
           :id="id('renderPerHost')" v-model="form.renderPerHost" :label="F.renderPerHost" :hint="L.hints.renderPerHost"
-          :error="problems.renderPerHost" inputmode="numeric"
+          :error="problems.renderPerHost" inputmode="numeric" short
         />
       </FieldGroup>
       <div class="grid gap-5">

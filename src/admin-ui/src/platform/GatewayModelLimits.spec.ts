@@ -110,8 +110,8 @@ describe('Gateway models: limits the gateway sends (admin design §4.10, #606)',
     const { wrapper } = mountModels(() => undefined)
     await flushPromises()
 
-    // The table has its heading, and a manual row's source reads as plain "Manual", not an instruction.
-    expect(wrapper.get('[data-test=list-title]').text()).toBe('The AI gateway’s models')
+    // The table is the first tab, Models (admin design §5.10), and a manual row's source reads as plain "Manual".
+    expect(wrapper.get('[role=tab][aria-selected=true]').text()).toBe(PLATFORM.gatewayModels.tabs.models)
     const row = wrapper.findAll('tbody tr').find((r) => r.text().includes('fors/chat-eu'))!
     expect(row.text()).toContain('Manual')
     expect(row.text()).not.toContain('Set here')
@@ -205,6 +205,33 @@ describe('Gateway models: the Integration API read-back (#654, admin design §4.
     const { wrapper } = mountModels(sync({ configured: true, lastError: { reason: 'unavailable', status: null, at: '2026-11-13T12:00:00Z' } }))
     await flushPromises()
     expect(wrapper.get('[data-test="gateway-readback"]').text()).not.toContain('HTTP')
+    wrapper.unmount()
+  })
+
+  it('puts the embedding panels on a tab of their own, and the test gateway\'s models behind Show test models', async () => {
+    const fake = { name: 'fake-chat', kind: 'model', modelKind: 'chat', residencies: ['Se'], source: 'catalog', contextWindow: null, maxOutputTokens: null, available: true, limitsSource: 'manual' }
+    const { wrapper } = mountModels((url) => (url === '/api/gateway/models' ? json([...models, fake]) : undefined))
+    await flushPromises()
+
+    const names = () => wrapper.findAll('tbody tr').map((r) => r.find('th, td').text())
+    expect(names()).toEqual(['fors/chat-eu', 'fors/chat-se'])
+    const show = wrapper.get('[data-test=show-test] input[type=checkbox]')
+    await show.setValue(true)
+    expect(names()).toContain('fake-chat')
+
+    expect(wrapper.find('[data-test=tab-panels]').exists()).toBe(false)
+    const tabs = wrapper.findAll('[role=tab]')
+    expect(tabs.map((t) => t.text())).toEqual([PLATFORM.gatewayModels.tabs.models, PLATFORM.gatewayModels.tabs.embedding])
+    await tabs[1]!.trigger('click')
+    expect(wrapper.find('[data-test=tab-panels]').exists()).toBe(true)
+    expect(wrapper.find('tbody').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('offers no Show test models when the gateway has no test models', async () => {
+    const { wrapper } = mountModels(() => undefined)
+    await flushPromises()
+    expect(wrapper.find('[data-test=show-test]').exists()).toBe(false)
     wrapper.unmount()
   })
 })

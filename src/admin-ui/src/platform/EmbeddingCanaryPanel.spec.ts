@@ -44,6 +44,9 @@ describe('Gateway models: embedding canary on demand (admin design §4.5, §5.8)
     vi.stubGlobal('fetch', fetch)
     const wrapper = mount(PlatformResourceView, { props: { resource: 'gateway-models' }, attachTo: document.body })
     await flushPromises()
+    // The panels are on the Models page's Embedding tab (admin design §5.10).
+    await wrapper.get('#resource-gateway-models-tab-embedding').trigger('click')
+    await flushPromises()
 
     const posted = () => fetch.mock.calls.filter(([url, init]) => url === '/api/gateway/canary-check' && init?.method === 'POST')
     expect(posted()).toHaveLength(0)

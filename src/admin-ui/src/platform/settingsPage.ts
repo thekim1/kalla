@@ -96,11 +96,12 @@ export const SETTINGS_PAGE_SECTIONS: readonly SettingsPageSection[] = [
   { id: 'crawl', kind: 'settings', group: 'content', label: S.crawl },
   { id: 'site-profiles', kind: 'resource', group: 'content', label: PLATFORM.resources.siteProfiles.label },
   { id: 'worker', kind: 'settings', group: 'content', label: S.worker },
-  { id: 'pii', kind: 'settings', group: 'content', label: S.pii },
+  { id: 'evaluation', kind: 'settings', group: 'content', label: S.evaluation },
+  // Admin design §5.10: Personal data is data protection, beside the three levels, retention and the deletion guard.
   { id: 'data-protection', kind: 'resource', group: 'protection', label: PLATFORM.resources.dataProtection.label },
+  { id: 'pii', kind: 'settings', group: 'protection', label: S.pii },
   { id: 'retention', kind: 'settings', group: 'protection', label: S.retention },
   { id: 'deletion-guard', kind: 'settings', group: 'protection', label: S['deletion-guard'] },
-  { id: 'evaluation', kind: 'settings', group: 'quality', label: S.evaluation },
   { id: 'network', kind: 'settings', group: 'platform', label: S.network },
   // Decisions "Role groups as a setting" (M-17 C10): which sign-in groups grant which role, applied at the next sign-in.
   { id: 'identity', kind: 'settings', group: 'platform', label: S.identity },

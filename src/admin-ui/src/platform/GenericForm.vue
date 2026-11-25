@@ -30,6 +30,8 @@ const props = withDefaults(
     models?: GatewayModel[]
     /** Fields shown but not editable (an embedding profile in use, #565); they are still sent back as loaded. */
     readOnly?: readonly string[]
+    /** Every JSON field under *Advanced: edit as JSON*, not only the rest of one with fields above (the Settings page, §5.10). */
+    foldJson?: boolean
   }>(),
   { models: () => [], readOnly: () => [] },
 )
@@ -183,16 +185,16 @@ async function save(): Promise<void> {
         />
       </div>
       <SelectField
-        v-else-if="field.kind === 'select'" :id="idOf(field.name)" v-model="values[field.name] as string" :label="field.label" :disabled="readOnly.includes(field.name)"
+        v-else-if="field.kind === 'select'" :id="idOf(field.name)" v-model="values[field.name] as string" class="max-w-sm" :label="field.label" :disabled="readOnly.includes(field.name)"
         :options="[...(field.required ? [] : [{ value: '', label: PLATFORM.form.none }]), ...(field.options ?? []).map((o) => ({ value: o, label: optionLabel(o) }))]"
         :hint="field.help" :error="form.errors[field.name]"
       />
       <SelectField
-        v-else-if="field.kind === 'model'" :id="idOf(field.name)" v-model="values[field.name] as string" :label="field.label" :disabled="readOnly.includes(field.name)"
+        v-else-if="field.kind === 'model'" :id="idOf(field.name)" v-model="values[field.name] as string" class="max-w-sm" :label="field.label" :disabled="readOnly.includes(field.name)"
         :options="modelOptions(field, models, values[field.name] as string)" :hint="modelHint(field, models)" :error="form.errors[field.name]"
       />
       <!-- A JSON field whose members have fields above holds only the rest: under Advanced, open when it is refused. -->
-      <details v-else-if="field.kind === 'json' && membersOf(field.name).length > 0" :open="!!form.errors[field.name]" data-test="advanced-json">
+      <details v-else-if="field.kind === 'json' && (foldJson || membersOf(field.name).length > 0)" :open="!!form.errors[field.name]" data-test="advanced-json">
         <summary class="cursor-pointer font-medium">{{ PLATFORM.form.advancedJson }}</summary>
         <p class="mt-1 text-small text-fg-3">{{ PLATFORM.form.advancedJsonHint }}</p>
         <TextAreaField

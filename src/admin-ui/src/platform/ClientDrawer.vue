@@ -251,9 +251,9 @@ async function revoke(): Promise<void> {
             <span class="block font-mono text-caption whitespace-nowrap text-fg-3">{{ row.prefix }}</span>
           </template>
           <template #cell-status="{ row }"><UiBadge :tone="KEY_STATUS_TONE[row.status] ?? 'neutral'" :label="L.keyStatus[row.status] ?? row.status" /></template>
-          <template #cell-expiresAt="{ row }">{{ row.expiresAt ? formatDate(row.expiresAt) : L.keys.never }}</template>
+          <template #cell-expiresAt="{ row }"><span :class="{ 'text-fg-3': !row.expiresAt }">{{ row.expiresAt ? formatDate(row.expiresAt) : L.keys.never }}</span></template>
           <template #cell-lastUsed="{ row }">
-            <span :title="row.lastUsedAt ? formatDateTime(row.lastUsedAt) : undefined">{{ row.lastUsedAt ? formatRelative(row.lastUsedAt) : L.neverUsed }}</span>
+            <span :title="row.lastUsedAt ? formatDateTime(row.lastUsedAt) : undefined" :class="{ 'text-fg-3': !row.lastUsedAt }">{{ row.lastUsedAt ? formatRelative(row.lastUsedAt) : L.neverUsed }}</span>
           </template>
           <template #cell-actions="{ row }">
             <!-- The deployment's key is replaced by deploying a new one (identity design §5.2): no actions here. -->
