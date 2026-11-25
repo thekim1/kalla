@@ -22,11 +22,11 @@ const options = [
     <template v-if="period === 'custom'">
       <label class="inline-flex items-center gap-1 text-small" data-test="period-from">
         <span>{{ FILTERS.from }}</span>
-        <input :id="`${idPrefix}-from`" type="date" class="field-input !h-ctl w-auto" :value="from" :max="to || undefined" @change="emit('update:from', ($event.target as HTMLInputElement).value)" />
+        <input :id="`${idPrefix}-from`" type="date" class="field-input !h-ctl w-auto max-md:!h-11" :value="from" :max="to || undefined" @change="emit('update:from', ($event.target as HTMLInputElement).value)" />
       </label>
       <label class="inline-flex items-center gap-1 text-small" data-test="period-to">
         <span>{{ FILTERS.to }}</span>
-        <input :id="`${idPrefix}-to`" type="date" class="field-input !h-ctl w-auto" :value="to" :min="from || undefined" @change="emit('update:to', ($event.target as HTMLInputElement).value)" />
+        <input :id="`${idPrefix}-to`" type="date" class="field-input !h-ctl w-auto max-md:!h-11" :value="to" :min="from || undefined" @change="emit('update:to', ($event.target as HTMLInputElement).value)" />
       </label>
     </template>
   </span>

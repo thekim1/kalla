@@ -167,4 +167,27 @@ describe('Knowledge bases (admin design §5.2, §4.5 view=)', () => {
     route.query = {}
     wrapper.unmount()
   })
+
+  it('reads a view it doesn’t know as Ours, and runs the search a moment after typing (#1063)', async () => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    useAuthStore().user = bffUser({ roles: ['rag-department-admin'] })
+    vi.spyOn(api.organisation, 'departments').mockResolvedValue([])
+    const list = vi.spyOn(api.collections, 'list').mockResolvedValue({ total: 0, items: [] })
+    route.query = { view: 'bogus' }
+    const wrapper = mountView()
+    await flushPromises()
+    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ view: 'mine' }))
+    expect(wrapper.get('[role=tab][aria-selected=true]').attributes('id')).toBe('collections-tab-mine')
+    expect(wrapper.get('[role=tabpanel]').attributes('aria-labelledby')).toBe('collections-tab-mine')
+
+    const calls = list.mock.calls.length
+    await wrapper.get('[data-test=collections-search]').setValue('bygg')
+    expect(list.mock.calls.length).toBe(calls)
+    await vi.advanceTimersByTimeAsync(350)
+    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'bygg' }))
+    route.query = {}
+    wrapper.unmount()
+    vi.useRealTimers()
+  })
 })

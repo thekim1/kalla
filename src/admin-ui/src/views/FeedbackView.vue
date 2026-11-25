@@ -147,7 +147,7 @@ onMounted(async () => {
     <FilterChip v-model="filters.outcome" :label="FEEDBACK.outcome" :options="outcomeOptions" :any="FEEDBACK.allOutcomes" />
     <FilterChip v-model="filters.comment" :label="FEEDBACK.comment" :options="commentOptions" :any="FEEDBACK.anyComment" />
     <FilterChip v-model="filters.state" :label="FEEDBACK.state" :options="stateOptions" :any="FEEDBACK.states.open!" unset="open" />
-    <UiButton v-if="active.length" size="sm" variant="quiet" data-test="clear-filters" @click="clear(filterRow)">{{ FILTERS.clear }}</UiButton>
+    <UiButton v-if="active.length" size="sm" variant="quiet" class="max-md:h-11" data-test="clear-filters" @click="clear(filterRow)">{{ FILTERS.clear }}</UiButton>
     <p class="ml-auto text-small text-fg-2" aria-live="polite" data-test="filter-count">
       {{ feedback.loaded.value ? FEEDBACK.shown(feedback.items.value.length, !!feedback.next.value) : '' }}
     </p>

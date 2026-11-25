@@ -81,4 +81,19 @@ describe('Map (admin design §5.5.6, as a table)', () => {
     expect((wrapper.get('[data-test="chip-Show"] select').element as HTMLSelectElement).value).toBe('all')
     expect(map.mock.calls.slice(-2).map((c) => c[0])).toEqual(['d1', 'd2']) // every department again
   })
+
+  it('reads another department’s id from the address as all of the user’s, and offers no Clear filters for a department chip it hides (#1063)', async () => {
+    setActivePinia(createPinia())
+    const mine = '11111111-1111-4111-8111-111111111111'
+    vi.spyOn(api.organisation, 'departments').mockResolvedValue([department({ id: mine, name: 'Bygg och miljö' })])
+    const map = vi.spyOn(api.organisation, 'map').mockImplementation(async (id) => ({ departmentId: id, departmentName: 'Bygg och miljö', rows: [own] }))
+    route.query = { department: '22222222-2222-4222-8222-222222222222' }
+    const wrapper = mount(MapView, { global: { stubs: { RouterLink: RouterLinkStub } } })
+    await flushPromises()
+    expect(map.mock.calls.map((c) => c[0])).toEqual([mine])
+    expect(wrapper.find('[data-test=clear-filters]').exists()).toBe(false)
+    expect(wrapper.findAll('[data-test=map] tbody tr')).toHaveLength(1)
+    route.query = {}
+    wrapper.unmount()
+  })
 })

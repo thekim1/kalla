@@ -11,7 +11,8 @@ import PageHeader from '@/components/ui/PageHeader.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiTabs from '@/components/ui/UiTabs.vue'
-import { useQueryFilters } from '@/composables/useQueryFilters'
+import { useDebouncedWatch } from '@/composables/useDebouncedWatch'
+import { ONE_OF, useQueryFilters } from '@/composables/useQueryFilters'
 import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
@@ -29,7 +30,7 @@ const router = useRouter()
 const collections = useLoadable<CollectionSummary[]>([])
 const departments = ref<Department[]>([])
 // The search and the view are kept in the address (admin design §5.12 Filters: the lists' search; `?q=bygg&view=all`).
-const { filters } = useQueryFilters({ q: '', view: 'mine' })
+const { filters } = useQueryFilters({ q: '', view: 'mine' }, { view: ONE_OF(['mine', 'shared', 'all']) })
 const q = toRef(filters, 'q')
 const view = toRef(filters, 'view') as Ref<CollectionView>
 const views = [
@@ -66,6 +67,8 @@ function created(collection: Collection, content: 'files' | 'web', filesError: u
 }
 
 watch(view, () => void load())
+// The search runs as you type, a moment after the last key, so the address never holds a search that hasn't run.
+useDebouncedWatch(q, () => void load(), 300)
 
 onMounted(async () => {
   departments.value = await api.organisation.departments().catch(() => [])

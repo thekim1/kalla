@@ -20,9 +20,11 @@ interface Row extends MapRow {
   department: string
 }
 const departments = ref<Department[]>([])
-const { filters, active, clear } = useQueryFilters({ department: '', show: 'all' }, { department: IS_ID, show: ONE_OF(['all', 'shared', 'unlinked']) })
+const { filters, active: set, clear } = useQueryFilters({ department: '', show: 'all' }, { department: IS_ID, show: ONE_OF(['all', 'shared', 'unlinked']) })
 const filterRow = ref<HTMLElement | null>(null)
 const maps = useLoadable<DepartmentMap[]>([])
+/** The filters that are set and shown: a single-department user has no department chip to clear. */
+const active = computed(() => set.value.filter((k) => k !== 'department' || departments.value.length > 1))
 const departmentOptions = computed(() => departments.value.map((d) => ({ value: d.id, label: d.name })))
 const showOptions = (['shared', 'unlinked'] as Show[]).map((v) => ({ value: v, label: MAP.showOptions[v]! }))
 const columns: Column[] = [
@@ -63,7 +65,9 @@ watch(() => filters.department, () => void load())
 
 onMounted(async () => {
   departments.value = await api.organisation.departments().catch(() => [])
-  await load()
+  // A department from the address that isn't one of the user's reads as all of them (the API would refuse it).
+  if (filters.department && !departments.value.some((d) => d.id === filters.department)) filters.department = ''
+  else await load()
 })
 </script>
 
@@ -73,7 +77,7 @@ onMounted(async () => {
   <form ref="filterRow" class="mb-4 flex flex-wrap items-center gap-2" role="search" :aria-label="MAP.filters" data-test="filters" @submit.prevent>
     <FilterChip v-if="departments.length > 1" v-model="filters.department" :label="MAP.department" :options="departmentOptions" :any="MAP.allDepartments" />
     <FilterChip v-model="filters.show" :label="MAP.show" :options="showOptions" :any="MAP.showOptions.all!" unset="all" />
-    <UiButton v-if="active.length" size="sm" variant="quiet" data-test="clear-filters" @click="clear(filterRow)">{{ FILTERS.clear }}</UiButton>
+    <UiButton v-if="active.length" size="sm" variant="quiet" class="max-md:h-11" data-test="clear-filters" @click="clear(filterRow)">{{ FILTERS.clear }}</UiButton>
     <p class="ml-auto text-small text-fg-2" aria-live="polite" data-test="filter-count">{{ maps.loaded.value ? MAP.shown(rows.length) : '' }}</p>
   </form>
   <AsyncState :loading="maps.loading.value" :error="maps.error.value" :empty="rows.length === 0" :empty-text="MAP.empty" @retry="load">

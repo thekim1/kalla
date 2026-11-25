@@ -84,9 +84,10 @@ const eventOptions = computed<SelectOption[]>(() => [
   ...Object.entries(AUDIT_EVENTS).filter(([event]) => !filters.entityType || typeOf(event) === filters.entityType)
     .map(([value, label]) => ({ value, label })).sort(byLabel),
 ])
+// Immediate: an event read from the address brings its type of object, so the pair is consistent from the first load.
 watch(() => filters.event, (event) => {
   if (event) filters.entityType = typeOf(event)
-})
+}, { immediate: true })
 watch(() => filters.entityType, (type) => {
   if (filters.event && typeOf(filters.event) !== type) filters.event = ''
 })
@@ -114,6 +115,12 @@ function objectLink(entry: AuditSummary): RouteLocationRaw | null {
   if (section) return { name: 'platform-settings', params: { section } }
   const page = OBJECT_PAGES[entry.entityType]
   return page && entry.entityId && entry.entityExists ? { name: page, params: { id: entry.entityId } } : null
+}
+
+/** Clear filters also folds More filters, which only stays open for a filter that is set. */
+function clearAll(): void {
+  clear(filterRow.value)
+  moreOpen.value = false
 }
 
 /** Only this object: narrows the list to the row's object (type and id), shown under More filters. */
@@ -159,7 +166,7 @@ onMounted(() => entries.reload())
       <PeriodPicker v-model:period="filters.period" v-model:from="filters.from" v-model:to="filters.to" id-prefix="audit" />
       <FilterTextChip v-model="filters.actor" :label="AUDIT.actor" :any="AUDIT.actorHint" />
       <FilterChip v-model="filters.entityType" :label="AUDIT.entityType" :options="typeOptions" :any="AUDIT.any" />
-      <UiButton v-if="active.length" size="sm" variant="quiet" data-test="clear" @click="clear(filterRow)">{{ FILTERS.clear }}</UiButton>
+      <UiButton v-if="active.length" size="sm" variant="quiet" class="max-md:h-11" data-test="clear" @click="clearAll">{{ FILTERS.clear }}</UiButton>
       <p class="ml-auto text-small text-fg-2" aria-live="polite" data-test="filter-count">
         {{ entries.loaded.value ? AUDIT.shown(entries.items.value.length, !!entries.next.value) : '' }}
       </p>
