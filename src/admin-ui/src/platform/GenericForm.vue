@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { isApiError, request } from '@/api/client'
 import type { GatewayModel, Level } from '@/api/types'
 import InlineError from '@/components/ui/InlineError.vue'
+import SaveBar from '@/components/ui/SaveBar.vue'
 import SelectField from '@/components/ui/SelectField.vue'
 import TextAreaField from '@/components/ui/TextAreaField.vue'
 import TextField from '@/components/ui/TextField.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiSwitch from '@/components/ui/UiSwitch.vue'
+import { useDirty } from '@/composables/useDirty'
 import { useFormErrors } from '@/composables/useFormErrors'
 import { COMMON, LEVEL_LABEL, PLATFORM } from '@/utils/labels'
 import { PLATFORM_RULE_MESSAGES } from '@/utils/messages'
@@ -32,6 +34,11 @@ const props = withDefaults(
     readOnly?: readonly string[]
     /** Every JSON field under *Advanced: edit as JSON*, not only the rest of one with fields above (the Settings page, §5.10). */
     foldJson?: boolean
+    /**
+     * The save bar instead of Save and Cancel (admin §5.12 rule 7, the Settings page): it counts the unsaved changes and
+     * emits `dirty`; Discard emits `cancel`, so the parent mounts the form again from the values loaded.
+     */
+    saveBar?: boolean
   }>(),
   { models: () => [], readOnly: () => [] },
 )
@@ -40,6 +47,8 @@ const emit = defineEmits<{
   (e: 'cancel'): void
   /** The save was refused; the form shows the error itself, and a parent may say more (an embedding profile's test outcome). */
   (e: 'failed', error: unknown, body: Record<string, unknown>): void
+  /** With `saveBar`: whether the form has unsaved changes. */
+  (e: 'dirty', dirty: boolean): void
 }>()
 
 // Mounted per form (the parent keys it), so fields and the start values are read once.
@@ -70,6 +79,12 @@ const switches = reactive<Record<string, boolean>>(Object.fromEntries(props.fiel
   const value = startValue(f)
   return [f.name, typeof value === 'number' && value !== 0]
 })))
+
+// The unsaved changes (useDirty): every field as entered, and each switch-and-count's switch.
+const dirty = useDirty(() => ({ ...values, switches: { ...switches } }))
+dirty.reset()
+watch(dirty.dirty, (d) => emit('dirty', d))
+onBeforeUnmount(() => emit('dirty', false))
 
 function switchOn(field: FieldSpec): boolean {
   return switches[field.name] === true
@@ -222,7 +237,8 @@ async function save(): Promise<void> {
     <!-- Extra controls that act on the values as entered (an embedding profile's Test), before the form's own error. -->
     <slot name="extra" :collect="collect" />
     <InlineError v-if="form.formError.value" :message="form.formError.value" />
-    <div class="flex gap-2">
+    <SaveBar v-if="saveBar" :changes="dirty.changes.value" :saving="saving" @save="save" @discard="emit('cancel')" />
+    <div v-else class="flex gap-2">
       <UiButton variant="primary" type="submit" :loading="saving" data-test="save">{{ submitLabel }}</UiButton>
       <UiButton variant="quiet" @click="emit('cancel')">{{ COMMON.cancel }}</UiButton>
     </div>

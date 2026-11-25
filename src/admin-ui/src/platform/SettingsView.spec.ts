@@ -8,7 +8,15 @@ import { SETTINGS_PAGE_SECTIONS } from './settingsPage'
 import SettingsView from './SettingsView.vue'
 
 const push = vi.fn()
-vi.mock('vue-router', async (original) => ({ ...(await original<typeof import('vue-router')>()), useRouter: () => ({ push }) }))
+// The page's leave guard (useUnsavedGuard), caught so a test can call it as the router would.
+type Guard = (to: { path: string }, from: { path: string }) => boolean
+let routeUpdate: Guard | null = null
+vi.mock('vue-router', async (original) => ({
+  ...(await original<typeof import('vue-router')>()),
+  useRouter: () => ({ push }),
+  onBeforeRouteLeave: () => {},
+  onBeforeRouteUpdate: (guard: Guard) => (routeUpdate = guard),
+}))
 
 function json(body: unknown) {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
@@ -51,6 +59,26 @@ describe('Settings page (admin design §5.10)', () => {
     expect(wrapper.find('[data-test=crawl-settings]').exists()).toBe(true)
     expect(wrapper.get('[data-test=host-politeness]').text()).toContain('www.umea.se')
     expect(wrapper.find('#settings-crawl-value').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('asks before another section opens while the open one has unsaved changes (admin §5.12, Saving)', async () => {
+    const crawl = { version: '3', value: { allowedPorts: [8443], hostOverrides: {} } }
+    const doc = { paths: { '/api/settings/{section}': { put: { requestBody: { content: { 'application/json': { schema: { properties: { value: { type: 'object' } } } } } } } } } }
+    vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(json(url === '/openapi/v1.json' ? doc : crawl))))
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const wrapper = mountPage('crawl')
+    await flushPromises()
+    const to = { path: '/plattform/settings/chat' }
+    const from = { path: '/plattform/settings/crawl' }
+    expect(routeUpdate!(to, from)).toBe(true)
+    expect(confirm).not.toHaveBeenCalled()
+
+    await wrapper.get('#platform-crawl-other').setValue('{ "maxPages": 100 }')
+    expect(wrapper.find('[data-test=save-bar]').exists()).toBe(true)
+    expect(routeUpdate!(to, from)).toBe(false)
+    expect(confirm).toHaveBeenCalledOnce()
+    confirm.mockRestore()
     wrapper.unmount()
   })
 

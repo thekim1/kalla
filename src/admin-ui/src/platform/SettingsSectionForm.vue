@@ -19,6 +19,8 @@ import { needsModels, SETTINGS_MODEL_FIELDS, withSwitchCounts, type SettingsSect
 // the crawl section's host politeness and the personal-data flag rules as tables. A save is that section alone, with the version read; Cancel goes
 // back to the saved values.
 const props = defineProps<{ section: SettingsSectionName; label: string }>()
+/** Whether the section has unsaved changes (the save bar's count), for the page's leave guard. */
+const emit = defineEmits<{ (e: 'dirty', dirty: boolean): void }>()
 const ui = useUiStore()
 
 interface Loaded {
@@ -73,14 +75,14 @@ watch(() => props.section, load, { immediate: true })
     <InlineError v-if="error" :message="problemMessage(error)" class="mb-4" />
     <template v-if="loaded">
       <CrawlSettingsForm
-        v-if="section === 'crawl'" :key="formKey" :initial="loaded.initial" :url="url()" :submit-label="PLATFORM.form.save" @saved="saved" @cancel="reset"
+        v-if="section === 'crawl'" :key="formKey" :initial="loaded.initial" :url="url()" @saved="saved" @cancel="reset" @dirty="emit('dirty', $event)"
       />
       <PiiSettingsForm
-        v-else-if="section === 'pii'" :key="formKey" :initial="loaded.initial" :url="url()" :submit-label="PLATFORM.form.save" @saved="saved" @cancel="reset"
+        v-else-if="section === 'pii'" :key="formKey" :initial="loaded.initial" :url="url()" @saved="saved" @cancel="reset" @dirty="emit('dirty', $event)"
       />
       <GenericForm
         v-else :key="formKey" :form-id="`settings-${section}`" :fields="loaded.fields" :initial="loaded.initial" method="put" :url="url()"
-        :submit-label="PLATFORM.form.save" :models="loaded.models" fold-json @saved="saved" @cancel="reset"
+        :submit-label="PLATFORM.form.save" :models="loaded.models" fold-json save-bar @saved="saved" @cancel="reset" @dirty="emit('dirty', $event)"
       />
     </template>
   </div>

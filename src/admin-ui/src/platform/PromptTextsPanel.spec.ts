@@ -75,7 +75,9 @@ describe('Settings: Prompt texts (admin design §4.5, chat design §7.3)', () =>
     const { wrapper, fetch } = await open()
     await area(wrapper, 'rules.off').setValue('Svara bara utifrån källorna.')
     expect(wrapper.find('[data-test="prompt-reset-rules.off"]').exists()).toBe(true)
-    await wrapper.get('[data-test=prompt-texts-save]').trigger('submit')
+    // The save bar (admin §5.12 rule 7) counts the one changed text and saves it.
+    expect(wrapper.get('[data-test=save-bar-count]').text()).toContain('1')
+    await wrapper.get('[data-test=save-bar-save]').trigger('click')
     await flushPromises()
 
     const body = putBody(fetch)

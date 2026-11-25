@@ -14,7 +14,7 @@ afterEach(() => {
 
 function mountForm(initial: Record<string, unknown>) {
   document.cookie = 'RAG-XSRF-TOKEN=t; path=/'
-  return mount(PiiSettingsForm, { props: { initial, url: '/api/settings/pii', submitLabel: 'Save' }, attachTo: document.body })
+  return mount(PiiSettingsForm, { props: { initial, url: '/api/settings/pii' }, attachTo: document.body })
 }
 
 const flagOf = (wrapper: VueWrapper, type: string) => (wrapper.get(`#pii-flag-${type}`).element as HTMLSelectElement).value
@@ -36,9 +36,13 @@ describe('Settings, Personal data: the flag rules as a table (admin design §5.1
     expect(wrapper.get('[data-test=pii-list-like] [role=switch]').attributes('aria-checked')).toBe('true')
     expect((wrapper.get('#pii-minNames').element as HTMLInputElement).value).toBe('5')
 
+    expect(wrapper.find('[data-test=save-bar]').exists()).toBe(false)
     await wrapper.get('#pii-flag-phone').setValue('threshold')
     await wrapper.get('#pii-min-phone').setValue('3')
-    await wrapper.get('form').trigger('submit')
+    // The save bar counts the changes (admin §5.12 rule 7): a type's row is one, its mode and minimum together.
+    expect(wrapper.get('[data-test=save-bar-count]').text()).toContain('1')
+    expect(wrapper.emitted('dirty')!.at(-1)).toEqual([true])
+    await wrapper.get('[data-test=save-bar-save]').trigger('click')
     await flushPromises()
     expect(sent(fetch)).toEqual({
       flagRules: {
