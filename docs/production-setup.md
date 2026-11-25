@@ -424,7 +424,7 @@ service only: it changes that variable and keeps the rest of `deploy/.env`. Then
 `docker compose --env-file deploy/.env restart kalla-api` (or `kalla-admin`, `kalla-worker`). Check its log for gateway
 `401` answers, then let the grace period end or revoke the old key. Kubernetes: `create-secrets.sh` again with that
 option, then
-`kubectl rollout restart deployment/rag-<service>`. Portainer: change the variable, update the stack (`kalla-bootstrap`
+`kubectl rollout restart deployment/kalla-<service>`. Portainer: change the variable, update the stack (`kalla-bootstrap`
 rewrites the file), then restart that service's container. A key that
 leaked is rotated without the grace period (*revoke immediately*): the service fails its model calls until it is
 restarted with the new key.
@@ -456,11 +456,11 @@ shows Källa's figures only.
 4. **Apply:** restart the firewall with the new allow-list (`sudo systemctl start rag-firewall.service`). kalla-admin picks
    the address up at its next context read (within 5 minutes), without a restart.
 
-**Check:** the *Gateway* page's status, `GET /api/gateway/status`, has `integration.configured: true` and no
+**Check:** the *AI gateway* card on the *Models* page, `GET /api/gateway/status`, has `integration.configured: true` and no
 `integration.lastError` after an assistant's or knowledge base's *Cost* card has been opened; a reason there is in the
 runbook (*Gateway keys, budgets and the read-back*). Kubernetes: the Admin API's port in your egress rules. Portainer:
-the gateway's `FORS_INTEGRATION_API_URL` names an address kalla-admin reaches (the gateway's `adminapi` is not on the `llm`
-network).
+nothing to set: the stack defaults the gateway's `FORS_INTEGRATION_API_URL` to `https://adminapi:8443/integration/v1`,
+which kalla-admin reaches over the gateway's `edge` network (Decisions "Upgrades in one step").
 
 ## Backup target
 
@@ -562,7 +562,7 @@ refused input fails the document (`embed.input_rejected`) and is a bug to report
 
 ## Rerank (optional)
 
-Rerank is optional (Decisions "Gateway release 1 and shared Keycloak as built"): while the platform has no model for an
+Rerank is optional (Decisions "Gateway releases", "Rerank pulled forward"): while the platform has no model for an
 assistant's reranker, chat, the test panel and `/v1/retrieve` make no rerank call and degrade nothing. Two rerankers
 exist, each with its own platform model (run-time settings, the admin's `PUT /api/settings/retrieval`) and its own time
 limit (deployment knobs, text read included; past the limit the fused order stands, `rerank_unavailable`):

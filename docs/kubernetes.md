@@ -62,14 +62,14 @@ volume (NFS, CephFS, Azure Files, Longhorn RWX).
    client secret, the backup repository); the host names, `--ca-file` and your own certificates are given on every
    run. It re-issues a service certificate that expires within 30 days, which needs `deploy/certs/ca.key` (keep it
    offline in between). After a run that changed something, restart the deployments (`kubectl rollout restart`; for a
-   rotated credential key, passed with `--gateway-credential-key-file SERVICE=FILE`, only `deployment/rag-<service>`).
+   rotated credential key, passed with `--gateway-credential-key-file SERVICE=FILE`, only `deployment/kalla-<service>`).
 
    **An installation made with `init-deployment.sh`** (before this script generated the files itself): run
    `create-secrets.sh` with the same `--certs-dir` and `--secrets-dir`. It keeps the CA, the passwords, the keys, the
    pepper and the Data Protection certificate, and issues the five service certificates again from the same CA, so
    have `ca.key` in place and restart the deployments afterwards.
 
-3. **Make an overlay.** Copy `deploy/kubernetes/example` (for example to `deploy/kubernetes/prod`, or into your GitOps
+2. **Make an overlay.** Copy `deploy/kubernetes/example` (for example to `deploy/kubernetes/prod`, or into your GitOps
    repository with the `../base` paths adjusted) and change:
    - `images`: the release's images (`ghcr.io/thekim1/kalla/<service>`), pinned by digest from the release notes.
      A release bundle already pins the base and components. The packages are public; a cluster without Internet
@@ -91,19 +91,19 @@ volume (NFS, CephFS, Azure Files, Longhorn RWX).
    - Optionally `../components/renderer`, more replicas, resources, node placement; or no malware scan (*Malware
      scan*, below).
 
-4. **Deploy:**
+3. **Deploy:**
 
    ```bash
    ./deploy/kubernetes/deploy.sh deploy/kubernetes/prod
    ```
 
-5. **Once per new database**, create the pgBackRest stanza (WAL archiving fails until it exists):
+4. **Once per new database**, create the pgBackRest stanza (WAL archiving fails until it exists):
 
    ```bash
    kubectl -n kalla exec statefulset/postgres -- pgbackrest --stanza=ragdb stanza-create
    ```
 
-6. **Set up sign-in** (*Sign-in*, below): register `https://<admin host>/signin-oidc` and `/signout-callback-oidc`
+5. **Set up sign-in** (*Sign-in*, below): register `https://<admin host>/signin-oidc` and `/signout-callback-oidc`
    on the `kalla-admin` client at your identity provider, finish the setup wizard (or sign in, when sign-in is
    declared), and list the Ingress controller's pod network under the trusted proxies (admin UI, Settings, *Network*),
    so kalla-api reads the client address from `X-Forwarded-For`.
