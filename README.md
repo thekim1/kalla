@@ -110,8 +110,8 @@ against `FORS_HEALTHCHECK_URL` (default `https://localhost:8443/health/ready`).
 
 `verify.yml` runs on every pull request that is not a draft (on open, each push, and when it leaves draft) and by
 hand, not on a push to `main`. Its jobs are filtered by the paths a pull request changes:
-- `ownership` (stream paths) and `doc-refs` (links and section references in the documents);
-- `backend` (build and tests) and `evaluation-smoke`;
+- `changes` with the `ownership` (stream paths) and `doc-refs` (links and section references in the documents) guards;
+- `backend` (build and tests, and the evaluation smoke when its paths changed);
 - `images`, `renderer` and `deploy-checks` (Compose files, `init-deployment.sh`, the host scripts, the release bundle);
 - `admin-ui`.
 
@@ -126,7 +126,7 @@ on a push to `main` that changes them.
 **CI runs on self-hosted runners** (Decisions "CI on the self-hosted runner";
 [`docs/ci-runner.md`](docs/ci-runner.md)): GitHub-hosted minutes are used up, so nothing runs on GitHub's runners.
 **`main` is protected:** a change goes in through a pull request with one approving review and green required checks
-(`ownership`, `doc-refs`, `backend`, `admin-ui`, `deploy-checks`, `images`, `renderer`, `evaluation-smoke`; a job
+(`changes, ownership, doc-refs`, `backend`, `admin-ui`, `deploy-checks`, `images`, `renderer`; a job
 that the path filter skips counts as passed).
 
 Before a pull request, run the test projects the change touches (`AGENTS.md`, *Tests*) and the ownership check:

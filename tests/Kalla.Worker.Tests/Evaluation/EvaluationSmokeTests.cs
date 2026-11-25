@@ -14,12 +14,12 @@ using Kalla.Worker.Tests.Processing;
 namespace Kalla.Worker.Tests.Evaluation;
 
 /// <summary>
-/// The <c>evaluation-smoke</c> job of <c>verify.yml</c> (knowledge design §16.4, repo-and-deployment §8.2; P1 item 17):
+/// The evaluation smoke of <c>verify.yml</c>'s backend job (knowledge design §16.4, repo-and-deployment §8.2; P1 item 17):
 /// the 13 pages of <c>tests/evaluation/smoke</c> ingested through the worker as one committed upload batch of a public
 /// upload source (detect, the worker's Markdown parser, chunk, embed on the FakeGateway), then the 30 questions through
 /// kalla-api in process reading its snapshot from the database: <c>POST /v1/retrieve</c> recall@10 ≥ 0.8 (recall@1, @3 and
 /// @5 reported) and every <c>/v1/chat/completions</c> answer of an assistant over the collection cites a source. The class
-/// carries <see cref="Category"/>, so the backend job leaves it to its own job.
+/// carries <see cref="Category"/>, so the backend job's test script leaves it out and the job runs it as a process of its own.
 /// </summary>
 [Collection(RagDatabaseGroup1.Name)]
 [Trait(TestCategory.Name, Category)]

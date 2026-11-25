@@ -13,7 +13,7 @@ repo-and-deployment §8.2).
 |---|---|
 | `Kalla.TestKit` `SmokeSet` | Loads both files and writes the documents into `content` as one upload collection: one chunk per paragraph, heading path `Title › Section`, FakeGateway embeddings. No worker or parser is needed. |
 | `Kalla.Api.Tests` `SmokeEvaluationTests` | Asks the 30 questions through `POST /v1/retrieve` (recall@10 ≥ 0.8) and through `/v1/chat/completions` (every answer cites). |
-| `verify.yml` `evaluation-smoke` (stream A) | Ingests the documents through the pipeline (upload, parser, worker) and runs the same questions. |
+| `verify.yml` `backend`, the evaluation smoke (stream A) | Ingests the documents through the pipeline (upload, parser, worker) and runs the same questions. |
 | Evaluator == API contract test (stream A) | Compares the evaluator's results with `/v1/retrieve`'s on the seeded collection. |
 
 With FakeGateway's feature-hashing embeddings, this checks the pipeline and the wiring, not answer quality. Those

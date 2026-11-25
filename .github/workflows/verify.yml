@@ -4,19 +4,25 @@ name: Verify
 # leaves draft; a newer push cancels the older run of the same pull request. Merge only on a green run (private repo on
 # the free plan: GitHub cannot enforce required checks). Nothing runs on a push to main; main or any branch can be
 # verified from the Actions tab (workflow_dispatch), and release.yml calls this workflow in full.
-# Jobs: ownership and backend (Stage 0), doc-refs (plans/archive/doc-restructure.md), evaluation-smoke (P1 item 17), images (P0 checklist #5), renderer
+# Jobs: changes with the ownership (Stage 0) and doc-refs (plans/archive/doc-restructure.md) guards, backend (Stage 0;
+# with the evaluation smoke, P1 item 17), images (P0 checklist #5), renderer
 # (connectors design §8.3), deploy-checks (P0 checklist #14), admin-ui (P0 checklist #3,
 # plans/platform/repo-and-deployment.md §2.3, §8.2). The parser and contract
 # jobs (P0 checklist #13) are in parser.yml, which runs them only when the parser changed. The dependency audits of the
 # backend and admin-ui jobs (scripts/audit/) also run daily against main in audit.yml.
 # Lean pull requests (user, 2026-11-05, 2026-11-17): backend skips a change that touches only paths it never reads (docs,
 # deploy, admin UI, parser, renderer image, infra, other workflows, scripts it does not run); images, renderer and
-# evaluation-smoke run only when their paths changed; a dispatch and release.yml run every job. The browser tests (e2e.yml) run only before a release (called by release.yml) or by hand.
+# the evaluation smoke (inside backend) run only when their paths changed; a dispatch and release.yml run every job. The browser tests (e2e.yml) run only before a release (called by release.yml) or by hand.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
   workflow_call:
+    inputs:
+      release:
+        # release.yml's call: its build job checks the pushed worker image's Playwright driver, so renderer doesn't.
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -29,45 +35,13 @@ env:
   DOTNET_CLI_USE_MSBUILD_SERVER: "0"
   UseSharedCompilation: "false"
 jobs:
-  ownership:
-    # Every pull request that is not a draft, design-only ones included: a stream branch may change only its own and the
-    # shared paths.
-    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
-    runs-on: [self-hosted, linux, x64]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - name: Changed paths belong to the branch's stream
-        env:
-          HEAD_REF: ${{ github.head_ref }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: git diff --name-only --no-renames "$BASE_SHA...$HEAD_SHA" | python3 -I scripts/check-ownership.py "$HEAD_REF"
-
-  doc-refs:
-    # Every design-section citation ("engine design §9.6") in code, tests and documents names a section that exists,
-    # and every relative Markdown link resolves (scripts/check-doc-refs.py). Design-only pull requests included.
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
-    runs-on: [self-hosted, linux, x64]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Section citations and links resolve
-        run: python3 -I scripts/check-doc-refs.py
-      - name: Unreleased change notes are well-formed
-        # changes/README.md: one file per pull request instead of appending to CHANGELOG.md's Unreleased.
-        run: python3 -I scripts/unreleased.py check
-      - name: Every action is pinned by commit SHA
-        # A tag can be moved to other code; the runners hold the release's and Azure's secrets (#506). The version is the
-        # comment after the SHA. Local reusable workflows (./.github/...) are this repository's own.
-        run: |
-          unpinned="$(grep -rnE '^\s*(- )?uses:' .github/workflows | grep -vE 'uses: \./' \
-            | grep -vE 'uses: [A-Za-z0-9._/-]+@[0-9a-f]{40} # v[0-9]+\.[0-9]+\.[0-9]+$' || true)"
-          if [ -n "$unpinned" ]; then echo "$unpinned"; echo "::error::pin each action as owner/name@<40-hex commit> # vX.Y.Z"; exit 1; fi
-
   changes:
-    # Design documents (plans/**, platforms/**, root *.md) do not build anything (repo-and-deployment §1). On a pull
-    # request only when it is not a draft (see the top); the other jobs need this one, so they skip with it.
+    # The path filter, then the guards that used to be jobs of their own, ownership and doc-refs: one runner pickup
+    # instead of three (#1084). Design documents (plans/**, platforms/**, root *.md) do not build anything
+    # (repo-and-deployment §1). On a pull request only when it is not a draft (see the top); the other jobs need this
+    # one, so they skip with it. They read its outputs even when a guard failed (`!cancelled()`), so a broken link
+    # does not hold back the tests.
+    name: changes, ownership, doc-refs
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: [self-hosted, linux, x64]
     outputs:
@@ -123,10 +97,37 @@ jobs:
           smoke="$(git diff --name-only "$range" | grep -E '^(src/Kalla\.(Worker|Retrieval|Answering|Api|Infrastructure|Pipelines|Domain)/|tests/evaluation/|tests/Kalla\.Worker\.Tests/Evaluation|images/postgres/|Directory\.(Packages|Build)\.(props|targets)$|global\.json$|\.github/workflows/verify\.yml$)' || true)"
           { echo "code=$(flag "$code")"; echo "deploy=$(flag "$deploy")"; echo "adminui=$(flag "$adminui")"
             echo "images=$(flag "$images")"; echo "renderer=$(flag "$renderer")"; echo "smoke=$(flag "$smoke")"; } >> "$GITHUB_OUTPUT"
+      - name: Changed paths belong to the branch's stream
+        # ownership: every pull request that is not a draft, design-only ones included: a stream branch may change only
+        # its own and the shared paths.
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: git diff --name-only --no-renames "$BASE_SHA...$HEAD_SHA" | python3 -I scripts/check-ownership.py "$HEAD_REF"
+      - name: Section citations and links resolve
+        # doc-refs: every design-section citation ("engine design §9.6") in code, tests and documents names a section
+        # that exists, and every relative Markdown link resolves (scripts/check-doc-refs.py). Design-only pull requests
+        # included.
+        if: ${{ !cancelled() }}
+        run: python3 -I scripts/check-doc-refs.py
+      - name: Unreleased change notes are well-formed
+        # changes/README.md: one file per pull request instead of appending to CHANGELOG.md's Unreleased.
+        if: ${{ !cancelled() }}
+        run: python3 -I scripts/unreleased.py check
+      - name: Every action is pinned by commit SHA
+        # A tag can be moved to other code; the runners hold the release's and Azure's secrets (#506). The version is the
+        # comment after the SHA. Local reusable workflows (./.github/...) are this repository's own.
+        if: ${{ !cancelled() }}
+        run: |
+          unpinned="$(grep -rnE '^\s*(- )?uses:' .github/workflows | grep -vE 'uses: \./' \
+            | grep -vE 'uses: [A-Za-z0-9._/-]+@[0-9a-f]{40} # v[0-9]+\.[0-9]+\.[0-9]+$' || true)"
+          if [ -n "$unpinned" ]; then echo "$unpinned"; echo "::error::pin each action as owner/name@<40-hex commit> # vX.Y.Z"; exit 1; fi
 
   backend:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -149,42 +150,37 @@ jobs:
           TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io/
           KALLA_TEST_POSTGRES_IMAGE: kalla.local/postgres:ci
           KALLA_TEST_CLAMAV_IMAGE: kalla.local/clamav:ci
+          EVALUATION_SMOKE: ${{ needs.changes.outputs.smoke }}
         run: |
           dotnet build Kalla.slnx -c Release --nologo
-          # Tests marked [Trait(TestCategory.Name, TestCategory.Flaky)] run locally and in the weekly flake hunt, not here;
-          # the evaluation smoke test has a job of its own (evaluation-smoke). The script runs every test project as a
-          # process of its own, all at once, and Kalla.AdminApi.Tests as five (its collections wait for one another
-          # inside one process and set this job's time); it prints each process's totals and their sum.
-          scripts/ci/backend-tests.sh Release
+          echo "$(nproc) CPUs; $(free -m | awk 'NR == 2 { print $2 " MiB, " $7 " MiB available" }')"
+          # The evaluation smoke (knowledge design §16.4, repo-and-deployment §8.2), when its paths changed: without the
+          # AppHost, the 13 pages of tests/evaluation/smoke go through the worker (an upload batch; Markdown is parsed in
+          # the worker, so no parser or ClamAV image) into kalla/postgres as built from this commit, then the 30
+          # questions through kalla-api in process on the FakeGateway: recall@10 >= 0.8 on POST /v1/retrieve and a
+          # citation on every chat answer (EvaluationSmokeTests, trait Category=EvaluationSmoke). It was a job of its
+          # own that built Kalla.Worker.Tests again (#1084); here it runs on this build, beside the other tests, and its
+          # detailed output with the recall numbers is printed whether it passes or not.
+          if [ "$EVALUATION_SMOKE" = true ]; then
+            smoke_log="$RUNNER_TEMP/evaluation-smoke.log"
+            dotnet test --project tests/Kalla.Worker.Tests -c Release --no-build --filter-trait "Category=EvaluationSmoke" \
+              --output Detailed > "$smoke_log" 2>&1 &
+            smoke_pid=$!
+          fi
+          # Tests marked [Trait(TestCategory.Name, TestCategory.Flaky)] run locally and in the weekly flake hunt, not here.
+          # The script runs every test project as a process of its own, all at once, and Kalla.AdminApi.Tests as five
+          # (its collections wait for one another inside one process and set this job's time); it prints each
+          # process's totals and their sum.
+          status=0; scripts/ci/backend-tests.sh Release || status=$?
+          if [ "$EVALUATION_SMOKE" = true ]; then
+            smoke_status=0; wait "$smoke_pid" || smoke_status=$?
+            echo "::group::evaluation smoke (exit $smoke_status)"; cat "$smoke_log"; echo "::endgroup::"
+            if [ "$smoke_status" != 0 ]; then echo "::error::the evaluation smoke failed (exit $smoke_status)"; status=1; fi
+          fi
+          [ "$status" = 0 ]
           dotnet list Kalla.slnx package --vulnerable --include-transitive --format json > "$RUNNER_TEMP/kalla-package-audit.json"
           # The same check runs daily against main in audit.yml.
           python3 -I scripts/audit/audit.py dotnet "$RUNNER_TEMP/kalla-package-audit.json"
-
-  evaluation-smoke:
-    # Knowledge design §16.4, repo-and-deployment §8.2: without the AppHost, the 13 pages of tests/evaluation/smoke go
-    # through the worker (an upload batch; Markdown is parsed in the worker, so no parser or ClamAV image) into
-    # kalla/postgres as built from this commit, then the 30 questions through kalla-api in process on the FakeGateway:
-    # recall@10 >= 0.8 on POST /v1/retrieve and a citation on every chat answer (EvaluationSmokeTests in
-    # tests/Kalla.Worker.Tests, trait Category=EvaluationSmoke, which the backend job leaves out). Detailed output
-    # prints the recall numbers.
-    needs: changes
-    if: needs.changes.outputs.smoke == 'true'
-    runs-on: [self-hosted, linux, x64]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
-        with:
-          dotnet-version: 10.0.401
-      - name: Build the Postgres image
-        # As in the backend job: the dotted registry part keeps Testcontainers on the local image.
-        run: docker build -f images/postgres/Dockerfile -t kalla.local/postgres:ci --build-arg REVISION=${{ github.sha }} .
-      - name: Ingest the smoke set and run its 30 questions
-        env:
-          TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io/
-          KALLA_TEST_POSTGRES_IMAGE: kalla.local/postgres:ci
-        run: |
-          dotnet build tests/Kalla.Worker.Tests -c Release --nologo
-          dotnet test --project tests/Kalla.Worker.Tests -c Release --no-build --filter-trait "Category=EvaluationSmoke" --output Detailed
 
   images:
     # kalla/postgres: the image test of repo-and-deployment §5.2 (pgvector version, HNSW build, pg_stat_statements,
@@ -192,7 +188,7 @@ jobs:
     # kalla/clamav (§5.5) with its own test; kalla/renderer (§5.4) is in the renderer job. The images are pushed to
     # ghcr only by release.yml (§8.1).
     needs: changes
-    if: needs.changes.outputs.images == 'true'
+    if: ${{ !cancelled() && needs.changes.outputs.images == 'true' }}
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -216,7 +212,7 @@ jobs:
     # that image (RendererContainerTests in tests/Kalla.Worker.Tests, connectors design §8.3), which the backend job
     # skips because it does not set KALLA_TEST_RENDERER_IMAGE.
     needs: changes
-    if: needs.changes.outputs.renderer == 'true'
+    if: ${{ !cancelled() && needs.changes.outputs.renderer == 'true' }}
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -236,6 +232,8 @@ jobs:
       - name: The worker image starts Playwright's driver
         # The driver's Node runs inside the worker (connectors design §8.3) and links libatomic.so.1, which the chiseled
         # base lacks and Libatomic.targets adds (#927). The tests below run the driver on the runner, not in the image.
+        # Not in a release: release.yml's build job runs the same check on the worker image it pushed (#1084).
+        if: ${{ !inputs.release }}
         run: |
           dotnet publish src/Kalla.Worker -c Release -t:PublishContainer --os linux --arch x64 --nologo \
             -p:ContainerRepository=kalla.local/worker -p:ContainerImageTag=ci
@@ -260,7 +258,7 @@ jobs:
     # keeps its secrets on a re-run in the Compose form and in the Portainer stack, the deployment scripts pass
     # shellcheck and the host units pass systemd-analyze verify (deploy/host/).
     needs: changes
-    if: needs.changes.outputs.deploy == 'true'
+    if: ${{ !cancelled() && needs.changes.outputs.deploy == 'true' }}
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -462,7 +460,7 @@ jobs:
     # the bundle doesn't contain), lint, typecheck, unit tests, build, then the gzip size budget and the design-system drift
     # report, which only warns. Node 24 as every gateway workflow; package.json engines asks for >= 22.
     needs: changes
-    if: needs.changes.outputs.adminui == 'true'
+    if: ${{ !cancelled() && needs.changes.outputs.adminui == 'true' }}
     runs-on: [self-hosted, linux, x64]
     defaults:
       run:
@@ -486,11 +484,18 @@ jobs:
           npm audit --json > "$RUNNER_TEMP/audit.json" || true
           python3 -I ../../scripts/audit/audit.py npm "$RUNNER_TEMP/audit.json"
       - name: Lint, typecheck, test and build
-        # messages.spec.ts checks every code in contracts/admin/v1/error-codes.json has a Swedish text.
+        # messages.spec.ts checks every code in contracts/admin/v1/error-codes.json has a Swedish text. Lint, typecheck
+        # and the unit tests run at the same time (#1084); each log is printed when all three are done.
         run: |
-          npm run lint
-          npm run typecheck
-          npm test
+          logs="$RUNNER_TEMP/admin-ui"; mkdir -p "$logs"; names=(); pids=()
+          for script in lint typecheck test; do npm run "$script" > "$logs/$script.log" 2>&1 & names+=("$script"); pids+=("$!"); done
+          failed=0
+          for i in "${!pids[@]}"; do
+            status=0; wait "${pids[$i]}" || status=$?
+            echo "::group::npm run ${names[$i]} (exit $status)"; cat "$logs/${names[$i]}.log"; echo "::endgroup::"
+            if [ "$status" != 0 ]; then echo "::error::npm run ${names[$i]} failed (exit $status)"; failed=1; fi
+          done
+          [ "$failed" = 0 ]
           npm run build
       - name: Audit production dependencies against the bundle
         # Any advisory fails, except a dated exception in scripts/audit/npm-production-exceptions.txt for a package the
