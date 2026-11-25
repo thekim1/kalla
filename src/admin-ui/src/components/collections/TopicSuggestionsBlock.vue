@@ -20,8 +20,11 @@ const id = useId()
 /** A section's next level once asked for: loading, loaded (possibly empty) or failed. */
 const under = reactive<Record<string, { loading: boolean; sections: TopicSection[]; error: unknown; open: boolean }>>({})
 
-watch(() => props.block, () => {
+watch(() => props.block, (block) => {
   for (const path of Object.keys(under)) delete under[path]
+  // The levels are closed: a pick under one would count in Add N with nothing on screen.
+  const shown = new Set(block.sections.map((s) => s.path))
+  for (const picked of Object.keys(props.picks)) if (!shown.has(picked)) emit('pick', picked, null)
 })
 
 interface Row { section: TopicSection; depth: number; parent: TopicSection | null }
@@ -62,14 +65,18 @@ async function toggle(path: string): Promise<void> {
     return
   }
   under[path] = { loading: true, sections: [], error: null, open: true }
+  const entry = under[path]! // the reactive entry, as later reads give it
+  // A reload of the block may drop this level while its request runs: the answer then goes nowhere.
+  const current = () => under[path] === entry
   try {
     const answer = await api.collections.topicSuggestions(props.collectionId, { sourceId: props.block.sourceId, under: path })
-    under[path]!.sections = answer.sources[0]?.sections ?? []
-    emptyUnder.value = under[path]!.sections.length === 0 ? path : null
+    if (!current()) return
+    entry.sections = answer.sources[0]?.sections ?? []
+    emptyUnder.value = entry.sections.length === 0 ? path : null
   } catch (e) {
-    under[path]!.error = e
+    if (current()) entry.error = e
   } finally {
-    under[path]!.loading = false
+    if (current()) entry.loading = false
   }
 }
 

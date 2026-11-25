@@ -16,6 +16,11 @@ export type RuleChange = (rules: PathRuleJson[]) => PathRuleJson[]
  */
 export interface PlannedPublication { id: string; processing: string; publication: Publication | null; replacesDraft: boolean }
 
+/** A version's parameters other than the topics, comparable as text (keys sorted). */
+function otherParams(params: Record<string, unknown>): string {
+  return JSON.stringify(Object.keys(params).filter((k) => k !== 'pathRules').sort().map((k) => [k, params[k]]))
+}
+
 /** The stored `pathRules` of a processing's published version (none when it has no published version). */
 export function publishedRules(pipeline: Pipeline): PathRuleJson[] {
   const rules = pipeline.versions.find((v) => v.id === pipeline.publishedVersionId)?.definition.params.pathRules
@@ -60,7 +65,10 @@ export function useTopicPublication(collectionId: Ref<string>, sourceNames: Ref<
         const started = await api.pipelines.plan(pipelineId, {
           parameters: params, version: pipeline.version, ...(copyOnWrite ? { collectionId: collectionId.value } : {}),
         })
-        const replacesDraft = pipeline.versions.some((v) => v.state === 'draft')
+        // A draft that changes more than the topics (a source page's unpublished edit); a topic plan's own draft only
+        // changes pathRules, and a copy-on-write plan makes a new processing and leaves the platform's draft alone.
+        const draft = pipeline.versions.find((v) => v.state === 'draft')
+        const replacesDraft = !copyOnWrite && !!draft && otherParams(draft.definition.params) !== otherParams(published?.definition.params ?? {})
         planned.value = [...planned.value, { id: started.publicationId, processing: pipeline.name, publication: null, replacesDraft }]
       }
       poll.start()

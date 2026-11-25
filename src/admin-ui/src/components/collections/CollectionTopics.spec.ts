@@ -314,10 +314,13 @@ describe('The Topics tab after review (#1075, #1076)', () => {
     const pipelines: Record<string, Pipeline> = {
       p1: { id: 'p1', name: 'web', templateId: 'website', departmentId: 'd1', publishedVersionId: 'v1', version: '4', versions: [
         { id: 'v1', number: 1, state: 'published', definition: definition([]), publishedAt: null },
-        { id: 'v2', number: 2, state: 'draft', definition: definition([]), publishedAt: null },
+        // A source page's unpublished edit: more than the topics changes.
+        { id: 'v2', number: 2, state: 'draft', definition: { ...definition([]), params: { pathRules: [], chunkTokens: 300 } }, publishedAt: null },
       ] },
       p2: { id: 'p2', name: 'files', templateId: 'upload', departmentId: 'd1', publishedVersionId: 'v7', version: '9', versions: [
         { id: 'v7', number: 1, state: 'published', definition: definition([]), publishedAt: null },
+        // A cancelled topic plan's own draft: only the topics differ, so no warning.
+        { id: 'v8', number: 2, state: 'draft', definition: definition([{ match: 'HR/', on: 'path', tags: ['hr'] }]), publishedAt: null },
       ] },
     }
     vi.spyOn(api.sources, 'get').mockImplementation(async (id: string) => ({ id, pipelineId: id === 's1' ? 'p1' : 'p2', collectionId: 'c1' }) as Source)
@@ -342,7 +345,7 @@ describe('The Topics tab after review (#1075, #1076)', () => {
     await tick(wrapper, 'HR/')
     await wrapper.get('[data-test=add-topics]').trigger('click')
     await flushPromises()
-    expect([...document.body.querySelectorAll('[data-test=topics-plan-draft]')]).toHaveLength(1) // p1's draft only
+    expect([...document.body.querySelectorAll('[data-test=topics-plan-draft]')]).toHaveLength(1) // p1's settings draft only
 
     const reads = topicsCall.mock.calls.length
     document.body.querySelector<HTMLButtonElement>('[data-test=confirm]')!.click()
@@ -369,6 +372,16 @@ describe('The Topics tab after review (#1075, #1076)', () => {
     expect(wrapper.get('[data-test=add-topic]').attributes('aria-disabled') ?? wrapper.get('[data-test=add-topic]').attributes('disabled')).toBeDefined()
     expect(wrapper.find('[data-test=edit-rule]').attributes('disabled')).toBeDefined()
     expect(wrapper.get('[data-test=topics-planning]').text()).toBe('Working out what needs processing again…')
+    // The row menu's Remove is disabled, and choosing it starts nothing (the review of #1080).
+    const plan = vi.mocked(api.pipelines.plan)
+    const calls = plan.mock.calls.length
+    await wrapper.get('[data-test=topic-menu-protokoll] button').trigger('click')
+    await flushPromises()
+    const item = openMenu().get('[role=menuitem]')
+    expect(item.attributes('aria-disabled')).toBe('true')
+    await item.trigger('click')
+    await flushPromises()
+    expect(plan.mock.calls.length).toBe(calls)
     wrapper.unmount()
   })
 

@@ -228,7 +228,7 @@ function emitSave(): void {
           </p>
           <p v-if="preview.matched === 0 && !preview.partial" class="m-0 text-warn" data-test="topic-preview-none">{{ TOPICS.noMatch(sourceName) }}</p>
           <template v-else>
-            <p class="m-0 text-small text-fg-2">{{ TOPICS.firstTen }}</p>
+            <p v-if="preview.sample.length" class="m-0 text-small text-fg-2">{{ TOPICS.firstTen }}</p>
             <ul class="m-0 grid gap-1 pl-5 text-small">
               <li v-for="d in preview.sample" :key="d.documentId" data-test="topic-preview-item">
                 {{ d.title ?? d.displayName ?? d.url }}<span v-if="d.url ?? d.displayName" class="ml-2 font-mono text-fg-3">{{ d.url ?? d.displayName }}</span>

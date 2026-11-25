@@ -147,6 +147,7 @@ async function saveForm({ sourceId, rule }: { sourceId: string; rule: PathRuleJs
 
 const removing = ref(false)
 function remove(topic: Topic): void {
+  if (busy.value) return
   const changes = new Map<string, RuleChange[]>()
   for (const sourceId of new Set((topic.rules ?? []).map((r) => r.sourceId))) changes.set(sourceId, [removeTopic(topic.tag)])
   doneMessage.value = TOPICS.removed(topic.tag)
@@ -199,7 +200,7 @@ onMounted(load)
           </template>
           <template #cell-actions="{ row }">
             <MenuButton
-              v-if="row.rules?.length" size="sm" :disabled="busy" :label="TOPICS.rowMenu(row.tag)" :items="[{ key: 'remove', label: TOPICS.remove, icon: 'delete', danger: true }]"
+              v-if="row.rules?.length" size="sm" :label="TOPICS.rowMenu(row.tag)" :items="[{ key: 'remove', label: TOPICS.remove, icon: 'delete', danger: true, disabled: busy }]"
               :data-test="`topic-menu-${row.tag}`" @select="remove(row)"
             />
           </template>
@@ -223,7 +224,8 @@ onMounted(load)
       </AsyncState>
       <!-- Always mounted, so the text is announced when it appears. -->
       <p class="m-0 text-small text-fg-2" role="status" data-test="topics-planning">{{ publication.planning.value ? TOPICS.planning : '' }}</p>
-      <InlineError v-if="publication.error.value" :message="publication.error.value" data-test="topics-save-error" />
+      <!-- A refusal while the form is open shows in the form only. -->
+      <InlineError v-if="publication.error.value && !formOpen" :message="publication.error.value" data-test="topics-save-error" />
       <TopicRuleForm
         v-model:open="formOpen" :collection-id="collectionId" :sources="props.sources ?? []" :initial="editing" :saving="publication.planning.value"
         :save-error="formError" @save="saveForm"

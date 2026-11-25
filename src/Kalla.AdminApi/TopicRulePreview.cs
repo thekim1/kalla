@@ -14,21 +14,26 @@ namespace Kalla.AdminApi;
 /// "Matches N of M documents" with the first ten. The rule is checked against the template's schema as V24 checks
 /// <c>pathRules</c> at publish, so an invalid regular expression is a 400 here as it would be at Save. Owning department and <c>EditPipelines</c> only; nothing is saved or logged.
 /// The matching has a time budget (#1076): a pattern that backtracks on many documents answers with what it checked in
-/// <see cref="Budget"/>, marked <c>partial</c>, instead of holding a request thread for minutes.
+/// <see cref="DefaultBudget"/>, marked <c>partial</c>, instead of holding a request thread for minutes.
 /// </summary>
 public static class TopicRulePreview
 {
     /// <summary>At most this many matched documents are listed.</summary>
     public const int SampleSize = 10;
 
-    /// <summary>How long one preview may spend matching; each match has the matcher's own 1 s regex timeout too.</summary>
-    public static readonly TimeSpan Budget = TimeSpan.FromSeconds(3);
+    /// <summary>
+    /// How long one preview may spend matching (<c>Topics:PreviewBudget</c>, a deployment knob; 3 s by default); each match
+    /// has the matcher's own 1 s regex timeout too.
+    /// </summary>
+    public static readonly TimeSpan DefaultBudget = TimeSpan.FromSeconds(3);
 
     public static RouteGroupBuilder MapTopicRulePreview(this RouteGroupBuilder collections)
     {
         ArgumentNullException.ThrowIfNull(collections);
-        collections.MapPost("/{id:guid}/topic-rules/preview", async (Guid id, TopicRulePreviewRequest request, AdminContext admin, CancellationToken ct) =>
+        collections.MapPost("/{id:guid}/topic-rules/preview", async (Guid id, TopicRulePreviewRequest request, AdminContext admin, IConfiguration configuration,
+                CancellationToken ct) =>
             {
+                var budget = configuration.GetValue("Topics:PreviewBudget", DefaultBudget);
                 var collection = await CollectionEndpoints.Scoped(admin).AsNoTracking().SingleOrDefaultAsync(c => c.Id == id, ct)
                     ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
                 var source = await (from s in admin.Db.Sources.AsNoTracking()
@@ -52,7 +57,7 @@ public static class TopicRulePreview
                 var clock = Stopwatch.StartNew();
                 await foreach (var d in documents.WithCancellation(ct))
                 {
-                    if (clock.Elapsed > Budget)
+                    if (clock.Elapsed >= budget)
                     {
                         break;
                     }

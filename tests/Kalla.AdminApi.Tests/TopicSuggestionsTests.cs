@@ -290,6 +290,21 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
     }
 
     [Fact]
+    public async Task The_preview_answers_what_it_checked_within_its_budget_as_partial()
+    {
+        // #1076: a pattern that would take too long answers with what was checked; a budget of 0 checks nothing.
+        var seed = await SeedAsync();
+        await using var factory = host.Factory.WithWebHostBuilder(web => web.UseSetting("Topics:PreviewBudget", "00:00:00"));
+        using var editor = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PipelineEditor, seed.OwnerCode);
+        var response = await editor.PostAsJsonAsync($"/api/collections/{seed.Collection}/topic-rules/preview",
+            new { sourceId = seed.Website, rule = new { match = "/bygga/", on = "path", tags = new[] { "bygga" } } }, Ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var answer = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        (answer.GetProperty("partial").GetBoolean(), answer.GetProperty("checked").GetInt32(), answer.GetProperty("matched").GetInt32(), answer.GetProperty("total").GetInt32())
+            .ShouldBe((true, 0, 0, 21));
+    }
+
+    [Fact]
     public async Task The_preview_counts_what_each_rule_kind_matches_with_the_first_ten_through_the_workers_matcher()
     {
         var seed = await SeedAsync();
