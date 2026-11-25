@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -53,6 +54,15 @@ public static partial class PathRules
 
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
+    /// <summary>
+    /// The compiled patterns (#1079): a rule's regex or glob is built once, not per document, since the chunk stage and the
+    /// topic preview match the same rules against every document of a source. Bounded: past <see cref="CacheLimit"/>
+    /// patterns it starts again, so a stream of one-off previews cannot grow it. A Regex is safe to share between threads.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, Regex> Compiled = new(StringComparer.Ordinal);
+
+    private const int CacheLimit = 1024;
+
     /// <summary>The rules of a stored <c>pathRules</c> parameter; anything but an array is none. Stored rules are read as they are (#930).</summary>
     public static IReadOnlyList<PathRule> Read(JsonElement? pathRules) =>
         pathRules is { ValueKind: JsonValueKind.Array } rules
@@ -99,9 +109,9 @@ public static partial class PathRules
                 case "path":
                     return path is not null && PathMatches(rule.Match, subject.Url, path) ? [] : null;
                 case "path-regex":
-                    return path is null ? null : Groups(new Regex(rule.Match, RegexOptions.CultureInvariant, RegexTimeout).Match(path));
+                    return path is null ? null : Groups(Pattern(rule.Match).Match(path));
                 case "title-regex":
-                    return subject.Title is null ? null : Groups(new Regex(rule.Match, RegexOptions.CultureInvariant, RegexTimeout).Match(subject.Title));
+                    return subject.Title is null ? null : Groups(Pattern(rule.Match).Match(subject.Title));
                 case "host":
                     return subject.Url is { } u && string.Equals(u.IdnHost, rule.Match, StringComparison.OrdinalIgnoreCase) ? [] : null;
                 case "mediaType":
@@ -208,8 +218,30 @@ public static partial class PathRules
         return regex.IsMatch(path) || (upload && regex.IsMatch("/" + path));
     }
 
+    /// <summary>A <c>path-regex</c> or <c>title-regex</c> rule's pattern, compiled once; an invalid one throws as <c>new Regex</c> does.</summary>
+    private static Regex Pattern(string match) =>
+        Cached("r:" + match, () => new Regex(match, RegexOptions.CultureInvariant, RegexTimeout));
+
+    private static Regex Cached(string key, Func<Regex> build)
+    {
+        if (Compiled.TryGetValue(key, out var regex))
+        {
+            return regex;
+        }
+
+        regex = build(); // outside the dictionary, so an invalid pattern is not stored
+        if (Compiled.Count >= CacheLimit)
+        {
+            Compiled.Clear();
+        }
+
+        return Compiled.GetOrAdd(key, regex);
+    }
+
     /// <summary>A glob over the path: <c>**</c> any characters, <c>*</c> within one segment, <c>?</c> one character.</summary>
-    internal static Regex Glob(string glob)
+    internal static Regex Glob(string glob) => Cached("g:" + glob, () => BuildGlob(glob));
+
+    private static Regex BuildGlob(string glob)
     {
         var pattern = new StringBuilder("^");
         for (var i = 0; i < glob.Length; i++)
