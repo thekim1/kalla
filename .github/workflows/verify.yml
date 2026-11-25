@@ -51,6 +51,7 @@ jobs:
       images: ${{ steps.filter.outputs.images }}
       renderer: ${{ steps.filter.outputs.renderer }}
       smoke: ${{ steps.filter.outputs.smoke }}
+      grading: ${{ steps.filter.outputs.grading }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -69,7 +70,7 @@ jobs:
           # would otherwise filter the release down to what changed since the old tag (0.6.0's second tag run).
           if [ "${{ github.event_name }}" != pull_request ] && [ "${{ github.event_name }}" != push ] \
             || [ "$REF_TYPE" = tag ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
-            printf 'code=true\ndeploy=true\nadminui=%s\nimages=true\nrenderer=true\nsmoke=true\n' "$ui" >> "$GITHUB_OUTPUT"; exit 0
+            printf 'code=true\ndeploy=true\nadminui=%s\nimages=true\nrenderer=true\nsmoke=true\ngrading=true\n' "$ui" >> "$GITHUB_OUTPUT"; exit 0
           fi
           flag() { [ -n "$1" ] && echo true || echo false; }
           # The backend job: anything besides what its build and tests never read, plus the files of those paths that
@@ -95,8 +96,11 @@ jobs:
           images="$(git diff --name-only "$range" | grep -E '^(images/postgres/|images/clamav/|deploy/postgres/|\.github/workflows/verify\.yml$)' || true)"
           renderer="$(git diff --name-only "$range" | grep -E '^(images/renderer/|src/Kalla\.Worker/Connectors/Render/|src/Kalla\.Worker/Connectors/Http/PageFetcher\.cs$|src/Kalla\.Worker/(Kalla\.Worker\.csproj|Libatomic\.targets)$|Directory\.Build\.targets$|tests/Kalla\.Worker\.Tests/Connectors/RendererContainerTests\.cs$|Directory\.Packages\.props$|\.github/workflows/verify\.yml$)' || true)"
           smoke="$(git diff --name-only "$range" | grep -E '^(src/Kalla\.(Worker|Retrieval|Answering|Api|Infrastructure|Pipelines|Domain)/|tests/evaluation/|tests/Kalla\.Worker\.Tests/Evaluation|images/postgres/|Directory\.(Packages|Build)\.(props|targets)$|global\.json$|\.github/workflows/verify\.yml$)' || true)"
+          # The gold-set grading script (scripts/grading/, #987), its fixtures, or this workflow.
+          grading="$(git diff --name-only "$range" | grep -E '^(scripts/grading/|tests/fixtures/grading/|\.github/workflows/verify\.yml$)' || true)"
           { echo "code=$(flag "$code")"; echo "deploy=$(flag "$deploy")"; echo "adminui=$(flag "$adminui")"
-            echo "images=$(flag "$images")"; echo "renderer=$(flag "$renderer")"; echo "smoke=$(flag "$smoke")"; } >> "$GITHUB_OUTPUT"
+            echo "images=$(flag "$images")"; echo "renderer=$(flag "$renderer")"; echo "smoke=$(flag "$smoke")"
+            echo "grading=$(flag "$grading")"; } >> "$GITHUB_OUTPUT"
       - name: Changed paths belong to the branch's stream
         # ownership: every pull request that is not a draft, design-only ones included: a stream branch may change only
         # its own and the shared paths.
@@ -159,21 +163,18 @@ jobs:
           # the worker, so no parser or ClamAV image) into kalla/postgres as built from this commit, then the 30
           # questions through kalla-api in process on the FakeGateway: recall@10 >= 0.8 on POST /v1/retrieve and a
           # citation on every chat answer (EvaluationSmokeTests, trait Category=EvaluationSmoke). It was a job of its
-          # own that built Kalla.Worker.Tests again (#1084); here it runs on this build, beside the other tests, and its
-          # detailed output with the recall numbers is printed whether it passes or not.
-          if [ "$EVALUATION_SMOKE" = true ]; then
-            smoke_log="$RUNNER_TEMP/evaluation-smoke.log"
-            dotnet test --project tests/Kalla.Worker.Tests -c Release --no-build --filter-trait "Category=EvaluationSmoke" \
-              --output Detailed > "$smoke_log" 2>&1 &
-            smoke_pid=$!
-          fi
+          # own that built Kalla.Worker.Tests again (#1084); here it runs on this build, after the other tests: beside them,
+          # with the other runner's backend job on the same host, a test process was killed for memory (#1095's first run).
+          # Its detailed output with the recall numbers is printed whether it passes or not.
           # Tests marked [Trait(TestCategory.Name, TestCategory.Flaky)] run locally and in the weekly flake hunt, not here.
           # The script runs every test project as a process of its own, all at once, and Kalla.AdminApi.Tests as five
           # (its collections wait for one another inside one process and set this job's time); it prints each
           # process's totals and their sum.
           status=0; scripts/ci/backend-tests.sh Release || status=$?
           if [ "$EVALUATION_SMOKE" = true ]; then
-            smoke_status=0; wait "$smoke_pid" || smoke_status=$?
+            smoke_log="$RUNNER_TEMP/evaluation-smoke.log"; smoke_status=0
+            dotnet test --project tests/Kalla.Worker.Tests -c Release --no-build --filter-trait "Category=EvaluationSmoke" \
+              --output Detailed > "$smoke_log" 2>&1 || smoke_status=$?
             echo "::group::evaluation smoke (exit $smoke_status)"; cat "$smoke_log"; echo "::endgroup::"
             if [ "$smoke_status" != 0 ]; then echo "::error::the evaluation smoke failed (exit $smoke_status)"; status=1; fi
           fi
@@ -452,6 +453,17 @@ jobs:
           units="$RUNNER_TEMP/units"
           bash deploy/host/install.sh --unit-dir "$units" --host-memory 24 --no-enable
           systemd-analyze verify "$units"/rag-*.slice "$units"/rag-*.service "$units"/rag-*.timer
+
+  grading:
+    # The go-live gate's grading script (scripts/grading/README.md): its unittest suite, standard library only, against the
+    # fixtures in tests/fixtures/grading/ and an in-process fake chat API (#987).
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.grading == 'true' }}
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Grading script tests
+        run: python3 -I -m unittest discover -s scripts/grading -v
 
   admin-ui:
     # The admin UI (repo-and-deployment §2.3, §8.2; admin design §10.2), as the gateway's "Verify UI" step: npm ci from

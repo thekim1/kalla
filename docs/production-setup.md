@@ -88,6 +88,21 @@ host, with 1.2 GB less reserved and one CPU fewer in the ingestion zone; the sli
 numbers. On-prem model capacity is the gateway's, measured with `scripts/capacity/`
 ([its README](../scripts/capacity/README.md)).
 
+### Hardware
+
+An estimate for Källa alone, without the language models, Keycloak and Open WebUI, from a local resource test
+(2026-11-08, [`dev/resource-test/`](../dev/resource-test/README.md), small corpus):
+
+| | vCPU | Memory | Disk (SSD) |
+|---|---|---|---|
+| **Realistic minimum** | 4 | 16 GB | 100 GB |
+| **Floor** (runs, without headroom) | 4 | 8 GB | 50 GB |
+
+At the floor, the peak working set is about 5.5–5.7 GB plus the OS, and the Compose memory reservations alone add up to
+about 6.6 GB. The pilot host's 8 vCPU mostly buy a faster first bulk load of PDFs: the parser takes about 0.75 s per PDF
+page on 2 cores, and about 1.1 s per scanned page with OCR. Retrieval costs about 8 ms of CPU per query, and the database
+grows by about 9 KB per chunk. The R1 release test sets the final numbers.
+
 ## Install
 
 ### 1. Files and images
@@ -409,7 +424,7 @@ service only: it changes that variable and keeps the rest of `deploy/.env`. Then
 `docker compose --env-file deploy/.env restart kalla-api` (or `kalla-admin`, `kalla-worker`). Check its log for gateway
 `401` answers, then let the grace period end or revoke the old key. Kubernetes: `create-secrets.sh` again with that
 option, then
-`kubectl rollout restart deployment/rag-<service>`. Portainer: change the variable, update the stack (`kalla-bootstrap`
+`kubectl rollout restart deployment/kalla-<service>`. Portainer: change the variable, update the stack (`kalla-bootstrap`
 rewrites the file), then restart that service's container. A key that
 leaked is rotated without the grace period (*revoke immediately*): the service fails its model calls until it is
 restarted with the new key.
@@ -441,11 +456,11 @@ shows Källa's figures only.
 4. **Apply:** restart the firewall with the new allow-list (`sudo systemctl start rag-firewall.service`). kalla-admin picks
    the address up at its next context read (within 5 minutes), without a restart.
 
-**Check:** the *Gateway* page's status, `GET /api/gateway/status`, has `integration.configured: true` and no
+**Check:** the *AI gateway* card on the *Models* page, `GET /api/gateway/status`, has `integration.configured: true` and no
 `integration.lastError` after an assistant's or knowledge base's *Cost* card has been opened; a reason there is in the
 runbook (*Gateway keys, budgets and the read-back*). Kubernetes: the Admin API's port in your egress rules. Portainer:
-the gateway's `FORS_INTEGRATION_API_URL` names an address kalla-admin reaches (the gateway's `adminapi` is not on the `llm`
-network).
+nothing to set: the stack defaults the gateway's `FORS_INTEGRATION_API_URL` to `https://adminapi:8443/integration/v1`,
+which kalla-admin reaches over the gateway's `edge` network (Decisions "Upgrades in one step").
 
 ## Backup target
 
@@ -479,12 +494,13 @@ writes it as the worker's secret file, `on` with the profile and `off` without.
   malware scan**: nothing is quarantined. The worker says so at every start with a warning and security event 5106
   `rag.malware.scan_off` ([security events](security-events.md)); its `clamav` health check stays Healthy and says that
   the scan is off; upload slots are `unscanned` (never `clean`) with no scan time, a run's report has
-  `malwareScan: "off"`, and the admin UI shows *Not scanned for malware* on those files and runs. Sizing: the
+  `malwareScan: "off"`, and in the admin UI the Files card's summary counts the files not scanned for malware, each
+  such file's details say so, and so do those runs. Sizing: the
   `kalla-clamav` row of *Sizing* (above) drops out, and the `kalla-mirror` network and `database.clamav.net` are not used.
 
 Choose `off` only where the files come from sources you trust, or where they are scanned before they reach RAG. **Files
-stored while the scan is off are not scanned when you turn it on later**: they stay as they are and keep their
-*Not scanned for malware* mark; only new and changed files are scanned from then on.
+stored while the scan is off are not scanned when you turn it on later**: they stay as they are, still counted in
+the Files card's summary and noted in their details; only new and changed files are scanned from then on.
 
 To change it, re-run `init-deployment.sh --profiles` with the new list, with or without `clamav` (for example
 `--profiles ''` or `--profiles clamav`; the list replaces the current one), then
@@ -546,7 +562,7 @@ refused input fails the document (`embed.input_rejected`) and is a bug to report
 
 ## Rerank (optional)
 
-Rerank is optional (Decisions "Gateway release 1 and shared Keycloak as built"): while the platform has no model for an
+Rerank is optional (Decisions "Gateway releases", "Rerank pulled forward"): while the platform has no model for an
 assistant's reranker, chat, the test panel and `/v1/retrieve` make no rerank call and degrade nothing. Two rerankers
 exist, each with its own platform model (run-time settings, the admin's `PUT /api/settings/retrieval`) and its own time
 limit (deployment knobs, text read included; past the limit the fused order stands, `rerank_unavailable`):

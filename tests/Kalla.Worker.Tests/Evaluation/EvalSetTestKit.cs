@@ -16,6 +16,7 @@ using Kalla.Domain;
 using Kalla.Domain.Entities;
 using Kalla.Domain.Ports;
 using Kalla.Infrastructure;
+using Kalla.Infrastructure.Gateway;
 using Kalla.Pipelines.Json;
 using Kalla.Pipelines.Processing;
 using Kalla.TestKit;
@@ -114,7 +115,7 @@ public sealed class EvalGatewayFactory : WebApplicationFactory<fakegateway::Prog
             if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/v1/chat/completions" && request.Content is not null)
             {
                 var body = JsonNode.Parse(await request.Content.ReadAsStringAsync(cancellationToken)) as JsonObject ?? [];
-                calls.Enqueue(new EvalCall(Header(request, EmbeddingClient.StepHeader), body["model"]?.GetValue<string>() ?? string.Empty,
+                calls.Enqueue(new EvalCall(Header(request, GatewayHeaders.Step), body["model"]?.GetValue<string>() ?? string.Empty,
                     body.ContainsKey("temperature"), body["response_format"]?["type"]?.GetValue<string>(), Header(request, FakeAccess.MaxResidencyHeader),
                     request.Headers.Authorization?.Parameter ?? string.Empty, FakeContent.LastUserText(body["messages"])));
             }

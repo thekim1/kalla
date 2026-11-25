@@ -2,7 +2,7 @@
 
 Källa is the RAG, crawling and chat platform of Umeå kommun: it collects the municipality's knowledge from websites
 and documents, keeps it current, and answers questions about it in chat with a cited source for every claim. It is
-built as small .NET 10 services on top of the [Ume AI Gateway](https://github.com/thekim1/fors), which every
+built as small .NET 10 services on top of [Fors](https://github.com/thekim1/fors), the AI gateway, which every
 model call goes through, with a Python parser and PostgreSQL with pgvector.
 
 **Status:** the pilot (P1) is built and released; the live block (the real gateway, the shared sign-in, the umea.se

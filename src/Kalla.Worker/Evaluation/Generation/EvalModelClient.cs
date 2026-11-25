@@ -133,8 +133,7 @@ public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<
                 new ResponseFormat("json_object")), options: Json),
         };
         request.WithMaxResidency(ceiling);
-        request.Headers.Add(Processing.Embedding.EmbeddingClient.RunIdHeader, runId.ToString());
-        request.Headers.Add(Processing.Embedding.EmbeddingClient.StepHeader, step);
+        request.WithCallTag(step, runId);
         request.For(usage.Owner.Acting(step));
         using var response = await SendAsync(HttpClientName, request, cancellationToken);
         JsonDocument? document;

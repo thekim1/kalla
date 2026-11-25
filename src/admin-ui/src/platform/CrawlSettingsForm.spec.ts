@@ -44,7 +44,7 @@ function rows(): string[][] {
 }
 
 function mountForm() {
-  return mount(CrawlSettingsForm, { props: { initial, url: '/api/settings/crawl', submitLabel: 'Save' }, attachTo: document.body })
+  return mount(CrawlSettingsForm, { props: { initial, url: '/api/settings/crawl' }, attachTo: document.body })
 }
 
 afterEach(() => {
@@ -95,7 +95,7 @@ describe('Crawl settings: host politeness (admin design §5.8, connectors design
     await flushPromises()
     expect(rows().map((r) => r[0])).toEqual(['bibliotek.example.org', 'intranat.umea.se', 'www.umea.se'])
 
-    click('save')
+    click('save-bar-save')
     await flushPromises()
     const [url, init] = fetch.mock.calls[0]!
     expect(url).toBe('/api/settings/crawl')
@@ -154,8 +154,12 @@ describe('Crawl settings: host politeness (admin design §5.8, connectors design
     }
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json(problem, 400)))
     const wrapper = mountForm()
+    // The save bar shows once something changed (admin §5.12 rule 7).
+    expect(document.body.querySelector('[data-test=save-bar]')).toBeNull()
+    await wrapper.get('#platform-crawl-other').setValue('{ "maxPages": 100 }')
+    expect(document.body.querySelector('[data-test=save-bar-count]')!.textContent).toContain('1')
 
-    click('save')
+    click('save-bar-save')
     await flushPromises()
 
     expect(document.body.textContent).toContain(

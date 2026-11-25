@@ -1,7 +1,7 @@
 # Updates without downtime
 
 By default Källa runs one instance of each service, and an update stops `kalla-api` and `kalla-admin`, migrates the
-database and starts the new version: a minute or two in which Open WebUI, MCP clients and the admin UI get errors. If
+database and starts the new version: a minute or two in which Open WebUI, API clients and the admin UI get errors. If
 they must keep working through an update, run two instances of `kalla-api` and `kalla-admin` behind the reverse proxy and
 replace them one at a time. It is opt-in, as in the gateway (whose
 [guide](https://github.com/thekim1/fors/blob/main/docs/zero-downtime-updates.md) this follows): nothing changes
@@ -21,7 +21,7 @@ All shared state lives in Postgres: the key ring that protects admin sign-ins (D
 job leases, the background syncs' advisory locks and the retention steps' locks. Any instance can therefore serve any
 request, and a user signed in to the admin UI stays signed in when the next request reaches the other instance. Two
 things are per instance: the request rate limiters (each slot counts its own, so a client may briefly get up to twice
-its limit) and the gateway model sync's run history on the admin's Settings page.
+its limit) and the gateway model sync's run history on the admin's *Models* page.
 
 When an instance is told to stop, it:
 
@@ -150,7 +150,7 @@ In `deploy/.env`, read by `compose.rolling.yaml`:
 - **Requests longer than the shutdown timeout** (300 s for kalla-api) are cut off. Raise `KALLA_SHUTDOWN_TIMEOUT_SECONDS`
   (and `stop_grace_period` in `compose.rolling.yaml`) if you have longer ones.
 - **Postgres** is a single instance: a new image is a short outage (`--with-postgres`).
-- **Releases marked "Rolling update: no"** (0.5.0, 0.6.0, 0.8.0 and 0.9.0 so far) can't be rolled: with two slots, stop the
+- **Releases marked "Rolling update: no"** (0.5.0, 0.6.0, 0.8.0, 0.9.0 and 0.9.1 so far) can't be rolled: with two slots, stop the
   services the release's entry in the [upgrade guide](upgrade-guide.md) names before its migration. (On one slot
   `kalla-migrate` does that itself from 0.8.0.)
 - **The single-instance installation's first rolling update** stops instances that had no drain configured; a few POSTs

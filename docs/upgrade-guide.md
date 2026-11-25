@@ -511,8 +511,9 @@ and the release preparation folds the notes in here and writes the release's *Ro
 
 ## Before 0.5.0
 
-A deployment older than 0.5.0 first moves to 0.7.0 with that release's copy of this guide, which has the sections for
-0.2.0 to 0.5.0: [`docs/upgrade-guide.md` at `v0.7.0`](https://github.com/thekim1/ume-rag-platform/blob/v0.7.0/docs/upgrade-guide.md).
+A deployment older than 0.5.0 first moves to 0.5.1 by the sections for 0.2.0 to 0.5.1 in an older copy of this guide,
+[`docs/upgrade-guide.md` at `v0.7.0`](https://github.com/thekim1/kalla/blob/v0.7.0/docs/upgrade-guide.md), as
+[portainer.md](portainer.md) (*Upgrade from before 0.5.0*) does. From 0.5.x, one update to this release.
 
 ## Upgrade procedure (single slot)
 

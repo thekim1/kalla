@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { request } from '@/api/client'
 import InlineError from '@/components/ui/InlineError.vue'
 import TextAreaField from '@/components/ui/TextAreaField.vue'
-import UiButton from '@/components/ui/UiButton.vue'
-import { COMMON, PLATFORM } from '@/utils/labels'
+import SaveBar from '@/components/ui/SaveBar.vue'
+import { useDirty } from '@/composables/useDirty'
+import { PLATFORM } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 import HostPolitenessTable from './HostPolitenessTable.vue'
 import type { HostOverrides } from './politeness'
@@ -12,8 +13,9 @@ import type { HostOverrides } from './politeness'
 // The crawl section of the platform settings (admin design §5.8): its members as JSON, except the host politeness
 // (`hostOverrides`, connectors design §6.6), which is the table below. Both go back in one save with the version read;
 // the server checks the politeness (V37) and audits the change (`settings.update`).
-const props = defineProps<{ initial: Record<string, unknown>; url: string; submitLabel: string }>()
-const emit = defineEmits<{ (e: 'saved', response: unknown): void; (e: 'cancel'): void }>()
+// The save bar (admin §5.12 rule 7): Discard emits `cancel`, so the parent mounts the form again from the values loaded.
+const props = defineProps<{ initial: Record<string, unknown>; url: string }>()
+const emit = defineEmits<{ (e: 'saved', response: unknown): void; (e: 'cancel'): void; (e: 'dirty', dirty: boolean): void }>()
 
 const value = (props.initial.value ?? {}) as Record<string, unknown>
 const { hostOverrides: initialOverrides, ...rest } = value
@@ -22,6 +24,11 @@ const overrides = ref<HostOverrides>({ ...((initialOverrides ?? {}) as HostOverr
 const jsonError = ref<string | null>(null)
 const saveError = ref<string | null>(null)
 const saving = ref(false)
+// A changed host counts as one change, the other settings' JSON as one.
+const dirty = useDirty(() => ({ other: other.value, hosts: { ...overrides.value } }))
+dirty.reset()
+watch(dirty.dirty, (d) => emit('dirty', d))
+onBeforeUnmount(() => emit('dirty', false))
 
 async function save(): Promise<void> {
   jsonError.value = null
@@ -66,9 +73,6 @@ async function save(): Promise<void> {
     </form>
     <HostPolitenessTable v-model="overrides" />
     <InlineError v-if="saveError" :message="saveError" />
-    <div class="flex gap-2">
-      <UiButton variant="primary" type="submit" form="platform-crawl" :loading="saving" data-test="save">{{ submitLabel }}</UiButton>
-      <UiButton variant="quiet" @click="emit('cancel')">{{ COMMON.cancel }}</UiButton>
-    </div>
+    <SaveBar :changes="dirty.changes.value" :saving="saving" @save="save" @discard="emit('cancel')" />
   </div>
 </template>

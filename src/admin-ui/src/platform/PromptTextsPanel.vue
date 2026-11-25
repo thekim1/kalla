@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { http } from '@/api/client'
 import InlineError from '@/components/ui/InlineError.vue'
+import SaveBar from '@/components/ui/SaveBar.vue'
 import TextAreaField from '@/components/ui/TextAreaField.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
+import { useDirty } from '@/composables/useDirty'
 import { useUiStore } from '@/stores/ui'
 import { formatNumber } from '@/utils/format'
 import { PROMPT_TEXTS as P } from '@/utils/labels'
@@ -31,6 +33,8 @@ interface PromptTextSection {
   lines: PromptTextLine[]
 }
 
+/** Whether a text has unsaved changes (the save bar's count), for the Settings page's leave guard. */
+const emit = defineEmits<{ (e: 'dirty', dirty: boolean): void }>()
 const ui = useUiStore()
 const sections = ref<PromptTextSection[]>([])
 const values = ref<Record<string, string>>({})
@@ -39,6 +43,15 @@ const loadError = ref<unknown>(null)
 const saveError = ref<unknown>(null)
 const saving = ref(false)
 const loaded = ref(false)
+
+// The save bar (admin §5.12 rule 7): each text is a change; Discard goes back to the texts as loaded.
+const dirty = useDirty(() => ({ ...values.value }))
+let loadedValues: Record<string, string> = {}
+watch(dirty.dirty, (d) => emit('dirty', d))
+onBeforeUnmount(() => emit('dirty', false))
+function discard(): void {
+  values.value = { ...loadedValues }
+}
 
 const defaults = computed(() =>
   Object.fromEntries(sections.value.flatMap((s) => s.lines).filter((l) => l.member).map((l) => [l.member!, l.text])),
@@ -51,6 +64,8 @@ async function load(): Promise<void> {
     chat.value = await http.get<{ value: Record<string, unknown>; version: string }>('/api/settings/chat')
     sections.value = await http.get<PromptTextSection[]>('/api/settings/chat/prompts')
     values.value = Object.fromEntries(sections.value.flatMap((s) => s.lines).filter((l) => l.member).map((l) => [l.member!, l.value ?? l.text]))
+    loadedValues = { ...values.value }
+    dirty.reset()
   } catch (e) {
     loadError.value = e
   } finally {
@@ -132,7 +147,7 @@ onMounted(load)
         </template>
       </section>
       <InlineError v-if="saveError" :message="problemMessage(saveError)" />
-      <div><UiButton variant="primary" type="submit" :loading="saving" data-test="prompt-texts-save">{{ P.save }}</UiButton></div>
+      <SaveBar :changes="dirty.changes.value" :saving="saving" @save="save" @discard="discard" />
     </form>
   </UiCard>
 </template>

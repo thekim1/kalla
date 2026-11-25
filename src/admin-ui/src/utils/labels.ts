@@ -2914,7 +2914,6 @@ export const PROMPT_TEXTS = {
   locked: 'Locked',
   reset: 'Reset to default',
   edited: 'Changed',
-  save: 'Save prompt texts',
   saved: 'Prompt texts saved',
   placeholders: {
     '{assistant}': '{assistant} is replaced by the assistant’s name.',
