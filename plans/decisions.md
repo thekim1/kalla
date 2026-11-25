@@ -468,17 +468,21 @@ by `entra.yml`. Actions are pinned by commit SHA, with automated pin bumps (A-20
 ### CI on the self-hosted runner
 
 Every workflow runs on the self-hosted runners; `verify.yml` and `parser.yml` run on every non-draft PR, each job only
-when its paths change, and the full set before a release. Agents run only the test projects
-they touch. `main` is protected (the ruleset *Protect main*, 2026-11-16): a pull request needs one approving
-review and the required checks; a red `main` is fixed first. `perf.yml` and
-`evaluation.yml` schedules stay off until the test host; its runner awaits IT security. Pull-request jobs share the
-runners' OS user, so a tag release builds without the build cache and with its own empty NuGet and npm caches (dry runs
-keep the cache); before go-live, `release.yml` and `entra.yml` move to a runner of their own under a separate user,
-labelled `release`, which runs no pull-request code (#704, with #506 and #507). Detail:
-`platform/repo-and-deployment.md` §8, §12 (#4).
+when its paths change, and the full set before a release. Agents run only the test projects they touch. `main` is
+protected (the ruleset *Protect main*, 2026-11-16): a pull request needs one approving review and the required checks; a
+red `main` is fixed first. `perf.yml` and `evaluation.yml` schedules stay off until the test host; its runner awaits IT
+security. Pull-request jobs share the runners' OS user, so a tag release reads no local build cache and starts with
+empty NuGet and npm caches (dry runs keep them); its image builds read and write a registry build cache
+(`ghcr.io/<owner>/kalla/buildcache:<image>`) that only release jobs (`packages: write`) can write. **A release starts
+with a dry run:** a tag run whose commit has a green `release.yml` dry run skips `verify.yml` and `parser.yml` (and
+`e2e.yml` when the dry run ran it) and still builds, boot-tests and publishes the images; without one it runs them all
+(#1084). Before go-live, `release.yml` and `entra.yml` move to a runner of their own under a separate user, labelled
+`release`, which runs no pull-request code (#704, with #506 and #507). Detail: `platform/repo-and-deployment.md` §8, §12
+(#4).
 
 *From:* log rows 12, 88, 90, 91; decided by user, 2026-10-31; path-filtered jobs, 2026-11-05; release isolation,
-2026-11-15 (#704); protected `main`, 2026-11-16.
+2026-11-15 (#704); protected `main`, 2026-11-16; the release-only registry cache and the dry-run reuse, 2026-11-25
+(#1084).
 *Also:* "CI on the self-hosted runner for every pull request", "Merge on local evidence, then check main".
 
 ### E2E optional on release

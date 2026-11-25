@@ -3,8 +3,8 @@
 #         shared = either stream, append-only, in a PR of its own, main = main session (design and coordination).
 # Globs are anchored at the repository root (*.md is a root file only): * stays inside one directory, ** crosses
 # directories. A path that matches no rule fails the check, so add a rule here first (main session). A PR from branch
-# a/* or b/* may touch only its own paths and shared paths (check: scripts/check-ownership.py, job ownership in
-# verify.yml).
+# a/* or b/* may touch only its own paths and shared paths (check: scripts/check-ownership.py, in verify.yml's guard
+# job "changes, ownership, doc-refs").
 # Work queues: plans/work/ (each stream owns its queue and results file). History: plans/archive/p0, p1, p1b.
 
 # Stream queues and results
