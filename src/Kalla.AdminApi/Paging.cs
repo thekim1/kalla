@@ -33,8 +33,18 @@ public static class KeysetPage
 }
 
 /// <summary><c>page</c> (from 1) and <c>pageSize</c> (≤ 200, default 50), and <c>q</c> (admin design §4.1).</summary>
-public sealed record PageQuery(int? Page, int? PageSize, string? Q)
+/// <remarks>
+/// Properties, not a positional record: the request delegate generator emits <c>typeof(string?)</c> for a constructor
+/// parameter of a nullable reference type, which does not compile (Kalla.AdminApi.csproj, EnableRequestDelegateGenerator).
+/// </remarks>
+public sealed record PageQuery
 {
+    public int? Page { get; init; }
+
+    public int? PageSize { get; init; }
+
+    public string? Q { get; init; }
+
     public int Take => Keyset.Take(PageSize);
 
     public int Skip => (Math.Max(Page ?? 1, 1) - 1) * Take;

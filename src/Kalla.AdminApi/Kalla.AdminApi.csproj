@@ -3,6 +3,11 @@
     <UserSecretsId>kalla-adminapi</UserSecretsId>
     <ContainerRepository>kalla/admin</ContainerRepository>
     <KallaServiceContainer>true</KallaServiceContainer>
+    <!-- The minimal API's request delegates generated at build time, not compiled from expression trees and JIT-compiled
+         by every host at start (the test hosts' JIT time, #1084). -->
+    <EnableRequestDelegateGenerator>true</EnableRequestDelegateGenerator>
+    <!-- RDG011: the two generic settings endpoints (SettingsEndpoints) are generated at run time instead, as before. -->
+    <NoWarn>$(NoWarn);RDG011</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="AngleSharp" />

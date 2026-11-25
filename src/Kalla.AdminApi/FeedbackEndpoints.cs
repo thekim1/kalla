@@ -196,9 +196,29 @@ public static class FeedbackEndpoints
     }
 }
 
-public sealed record FeedbackQuery(
-    DateTimeOffset? From, DateTimeOffset? To, Guid? AssistantId, short? Rating, string? Outcome, bool? HasComment, string? State, Guid? DocumentId, Guid? After,
-    int? Limit);
+/// <remarks>Properties, not a positional record, as <see cref="PageQuery"/> (the request delegate generator).</remarks>
+public sealed record FeedbackQuery
+{
+    public DateTimeOffset? From { get; init; }
+
+    public DateTimeOffset? To { get; init; }
+
+    public Guid? AssistantId { get; init; }
+
+    public short? Rating { get; init; }
+
+    public string? Outcome { get; init; }
+
+    public bool? HasComment { get; init; }
+
+    public string? State { get; init; }
+
+    public Guid? DocumentId { get; init; }
+
+    public Guid? After { get; init; }
+
+    public int? Limit { get; init; }
+}
 
 public sealed record CitedDocument(Guid Id, string? Title);
 
