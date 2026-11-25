@@ -70,7 +70,7 @@ public static class OrganisationEndpoints
 /// The Map's rows (admin design §5.5.6): one per department → knowledge base → assistant → audience path. The
 /// department's own knowledge bases (also when none of its assistants links them) and the shared ones its assistants
 /// link, with their owning department; its assistants with their published version, a link only the draft has marked
-/// <c>draftOnly</c>, and the link's topics; each audience client. No content. Archived assistants are left out: the Map
+/// <c>draftOnly</c>, and the link's topics; each audience client; an own knowledge base's sources. No content. Archived assistants are left out: the Map
 /// shows who uses what now (#374), so a knowledge base only an archived assistant links ends its path there.
 /// </summary>
 public static class DepartmentMap
@@ -106,9 +106,14 @@ public static class DepartmentMap
             .Where(c => c.DeletedAt == null && (c.DepartmentId == department.Id || linkedIds.Contains(c.Id))).ToDictionaryAsync(c => c.Id, ct);
         var owners = collections.Values.Select(c => c.DepartmentId).Distinct().ToList();
         var names = await db.Departments.AsNoTracking().Where(d => owners.Contains(d.Id)).ToDictionaryAsync(d => d.Id, d => d.Name, ct);
+        // The drawing's first column (B-67): the sources of the department's own knowledge bases; a shared one's are its owner's.
+        var ownIds = collections.Values.Where(c => c.DepartmentId == department.Id).Select(c => c.Id).ToList();
+        var sources = (await db.Sources.AsNoTracking().Where(s => ownIds.Contains(s.CollectionId) && s.DeletedAt == null).OrderBy(s => s.Name)
+                .Select(s => new { s.CollectionId, Source = new MapSourceDto(s.Id, s.Name, s.Type) }).ToListAsync(ct))
+            .ToLookup(x => x.CollectionId, x => x.Source);
 
         MapCollectionDto Collection(Collection c) => new(c.Id, c.Name, c.DepartmentId, names.GetValueOrDefault(c.DepartmentId) ?? "", c.DepartmentId != department.Id,
-            c.SharedWith, c.Classification, c.PublishedAt is not null, c.ContactName, c.ContactEmail);
+            c.SharedWith, c.Classification, c.PublishedAt is not null, c.ContactName, c.ContactEmail, [.. sources[c.Id]]);
 
         var rows = new List<MapRowDto>();
         foreach (var (assistant, number, assistantLinks) in links)
@@ -144,10 +149,12 @@ public sealed record MapDto(Guid DepartmentId, string DepartmentName, IReadOnlyL
 /// <summary>A path; <see cref="Assistant"/> and <see cref="Audience"/> are null where the path ends earlier.</summary>
 public sealed record MapRowDto(MapCollectionDto Collection, MapAssistantDto? Assistant, MapAudienceDto? Audience);
 
-/// <summary><see cref="Shared"/>: owned by another department and shared in.</summary>
+/// <summary><see cref="Shared"/>: owned by another department and shared in. <see cref="Sources"/>: an own knowledge base's, by name; none for a shared one.</summary>
 public sealed record MapCollectionDto(
     Guid Id, string Name, Guid DepartmentId, string DepartmentName, bool Shared, string SharedWith, string Classification, bool Published, string? ContactName,
-    string? ContactEmail);
+    string? ContactEmail, IReadOnlyList<MapSourceDto> Sources);
+
+public sealed record MapSourceDto(Guid Id, string Name, string Type);
 
 /// <summary><see cref="PublishedVersion"/>: null before the first publish; <see cref="DraftOnly"/>: the link is only in the draft.</summary>
 public sealed record MapAssistantDto(
