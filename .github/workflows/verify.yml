@@ -51,6 +51,7 @@ jobs:
       images: ${{ steps.filter.outputs.images }}
       renderer: ${{ steps.filter.outputs.renderer }}
       smoke: ${{ steps.filter.outputs.smoke }}
+      grading: ${{ steps.filter.outputs.grading }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -69,7 +70,7 @@ jobs:
           # would otherwise filter the release down to what changed since the old tag (0.6.0's second tag run).
           if [ "${{ github.event_name }}" != pull_request ] && [ "${{ github.event_name }}" != push ] \
             || [ "$REF_TYPE" = tag ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
-            printf 'code=true\ndeploy=true\nadminui=%s\nimages=true\nrenderer=true\nsmoke=true\n' "$ui" >> "$GITHUB_OUTPUT"; exit 0
+            printf 'code=true\ndeploy=true\nadminui=%s\nimages=true\nrenderer=true\nsmoke=true\ngrading=true\n' "$ui" >> "$GITHUB_OUTPUT"; exit 0
           fi
           flag() { [ -n "$1" ] && echo true || echo false; }
           # The backend job: anything besides what its build and tests never read, plus the files of those paths that
@@ -95,8 +96,11 @@ jobs:
           images="$(git diff --name-only "$range" | grep -E '^(images/postgres/|images/clamav/|deploy/postgres/|\.github/workflows/verify\.yml$)' || true)"
           renderer="$(git diff --name-only "$range" | grep -E '^(images/renderer/|src/Kalla\.Worker/Connectors/Render/|src/Kalla\.Worker/Connectors/Http/PageFetcher\.cs$|src/Kalla\.Worker/(Kalla\.Worker\.csproj|Libatomic\.targets)$|Directory\.Build\.targets$|tests/Kalla\.Worker\.Tests/Connectors/RendererContainerTests\.cs$|Directory\.Packages\.props$|\.github/workflows/verify\.yml$)' || true)"
           smoke="$(git diff --name-only "$range" | grep -E '^(src/Kalla\.(Worker|Retrieval|Answering|Api|Infrastructure|Pipelines|Domain)/|tests/evaluation/|tests/Kalla\.Worker\.Tests/Evaluation|images/postgres/|Directory\.(Packages|Build)\.(props|targets)$|global\.json$|\.github/workflows/verify\.yml$)' || true)"
+          # The gold-set grading script (scripts/grading/, #987), its fixtures, or this workflow.
+          grading="$(git diff --name-only "$range" | grep -E '^(scripts/grading/|tests/fixtures/grading/|\.github/workflows/verify\.yml$)' || true)"
           { echo "code=$(flag "$code")"; echo "deploy=$(flag "$deploy")"; echo "adminui=$(flag "$adminui")"
-            echo "images=$(flag "$images")"; echo "renderer=$(flag "$renderer")"; echo "smoke=$(flag "$smoke")"; } >> "$GITHUB_OUTPUT"
+            echo "images=$(flag "$images")"; echo "renderer=$(flag "$renderer")"; echo "smoke=$(flag "$smoke")"
+            echo "grading=$(flag "$grading")"; } >> "$GITHUB_OUTPUT"
       - name: Changed paths belong to the branch's stream
         # ownership: every pull request that is not a draft, design-only ones included: a stream branch may change only
         # its own and the shared paths.
@@ -452,6 +456,17 @@ jobs:
           units="$RUNNER_TEMP/units"
           bash deploy/host/install.sh --unit-dir "$units" --host-memory 24 --no-enable
           systemd-analyze verify "$units"/rag-*.slice "$units"/rag-*.service "$units"/rag-*.timer
+
+  grading:
+    # The go-live gate's grading script (scripts/grading/README.md): its unittest suite, standard library only, against the
+    # fixtures in tests/fixtures/grading/ and an in-process fake chat API (#987).
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.grading == 'true' }}
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Grading script tests
+        run: python3 -I -m unittest discover -s scripts/grading -v
 
   admin-ui:
     # The admin UI (repo-and-deployment §2.3, §8.2; admin design §10.2), as the gateway's "Verify UI" step: npm ci from
