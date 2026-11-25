@@ -13,7 +13,8 @@ import { IS_ID, ONE_OF, useQueryFilters } from '@/composables/useQueryFilters'
 import { useLoadable } from '@/stores/loadable'
 import { FILTERS, MAP, PAGE, SHARING_LABEL } from '@/utils/labels'
 
-// The Map as a table (admin design §5.5.6, P1b): one row per department → knowledge base → assistant → channel path,
+// The Map as a table (admin design §5.5.6, P1b): one row per department → source → knowledge base → assistant → channel
+// path (a shared-in knowledge base's sources are its owner's, so its rows have none, #1083),
 // with the responsible contact, filtered by department and by what to show: chips kept in the address (§5.12 *Filters*;
 // `?department=…&show=shared`). **Table** / **Drawing** at the row's end (`?view=drawing`, B-67): the drawing is one card per
 // department, with the same filters.
@@ -21,12 +22,14 @@ type Show = 'all' | 'shared' | 'unlinked'
 interface Row extends MapRow {
   key: string
   department: string
+  /** The source of this path; null for a knowledge base without one of the department's own sources. */
+  source: MapRow['collection']['sources'][number] | null
 }
 const departments = ref<Department[]>([])
 const { filters, active: set, clear } = useQueryFilters({ department: '', show: 'all' }, { department: IS_ID, show: ONE_OF(['all', 'shared', 'unlinked']) })
 // The view is not a filter: Clear filters leaves it as it is.
 const { filters: shape } = useQueryFilters({ view: 'table' }, { view: ONE_OF(['table', 'drawing']) })
-const viewOptions = ['table', 'drawing'].map((v) => ({ value: v, label: MAP.views[v]! }))
+const viewOptions = (['table', 'drawing'] as const).map((v) => ({ value: v, label: MAP.views[v] }))
 const filterRow = ref<HTMLElement | null>(null)
 const maps = useLoadable<DepartmentMap[]>([])
 /** The filters that are set and shown: a single-department user has no department chip to clear. */
@@ -35,6 +38,7 @@ const departmentOptions = computed(() => departments.value.map((d) => ({ value: 
 const showOptions = (['shared', 'unlinked'] as Show[]).map((v) => ({ value: v, label: MAP.showOptions[v]! }))
 const columns: Column[] = [
   { key: 'department', label: MAP.department },
+  { key: 'source', label: MAP.source },
   { key: 'collection', label: MAP.knowledgeBase },
   { key: 'sharing', label: MAP.shared },
   { key: 'assistant', label: MAP.assistant },
@@ -45,7 +49,9 @@ const columns: Column[] = [
 const showing = (r: MapRow) => filters.show !== 'shared' && filters.show !== 'unlinked'
   || (filters.show === 'shared' ? r.collection.shared || r.collection.sharedWith !== 'department' : r.assistant === null)
 const rows = computed<Row[]>(() =>
-  maps.data.value.flatMap((m) => m.rows.map((r, i) => ({ ...r, department: m.departmentName, key: `${m.departmentId}-${i}` }))).filter(showing),
+  maps.data.value.flatMap((m) => m.rows.filter(showing).flatMap((r, i) =>
+    (r.collection.sources.length ? r.collection.sources : [null]).map((source) =>
+      ({ ...r, source, department: m.departmentName, key: `${m.departmentId}-${i}-${source?.id ?? ''}` })))),
 )
 /** The drawing: one per department that has something to show. */
 const drawings = computed(() => maps.data.value.map((m) => ({ id: m.departmentId, name: m.departmentName, rows: m.rows.filter(showing) })).filter((d) => d.rows.length))
@@ -69,12 +75,19 @@ async function load(): Promise<void> {
 /** A row opens its assistant, or the knowledge base when no assistant uses it. */
 const rowTo = (row: Row) => (row.assistant ? { name: 'assistant', params: { id: row.assistant.id } } : { name: 'collection', params: { id: row.collection.id } })
 
-watch(() => filters.department, () => void load())
+/**
+ * A department from the address that isn't one of the user's reads as all of them (the API would refuse it): on
+ * arrival, and on every later change of the address (back, forward, a link while the page is open, #1072).
+ */
+const known = (department: string) => !department || departments.value.some((d) => d.id === department)
+watch(() => filters.department, (department) => {
+  if (!known(department)) filters.department = ''
+  else void load()
+})
 
 onMounted(async () => {
   departments.value = await api.organisation.departments().catch(() => [])
-  // A department from the address that isn't one of the user's reads as all of them (the API would refuse it).
-  if (filters.department && !departments.value.some((d) => d.id === filters.department)) filters.department = ''
+  if (!known(filters.department)) filters.department = ''
   else await load()
 })
 </script>
@@ -91,13 +104,17 @@ onMounted(async () => {
     </p>
     <SegmentedControl v-model="shape.view" :options="viewOptions" :label="MAP.view" data-test="map-view" />
   </form>
-  <AsyncState :loading="maps.loading.value" :error="maps.error.value" :empty="rows.length === 0" :empty-text="MAP.empty" @retry="load">
+  <AsyncState :loading="maps.loading.value || (!maps.loaded.value && !maps.error.value)" :error="maps.error.value" :empty="rows.length === 0" :empty-text="MAP.empty" @retry="load">
     <div v-if="shape.view === 'drawing'" class="grid gap-6" data-test="map-drawings">
       <p class="m-0 text-small text-fg-2 max-md:hidden">{{ MAP.drawing.hint }}</p>
       <MapDrawing v-for="d in drawings" :key="d.id" :department-name="d.name" :rows="d.rows" />
     </div>
     <DataTable v-else :columns="columns" :rows="rows" :row-key="(r) => r.key" :caption="MAP.caption" :row-to="rowTo" data-test="map">
       <template #cell-department="{ row }">{{ row.department }}</template>
+      <template #cell-source="{ row }">
+        <span v-if="row.source" class="[overflow-wrap:anywhere]" data-test="map-source">{{ row.source.name }}</span>
+        <span v-else class="text-fg-3">{{ MAP.none }}</span>
+      </template>
       <template #cell-collection="{ row }">
         <span class="font-medium">{{ row.collection.name }}</span>
         <span v-if="row.collection.shared" class="block text-small text-fg-2">{{ MAP.sharedIn(row.collection.departmentName) }}</span>

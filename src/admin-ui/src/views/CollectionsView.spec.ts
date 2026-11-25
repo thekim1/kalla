@@ -186,6 +186,12 @@ describe('Knowledge bases (admin design §5.2, §4.5 view=)', () => {
     expect(list.mock.calls.length).toBe(calls)
     await vi.advanceTimersByTimeAsync(350)
     expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'bygg' }))
+    // Enter loads at once; the debounce then has nothing new to load (#1072).
+    const before = list.mock.calls.length
+    await wrapper.get('[data-test=collections-search]').setValue('bygglov')
+    await wrapper.get('form[role=search]').trigger('submit')
+    await vi.advanceTimersByTimeAsync(350)
+    expect(list.mock.calls.length).toBe(before + 1)
     route.query = {}
     wrapper.unmount()
     vi.useRealTimers()

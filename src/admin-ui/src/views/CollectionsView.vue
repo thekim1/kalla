@@ -53,7 +53,10 @@ const columns: Column[] = [
   { key: 'state', label: COLLECTIONS.state },
 ]
 
+/** The search and view last loaded: Enter loads at once, and the debounce after it then has nothing new to load (#1072). */
+let loaded = ''
 async function load(): Promise<void> {
+  loaded = `${view.value}|${q.value.trim()}`
   await collections.run(async () => (await api.collections.list({ q: q.value.trim() || undefined, pageSize: 200, view: view.value })).items)
 }
 
@@ -68,7 +71,7 @@ function created(collection: Collection, content: 'files' | 'web', filesError: u
 
 watch(view, () => void load())
 // The search runs as you type, a moment after the last key, so the address never holds a search that hasn't run.
-useDebouncedWatch(q, () => void load(), 300)
+useDebouncedWatch(q, () => loaded !== `${view.value}|${q.value.trim()}` && void load(), 300)
 
 onMounted(async () => {
   departments.value = await api.organisation.departments().catch(() => [])
