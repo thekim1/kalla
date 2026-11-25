@@ -62,7 +62,7 @@ const roleLabel = computed(() => auth.roles.map((r) => ROLE_LABEL[r as Role]).fi
 
       <nav :aria-label="SHELL.menu" class="flex flex-col gap-4">
         <section v-for="g in groups" :key="g.id" :aria-labelledby="`menu-${g.id}`">
-          <h2 :id="`menu-${g.id}`" class="px-3 pb-1 text-caption font-medium uppercase tracking-wide text-fg-3">{{ g.label }}</h2>
+          <h2 :id="`menu-${g.id}`" :class="{ 'sr-only': g.hideLabel }" class="px-3 pb-1 text-caption font-medium uppercase tracking-wide text-fg-3">{{ g.label }}</h2>
           <ul>
             <li v-for="item in g.items" :key="item.name">
               <RouterLink

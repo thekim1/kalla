@@ -233,7 +233,22 @@ describe('Home: Live, Health and Get started (admin design §5.5.1)', () => {
     const platform = mount(OverviewView, { global: { stubs: { RouterLink: LinkStub } } })
     await flushPromises()
     expect(JSON.parse(platform.get('[data-test=health-models] a').attributes('data-to')!)).toEqual({ name: 'platform-models' })
-    expect(wrapper.text()).not.toContain(OVERVIEW.noRuns)
+    expect(organisation.find('[data-test=sync-dot-ok]').exists()).toBe(true)
+    expect(models.find('[data-test=sync-dot-danger]').exists()).toBe(true)
+  })
+
+  it('greys what has not happened yet (rule 8): no fetches in 24 h, and a sync that never succeeded nor failed', async () => {
+    editor()
+    vi.spyOn(api, 'overview').mockResolvedValue(overviewOf())
+    const wrapper = mount(OverviewView, { global: { stubs: { RouterLink: LinkStub } } })
+    await flushPromises()
+    const total = wrapper.get('[data-test=health-runs-total]')
+    expect(total.find('[data-test=runs-dot-none]').classes()).toContain('bg-fg-3')
+    expect(total.get('[data-test=health-runs-summary]').text()).toBe(OVERVIEW.noRunsShort)
+    expect(total.get('[data-test=health-runs-summary]').classes()).toContain('text-fg-3')
+    const organisation = wrapper.get('[data-test=health-organisation]')
+    expect(organisation.text()).toContain(OVERVIEW.noSuccess)
+    expect(organisation.get('[data-test=sync-dot-none]').classes()).toContain('bg-fg-3')
   })
 
   it('folds the checklist of a published knowledge base to one line, which unfolds', async () => {
@@ -464,6 +479,24 @@ describe('Home: the deployment notices (admin design §5.5.1)', () => {
       const wrapper = mount(OverviewView, { global: { stubs: { RouterLink: LinkStub } } })
       await flushPromises()
       expect(order(wrapper, ['needs-attention', 'get-started', 'live', 'health'])).toBe(true)
+      // The live table's title is inside its card (§5.12).
+      expect(wrapper.get('[data-test=live] h2').text()).toBe(OVERVIEW.live)
+      expect(wrapper.get('[data-test=live]').attributes('aria-labelledby')).toBe('live-h')
+    })
+
+    it('puts a platform admin\'s notices, the secret reminders first, before Needs attention', async () => {
+      signIn({ roles: ['rag-platform-admin'], departmentCodes: [], departmentSources: [] })
+      vi.spyOn(api, 'overview').mockResolvedValue(overviewOf({
+        secretExpiry: [{ which: 'rag-admin', expiresOn: '2026-12-01' }],
+        deploymentNotices: [{ code: 'retired_variables', names: ['OLD_VAR'] }],
+        attention: [{
+          kind: 'deletion_waiting', objectType: 'source', objectId: 's1', objectName: 'umea.se/bygga', departmentId: 'd1', since: null,
+          details: { runId: 'r1', collectionName: 'Bygglov', proposed: '212' },
+        }],
+      }))
+      const wrapper = mount(OverviewView, { global: { stubs: { RouterLink: LinkStub } } })
+      await flushPromises()
+      expect(order(wrapper, ['secret-expiry', 'deployment-notices', 'needs-attention', 'health'])).toBe(true)
     })
   })
 })

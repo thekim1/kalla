@@ -149,7 +149,7 @@ onMounted(async () => {
     <PeriodPicker v-model:period="filters.period" v-model:from="filters.from" v-model:to="filters.to" id-prefix="costs" />
     <FilterChip v-model="filters.departmentId" :label="COSTS.department" :options="departmentOptions" :any="COSTS.allDepartments" />
     <FilterChip v-model="filters.kind" :label="COSTS.kind" :options="kindOptions" :any="COSTS.kinds['']!" />
-    <UiButton v-if="active.length" size="sm" variant="quiet" data-test="clear-filters" @click="clear(filterRow)">{{ FILTERS.clear }}</UiButton>
+    <UiButton v-if="active.length" size="sm" variant="quiet" class="max-md:h-11" data-test="clear-filters" @click="clear(filterRow)">{{ FILTERS.clear }}</UiButton>
     <p class="ml-auto text-small text-fg-2" aria-live="polite" data-test="filter-count">{{ report.loaded.value ? COSTS.shown(objectCount) : '' }}</p>
   </form>
 

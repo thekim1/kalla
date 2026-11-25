@@ -68,14 +68,15 @@ const liveColumns: Column[] = [
 ]
 const usageOf = (a: { assistantId: string }) => ({ name: 'assistant', params: { id: a.assistantId }, query: { tab: 'usage' } })
 const accessOpen = ref(false)
-/** Health's dots: green while fine, amber with remarks, red on a failure (the words say it too). */
-const DOT: Record<'ok' | 'warn' | 'danger', string> = { ok: 'bg-ok', warn: 'bg-warn', danger: 'bg-danger' }
+/** Health's dots: green while fine, amber with remarks, red on a failure (the words say it too); grey for nothing yet (rule 8). */
+const DOT: Record<'ok' | 'warn' | 'danger' | 'none', string> = { ok: 'bg-ok', warn: 'bg-warn', danger: 'bg-danger', none: 'bg-fg-3' }
 const runTotals = computed(() => {
   const t = { succeeded: 0, degraded: 0, failed: 0, running: 0 }
   for (const d of overview.data.value?.health.departments ?? []) for (const k of Object.keys(t) as (keyof typeof t)[]) t[k] += d.runs[k] ?? 0
   return t
 })
-const runsTone = computed(() => (runTotals.value.failed ? 'danger' : runTotals.value.degraded ? 'warn' : 'ok'))
+const noRuns = computed(() => Object.values(runTotals.value).every((n) => n === 0))
+const runsTone = computed(() => (runTotals.value.failed ? 'danger' : runTotals.value.degraded ? 'warn' : noRuns.value ? 'none' : 'ok'))
 const runsSummary = computed(() => {
   const parts = RUN_OUTCOMES.filter((o) => runTotals.value[o.key]).map((o) => o.label(runTotals.value[o.key]))
   return parts.length ? parts.join(', ') : OVERVIEW.noRunsShort
@@ -98,6 +99,8 @@ const syncs = computed(() => {
     { key: 'models', label: OVERVIEW.modelSync, sync: health.modelSync, to: auth.can('admin') ? { name: 'platform-models' } : null },
   ]
 })
+/** A sync that never succeeded is grey until it fails, not green. */
+const syncTone = (sync: SyncHealth) => (sync.consecutiveFailures ? 'danger' : sync.lastSuccessAt ? 'ok' : 'none')
 const lastSuccess = (sync: SyncHealth) => (sync.lastSuccessAt ? OVERVIEW.lastSuccess(formatRelative(sync.lastSuccessAt)) : OVERVIEW.noSuccess)
 
 // Hide is remembered per browser (§5.5.1 item 3); without storage it lasts until the page is left.
@@ -157,9 +160,8 @@ function showHidden(): void {
     </div>
 
     <!-- Assistants in use, the last 7 days: a table, the most asked first, zeros grey (rule 8); cards on a phone. -->
-    <section v-if="live.length" class="mb-6 grid gap-3" aria-labelledby="live-h" data-test="live">
-      <h2 id="live-h" class="text-heading">{{ OVERVIEW.live }} <span class="text-small font-normal text-fg-3">· {{ OVERVIEW.liveMeta }}</span></h2>
-      <p v-if="quiet" class="text-fg-2" data-test="live-empty">{{ OVERVIEW.liveEmpty }}</p>
+    <UiCard v-if="live.length" :title="OVERVIEW.live" :meta="OVERVIEW.liveMeta" heading-id="live-h" class="mb-6" data-test="live">
+      <p v-if="quiet" class="mb-3 text-fg-2" data-test="live-empty">{{ OVERVIEW.liveEmpty }}</p>
       <DataTable :columns="liveColumns" :rows="liveRows" :row-key="(a) => a.assistantId" :caption="OVERVIEW.liveCaption" :row-to="usageOf">
         <template #cell-name="{ row }"><span class="font-medium">{{ row.name }}</span></template>
         <template #cell-questions="{ row }"><span class="tabular" :class="quietZero(row.questions)" data-test="live-questions">{{ formatNumber(row.questions) }}</span></template>
@@ -168,15 +170,16 @@ function showHidden(): void {
         <template #cell-thumbsDown="{ row }"><span class="tabular" :class="quietZero(row.thumbsDown)">{{ formatNumber(row.thumbsDown) }}</span></template>
         <template #cell-cost="{ row }"><span class="tabular" :class="quietZero(row.costUsd)" data-test="live-cost">{{ formatUsdCost(row.costUsd) }}</span></template>
       </DataTable>
-    </section>
+    </UiCard>
 
     <!-- Health: one line of four states; a state that fails turns amber or red, in words as well as colour. -->
     <section class="mb-6" aria-labelledby="health-h" data-test="health">
       <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
         <h2 id="health-h" class="font-medium">{{ OVERVIEW.health }}</h2>
         <span class="inline-flex items-center gap-1.5" data-test="health-runs-total">
-          <span class="size-2 rounded-full" :class="DOT[runsTone]" aria-hidden="true" />
-          <RouterLink :to="{ name: 'collections' }" class="text-accent-ink underline">{{ OVERVIEW.fetches24h }}</RouterLink>: {{ runsSummary }}
+          <span class="size-2 rounded-full" :class="DOT[runsTone]" aria-hidden="true" :data-test="`runs-dot-${runsTone}`" />
+          <!-- One flex item, so the gap doesn't fall before the colon. -->
+          <span><RouterLink :to="{ name: 'collections' }" class="text-accent-ink underline">{{ OVERVIEW.fetches24h }}</RouterLink>: <span :class="{ 'text-fg-3': noRuns }" data-test="health-runs-summary">{{ runsSummary }}</span></span>
         </span>
         <span class="inline-flex items-center gap-1.5" data-test="health-queue">
           <span class="size-2 rounded-full" :class="DOT.ok" aria-hidden="true" />
@@ -184,7 +187,7 @@ function showHidden(): void {
           <span v-if="overview.data.value.health.queue.oldestQueuedAt" class="text-fg-2">· {{ OVERVIEW.queueOldest(formatRelative(overview.data.value.health.queue.oldestQueuedAt)) }}</span>
         </span>
         <span v-for="s in syncs" :key="s.key" class="inline-flex flex-wrap items-center gap-1.5" :data-test="`health-${s.key}`">
-          <span class="size-2 rounded-full" :class="DOT[s.sync.consecutiveFailures ? 'danger' : 'ok']" aria-hidden="true" />
+          <span class="size-2 rounded-full" :class="DOT[syncTone(s.sync)]" aria-hidden="true" :data-test="`sync-dot-${syncTone(s.sync)}`" />
           <RouterLink v-if="s.to" :to="s.to" class="text-accent-ink underline">{{ s.label }}</RouterLink>
           <span v-else>{{ s.label }}</span>
           <span>{{ lastSuccess(s.sync) }}</span>
