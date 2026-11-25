@@ -118,6 +118,7 @@ public static class CollectionSharing
             .RequireAuthorization(AdminPolicies.Read).WithName("GetCollectionTopics")
             .WithSummary("The tags on a collection's live chunks with document counts (and, for the owner, the path rules that set them and the tags still pending)");
         collections.MapTopicSuggestions();
+        collections.MapTopicRulePreview();
 
         return api;
     }

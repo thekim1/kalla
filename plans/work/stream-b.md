@@ -37,6 +37,8 @@ Beside P2 wave 1: take B-64 when a wave item waits, or after it. `proposals/topi
   for the form's round trip of every rule kind and the 0-match flow, and for the read-only field; shown in a browser.
 - **Waits on:** B-64.
 - **Read:** Decisions "Topics editor"; admin §4.5, §5.5.2, §5.8; processing §7.
+- **Taken** 2026-11-24, `b/65-topic-form` (part 1: the preview route and the client; part 2: the form, remove, and the
+  read-only field on the source page).
 
 ## Support chatbot F6 (user, 2026-11-22)
 

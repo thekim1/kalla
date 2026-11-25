@@ -102,13 +102,14 @@ public static partial class TopicSuggestions
     private static async Task<List<Section>> SectionsAsync(RagDbContext db, Guid sourceId, bool upload, string parent, CancellationToken ct)
     {
         // The section's segments as string_to_array gives them: a URL path has a leading empty one (`/a/b` is '', a, b), a
-        // display name has none (`HR/a` is HR, a); either way one more than the parent's slashes.
+        // display name has none (`HR/a` is HR, a); either way one more than the parent's slashes. A display name is taken
+        // as stored, as the matcher takes it: `/HR/a` is in no folder section, since an `HR/` rule does not match it.
         var depth = parent.Count(c => c == '/') + 1;
         var rows = await db.Database.SqlQuery<SectionRow>($"""
             WITH docs AS (
                 SELECT d."Title",
                        substring(d."Url" from '^[A-Za-z][A-Za-z0-9+.-]*://([^/?#:]*)') AS host,
-                       string_to_array(CASE WHEN {upload} THEN ltrim(d."DisplayName", '/')
+                       string_to_array(CASE WHEN {upload} THEN d."DisplayName"
                                             ELSE regexp_replace(regexp_replace(d."Url", '^[A-Za-z][A-Za-z0-9+.-]*://[^/?#]*', ''), '[?#].*$', '') END, '/') AS segs
                 FROM content."Documents" d
                 WHERE d."SourceId" = {sourceId} AND d."DeletedAt" IS NULL AND d."LiveChunkSetId" IS NOT NULL
