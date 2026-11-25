@@ -15,8 +15,11 @@ the browser ("The server cannot be reached") although the same commit passed alo
 
 ## Working with the workflows
 
-- **Before a release, run a release dry run** and fix what it finds:
-  `gh workflow run release.yml -f version=X.Y.Z-dryrun -f e2e=false` (about 14 minutes; a tag run about 17). It is the only way to run the
+- **Before a release, run a release dry run** of the commit you will tag, and fix what it finds:
+  `gh workflow run release.yml -f version=X.Y.Z-dryrun -f e2e=false` (about 13 minutes). Once it is green, the tag run
+  of the same commit skips `verify.yml` and `parser.yml` (and `e2e.yml` when the dry run had `-f e2e=true`): its
+  `gate` job finds the dry run and says so in a notice. It still builds, boot-tests and publishes the images; without a
+  green dry run of that commit it runs everything (#1084). The dry run is the only way to run the
   bundle's smoke test (`deploy/tests/release-smoke.sh`) and the Portainer stack's boot test
   (`deploy/tests/portainer-boot.sh`: the release's `compose.portainer.yaml` with the gateway's pinned release, `clamav`,
   `openwebui` and `proxy`) before the tag, and it never reaches the publish job. `-f portainer_boot=X.Y.Z` runs only

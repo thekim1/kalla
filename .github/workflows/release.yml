@@ -16,6 +16,9 @@ name: Release
 #      images (not for a pre-release).
 # build doesn't wait for verify and parser (about 8 minutes on both runners): a red test stops publish, so only the
 # version's images (never :latest) can reach ghcr.io from a commit whose tests fail, as when a boot test fails.
+# A release starts with a dry run (Decisions "CI on the self-hosted runner", #1084): the gate job finds a green dry run
+# of the tag's commit, and then verify and parser are skipped, and e2e too when that dry run ran it. The images are
+# still built, boot-tested and published. Without such a dry run everything runs (scripts/ci/release-gate.sh).
 # A manual run (workflow_dispatch) is a dry run of 1-3: the images go to a registry inside the job (localhost:5000), so
 # nothing reaches ghcr.io and no release or tag is created.
 # A manual run with the input portainer_boot (X.Y.Z) runs only deploy/tests/portainer-boot.sh, in minutes: this ref's
@@ -71,15 +74,32 @@ env:
   # The dry run's registry: distribution 3.1.1 (Docker Hub image pushed 2026-09-21).
   DRY_RUN_REGISTRY_IMAGE: registry:3.1.1@sha256:325b4b29b041e82803abeb703e201655e4e23ab83264ec1a7c9ddb0a5b14a6e0
 jobs:
+  gate:
+    # Whether this tag's commit has a green dry run (header). Seconds; false for anything but a tag push.
+    runs-on: [self-hosted, linux, x64]
+    permissions:
+      actions: read
+    outputs:
+      skip_tests: ${{ steps.gate.outputs.skip_tests }}
+      skip_e2e: ${{ steps.gate.outputs.skip_e2e }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci/release-gate.sh
+
   verify:
-    if: inputs.portainer_boot == ''
+    needs: gate
+    if: inputs.portainer_boot == '' && needs.gate.outputs.skip_tests != 'true'
     uses: ./.github/workflows/verify.yml
     with:
       # verify's renderer job leaves out the worker image's Playwright driver check: build runs it on the pushed image.
       release: true
 
   parser:
-    if: inputs.portainer_boot == ''
+    needs: gate
+    if: inputs.portainer_boot == '' && needs.gate.outputs.skip_tests != 'true'
     uses: ./.github/workflows/parser.yml
 
   portainer-boot:
@@ -148,8 +168,14 @@ jobs:
     # the release. After verify, parser and build, never beside them: both runners share one machine, and with verify's
     # backend and renderer jobs running next to it the browser's requests to the admin UI failed (run 42469437132; alone,
     # run 42471519711 passed on the same commit).
-    needs: [verify, parser, build]
-    if: (github.event_name == 'push' && vars.RELEASE_E2E == 'true') || (github.event_name == 'workflow_dispatch' && inputs.e2e)
+    # verify and parser are skipped when the gate found a green dry run, and e2e too when that dry run ran it.
+    needs: [gate, verify, parser, build]
+    if: >-
+      !cancelled() && needs.build.result == 'success' &&
+      ((github.event_name == 'push' && vars.RELEASE_E2E == 'true' && needs.gate.outputs.skip_e2e != 'true') ||
+       (github.event_name == 'workflow_dispatch' && inputs.e2e)) &&
+      (needs.verify.result == 'success' || (needs.verify.result == 'skipped' && needs.gate.outputs.skip_tests == 'true')) &&
+      (needs.parser.result == 'success' || (needs.parser.result == 'skipped' && needs.gate.outputs.skip_tests == 'true'))
     uses: ./.github/workflows/e2e.yml
 
   build:
@@ -201,8 +227,9 @@ jobs:
       - name: A tag release reads no shared cache
         # Pull-request jobs run as the same user on these runners and could rewrite the caches in its home (#704,
         # Decisions "CI on the self-hosted runner"). A tag release therefore restores NuGet and npm packages into empty
-        # directories of its own, and its image builds read no build cache (cache-from below). A dry run keeps the
-        # caches. Before go-live releases move to a runner of their own under a separate user.
+        # directories of its own, and its image builds read no local build cache, only the registry cache that release
+        # jobs alone write (below). A dry run keeps the caches. Before go-live releases move to a runner of their own
+        # under a separate user.
         if: github.event_name == 'push'
         run: |
           {
@@ -223,13 +250,22 @@ jobs:
         with:
           # The builder pushes to localhost:5000 in a dry run.
           driver-opts: network=host
-      - name: Build cache on the runner's disk
+      - name: Build cache
         # The buildx builder above starts empty in every run, so each image would build from scratch and, with new layer
-        # digests, push every layer again. One local cache per image, kept in the runner user's home (both runners share
-        # it; releases don't run in parallel), read by each build and replaced after it (mode=max keeps the build
-        # stages' layers too), so an unchanged Dockerfile and context rebuild in seconds and push only the new layers.
-        # A tag release only writes it (#704): pull-request jobs share the runner user's home, so a release never reads it.
-        run: echo "BUILD_CACHE=$HOME/.cache/kalla-release-buildx" >> "$GITHUB_ENV"
+        # digests, push every layer again. A cache per image, read by each build and replaced after it (mode=max keeps
+        # the build stages' layers too), so an unchanged Dockerfile and context rebuild in seconds and push only the new
+        # layers. A tag release uses a registry cache, ghcr.io/<owner>/kalla/buildcache:<image>, that only release jobs
+        # (packages: write) can write: pull-request jobs share the runner user's home, so a tag release never reads the
+        # local cache (#704, #1084 R4a). A dry run uses the local one in the runner user's home (both runners share it;
+        # releases don't run in parallel).
+        env:
+          REPOSITORY: ${{ steps.version.outputs.repository }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            echo "CACHE_REGISTRY=ghcr.io/$REPOSITORY/buildcache" >> "$GITHUB_ENV"
+          else
+            echo "BUILD_CACHE=$HOME/.cache/kalla-release-buildx" >> "$GITHUB_ENV"
+          fi
       - name: Install Syft
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
@@ -246,12 +282,11 @@ jobs:
       - name: Start the Dockerfile images' builds
         # kalla/postgres, clamav, renderer and parser, all four at once in the background (scripts/ci/release-images.sh,
         # #1084): one after another they took 10.6 to 12.2 minutes of a tag run. "The Dockerfile images" below waits for
-        # them. A tag release reads no build cache (#704); it still writes one, which only a trusted build does.
+        # them. The build cache is the step's above.
         env:
           VERSION: ${{ steps.version.outputs.version }}
           PREFIX: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}
           REVISION: ${{ github.sha }}
-          CACHE_READ: ${{ github.event_name != 'push' }}
         run: bash scripts/ci/release-images.sh start
       - name: Build the admin UI
         # Built from the lock only (src/admin-ui/.npmrc), as in verify.yml. The admin publish below adds dist/ as
@@ -303,7 +338,9 @@ jobs:
         id: images
         run: bash scripts/ci/release-images.sh wait
       - name: Rotate the build cache
-        # A local cache only grows when written over itself: keep each image's new cache and drop the old one.
+        # A local cache only grows when written over itself: keep each image's new cache and drop the old one. A tag
+        # release's registry cache is replaced by its push.
+        if: github.event_name != 'push'
         run: |
           for name in postgres clamav renderer parser; do
             if [ -d "$BUILD_CACHE/$name-new" ]; then rm -rf "${BUILD_CACHE:?}/$name"; mv "$BUILD_CACHE/$name-new" "$BUILD_CACHE/$name"; fi
@@ -311,7 +348,9 @@ jobs:
           du -sh "$BUILD_CACHE"/* 2>/dev/null || true
       - name: Image pins of the other images, and their SBOMs in the background
         # Syft takes about two minutes for the four images (the parser's is 3 GB): it runs beside the smoke test and the
-        # Portainer boot, and "The other images' SBOMs" below waits for it.
+        # Portainer boot, and "The other images' SBOMs" below waits for it. Each image is pulled once (#1084 R7): into
+        # the Docker daemon, which shares the download with the boot tests' pull of the same image, and Syft reads it
+        # from there (docker:) instead of pulling it from the registry a second time.
         env:
           VERSION: ${{ steps.version.outputs.version }}
           PREFIX: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}
@@ -319,8 +358,6 @@ jobs:
           CLAMAV_DIGEST: ${{ steps.images.outputs.clamav }}
           RENDERER_DIGEST: ${{ steps.images.outputs.renderer }}
           PARSER_DIGEST: ${{ steps.images.outputs.parser }}
-          # The dry run's registry speaks plain HTTP.
-          SYFT_REGISTRY_INSECURE_USE_HTTP: ${{ github.event_name != 'push' }}
         run: |
           # A scan a cancelled attempt left behind still holds its unpacked image (#1069): stop it first. The match is on
           # this runner's workspace, which is in every scan's output path, so the other runner's scans are left alone.
@@ -331,7 +368,7 @@ jobs:
           for name in postgres clamav renderer parser; do
             digest_var="${name^^}_DIGEST"; ref="$PREFIX/$name:$VERSION@${!digest_var}"
             echo "KALLA_${name^^}_IMAGE=$ref" | tee -a images.env
-            echo "$name $ref" >> "$syft_dir/refs"
+            echo "$name $ref $PREFIX/$name@${!digest_var}" >> "$syft_dir/refs"
           done
           # The exit code goes to a file: a later step can't `wait` for a process this step started. Every stream of the
           # background part is redirected, or the runner would wait for it before ending the step.
@@ -339,9 +376,10 @@ jobs:
           (
             # No -q: Syft's own messages (a full disk, a refused pull) go to the log the step below prints (#1069).
             TMPDIR="$syft_dir/tmp" bash -c 'set -e
-              while read -r name ref; do
+              while read -r name ref by_digest; do
                 echo "== $name"
-                syft scan "registry:$ref" -o "spdx-json=$PWD/sbom/kalla-$name-$VERSION.spdx.json"
+                docker pull -q -- "$ref"
+                syft scan "docker:$by_digest" -o "spdx-json=$PWD/sbom/kalla-$name-$VERSION.spdx.json"
               done < "$1/refs"' _ "$syft_dir" > "$syft_dir/log" 2>&1 || rc=$?
             echo "${rc:-0}" > "$syft_dir/exit"
           ) < /dev/null > /dev/null 2>&1 &
@@ -449,11 +487,13 @@ jobs:
 
   publish:
     # Only for a pushed tag, once verify, parser, build and (when asked) e2e are green; a dry run ends after build.
-    needs: [verify, parser, build, e2e]
+    # verify and parser may be skipped only because the gate found a green dry run of this commit (header).
+    needs: [gate, verify, parser, build, e2e]
     if: >-
-      !cancelled() && github.event_name == 'push' && needs.verify.result == 'success' &&
-      needs.parser.result == 'success' && needs.build.result == 'success' &&
-      (needs.e2e.result == 'success' || needs.e2e.result == 'skipped')
+      !cancelled() && github.event_name == 'push' && needs.gate.result == 'success' &&
+      (needs.verify.result == 'success' || (needs.verify.result == 'skipped' && needs.gate.outputs.skip_tests == 'true')) &&
+      (needs.parser.result == 'success' || (needs.parser.result == 'skipped' && needs.gate.outputs.skip_tests == 'true')) &&
+      needs.build.result == 'success' && (needs.e2e.result == 'success' || needs.e2e.result == 'skipped')
     runs-on: [self-hosted, linux, x64]
     permissions:
       contents: write
