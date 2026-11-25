@@ -1,7 +1,8 @@
 # Gold-set grading for the go-live gate (P1b #16, hand-off L8)
 
 `grading.py` produces the file that department reviewers grade by hand before the pilot goes live, and computes the
-gate's totals from the graded file (weakness review §2 "Hand grading"; ingestion plan §7; P1b README §1.1, item 31).
+gate's totals from the graded file (weakness review §2 "Hand grading"; ingestion plan §7; the thresholds are Decisions
+"Gold set drafted by the main session, reviewed by DoIT").
 P1 has no grading UI: reviewers grade in a spreadsheet, and the graded file and its totals are attached to the go-live
 decision.
 
@@ -11,7 +12,7 @@ or installed and it can be copied to any host that reaches the chat API. Tests: 
 
 ```bash
 python3 -I -m unittest discover -s scripts/grading -v
-uvx ruff@0.17.2 check scripts/grading && uvx ruff@0.17.2 format --check scripts/grading
+uvx ruff@0.17.5 check scripts/grading && uvx ruff@0.17.5 format --check scripts/grading
 ```
 
 ## `answer`: ask the gold set, write the CSV
@@ -72,14 +73,14 @@ reviewers; the totals count only their `grade_not_found`, and they print how man
 python3 -I scripts/grading/grading.py totals graded.csv [--out totals.txt]
 ```
 
-| Measure | Counted as | Passes at (default, P1b README §1.1) | Option |
+| Measure | Counted as | Passes at (default, Decisions "Gold set drafted by the main session, reviewed by DoIT") | Option |
 |---|---|---|---|
 | Correct answers on answerable questions | answerable rows with `grade_correct` ja / answerable rows | ≥ 80 % | `--min-correct 0.80` |
 | Citation precision | sum of `grade_supporting_citations` / sum of `citation_count`, all rows | ≥ 90 % | `--min-citation-precision 0.90` |
 | False not-found | answerable rows with `grade_not_found` ja / answerable rows | ≤ 10 % | `--max-false-not-found 0.10` |
 | Off-topic answered "not found" | off-topic rows with `grade_not_found` ja / off-topic rows | ≥ 80 % | `--min-off-topic-not-found 0.80` |
 
-The department confirms the thresholds when the set is written (P1b README §6, U-k); pass changed ones as options.
+The thresholds are a decision: a changed one needs a new decision first (`plans/decisions.md`), then the option.
 Shares are compared exactly (16/20 meets 80 %). A measure with nothing to count (no off-topic rows, no citations)
 fails. Exit 0: every measure passes; 1: at least one fails; 2: the file is not completely or consistently graded (a
 missing or unreadable grade, correct and not found on the same row, more supporting citations than citations), with
