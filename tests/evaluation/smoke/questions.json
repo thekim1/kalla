@@ -1,5 +1,5 @@
 {
-  "description": "Smoke evaluation set (P1 item 17; knowledge design 16.4): 30 questions over the fictional documents in documents/. expected = the documents (file names) a correct answer cites. Used by Kalla.Api.Tests SmokeEvaluationTests and the evaluation-smoke CI job.",
+  "description": "Smoke evaluation set (P1 item 17; knowledge design 16.4): 30 questions over the fictional documents in documents/. expected = the documents (file names) a correct answer cites. Used by Kalla.Api.Tests SmokeEvaluationTests and the evaluation smoke inside verify.yml's backend job.",
   "questions": [
     {
       "id": "q01",
