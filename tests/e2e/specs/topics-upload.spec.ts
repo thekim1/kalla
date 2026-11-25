@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
-import { accepted, eventually, getJson, login } from '../helpers'
+import { accepted, eventually, getJson, login, ready, scan } from '../helpers'
 
 // Topics picked from the sections found (B-64) and the topic form (B-65; admin design §5.5.2, Decisions "Topics
 // editor"): a knowledge base of files with two folders of five files suggests both folders; ticking them and Add 2
@@ -24,7 +24,6 @@ async function shot(page: Page, name: string): Promise<void> {
 
 test('two folders picked as topics are saved through one plan, pending, then counted after the re-chunk', async ({ page }) => {
   test.setTimeout(8 * 60_000)
-  // Not first by name: the accessibility spec scans the first knowledge base of the list (#1064).
   const collection = `Topics ${crypto.randomUUID().slice(0, 8)}`
   await login(page, 'rag-department-admin')
 
@@ -58,8 +57,14 @@ test('two folders picked as topics are saved through one plan, pending, then cou
     return items.length === 10 && items.every(f => f.state === 'indexed')
   }, 'the ten files are indexed')
 
-  // The Topics tab suggests both folders, each with its proposed topic.
+  // A knowledge base of files on purpose: its hidden file inputs are no pointer targets, and the pages pass axe (#1064).
   const collectionId = new URL(page.url()).pathname.split('/')[2]!
+  await ready(page, `/collections/${collectionId}?tab=content`)
+  await scan(page, 'a knowledge base of files: Content')
+  await ready(page, `/sources/${sourceId}`)
+  await scan(page, 'a knowledge base of files: its source')
+
+  // The Topics tab suggests both folders, each with its proposed topic.
   await page.goto(`/collections/${collectionId}?tab=topics`)
   const suggested = page.getByTestId('topic-suggestions')
   await expect(suggested.getByTestId('topic-section')).toHaveCount(2)
