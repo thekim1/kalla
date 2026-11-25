@@ -12,8 +12,8 @@ public sealed record SmokeSeed(Guid CollectionId, Guid SourceId, IReadOnlyDictio
 /// The evaluation smoke set (<c>tests/evaluation/smoke</c>; P1 item 17, knowledge design §16.4): 13 fictional Markdown
 /// pages and 30 questions. <see cref="SeedAsync"/> writes the pages as one public upload collection through
 /// <see cref="ContentFixtureWriter"/>, without worker or parser: one chunk per paragraph, heading path
-/// <c>Title › Section</c>, the writer's embedding function (the FakeGateway's in tests). The evaluation-smoke CI job
-/// ingests the same files through the pipeline instead.
+/// <c>Title › Section</c>, the writer's embedding function (the FakeGateway's in tests). The evaluation smoke (in
+/// verify.yml's backend job) ingests the same files through the pipeline instead.
 /// </summary>
 public static class SmokeSet
 {
