@@ -8,6 +8,7 @@ import TextAreaField from '@/components/ui/TextAreaField.vue'
 import TextField from '@/components/ui/TextField.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiDrawer from '@/components/ui/UiDrawer.vue'
+import { useDebouncedWatch } from '@/composables/useDebouncedWatch'
 import { useFormErrors } from '@/composables/useFormErrors'
 import { ASSISTANT_TESTS as L, COMMON } from '@/utils/labels'
 
@@ -33,7 +34,6 @@ const found = ref<DocumentSummary[]>([])
 const saving = ref(false)
 const form = useFormErrors({ question: 'test-question', expectedBehaviour: 'test-question-behaviour', expectedDocumentId: 'test-question-search', expectedPhrase: 'test-question-phrase' })
 const collectionOptions = computed(() => props.collections.map((c) => ({ value: c.id, label: c.name })))
-let timer: ReturnType<typeof setTimeout> | undefined
 let searchRequest = 0
 
 const titleOf = (d: { title: string | null; displayName: string | null; url: string | null }, id: string) => d.title ?? d.displayName ?? d.url ?? id
@@ -54,10 +54,8 @@ watch(
   },
 )
 
-watch([search, collectionId], () => {
-  if (timer) clearTimeout(timer)
-  timer = setTimeout(() => void runSearch(), 250)
-})
+// The document search once the field and the knowledge base stand still for 250 ms (useDebouncedWatch, #980).
+useDebouncedWatch(() => [search.value, collectionId.value], () => void runSearch(), 250)
 
 async function runSearch(): Promise<void> {
   const mine = ++searchRequest
