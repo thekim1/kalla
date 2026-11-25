@@ -810,7 +810,7 @@ export const TOPICS = {
 
 /** The Map as a table (admin design §5.5.6). */
 export const MAP = {
-  lead: 'One row per path from a department’s knowledge base to an assistant and the channel that offers it, with who is responsible.',
+  lead: 'Which sources feed which knowledge bases, the assistants that use them and the channels that offer them, with who is responsible.',
   department: 'Department',
   allDepartments: 'All',
   show: 'Show',
@@ -831,6 +831,24 @@ export const MAP = {
   filters: 'Filter the map',
   /** The filter row's count (admin design §5.12 *Filters*). */
   shown: (n: number) => `${n} ${n === 1 ? 'row' : 'rows'}`,
+  /** The drawing (admin design §5.5.6, B-67). */
+  view: 'Show as',
+  views: { table: 'Table', drawing: 'Drawing' } as Record<string, string>,
+  drawing: {
+    /** Before the department's name, which is Swedish. */
+    title: 'Map ·',
+    columns: { source: 'Sources', collection: 'Knowledge bases', assistant: 'Assistants', audience: 'Channels' } as Record<string, string>,
+    /** The relations as text, beside the lines (§5.5.6: nothing depends on the drawing). */
+    relations: {
+      source: (names: string) => `Feeds: ${names}`,
+      collection: (names: string) => `Used by: ${names}`,
+      assistant: (names: string) => `Offered in: ${names}`,
+    } as Record<string, (names: string) => string>,
+    draftLink: (name: string) => `${name} (draft)`,
+    noneInColumn: 'None',
+    hint: 'Point at or focus an item to highlight what it feeds and what feeds it.',
+    shown: (n: number) => `${n} ${n === 1 ? 'department' : 'departments'}`,
+  },
 } as const
 
 export const SOURCE = {

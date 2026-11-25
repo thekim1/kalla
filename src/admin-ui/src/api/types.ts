@@ -510,6 +510,8 @@ export interface MapRow {
   collection: {
     id: string; name: string; departmentId: string; departmentName: string; shared: boolean; sharedWith: SharingLevel; classification: Level
     published: boolean; contactName: string | null; contactEmail: string | null
+    /** An own knowledge base's sources, by name (the drawing's first column); none for a shared one. */
+    sources: { id: string; name: string; type: string }[]
   }
   assistant: {
     id: string; name: string; state: string; publishedVersion: number | null; draftOnly: boolean; topics: string[]; contactName: string | null

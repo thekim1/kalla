@@ -15,7 +15,7 @@ vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push: 
 const own: MapRow = {
   collection: {
     id: 'c1', name: 'Blanketter', departmentId: 'd1', departmentName: 'Bygg och miljö', shared: false, sharedWith: 'department', classification: 'internal',
-    published: true, contactName: 'B. Berg', contactEmail: null,
+    published: true, contactName: 'B. Berg', contactEmail: null, sources: [{ id: 's1', name: 'Blanketter (filer)', type: 'upload' }],
   },
   assistant: null,
   audience: null,
@@ -23,7 +23,7 @@ const own: MapRow = {
 const sharedIn: MapRow = {
   collection: {
     id: 'c9', name: 'umea.se', departmentId: 'd9', departmentName: 'Kommunikation', shared: true, sharedWith: 'municipality', classification: 'public',
-    published: true, contactName: 'K. Lund', contactEmail: null,
+    published: true, contactName: 'K. Lund', contactEmail: null, sources: [],
   },
   assistant: {
     id: 'a1', name: 'Permits assistant', state: 'active', publishedVersion: 3, draftOnly: false, topics: ['bygglov'], contactName: 'A. Andersson', contactEmail: null,
@@ -93,6 +93,34 @@ describe('Map (admin design §5.5.6, as a table)', () => {
     expect(map.mock.calls.map((c) => c[0])).toEqual([mine])
     expect(wrapper.find('[data-test=clear-filters]').exists()).toBe(false)
     expect(wrapper.findAll('[data-test=map] tbody tr')).toHaveLength(1)
+    route.query = {}
+    wrapper.unmount()
+  })
+
+  it('switches to the drawing, one card per department, and keeps the switch in the address apart from the filters (B-67)', async () => {
+    setActivePinia(createPinia())
+    vi.spyOn(api.organisation, 'departments').mockResolvedValue([department({ id: 'd1', name: 'Bygg och miljö' }), department({ id: 'd2', name: 'Kultur' })])
+    vi.spyOn(api.organisation, 'map').mockImplementation(async (id) => ({ departmentId: id, departmentName: id === 'd1' ? 'Bygg och miljö' : 'Kultur', rows: id === 'd1' ? [own, sharedIn, draftOnly] : [] }))
+    route.query = { view: 'drawing', show: 'unlinked' }
+    const wrapper = mount(MapView, { global: { stubs: { RouterLink: RouterLinkStub } } })
+    await flushPromises()
+    expect(wrapper.find('[data-test=map]').exists()).toBe(false)
+    // Kultur has nothing to show: one drawing, with the unlinked knowledge base and its source only.
+    const drawings = wrapper.findAll('[data-test=map-drawing]')
+    expect(drawings).toHaveLength(1)
+    expect(drawings[0]!.get('h2').text()).toBe(`${MAP.drawing.title} Bygg och miljö`)
+    expect(drawings[0]!.findAll('[data-test=map-node]').map((n) => n.text())).toEqual([
+      expect.stringContaining('Blanketter (filer)'), expect.stringContaining('Blanketter'),
+    ])
+    expect(wrapper.get('[data-test=filter-count]').text()).toBe(MAP.drawing.shown(1))
+    // Clear filters leaves the view as it is.
+    await wrapper.get('[data-test=clear-filters]').trigger('click')
+    await flushPromises()
+    expect(replace).toHaveBeenLastCalledWith({ query: { view: 'drawing' } })
+    expect(wrapper.findAll('[data-test=map-node]')).toHaveLength(6)
+    await wrapper.get('[data-test=map-view] button[aria-pressed=false]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test=map]').exists()).toBe(true)
     route.query = {}
     wrapper.unmount()
   })

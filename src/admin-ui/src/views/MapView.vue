@@ -6,6 +6,8 @@ import AsyncState from '@/components/ui/AsyncState.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import FilterChip from '@/components/ui/FilterChip.vue'
+import SegmentedControl from '@/components/ui/SegmentedControl.vue'
+import MapDrawing from '@/components/map/MapDrawing.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import { IS_ID, ONE_OF, useQueryFilters } from '@/composables/useQueryFilters'
 import { useLoadable } from '@/stores/loadable'
@@ -13,7 +15,8 @@ import { FILTERS, MAP, PAGE, SHARING_LABEL } from '@/utils/labels'
 
 // The Map as a table (admin design §5.5.6, P1b): one row per department → knowledge base → assistant → channel path,
 // with the responsible contact, filtered by department and by what to show: chips kept in the address (§5.12 *Filters*;
-// `?department=…&show=shared`). The drawing (B-67, with its Table / Drawing switch on the same row) comes later.
+// `?department=…&show=shared`). **Table** / **Drawing** at the row's end (`?view=drawing`, B-67): the drawing is one card per
+// department, with the same filters.
 type Show = 'all' | 'shared' | 'unlinked'
 interface Row extends MapRow {
   key: string
@@ -21,6 +24,9 @@ interface Row extends MapRow {
 }
 const departments = ref<Department[]>([])
 const { filters, active: set, clear } = useQueryFilters({ department: '', show: 'all' }, { department: IS_ID, show: ONE_OF(['all', 'shared', 'unlinked']) })
+// The view is not a filter: Clear filters leaves it as it is.
+const { filters: shape } = useQueryFilters({ view: 'table' }, { view: ONE_OF(['table', 'drawing']) })
+const viewOptions = ['table', 'drawing'].map((v) => ({ value: v, label: MAP.views[v]! }))
 const filterRow = ref<HTMLElement | null>(null)
 const maps = useLoadable<DepartmentMap[]>([])
 /** The filters that are set and shown: a single-department user has no department chip to clear. */
@@ -35,12 +41,14 @@ const columns: Column[] = [
   { key: 'channel', label: MAP.channel },
   { key: 'responsible', label: MAP.responsible },
 ]
+/** What to show: everything, the shared knowledge bases (shared in or out), or those no assistant uses. */
+const showing = (r: MapRow) => filters.show !== 'shared' && filters.show !== 'unlinked'
+  || (filters.show === 'shared' ? r.collection.shared || r.collection.sharedWith !== 'department' : r.assistant === null)
 const rows = computed<Row[]>(() =>
-  maps.data.value
-    .flatMap((m) => m.rows.map((r, i) => ({ ...r, department: m.departmentName, key: `${m.departmentId}-${i}` })))
-    .filter((r) => filters.show !== 'shared' && filters.show !== 'unlinked'
-      || (filters.show === 'shared' ? r.collection.shared || r.collection.sharedWith !== 'department' : r.assistant === null)),
+  maps.data.value.flatMap((m) => m.rows.map((r, i) => ({ ...r, department: m.departmentName, key: `${m.departmentId}-${i}` }))).filter(showing),
 )
+/** The drawing: one per department that has something to show. */
+const drawings = computed(() => maps.data.value.map((m) => ({ id: m.departmentId, name: m.departmentName, rows: m.rows.filter(showing) })).filter((d) => d.rows.length))
 
 /** Own knowledge bases show how they are shared; a shared-in one shows its owner instead. */
 const sharing = (r: Row) => (r.collection.shared || r.collection.sharedWith === 'department' ? MAP.none : SHARING_LABEL[r.collection.sharedWith])
@@ -78,10 +86,17 @@ onMounted(async () => {
     <FilterChip v-if="departments.length > 1" v-model="filters.department" :label="MAP.department" :options="departmentOptions" :any="MAP.allDepartments" />
     <FilterChip v-model="filters.show" :label="MAP.show" :options="showOptions" :any="MAP.showOptions.all!" unset="all" />
     <UiButton v-if="active.length" size="sm" variant="quiet" class="max-md:h-11" data-test="clear-filters" @click="clear(filterRow)">{{ FILTERS.clear }}</UiButton>
-    <p class="ml-auto text-small text-fg-2" aria-live="polite" data-test="filter-count">{{ maps.loaded.value ? MAP.shown(rows.length) : '' }}</p>
+    <p class="ml-auto text-small text-fg-2" aria-live="polite" data-test="filter-count">
+      {{ maps.loaded.value ? (shape.view === 'drawing' ? MAP.drawing.shown(drawings.length) : MAP.shown(rows.length)) : '' }}
+    </p>
+    <SegmentedControl v-model="shape.view" :options="viewOptions" :label="MAP.view" data-test="map-view" />
   </form>
   <AsyncState :loading="maps.loading.value" :error="maps.error.value" :empty="rows.length === 0" :empty-text="MAP.empty" @retry="load">
-    <DataTable :columns="columns" :rows="rows" :row-key="(r) => r.key" :caption="MAP.caption" :row-to="rowTo" data-test="map">
+    <div v-if="shape.view === 'drawing'" class="grid gap-6" data-test="map-drawings">
+      <p class="m-0 text-small text-fg-2 max-md:hidden">{{ MAP.drawing.hint }}</p>
+      <MapDrawing v-for="d in drawings" :key="d.id" :department-name="d.name" :rows="d.rows" />
+    </div>
+    <DataTable v-else :columns="columns" :rows="rows" :row-key="(r) => r.key" :caption="MAP.caption" :row-to="rowTo" data-test="map">
       <template #cell-department="{ row }">{{ row.department }}</template>
       <template #cell-collection="{ row }">
         <span class="font-medium">{{ row.collection.name }}</span>

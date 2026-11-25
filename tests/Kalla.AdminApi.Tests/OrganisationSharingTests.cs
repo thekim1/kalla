@@ -433,6 +433,8 @@ public sealed class OrganisationSharingTests(AdminDatabaseFixture database, Admi
             c.GetProperty("shared").GetBoolean().ShouldBeTrue();
             c.GetProperty("departmentId").GetGuid().ShouldBe(seed.Owner);
             c.GetProperty("contactName").GetString().ShouldBe("K. Lund");
+            // A shared knowledge base's sources are its owner's: none on the user's map.
+            c.GetProperty("sources").GetArrayLength().ShouldBe(0);
         }
 
         var published = shared.Single(r => r.GetProperty("assistant").GetProperty("id").GetGuid() == permits);
@@ -450,6 +452,10 @@ public sealed class OrganisationSharingTests(AdminDatabaseFixture database, Admi
         var ownerRow = ownerMap.GetProperty("rows").EnumerateArray().ShouldHaveSingleItem();
         ownerRow.GetProperty("collection").GetProperty("sharedWith").GetString().ShouldBe(CollectionSharingLevels.Municipality);
         ownerRow.GetProperty("assistant").ValueKind.ShouldBe(JsonValueKind.Null);
+        // Its own knowledge base's sources, for the drawing's first column (B-67).
+        var source = ownerRow.GetProperty("collection").GetProperty("sources").EnumerateArray().ShouldHaveSingleItem();
+        (source.GetProperty("id").GetGuid(), source.GetProperty("name").GetString(), source.GetProperty("type").GetString())
+            .ShouldBe((seed.Source, "umea.se bygga", SourceTypes.Crawl));
         (await owner.GetAsync($"/api/organisation/departments/{seed.User}/map", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         using var platform = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         (await platform.GetAsync($"/api/organisation/departments/{seed.User}/map", Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
