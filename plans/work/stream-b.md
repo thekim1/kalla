@@ -44,7 +44,7 @@ Beside P2 wave 1: take B-64 when a wave item waits, or after it. `proposals/topi
 
 After wave 1, or beside it when a wave-1 item waits.
 
-### [ ] B-67 The drawn Map
+### [x] B-67 The drawn Map (#1074)
 - **Do:** admin §5.5.6's drawing beside the existing table (**Table** / **Drawing**): one column per stage, plain SVG
   lines next to lists that carry the same relations as text, selecting an item highlights what it feeds and what feeds
   it; from the same `GET /api/organisation/departments/{id}/map` (sources added to its rows if missing).
