@@ -64,6 +64,33 @@ In `backup.prom`: `rag_backup_age_seconds` under 93600 (26 h), `rag_backup_repo_
 `rag_upload_backup_last_success_timestamp_seconds` within the last 30 minutes (not with an S3 target). These are the
 thresholds of the proposed alerts below; anything else: *Where to look first*.
 
+Then open the admin's **Home** and read **Needs attention**. It lists what the platform found that a person has to act
+on: a source whose last three runs failed or whose crawls stay incomplete, a run held for the deletion decision,
+personal data flagged in a public knowledge base, an assistant's or knowledge base's gateway key that can no longer be
+used, a failing organisation or model sync, a retrieval or answer evaluation that got worse, an Open WebUI feedback
+import that keeps failing, and an assistant nobody has used in 90 days. Each item links to the page where it is fixed;
+an item goes once its cause is gone.
+
+**Gateway credential keys expire**, and nothing in Källa reminds anyone: Home's reminder covers only the sign-in
+client secret stored by the setup wizard. When a credential key is issued or rotated, put its expiry date in the team's
+calendar with a reminder a month ahead, and rotate it then ([production setup](production-setup.md), *Gateway
+credential keys*). A key past its expiry stops every model call of the service that uses it.
+
+## The nightly answer run
+
+Every night, every published and active assistant whose knowledge bases have test questions answers up to
+*Questions per assistant and night* of them (100 by default), and the evaluation's judge model rates each answer. A
+night therefore costs up to that many answers **and** as many judge calls per such assistant, charged to the
+assistant's gateway key. Nothing runs while no judge model is set (*Settings → Evaluation*).
+
+- **Switch:** *Settings → Evaluation*, *Run the nightly answer evaluation* (off stores
+  `Settings.EvaluationAnswerQuestions = 0`; on again starts at 100), and *Questions per assistant and night* (1–100).
+  There is no switch per assistant.
+- **In the cost figures:** the steps `eval-answer-chat` (the answers) and `eval-answer` (the judge), under the client
+  `admin-console` (*Reading Källa's cost beside the gateway's*, below).
+- **Results:** each assistant's *Quality* tab; an answer score 5 points under its 28-day median is an item on Home's
+  *Needs attention*.
+
 ## Reading Källa's cost beside the gateway's
 
 Källa meters its own model calls so editors can see what each assistant and knowledge base costs, per step and
@@ -738,6 +765,22 @@ Also for G1 and W2:
 - *Feedback snapshots* cover only rated conversations, as of the rating.
 - *Backups of Open WebUI's data (the volume `kalla-openwebui-data`)*: none in P0, so a deleted conversation cannot be recovered.
 - Open WebUI (the profile `openwebui`) is off by default and not deployed in P0 (production-setup.md, *Open WebUI*).
+
+## Adding a department
+
+A department comes from the gateway's organisation, so it starts there:
+
+1. **In the gateway's admin** (a gateway admin): create the department and its team or teams, and, if people are to
+   join by group, the department's member groups. Then, under *Access → Integrations → Kalla*, create the department's
+   **assigned keys** (role *Assigned*), with the models, residencies and budget its assistants and knowledge bases
+   may use ([portainer.md](portainer.md), step 7; [production setup](production-setup.md), *Gateway credential keys*).
+2. **In Källa's admin:** *Organisation → Fetch now* (or wait up to 5 minutes). The department appears with its teams
+   and member groups, and its assigned keys become choices on its knowledge bases and assistants.
+3. **People:** a role from the provider's role claim or from *Settings → Role groups*, and the department from the
+   `departmentCodes` claim or from a member group of the department ([how it works](how-it-works.md), *Signing in to
+   the admin UI*). Both apply at each person's next sign-in.
+4. **Content:** the department's admins create its knowledge bases and assistants and pick one of its assigned keys on
+   each. An object of another department stays invisible to them.
 
 ## Gateway keys, budgets and the read-back
 
