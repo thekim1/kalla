@@ -17,6 +17,7 @@ describe('Apps and keys page (admin design §5.9, §5.9.1)', () => {
     setActivePinia(createPinia())
     vi.spyOn(api.clients, 'list').mockResolvedValue([
       { id: 'c1', name: 'Open WebUI', kind: 'open-webui', classificationCeiling: 'internal', isEnabled: true, isManagedByDeployment: false, activeKeys: 2, lastUsedAt: null },
+      { id: 'c2', name: 'Search', kind: 'integration', classificationCeiling: 'public', isEnabled: false, isManagedByDeployment: false, activeKeys: 0, lastUsedAt: null },
     ])
     const get = vi.spyOn(api.clients, 'get').mockResolvedValue({ id: 'c1', name: 'Open WebUI', kind: 'open-webui', assistants: [] } as unknown as Client)
     vi.spyOn(api.keys, 'list').mockResolvedValue([])
@@ -27,8 +28,13 @@ describe('Apps and keys page (admin design §5.9, §5.9.1)', () => {
     expect(cells[0]).toContain('Open WebUI')
     expect(cells[1]).toContain(L.kinds['open-webui']!.title)
     expect(cells[2]).toContain(LEVEL_LABEL.internal)
-    expect(cells[4]).toContain('2')
-    expect(cells[5]).toContain(L.neverUsed)
+    expect(cells[3]).toContain('2')
+    expect(cells[4]).toContain(L.neverUsed)
+    // Never used is grey; enabled is the normal case, so only an app that is off has a badge (admin §5.12 rule 8).
+    expect(wrapper.get('tbody tr').find('td:last-child span').classes()).toContain('text-fg-3')
+    const rows = wrapper.findAll('tbody tr')
+    expect(rows[0]!.find('[data-test=client-off]').exists()).toBe(false)
+    expect(rows[1]!.get('[data-test=client-off]').text()).toBe(L.off)
 
     await wrapper.get('tbody tr').trigger('click')
     await flushPromises()

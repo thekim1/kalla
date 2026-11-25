@@ -158,7 +158,7 @@ async function save(): Promise<void> {
         />
         <TextField
           :id="id('requestsPerMinute')" v-model="values.requestsPerMinute" :label="K.requestsPerMinute" :hint="PLATFORM.fieldHints.requestsPerMinute"
-          :error="form.errors.requestsPerMinute" inputmode="numeric"
+          :error="form.errors.requestsPerMinute" inputmode="numeric" short
         />
       </div>
     </details>

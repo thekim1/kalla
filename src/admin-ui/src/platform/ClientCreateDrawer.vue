@@ -141,7 +141,7 @@ async function create(): Promise<void> {
       <fieldset v-if="step === 1" class="grid gap-2" data-test="kinds">
         <legend class="sr-only">{{ L.steps.kind }}</legend>
         <label
-          v-for="k in KINDS" :key="k" class="flex gap-3 rounded-card border border-border p-3"
+          v-for="k in KINDS" :key="k" class="flex gap-3 rounded-card border border-border p-3 has-checked:bg-accent-soft has-checked:shadow-inset-selected"
           :class="unavailable(k) ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'"
         >
           <input

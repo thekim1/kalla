@@ -67,7 +67,8 @@ watch(() => props.section, load, { immediate: true })
 </script>
 
 <template>
-  <div data-test="settings-section-form">
+  <!-- A page form at most 680 px wide (admin §5.12 rule 3). -->
+  <div class="max-w-[680px]" data-test="settings-section-form">
     <p v-if="loading && !loaded" role="status">{{ COMMON.loading }}</p>
     <InlineError v-if="error" :message="problemMessage(error)" class="mb-4" />
     <template v-if="loaded">
@@ -79,7 +80,7 @@ watch(() => props.section, load, { immediate: true })
       />
       <GenericForm
         v-else :key="formKey" :form-id="`settings-${section}`" :fields="loaded.fields" :initial="loaded.initial" method="put" :url="url()"
-        :submit-label="PLATFORM.form.save" :models="loaded.models" @saved="saved" @cancel="reset"
+        :submit-label="PLATFORM.form.save" :models="loaded.models" fold-json @saved="saved" @cancel="reset"
       />
     </template>
   </div>

@@ -44,7 +44,7 @@ async function save(): Promise<void> {
 <template>
   <form id="settings-pii" class="grid gap-6" novalidate data-test="pii-settings" @submit.prevent="save">
     <TextAreaField id="pii-ownDomains" v-model="form.ownDomains" :label="P.ownDomains" :hint="P.ownDomainsHint" :error="errors.errors.ownDomains" :rows="3" mono />
-    <TextField id="pii-nerMinScore" v-model="form.nerMinScore" :label="P.nerMinScore" :hint="P.nerMinScoreHint" :error="errors.errors.nerMinScore" inputmode="decimal" />
+    <TextField id="pii-nerMinScore" v-model="form.nerMinScore" :label="P.nerMinScore" :hint="P.nerMinScoreHint" :error="errors.errors.nerMinScore" inputmode="decimal" short />
 
     <fieldset id="pii-rules" class="grid gap-3" aria-describedby="pii-rules-hint" data-test="pii-rules">
       <legend class="mb-1 font-medium">{{ P.rules }}</legend>
@@ -67,7 +67,7 @@ async function save(): Promise<void> {
             <td class="w-20 py-2 sm:w-36">
               <TextField
                 v-if="form.types[t]!.flag === 'threshold'" :id="`pii-min-${t}`" v-model="form.types[t]!.min" :label="`${P.min}: ${P.types[t]}`"
-                :error="errors.errors[`min.${t}`]" inputmode="numeric" class="[&_label]:sr-only"
+                :error="errors.errors[`min.${t}`]" inputmode="numeric" short class="[&_label]:sr-only"
               />
             </td>
           </tr>
@@ -84,8 +84,8 @@ async function save(): Promise<void> {
         <span id="pii-listLike-label" class="font-medium">{{ P.listLikeOn }}</span>
       </div>
       <div v-if="form.listLike" class="grid gap-4 sm:grid-cols-2">
-        <TextField id="pii-minNames" v-model="form.minNames" :label="P.minNames" :error="errors.errors.minNames" inputmode="numeric" />
-        <TextField id="pii-minContacts" v-model="form.minContacts" :label="P.minContacts" :error="errors.errors.minContacts" inputmode="numeric" />
+        <TextField id="pii-minNames" v-model="form.minNames" :label="P.minNames" :error="errors.errors.minNames" inputmode="numeric" short />
+        <TextField id="pii-minContacts" v-model="form.minContacts" :label="P.minContacts" :error="errors.errors.minContacts" inputmode="numeric" short />
       </div>
     </fieldset>
 

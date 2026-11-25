@@ -1519,7 +1519,9 @@ export const PLATFORM = {
   gatewayModels: {
     limitsSource: 'Limits from',
     limitsSources: { catalog: 'AI gateway', manual: 'Manual' } as Record<string, string>,
-    listTitle: 'The AI gateway’s models',
+    tabs: { label: 'Models and embedding', models: 'Models', embedding: 'Embedding' },
+    showTest: 'Show test models',
+    showTestHint: (count: number) => `${count} of the AI gateway’s models are the test gateway’s (fake-…).`,
     limits: 'Limits',
     limitsFromGateway: 'The AI gateway sends this model’s limits, so they cannot be changed here.',
     gateway: 'AI gateway',
@@ -1556,7 +1558,7 @@ export const PLATFORM = {
     listHint: 'One value per line.',
     jsonHint: 'JSON; the server checks the content.',
     membersAbove: 'The settings above are not repeated here.',
-    advancedJson: 'Advanced (JSON)',
+    advancedJson: 'Advanced: edit as JSON',
     advancedJsonHint: 'The settings that have no field of their own yet.',
     secretOnce: 'The key is shown only now. Copy it and store it safely.',
     copy: 'Copy',
@@ -1571,8 +1573,10 @@ export const PLATFORM_CLIENTS = {
   lead: 'The apps that use the platform, each with its own keys and the assistants it offers.',
   add: 'Add app',
   empty: 'No app yet. Use Add app to connect one.',
-  columns: { name: 'Name', kind: 'Type', ceiling: 'Information class', enabled: 'Enabled', activeKeys: 'Active keys', lastUsed: 'Last used' },
+  columns: { name: 'Name', kind: 'Type', ceiling: 'Information class', activeKeys: 'Active keys', lastUsed: 'Last used' },
   neverUsed: 'Never used',
+  /** The badge of an app that is switched off; an enabled app shows none. */
+  off: 'Off',
   /** One card per client kind in the Add app drawer's first step. */
   kinds: {
     'open-webui': { title: 'Open WebUI', description: 'The chat for staff: Open WebUI calls the platform with one key and forwards who the user is.' },
@@ -2879,10 +2883,9 @@ export const SETTINGS_PAGE = {
   section: 'Section',
   saved: (section: string) => `${section} saved`,
   groups: {
-    answers: 'Chat and answers',
+    answers: 'Answers',
     content: 'Content',
     protection: 'Data protection',
-    quality: 'Quality',
     platform: 'Platform',
   },
   /** One line under each section's title. */

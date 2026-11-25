@@ -79,6 +79,9 @@ async function open(name: string) {
   document.cookie = 'RAG-XSRF-TOKEN=t; path=/'
   const wrapper = mount(PlatformResourceView, { props: { resource: 'gateway-models' }, attachTo: document.body })
   await flushPromises()
+  // The panels are on the Models page's Embedding tab (admin design ยง5.10).
+  await wrapper.get('#resource-gateway-models-tab-embedding').trigger('click')
+  await flushPromises()
   await wrapper.get(`[data-test="profile-edit-${name}"]`).trigger('click')
   await flushPromises()
   return wrapper
@@ -92,6 +95,9 @@ describe('Gateway models: embedding profiles editable before use (admin design ย
     setActivePinia(createPinia())
     stub()
     const wrapper = mount(PlatformResourceView, { props: { resource: 'gateway-models' }, attachTo: document.body })
+    await flushPromises()
+    // The panels are on the Models page's Embedding tab (admin design ยง5.10).
+    await wrapper.get('#resource-gateway-models-tab-embedding').trigger('click')
     await flushPromises()
     const table = wrapper.get('[data-test="embedding-profiles"]')
     const rows = table.findAll('tbody tr')
@@ -189,6 +195,9 @@ describe('Gateway models: embedding profiles editable before use (admin design ย
     const fetch = stub({ list: [] })
     const wrapper = mount(PlatformResourceView, { props: { resource: 'gateway-models' }, attachTo: document.body })
     await flushPromises()
+    // The panels are on the Models page's Embedding tab (admin design ยง5.10).
+    await wrapper.get('#resource-gateway-models-tab-embedding').trigger('click')
+    await flushPromises()
     expect(wrapper.get('[data-test=profiles-empty]').text()).toBe(E.none)
     await wrapper.get('[data-test=profile-create]').trigger('click')
     await flushPromises()
@@ -220,6 +229,9 @@ describe('Gateway models: embedding profiles editable before use (admin design ย
       post: () => json({ title: 'Unprocessable', status: 422, code: 'profile_test_failed', params: { error: 'model_not_allowed' }, test }, 422),
     })
     const wrapper = mount(PlatformResourceView, { props: { resource: 'gateway-models' }, attachTo: document.body })
+    await flushPromises()
+    // The panels are on the Models page's Embedding tab (admin design ยง5.10).
+    await wrapper.get('#resource-gateway-models-tab-embedding').trigger('click')
     await flushPromises()
     await wrapper.get('[data-test=profile-create]').trigger('click')
     await flushPromises()

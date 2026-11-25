@@ -46,6 +46,8 @@ export interface GatewayPage {
   label: string
 }
 
+export type ResourcePanel = 'gateway-context' | 'embedding-profiles' | 'embedding-canary'
+
 export interface PlatformResource {
   id: string
   label: string
@@ -75,8 +77,15 @@ export interface PlatformResource {
   remove?: { path: string; deleteNote?: string }
   /** A heading above the list, for a page whose panels come first. */
   listTitle?: string
-  /** Panels shown above the list, in order. */
-  panels?: readonly ('gateway-context' | 'embedding-profiles' | 'embedding-canary')[]
+  /** Panels shown above the list (above the tabs, with `tabs`), in order. */
+  panels?: readonly ResourcePanel[]
+  /**
+   * The page's tabs (admin design §5.10, Models): the list's own tab first, named `list`, then a tab per entry of
+   * `others` with its panels. The address names a tab other than the first (`?tab=<id>`).
+   */
+  tabs?: { label: string; list: string; others: readonly { id: string; label: string; panels: readonly ResourcePanel[] }[] }
+  /** Rows the list hides behind *Show test models* (admin design §5.10: the FakeGateway's `fake-*` models). */
+  testRow?: (row: Row) => boolean
   /** The row's edit fields that pick a gateway model (#466); the form then loads the mirror with its availability. */
   modelFields?: (row: Row) => readonly ModelField[] | undefined
 }
@@ -203,8 +212,14 @@ export const platformResources: PlatformResource[] = [
             },
           ]
         : [],
-    listTitle: PLATFORM.gatewayModels.listTitle,
-    panels: ['gateway-context', 'embedding-profiles', 'embedding-canary'],
+    // Admin design §5.10: the gateway's version and features in a small card on top, then Models (first) and Embedding.
+    panels: ['gateway-context'],
+    tabs: {
+      label: PLATFORM.gatewayModels.tabs.label,
+      list: PLATFORM.gatewayModels.tabs.models,
+      others: [{ id: 'embedding', label: PLATFORM.gatewayModels.tabs.embedding, panels: ['embedding-profiles', 'embedding-canary'] }],
+    },
+    testRow: (row) => String(row.name).startsWith('fake-'),
   },
 ]
 

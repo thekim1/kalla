@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { request } from '@/api/client'
 import InlineError from '@/components/ui/InlineError.vue'
 import TextAreaField from '@/components/ui/TextAreaField.vue'
@@ -34,6 +34,7 @@ async function save(): Promise<void> {
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     jsonError.value = PLATFORM.form.invalidJson
+    await nextTick()
     document.getElementById('platform-crawl-other')?.focus()
     return
   }
@@ -54,10 +55,14 @@ async function save(): Promise<void> {
   <div class="grid gap-6" data-test="crawl-settings">
     <!-- The table's drawer has a form of its own, so it stays outside this one. -->
     <form id="platform-crawl" novalidate @submit.prevent="save">
-      <TextAreaField
-        id="platform-crawl-other" v-model="other" :label="PLATFORM.politeness.otherSettings" :hint="PLATFORM.politeness.otherHint"
-        :error="jsonError" :rows="8" mono
-      />
+      <!-- The members without a field of their own, under Advanced as in every section (admin design §5.10). -->
+      <details :open="!!jsonError" data-test="advanced-json">
+        <summary class="cursor-pointer font-medium">{{ PLATFORM.form.advancedJson }}</summary>
+        <TextAreaField
+          id="platform-crawl-other" v-model="other" class="mt-3" :label="PLATFORM.politeness.otherSettings" :hint="PLATFORM.politeness.otherHint"
+          :error="jsonError" :rows="8" mono
+        />
+      </details>
     </form>
     <HostPolitenessTable v-model="overrides" />
     <InlineError v-if="saveError" :message="saveError" />

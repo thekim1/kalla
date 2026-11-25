@@ -13,7 +13,7 @@ import UiTabs from '@/components/ui/UiTabs.vue'
 import { useLoadable } from '@/stores/loadable'
 import { useUiStore } from '@/stores/ui'
 import { formatDate, formatDateTime, formatRelative } from '@/utils/format'
-import { COMMON, LEVEL_LABEL, PLATFORM, PLATFORM_CLIENTS } from '@/utils/labels'
+import { LEVEL_LABEL, PLATFORM, PLATFORM_CLIENTS } from '@/utils/labels'
 import ClientCreateDrawer from './ClientCreateDrawer.vue'
 import ClientDrawer from './ClientDrawer.vue'
 import { KEY_STATUS_TONE } from './clients'
@@ -44,7 +44,6 @@ const columns: Column[] = [
   { key: 'name', label: L.columns.name },
   { key: 'kind', label: L.columns.kind },
   { key: 'ceiling', label: L.columns.ceiling },
-  { key: 'enabled', label: L.columns.enabled },
   { key: 'activeKeys', label: L.columns.activeKeys, align: 'right' },
   { key: 'lastUsed', label: L.columns.lastUsed },
 ]
@@ -127,13 +126,14 @@ onMounted(() => {
         <template #cell-name="{ row }">
           <span class="font-medium">{{ row.name }}</span>
           <UiBadge v-if="row.isManagedByDeployment" :label="L.managed" :dot="false" class="ml-2" />
+          <!-- Enabled is the normal case: only an app that is off says so (admin §5.12 rule 8). -->
+          <UiBadge v-if="!row.isEnabled" :label="L.off" class="ml-2" data-test="client-off" />
         </template>
         <template #cell-kind="{ row }">{{ L.kinds[row.kind]?.title ?? row.kind }}</template>
         <template #cell-ceiling="{ row }">{{ LEVEL_LABEL[row.classificationCeiling as ClientSummary['classificationCeiling']] }}</template>
-        <template #cell-enabled="{ row }">{{ row.isEnabled ? COMMON.yes : COMMON.no }}</template>
         <template #cell-activeKeys="{ row }">{{ row.activeKeys }}</template>
         <template #cell-lastUsed="{ row }">
-          <span :title="row.lastUsedAt ? formatDateTime(row.lastUsedAt) : undefined">{{ row.lastUsedAt ? formatRelative(row.lastUsedAt) : L.neverUsed }}</span>
+          <span :title="row.lastUsedAt ? formatDateTime(row.lastUsedAt) : undefined" :class="{ 'text-fg-3': !row.lastUsedAt }">{{ row.lastUsedAt ? formatRelative(row.lastUsedAt) : L.neverUsed }}</span>
         </template>
       </DataTable>
     </AsyncState>
@@ -153,9 +153,9 @@ onMounted(() => {
         </template>
         <template #cell-app="{ row }">{{ row.clientName }}</template>
         <template #cell-status="{ row }"><UiBadge :tone="KEY_STATUS_TONE[row.status] ?? 'neutral'" :label="L.keyStatus[row.status] ?? row.status" /></template>
-        <template #cell-expiresAt="{ row }">{{ row.expiresAt ? formatDate(row.expiresAt) : L.keys.never }}</template>
+        <template #cell-expiresAt="{ row }"><span :class="{ 'text-fg-3': !row.expiresAt }">{{ row.expiresAt ? formatDate(row.expiresAt) : L.keys.never }}</span></template>
         <template #cell-lastUsed="{ row }">
-          <span :title="row.lastUsedAt ? formatDateTime(row.lastUsedAt) : undefined">{{ row.lastUsedAt ? formatRelative(row.lastUsedAt) : L.neverUsed }}</span>
+          <span :title="row.lastUsedAt ? formatDateTime(row.lastUsedAt) : undefined" :class="{ 'text-fg-3': !row.lastUsedAt }">{{ row.lastUsedAt ? formatRelative(row.lastUsedAt) : L.neverUsed }}</span>
         </template>
       </DataTable>
     </AsyncState>

@@ -34,7 +34,7 @@ onMounted(async () => {
         <dt class="text-fg-2">{{ G.version }}</dt>
         <dd class="tabular" data-test="gateway-version">{{ context.version ?? G.unknownVersion }}</dd>
         <dt class="text-fg-2">{{ G.features }}</dt>
-        <dd data-test="gateway-features">{{ context.features.length ? context.features.join(', ') : G.noFeatures }}</dd>
+        <dd data-test="gateway-features" :class="{ 'text-fg-3': !context.features.length }">{{ context.features.length ? context.features.join(', ') : G.noFeatures }}</dd>
       </template>
       <template v-if="readback">
         <dt class="text-fg-2">{{ G.readback }}</dt>

@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { computed, ref, shallowRef, watch } from 'vue'
+import { computed, inject, ref, shallowRef, watch } from 'vue'
+import { routeLocationKey, routerKey } from 'vue-router'
 import { api } from '@/api'
 import { request } from '@/api/client'
 import type { GatewayModel } from '@/api/types'
 import AsyncState from '@/components/ui/AsyncState.vue'
+import CheckField from '@/components/ui/CheckField.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiDrawer from '@/components/ui/UiDrawer.vue'
+import UiTabs from '@/components/ui/UiTabs.vue'
 import { useLoadable } from '@/stores/loadable'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime } from '@/utils/format'
@@ -22,7 +25,7 @@ import GatewayContextPanel from './GatewayContextPanel.vue'
 import SecretOnce from './SecretOnce.vue'
 import GenericForm from './GenericForm.vue'
 import { withModelFields } from './modelFields'
-import { gatewayAdminUrl, resourceById, rowsOf, urlOf, type Operation, type ResourceColumn, type Row, type RowAction } from './resources'
+import { gatewayAdminUrl, resourceById, rowsOf, urlOf, type Operation, type ResourceColumn, type ResourcePanel, type Row, type RowAction } from './resources'
 import { fieldsOf, loadOpenApi, requestSchema, type FieldSpec, type OpenApiDocument } from './schema'
 
 // A platform object's list and its generic form (admin design §5.8): create, edit, and the few non-CRUD actions. `embedded`:
@@ -53,6 +56,29 @@ const openError = ref<unknown>(null)
 const secret = ref<string | null>(null)
 
 const columns = computed<ResourceColumn[]>(() => resource.value?.columns ?? [])
+
+// The page's tabs (resource.tabs): the list's tab is `list`. Injected without a warning where there is no router (the
+// Settings page's embedded lists in unit tests); the address names a tab other than the first.
+const router = inject(routerKey, null)
+const route = inject(routeLocationKey, null)
+const tabOptions = computed(() => {
+  const t = resource.value?.tabs
+  return t ? [{ value: 'list', label: t.list }, ...t.others.map((o) => ({ value: o.id, label: o.label }))] : []
+})
+const tab = ref(String(route?.query.tab ?? 'list'))
+const tabPanels = computed<readonly ResourcePanel[]>(() => resource.value?.tabs?.others.find((o) => o.id === tab.value)?.panels ?? [])
+watch(tabOptions, (options) => {
+  if (options.length && !options.some((o) => o.value === tab.value)) tab.value = 'list'
+}, { immediate: true })
+function switchTab(value: string): void {
+  tab.value = value
+  if (router && route) void router.replace({ query: { ...route.query, tab: value === 'list' ? undefined : value } })
+}
+
+// The FakeGateway's models (resource.testRow) behind Show test models, offered only while there are any.
+const showTest = ref(false)
+const testCount = computed(() => (resource.value?.testRow ? rows.data.value.filter(resource.value.testRow).length : 0))
+const shownRows = computed(() => (showTest.value || !resource.value?.testRow ? rows.data.value : rows.data.value.filter((r) => !resource.value!.testRow!(r))))
 const details = computed(() => (selected.value && resource.value?.details ? resource.value.details(selected.value) : []))
 // A row without an edit opens its details alone; with one, they stand above its form.
 const showDetails = computed(() => details.value.length > 0 && (!editable(selected.value!) || openForm.value?.operation === resource.value!.update))
@@ -215,15 +241,34 @@ watch(() => props.resource, () => {
       <EmbeddingProfilesPanel v-else-if="panel === 'embedding-profiles'" class="mb-6" />
       <EmbeddingCanaryPanel v-else-if="panel === 'embedding-canary'" class="mb-6" />
     </template>
-    <h2 v-if="resource.listTitle" class="mb-3 text-title-3" data-test="list-title">{{ resource.listTitle }}</h2>
-    <AsyncState :loading="rows.loading.value" :error="rows.error.value" :empty="rows.data.value.length === 0" @retry="load">
-      <DataTable
-        :columns="columns" :rows="rows.data.value" :row-key="(row) => String(row[resource!.key])" :caption="resource.label"
-        :clickable="!!resource.update || !!resource.details" @row-click="edit"
-      >
-        <template v-for="c in columns" :key="c.key" #[`cell-${c.key}`]="{ row }">{{ cell(c.value ? c.value(row) : row[c.key]) }}</template>
-      </DataTable>
-    </AsyncState>
+    <UiTabs v-if="tabOptions.length" :id="`resource-${resource.id}`" :model-value="tab" :tabs="tabOptions" :label="resource.tabs!.label" class="mb-6" @update:model-value="switchTab" />
+    <div
+      v-if="tabOptions.length && tab !== 'list'" :id="`resource-${resource.id}-panel-${tab}`" role="tabpanel"
+      :aria-labelledby="`resource-${resource.id}-tab-${tab}`" data-test="tab-panels"
+    >
+      <template v-for="panel in tabPanels" :key="panel">
+        <EmbeddingProfilesPanel v-if="panel === 'embedding-profiles'" class="mb-6" />
+        <EmbeddingCanaryPanel v-else-if="panel === 'embedding-canary'" class="mb-6" />
+        <GatewayContextPanel v-else-if="panel === 'gateway-context'" class="mb-6" />
+      </template>
+    </div>
+    <div
+      v-else :id="tabOptions.length ? `resource-${resource.id}-panel-list` : undefined" :role="tabOptions.length ? 'tabpanel' : undefined"
+      :aria-labelledby="tabOptions.length ? `resource-${resource.id}-tab-list` : undefined"
+    >
+      <h2 v-if="resource.listTitle" class="mb-3 text-title-3" data-test="list-title">{{ resource.listTitle }}</h2>
+      <div v-if="testCount > 0" class="mb-4" data-test="show-test">
+        <CheckField v-model="showTest" :label="PLATFORM.gatewayModels.showTest" :description="PLATFORM.gatewayModels.showTestHint(testCount)" />
+      </div>
+      <AsyncState :loading="rows.loading.value" :error="rows.error.value" :empty="shownRows.length === 0" @retry="load">
+        <DataTable
+          :columns="columns" :rows="shownRows" :row-key="(row) => String(row[resource!.key])" :caption="resource.label"
+          :clickable="!!resource.update || !!resource.details" @row-click="edit"
+        >
+          <template v-for="c in columns" :key="c.key" #[`cell-${c.key}`]="{ row }">{{ cell(c.value ? c.value(row) : row[c.key]) }}</template>
+        </DataTable>
+      </AsyncState>
+    </div>
 
     <UiDrawer v-model:open="drawerOpen" :title="drawerTitle" wide>
       <div v-if="secret" class="grid gap-3">
