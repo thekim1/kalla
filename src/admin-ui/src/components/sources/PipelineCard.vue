@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/api'
-import type { Pipeline, Source, TemplateDetail } from '@/api/types'
+import type { PathRuleJson, Pipeline, Source, TemplateDetail } from '@/api/types'
 import DetailRow from '@/components/ui/DetailRow.vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import SelectField from '@/components/ui/SelectField.vue'
@@ -14,6 +14,7 @@ import UiDrawer from '@/components/ui/UiDrawer.vue'
 import { useAuthStore } from '@/stores/auth'
 import { COMMON, PIPELINE } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
+import { ruleInWords } from '@/utils/topics'
 
 // Bearbetning on the source page (admin design §6.3, §6.6 step 1): the pipeline the source uses, its version and template
 // parameters, and Ändra bearbetning: the parameters as a form from the template's paramsSchema (enum → select, integer →
@@ -45,10 +46,20 @@ const fields = computed(() =>
       label: PIPELINE.params[name] ?? labels?.en ?? labels?.sv ?? name,
       options: kind === 'select' ? (schema.enum as string[]).map((v) => ({ value: v, label: PIPELINE.options[v] ?? v })) : [],
       hint: kind === 'integer' && typeof schema.minimum === 'number' && typeof schema.maximum === 'number'
-        ? PIPELINE.range(schema.minimum, schema.maximum) : name === 'pathRules' ? PIPELINE.pathRulesHint : kind === 'json' ? PIPELINE.json : undefined,
+        ? PIPELINE.range(schema.minimum, schema.maximum) : kind === 'json' ? PIPELINE.json : undefined,
     }
   }),
 )
+/**
+ * Topics (`pathRules`) are edited on the knowledge base's Topics tab (§5.5.2, §5.8; Decisions "Topics editor"): here they
+ * are shown in words, read-only, and a publication of the other parameters sends their stored value unchanged.
+ */
+const editable = computed(() => fields.value.filter((f) => f.name !== 'pathRules'))
+const hasPathRules = computed(() => fields.value.some((f) => f.name === 'pathRules'))
+const storedPathRules = computed<PathRuleJson[]>(() => {
+  const rules = current.value?.definition.params.pathRules
+  return Array.isArray(rules) ? (rules as PathRuleJson[]) : []
+})
 const summary = computed(() =>
   fields.value.filter((f) => f.kind !== 'json').map((f) => {
     const value = current.value?.definition.params[f.name] ?? f.schema.default
@@ -67,7 +78,7 @@ async function load(): Promise<void> {
 }
 
 function edit(): void {
-  for (const f of fields.value) {
+  for (const f of editable.value) {
     values[f.name] = display(f.kind, current.value?.definition.params[f.name] ?? f.schema.default)
     fieldErrors[f.name] = undefined
   }
@@ -76,9 +87,9 @@ function edit(): void {
 }
 
 function parameters(): Record<string, unknown> | null {
-  const result: Record<string, unknown> = {}
+  const result: Record<string, unknown> = hasPathRules.value ? { pathRules: current.value?.definition.params.pathRules ?? [] } : {}
   let ok = true
-  for (const f of fields.value) {
+  for (const f of editable.value) {
     const text = (values[f.name] ?? '').trim()
     fieldErrors[f.name] = undefined
     if (f.kind === 'integer') {
@@ -125,6 +136,15 @@ onMounted(load)
       <DetailRow :label="PIPELINE.name">{{ pipeline.name }}</DetailRow>
       <DetailRow v-if="published" :label="PIPELINE.version">{{ published.number }}<span v-if="draft" class="ml-2 text-fg-2">· {{ PIPELINE.draft(draft.number) }}</span></DetailRow>
       <DetailRow v-for="s in summary" :key="s.label" :label="s.label">{{ s.value }}</DetailRow>
+      <DetailRow v-if="hasPathRules" :label="PIPELINE.params.pathRules ?? 'Topics'" data-test="pipeline-topics">
+        <span class="grid gap-1">
+          <span v-if="storedPathRules.length === 0" class="text-fg-3">{{ PIPELINE.pathRulesNone }}</span>
+          <span v-for="(r, i) in storedPathRules" :key="i" data-test="pipeline-topic"><span class="font-mono">{{ r.tags.join(', ') }}</span>: {{ ruleInWords(r) }}</span>
+          <RouterLink
+            :to="{ name: 'collection', params: { id: source.collectionId }, query: { tab: 'topics' } }" class="text-accent-ink underline" data-test="pipeline-topics-link"
+          >{{ PIPELINE.pathRulesEdit }}</RouterLink>
+        </span>
+      </DetailRow>
     </dl>
     <div v-if="canPublish && template" class="mt-4"><UiButton icon="tune" data-test="edit-pipeline" @click="edit">{{ PIPELINE.edit }}</UiButton></div>
 
@@ -132,7 +152,8 @@ onMounted(load)
       <form id="pipeline-form" class="grid gap-5" novalidate @submit.prevent="publish">
         <p class="text-fg-2">{{ PIPELINE.editLead }}</p>
         <p v-if="copyOnWrite" class="rounded-card bg-sunken p-3 text-small" data-test="copy-on-write">{{ PIPELINE.platformShared }}</p>
-        <template v-for="f in fields" :key="f.name">
+        <p v-if="hasPathRules" class="m-0 text-small text-fg-2" data-test="pipeline-topics-kept">{{ PIPELINE.pathRulesKept }}</p>
+        <template v-for="f in editable" :key="f.name">
           <SelectField v-if="f.kind === 'select'" :id="`param-${f.name}`" v-model="values[f.name]!" :label="f.label" :options="f.options" />
           <TextField
             v-else-if="f.kind === 'integer'" :id="`param-${f.name}`" v-model="values[f.name]!" :label="f.label" :hint="f.hint" inputmode="numeric" short

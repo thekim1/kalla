@@ -21,7 +21,7 @@ function setup(roles: string[]) {
   const auth = useAuthStore()
   auth.user = bffUser({ roles })
   auth.status = 'authenticated'
-  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: {} }, { path: '/publications/:id', name: 'publication', component: {} }] })
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: {} }, { path: '/publications/:id', name: 'publication', component: {} }, { path: '/collections/:id', name: 'collection', component: {} }] })
   vi.spyOn(api.pipelines, 'get').mockResolvedValue(platformPipeline)
   vi.spyOn(api.templates, 'get').mockResolvedValue({
     id: 'website', version: 1, sourceType: 'crawl', deprecated: false, stages: [],
@@ -49,8 +49,9 @@ describe('Processing on the source page (admin design §6.6 step 1)', () => {
     await flushPromises()
     expect(document.body.querySelector('[data-test=copy-on-write]')).not.toBeNull()
     expect(document.body.textContent).toContain('From 200 to 800.')
-    // Topics explains its rules with an example instead of "leave it as it is" (#929).
-    expect(document.body.textContent).toContain(PIPELINE.pathRulesHint)
+    // Topics are edited on the Topics tab: not a field here (B-65, §5.8).
+    expect(document.body.textContent).toContain(PIPELINE.pathRulesKept)
+    expect(document.body.querySelector('#param-pathRules')).toBeNull()
     const tokens = document.body.querySelector<HTMLInputElement>('#param-chunkTokens')!
     expect(tokens.value).toBe('500')
     tokens.value = 'många'
@@ -75,5 +76,27 @@ describe('Processing on the source page (admin design §6.6 step 1)', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('website')
     expect(wrapper.find('[data-test=edit-pipeline]').exists()).toBe(false)
+  })
+
+  it('shows the topics read-only in words with a link to the Topics tab, and keeps them when other parameters are published', async () => {
+    const router = setup(['rag-pipeline-editor'])
+    const rules = [{ match: '/bygga/', on: 'path', tags: ['bygga'] }, { match: 'application/pdf', on: 'mediaType', tags: ['pdf', 'dokument'] }]
+    vi.spyOn(api.pipelines, 'get').mockResolvedValue({
+      ...platformPipeline, departmentId: 'd1',
+      versions: [{ id: 'v1', number: 1, state: 'published', definition: { ...definition, params: { chunkTokens: 500, pathRules: rules } }, publishedAt: '2026-10-01T10:00:00Z' }],
+    })
+    const plan = vi.spyOn(api.pipelines, 'plan').mockResolvedValue({ publicationId: 'pub1', pipelineId: 'p1', draftVersionId: 'v9', draftNumber: 2, copiedOnWrite: false })
+    const wrapper = mount(PipelineCard, { props: { source }, attachTo: document.body, global: { plugins: [router] } })
+    await flushPromises()
+
+    expect(wrapper.findAll('[data-test=pipeline-topic]').map((t) => t.text())).toEqual(['bygga: under /bygga/', 'pdf, dokument: PDF files'])
+    expect(wrapper.get('[data-test=pipeline-topics-link]').attributes('href')).toBe('/collections/c1?tab=topics')
+
+    await wrapper.get('[data-test=edit-pipeline]').trigger('click')
+    await flushPromises()
+    document.body.querySelector<HTMLButtonElement>('[data-test=plan]')!.click()
+    await flushPromises()
+    expect(plan).toHaveBeenCalledWith('p1', { parameters: { chunkTokens: 500, ocr: 'auto', pathRules: rules }, version: '4' })
+    wrapper.unmount()
   })
 })

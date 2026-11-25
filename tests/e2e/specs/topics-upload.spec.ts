@@ -3,10 +3,12 @@ import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { accepted, eventually, getJson, login } from '../helpers'
 
-// Topics picked from the sections found (B-64; admin design §5.5.2, Decisions "Topics editor"): a knowledge base of files
-// with two folders of five files suggests both folders; ticking them and Add 2 topics plans the processing once and
-// confirms it in one dialog with the plan's count; the topics read pending, then are counted after the re-chunk. Runs on
-// the FakeGateway stack with the real worker, on a knowledge base it creates itself.
+// Topics picked from the sections found (B-64) and the topic form (B-65; admin design §5.5.2, Decisions "Topics
+// editor"): a knowledge base of files with two folders of five files suggests both folders; ticking them and Add 2
+// topics plans the processing once and confirms it in one dialog with the plan's count; the topics read pending, then
+// are counted after the re-chunk. A file-type topic is added through the form with its match count, Edit opens a
+// stored rule in words, and Remove takes a topic away. Runs on the FakeGateway stack with the real worker, on a
+// knowledge base it creates itself.
 
 interface UploadFile { fileName: string; state: string }
 interface Topic { tag: string; documents: number | null; pending: boolean }
@@ -95,4 +97,39 @@ test('two folders picked as topics are saved through one plan, pending, then cou
   // The picked folders are now covered: ticked, with their topic.
   await expect(page.getByTestId('topic-covered')).toHaveCount(2)
   await shot(page, '3-counted')
+
+  // B-65: a topic through the form, with what it matches before it is saved.
+  await page.getByTestId('add-topic').click()
+  const form = page.getByRole('dialog', { name: 'Add topic' })
+  await form.getByRole('textbox', { name: 'Topic' }).fill('rutiner')
+  await form.getByRole('radio', { name: 'of the file type' }).check()
+  await form.getByRole('combobox', { name: 'File type' }).selectOption('text/markdown')
+  await expect(form.getByTestId('topic-preview-count')).toHaveText(/^Matches 10 of 10 documents$/)
+  await shot(page, '4-form')
+  await form.getByTestId('topic-form-save').click()
+  const added = page.getByRole('dialog', { name: 'Add 1 topic?' })
+  await expect(added.getByTestId('topics-plan-item')).toContainText('saving processes 10 documents again', { timeout: 60_000 })
+  await added.getByRole('button', { name: 'Confirm' }).click()
+  await expect(added).toBeHidden()
+  await eventually(async () => (await topics()).find(t => t.tag === 'rutiner')?.documents === 10, 'the file type topic is counted')
+
+  // Edit opens the stored rule in words.
+  await page.reload()
+  await page.getByRole('button', { name: 'Edit bygglov: under Bygglov/' }).click()
+  const edit = page.getByRole('dialog', { name: 'Edit topic' })
+  await expect(edit.getByRole('textbox', { name: 'Address or folder' })).toHaveValue('Bygglov/')
+  await expect(edit.getByTestId('topic-preview-count')).toHaveText(/^Matches 5 of 10 documents$/)
+  await edit.getByRole('button', { name: 'Cancel' }).click()
+
+  // Remove: the topic goes once the documents are processed again, and its folder can be picked again.
+  await page.getByRole('button', { name: 'Actions for skola' }).click()
+  await page.getByRole('menuitem', { name: 'Remove topic' }).click()
+  const removal = page.getByRole('dialog', { name: 'Remove the topic skola?' })
+  await expect(removal.getByTestId('topics-plan-item')).toHaveCount(1, { timeout: 60_000 })
+  await removal.getByRole('button', { name: 'Confirm' }).click()
+  await expect(removal).toBeHidden()
+  await eventually(async () => !(await topics()).some(t => t.tag === 'skola'), 'skola is gone after the re-chunk')
+  await page.reload()
+  await expect(page.getByTestId('topic-covered')).toHaveCount(1)
+  await shot(page, '5-removed')
 })
