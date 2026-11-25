@@ -14,7 +14,7 @@ the order the notes were added to git, deletes the files, and leaves the rest of
 (main-handbook "At each release").
 
 Usage:
-  python3 scripts/unreleased.py check   fail on a note that is not a bullet list or has an unknown name (doc-refs job)
+  python3 scripts/unreleased.py check   fail on a note that is not a bullet list or has an unknown name (the `changes, ownership, doc-refs` job)
   python3 scripts/unreleased.py show    print what fold would append, document by document
   python3 scripts/unreleased.py fold    append the notes and delete the files (git rm when tracked)
 """

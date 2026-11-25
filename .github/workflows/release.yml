@@ -352,18 +352,26 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          bash scripts/ci/release-asset.sh "v$UPGRADE_FROM" compose.portainer.yaml "dist-from/$UPGRADE_FROM/compose.portainer.yaml"
+          # Best effort throughout: a failed download or login leaves the pull to the upgrade test, not the build failed.
           pull="$RUNNER_TEMP/prepull"; mkdir -p "$pull/docker-config"
-          echo "$GH_TOKEN" | docker --config "$pull/docker-config" login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-          grep -oE '[a-z0-9.-]+(/[a-z0-9._-]+)+(:[A-Za-z0-9._-]+)?@sha256:[0-9a-f]{64}' \
+          if ! bash scripts/ci/release-asset.sh "v$UPGRADE_FROM" compose.portainer.yaml "dist-from/$UPGRADE_FROM/compose.portainer.yaml" ||
+             ! echo "$GH_TOKEN" | docker --config "$pull/docker-config" login ghcr.io -u "$GITHUB_ACTOR" --password-stdin; then
+            echo "::warning::no pre-pull of $UPGRADE_FROM's images; the upgrade test pulls them"
+            echo 0 > "$pull/exit"; exit 0
+          fi
+          # A reference starts with a letter or digit: in `image: ${KALLA_API_IMAGE:-ghcr.io/…}` the match would otherwise
+          # start at the `-` of `:-`, and `docker pull -ghcr.io/…` is an unknown flag (#1108).
+          grep -oE '[a-z0-9][a-z0-9.-]*(/[a-z0-9._-]+)+(:[A-Za-z0-9._-]+)?@sha256:[0-9a-f]{64}' \
             "dist-from/$UPGRADE_FROM/compose.portainer.yaml" | sort -u > "$pull/refs"
           cat "$pull/refs"
-          # Every stream redirected and the exit code in a file, as the Syft step's.
+          # Every stream redirected and the exit code in a file, as the Syft step's. The loop's PID goes to a file, so
+          # the upgrade test's timeout and the cleanup step stop the loop, not only the pull in flight.
           (
-            while read -r ref; do docker --config "$pull/docker-config" pull -q "$ref" || echo "not pulled: $ref"; done < "$pull/refs"
+            while read -r ref; do docker --config "$pull/docker-config" pull -q -- "$ref" || echo "not pulled: $ref"; done < "$pull/refs"
             docker --config "$pull/docker-config" logout ghcr.io
             echo 0 > "$pull/exit"
           ) < /dev/null > "$pull/log" 2>&1 &
+          echo "$!" > "$pull/pid"
       - name: Build the release bundle
         run: |
           set -a; . ./images.env; set +a
@@ -411,7 +419,14 @@ jobs:
           # The stack file and its images came with the background pull above; wait for it so the logs don't interleave.
           pull="$RUNNER_TEMP/prepull"; deadline=$((SECONDS + 600))
           until [ -s "$pull/exit" ] || [ "$SECONDS" -ge "$deadline" ]; do sleep 5; done
-          cat "$pull/log"
+          if [ ! -s "$pull/exit" ]; then
+            echo "::warning::the pre-pull did not finish within 10 minutes; stopped, the upgrade test pulls the rest"
+            kill "$(cat "$pull/pid")" 2>/dev/null || true; pkill -f "$pull/docker-config" || true
+          fi
+          cat "$pull/log" 2>/dev/null || true
+          # The pre-pull fetches the stack file best effort; fetch it here when it didn't.
+          [ -s "dist-from/$UPGRADE_FROM/compose.portainer.yaml" ] ||
+            bash scripts/ci/release-asset.sh "v$UPGRADE_FROM" compose.portainer.yaml "dist-from/$UPGRADE_FROM/compose.portainer.yaml"
           bash deploy/tests/portainer-upgrade-boot.sh "dist-from/$UPGRADE_FROM/compose.portainer.yaml" dist/compose.portainer.yaml \
             --from-env "deploy/tests/fixtures/stack-$UPGRADE_FROM.env" \
             --version "${{ steps.version.outputs.version }}" --rename-0.9
@@ -434,6 +449,8 @@ jobs:
         run: |
           pkill -f "spdx-json=$GITHUB_WORKSPACE/sbom/" || true
           pkill -f "metadata-file $RUNNER_TEMP/release-images/" || true
+          # The pull loop first, so it doesn't start the next pull.
+          [ -s "$RUNNER_TEMP/prepull/pid" ] && kill "$(cat "$RUNNER_TEMP/prepull/pid")" 2>/dev/null || true
           pkill -f "$RUNNER_TEMP/prepull/docker-config" || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

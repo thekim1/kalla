@@ -17,6 +17,8 @@
 # Each process's output goes to a file under $RUNNER_TEMP (or a new temporary directory) and is printed when it ends
 # badly; the summary line of every process and the sum are always printed. Exit code 1 when any process failed.
 set -euo pipefail
+# bash's `time` and awk below use the locale's decimal separator; under sv_SE.UTF-8 `12,3` reads as 12 (#1108).
+unset LC_ALL; export LC_NUMERIC=C   # LC_ALL would override it
 
 configuration="${1:-Release}"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -97,7 +99,8 @@ for i in "${!pids[@]}"; do
   else
     echo "passed  $name: $summary"
   fi
-  if read -r real user sys < "$logs/$name.time" 2>/dev/null; then
+  # The test first: `read … < missing 2>/dev/null` prints the redirection's error anyway, as the redirections apply in order.
+  if [ -s "$logs/$name.time" ] && read -r real user sys < "$logs/$name.time"; then
     awk -v n="$name" -v r="$real" -v u="$user" -v s="$sys" 'BEGIN { printf "  %-26s wall %6.1f s, cpu %6.1f s (%.1f cores)\n", n, r, u + s, (r > 0 ? (u + s) / r : 0) }' || true
   fi
 done
