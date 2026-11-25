@@ -496,7 +496,7 @@ public sealed record SourceLastRun(Guid Id, string State, DateTimeOffset Started
 /// <summary>
 /// A source. <see cref="Schedule"/> is its own cron (null: the platform default for its type); <see cref="ScheduleInForce"/>
 /// the cron it runs on (null for uploads); <see cref="NextRunAt"/> when the scheduler enqueues its next scheduled sync,
-/// jitter included (null when paused or unscheduled; not after now: due, <see cref="CronSchedules.NextRun"/>).
+/// jitter included (null when paused or unscheduled; not after now: due, <see cref="SourceSchedules.Next"/>).
 /// </summary>
 public sealed record SourceDto(
     Guid Id, Guid CollectionId, string Type, string Name, string Classification, JsonElement Settings, string? Schedule, string? ScheduleInForce,
@@ -508,11 +508,13 @@ public sealed record SourceDto(
         ArgumentNullException.ThrowIfNull(admin);
         ArgumentNullException.ThrowIfNull(s);
         var platform = await admin.Db.Settings.AsNoTracking().SingleOrDefaultAsync(ct) ?? new PlatformSettings();
-        var inForce = CronSchedules.InForce(s, platform);
+        // The worker's rule (A-43): the schedule in force, and when the scheduler enqueues the next run (none while paused).
+        var inForce = SourceSchedules.InForce(s.Type, s.Schedule, SourceSchedules.ReadDefaults(platform.DefaultSchedules));
         var last = await admin.Db.Runs.AsNoTracking().Where(r => r.SourceId == s.Id && r.Trigger == RunTriggers.Schedule).MaxAsync(r => r.ScheduledFor, ct);
         using var settings = JsonDocument.Parse(s.Settings);
         return new(s.Id, s.CollectionId, s.Type, s.Name, s.Classification, settings.RootElement.Clone(), s.Schedule, inForce,
-            CronSchedules.NextRun(s, inForce, platform.ScheduleJitterMinutes, last, admin.Now), s.PipelineId, s.ContainsThirdPartyText,
+            s.State == SourceStates.Active ? SourceSchedules.Next(inForce, s.Id, platform.ScheduleJitterMinutes, s.CreatedAt, last, admin.Now)?.At : null,
+            s.PipelineId, s.ContainsThirdPartyText,
             s.State, s.UpdatedAt, s.UpdatedBy, s.Version.ToString(CultureInfo.InvariantCulture));
     }
 }
