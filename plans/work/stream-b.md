@@ -54,7 +54,7 @@ After wave 1, or beside it when a wave-1 item waits.
 - **Waits on:** nothing.
 - **Read:** admin §5.5.6, §10.1, §10.2 (no graph library).
 
-### [ ] B-68 Unused assistants: *Archive* and *Keep*
+### [x] B-68 Unused assistants: *Archive* and *Keep* (#1078)
 - **Do:** admin §5.5.1's unused-assistant attention item (published ≥ 90 days ago, no message in 90 days in
   `AssistantDailyTotals`) with **Archive** (`…/archive`) and **Keep** (`POST /api/assistants/{id}/keep`, the column
   `Assistants.UnusedKeptUntil` in a migration of its own, audited `assistant.keep`).
