@@ -55,10 +55,28 @@ const newTopics = computed(() => {
 const busy = computed(() => publication.planning.value || publication.confirming.value)
 const picksValid = computed(() => pickList.value.length > 0 && pickList.value.every((p) => tagError(p.tag) === null))
 
-function pick(sourceId: string, path: string, tag: string | null): void {
+/** The hosts of each picked website section (path → hosts), for its host-first rules. */
+const pickHosts: Record<string, Record<string, string[]>> = {}
+
+function pick(sourceId: string, path: string, tag: string | null, hosts?: string[]): void {
   const paths = (picks[sourceId] ??= {})
-  if (tag === null) delete paths[path]
-  else paths[path] = tag
+  const known = (pickHosts[sourceId] ??= {})
+  if (tag === null) {
+    delete paths[path]
+    delete known[path]
+  } else {
+    paths[path] = tag
+    if (hosts) known[path] = hosts
+  }
+}
+
+/**
+ * A picked section's rules (Decisions "Topics editor", #1082): on a website one host-first rule per host the section was
+ * found on (`www.umea.se/omsorg/`), so a host the source gains later is not tagged by it; an upload's folder as it is.
+ */
+function sectionRules(sourceId: string, path: string, tag: string): PathRuleJson[] {
+  const hosts = pickHosts[sourceId]?.[path] ?? []
+  return (hosts.length ? hosts.map((host) => `${host}${path}`) : [path]).map((match) => ({ match, on: 'path' as const, tags: [tag] }))
 }
 
 async function loadTopics(): Promise<void> {
@@ -79,7 +97,7 @@ function addPicked(): void {
   if (!picksValid.value) return
   const changes = new Map<string, RuleChange[]>()
   for (const p of pickList.value) {
-    changes.set(p.sourceId, [...(changes.get(p.sourceId) ?? []), addRules([{ match: p.path, on: 'path', tags: [normaliseTag(p.tag)] }])])
+    changes.set(p.sourceId, [...(changes.get(p.sourceId) ?? []), addRules(sectionRules(p.sourceId, p.path, normaliseTag(p.tag)))])
   }
   doneMessage.value = TOPICS.saved(newTopics.value)
   removing.value = false
@@ -196,11 +214,13 @@ onMounted(load)
           <template #cell-source="{ row }">{{ topicSources(row).join(', ') }}</template>
           <template #cell-documents="{ row }">
             <span v-if="row.pending" class="text-fg-3" data-test="topic-pending">{{ TOPICS.pending }}</span>
+            <!-- Removed, not yet processed again (#1082): its count, and in words that it is going. -->
+            <span v-else-if="row.pendingRemoval" class="tabular" data-test="topic-pending-removal">{{ formatNumber(row.documents ?? 0) }} · {{ TOPICS.pendingRemoval }}</span>
             <span v-else class="tabular" :class="quietZero(row.documents ?? 0)">{{ formatNumber(row.documents ?? 0) }}</span>
           </template>
           <template #cell-actions="{ row }">
             <MenuButton
-              v-if="row.rules?.length" size="sm" :label="TOPICS.rowMenu(row.tag)" :items="[{ key: 'remove', label: TOPICS.remove, icon: 'delete', danger: true, disabled: busy }]"
+              v-if="row.rules?.length && !row.pendingRemoval" size="sm" :label="TOPICS.rowMenu(row.tag)" :items="[{ key: 'remove', label: TOPICS.remove, icon: 'delete', danger: true, disabled: busy }]"
               :data-test="`topic-menu-${row.tag}`" @select="remove(row)"
             />
           </template>
@@ -213,7 +233,7 @@ onMounted(load)
         <div class="grid gap-6">
           <TopicSuggestionsBlock
             v-for="block in suggestions.data.value" :key="block.sourceId" :collection-id="collectionId" :block="block" :picks="picks[block.sourceId] ?? {}"
-            @pick="(path, tag) => pick(block.sourceId, path, tag)"
+            @pick="(path, tag, hosts) => pick(block.sourceId, path, tag, hosts)"
           />
           <div v-if="suggestions.data.value.some((b) => b.sections.length > 0)" class="grid justify-items-end gap-2">
             <UiButton variant="primary" icon="add" :disabled="!picksValid || busy" data-test="add-topics" @click="addPicked">

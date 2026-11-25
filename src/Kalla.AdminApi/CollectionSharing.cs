@@ -111,7 +111,13 @@ public static class CollectionSharing
                 // A tag a published rule sets while its source is processed again, and that no live chunk carries yet (§5.5.2).
                 var pending = rules.Where(r => reprocessing.Contains(r.SourceId)).SelectMany(r => r.Tags)
                     .Except(live.Select(c => c.Tag), StringComparer.Ordinal).Distinct(StringComparer.Ordinal);
-                return new TopicsDto(id, [.. live.Select(c => new TopicDto(c.Tag, c.Documents, RulesOf(c.Tag)))
+                // A tag live chunks still carry that no published rule sets any more, while a source carrying it is processed
+                // again after a publication or rollback: pending removal (§4.5, §5.5.2; Decisions "Topics editor", #1082).
+                string[] unset = [.. live.Select(c => c.Tag).Where(t => !rules.Any(r => r.Tags.Contains(t, StringComparer.Ordinal)))];
+                var carriers = await TagSourcesAsync(admin.Db, id, unset, ct);
+                var removing = await ReprocessingAsync(admin.Db, [.. carriers.Select(c => c.SourceId).Distinct()], ct);
+                var pendingRemoval = carriers.Where(c => removing.Contains(c.SourceId)).Select(c => c.Tag).ToHashSet(StringComparer.Ordinal);
+                return new TopicsDto(id, [.. live.Select(c => new TopicDto(c.Tag, c.Documents, RulesOf(c.Tag)) { PendingRemoval = pendingRemoval.Contains(c.Tag) })
                     .Concat(pending.Select(t => new TopicDto(t, null, RulesOf(t)) { Pending = true }))
                     .OrderBy(t => t.Tag, TagOrder)]);
             })
@@ -192,6 +198,25 @@ public static class CollectionSharing
             ORDER BY t."Tag"
             """).ToListAsync(ct);
     }
+
+    /// <summary>The live documents' sources that carry each of <paramref name="tags"/> in the collection (pending removal).</summary>
+    private static async Task<List<TagSource>> TagSourcesAsync(RagDbContext db, Guid collectionId, string[] tags, CancellationToken ct)
+    {
+        if (tags.Length == 0)
+        {
+            return [];
+        }
+
+        return await db.Database.SqlQuery<TagSource>($"""
+            SELECT DISTINCT d."SourceId", t."Tag"
+            FROM content."Chunks" c
+            JOIN content."Documents" d ON d."LiveChunkSetId" = c."ChunkSetId" AND d."DeletedAt" IS NULL
+            CROSS JOIN LATERAL unnest(c."Tags") AS t("Tag")
+            WHERE c."CollectionId" = {collectionId} AND c."DeletedAt" IS NULL AND t."Tag" = ANY ({tags})
+            """).ToListAsync(ct);
+    }
+
+    private sealed record TagSource(Guid SourceId, string Tag);
 
     /// <summary>
     /// The sources of <paramref name="sourceIds"/> being processed again after a publication or a rollback: a <c>reprocess</c>
@@ -275,6 +300,9 @@ public sealed record TopicsDto(Guid CollectionId, IReadOnlyList<TopicDto> Topics
 public sealed record TopicDto(string Tag, int? Documents, IReadOnlyList<TopicRuleDto>? Rules)
 {
     public bool Pending { get; init; }
+
+    /// <summary>No published rule sets it any more; a source carrying it is processed again (#1082). Listed with its count.</summary>
+    public bool PendingRemoval { get; init; }
 }
 
 public sealed record TopicRuleDto(Guid SourceId, string SourceName, string On, string Match);

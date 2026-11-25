@@ -14,7 +14,7 @@ import { tagError } from '@/utils/topics'
 // The picks are the parent's: path → tag. A reload of the block (after a save) closes the open levels, so none shows
 // sections as they were before the save (#1075); closing a level drops the picks under it, which no longer show.
 const props = defineProps<{ collectionId: string; block: SourceTopicSuggestions; picks: Record<string, string> }>()
-const emit = defineEmits<{ (e: 'pick', path: string, tag: string | null): void }>()
+const emit = defineEmits<{ (e: 'pick', path: string, tag: string | null, hosts?: string[]): void }>()
 const id = useId()
 
 /** A section's next level once asked for: loading, loaded (possibly empty) or failed. */
@@ -85,7 +85,8 @@ function picked(path: string): boolean {
 }
 
 function tick(section: TopicSection, on: boolean): void {
-  emit('pick', section.path, on ? (section.suggestedTag ?? '') : null)
+  // With the section's hosts: a website section becomes one host-first rule per host (#1082).
+  emit('pick', section.path, on ? (section.suggestedTag ?? '') : null, section.hosts)
 }
 
 const label = (s: TopicSection) => s.title ?? s.path

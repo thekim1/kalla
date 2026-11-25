@@ -728,6 +728,8 @@ export const TOPICS = {
   noRule: 'No rule any more',
   /** A published rule's tag before its source has been processed again (§5.5.2). */
   pending: 'pending',
+  /** A removed topic until its documents are processed again (§5.5.2, #1082). */
+  pendingRemoval: 'Pending removal',
   source: 'Source',
   /** For `Edit` and `Read` of the owning department (§5.5.2). */
   readOnly: 'Topics are changed by whoever may edit processing.',

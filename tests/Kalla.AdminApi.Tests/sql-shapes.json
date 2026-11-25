@@ -3,6 +3,7 @@
   "AdminApi.AssistantTestRunner.CreateRunAsync#1": ["pg_advisory_xact_lock void"],
   "AdminApi.AuditEndpoints.SnapshotNamesAsync#1": ["Id bigint", "Name text"],
   "AdminApi.CollectionSharing.ReprocessingAsync#1": ["Value uuid"],
+  "AdminApi.CollectionSharing.TagSourcesAsync#1": ["SourceId uuid", "Tag text"],
   "AdminApi.CollectionSharing.TopicCountsAsync#1": ["CollectionId uuid", "Tag text", "Documents integer"],
   "AdminApi.CostEndpoints.AssistantOutcomesAsync#1": ["Period date", "Outcome character varying", "ClientId uuid", "Turns bigint", "CostUsd numeric", "EstimatedCostUsd numeric"],
   "AdminApi.CostEndpoints.AssistantUsageAsync#1": ["Period date", "ObjectId uuid", "DepartmentId uuid", "Step character varying", "ClientId uuid", "Calls bigint", "InputTokens bigint", "CachedInputTokens bigint", "OutputTokens bigint", "CostUsd numeric", "EstimatedCostUsd numeric", "EstimatedCalls bigint"],

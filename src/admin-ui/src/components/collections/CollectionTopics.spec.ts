@@ -19,13 +19,13 @@ const topics: Topic[] = [
 ]
 const web: SourceTopicSuggestions = {
   sourceId: 's1', sourceName: 'umea.se', kind: 'website', under: null, sections: [
-    { path: '/bygga/', documents: 612, title: 'Bygga, bo och miljö', suggestedTag: 'bygga', coveredBy: ['bygga'] },
-    { path: '/utbildning/', documents: 488, title: 'Utbildning och barnomsorg', suggestedTag: 'utbildning', coveredBy: [] },
-    { path: '/omsorg/', documents: 401, title: null, suggestedTag: 'omsorg', coveredBy: [] },
+    { path: '/bygga/', documents: 612, title: 'Bygga, bo och miljö', suggestedTag: 'bygga', coveredBy: ['bygga'], hosts: ['www.umea.se'] },
+    { path: '/utbildning/', documents: 488, title: 'Utbildning och barnomsorg', suggestedTag: 'utbildning', coveredBy: [], hosts: ['www.umea.se'] },
+    { path: '/omsorg/', documents: 401, title: null, suggestedTag: 'omsorg', coveredBy: [], hosts: ['www.umea.se'] },
   ],
 }
 const files: SourceTopicSuggestions = {
-  sourceId: 's2', sourceName: 'Filer', kind: 'upload', under: null, sections: [{ path: 'HR/', documents: 9, title: null, suggestedTag: 'hr', coveredBy: [] }],
+  sourceId: 's2', sourceName: 'Filer', kind: 'upload', under: null, sections: [{ path: 'HR/', documents: 9, title: null, suggestedTag: 'hr', coveredBy: [], hosts: [] }],
 }
 
 function setup(roles: string[]) {
@@ -105,7 +105,7 @@ describe('The Topics tab (admin design §5.5.2; Decisions "Topics editor")', () 
     const wrapper = mountTab()
     await flushPromises()
     suggestions.mockResolvedValueOnce({ collectionId: 'c1', sources: [{ ...web, under: '/omsorg/', sections: [
-      { path: '/omsorg/aldre/', documents: 120, title: 'Äldreomsorg', suggestedTag: 'aldre', coveredBy: [] },
+      { path: '/omsorg/aldre/', documents: 120, title: 'Äldreomsorg', suggestedTag: 'aldre', coveredBy: [], hosts: ['www.umea.se'] },
     ] }] })
 
     const show = row(wrapper, '/omsorg/').get('[data-test=show-under]')
@@ -158,8 +158,8 @@ describe('The Topics tab (admin design §5.5.2; Decisions "Topics editor")', () 
     // The published rules stay; the new ones are added. A platform processing is copied for the knowledge base (§6.6).
     expect(plan).toHaveBeenCalledWith('p1', { parameters: { chunkTokens: 500, pathRules: [
       { match: '/bygga/', on: 'path', tags: ['bygga'] },
-      { match: '/utbildning/', on: 'path', tags: ['utbildning'] },
-      { match: '/omsorg/', on: 'path', tags: ['utbildning'] },
+      { match: 'www.umea.se/utbildning/', on: 'path', tags: ['utbildning'] },
+      { match: 'www.umea.se/omsorg/', on: 'path', tags: ['utbildning'] },
     ] }, version: '4' })
     expect(plan).toHaveBeenCalledWith('p2', { parameters: { pathRules: [{ match: 'HR/', on: 'path', tags: ['hr'] }] }, version: '9', collectionId: 'c1' })
 
@@ -390,7 +390,7 @@ describe('The Topics tab after review (#1075, #1076)', () => {
     const wrapper = mountTab()
     await flushPromises()
     suggestions.mockResolvedValueOnce({ collectionId: 'c1', sources: [{ ...web, under: '/omsorg/', sections: [
-      { path: '/omsorg/aldre/', documents: 120, title: 'Äldreomsorg', suggestedTag: 'aldre', coveredBy: [] },
+      { path: '/omsorg/aldre/', documents: 120, title: 'Äldreomsorg', suggestedTag: 'aldre', coveredBy: [], hosts: ['www.umea.se'] },
     ] }] })
     await row(wrapper, '/omsorg/').get('[data-test=show-under]').trigger('click')
     await flushPromises()
@@ -406,6 +406,47 @@ describe('The Topics tab after review (#1075, #1076)', () => {
     ;(wrapper.vm as unknown as { $: { setupState: { load: () => void } } }).$.setupState.load()
     await flushPromises()
     expect(wrapper.find('[data-test=topic-section][data-path="/omsorg/aldre/"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})
+
+describe('Host-first rules and Pending removal (Decisions "Topics editor", #1082)', () => {
+  it('writes one host-first rule per host a website section was found on, and a folder as it is', async () => {
+    const suggestions = setup(['rag-pipeline-editor'])
+    suggestions.mockResolvedValue({ collectionId: 'c1', sources: [files, { ...web, sections: [
+      { path: '/omsorg/', documents: 401, title: null, suggestedTag: 'omsorg', coveredBy: [], hosts: ['umea.se', 'www.umea.se'] },
+    ] }] })
+    const definition = { schema: 1, template: 'website', templateVersion: 1, params: { pathRules: [] } }
+    vi.spyOn(api.sources, 'get').mockImplementation(async (id: string) => ({ id, pipelineId: id === 's1' ? 'p1' : 'p2', collectionId: 'c1' }) as Source)
+    vi.spyOn(api.pipelines, 'get').mockImplementation(async (id: string) => ({
+      id, name: id, templateId: 'website', departmentId: 'd1', publishedVersionId: 'v1', version: '1',
+      versions: [{ id: 'v1', number: 1, state: 'published', definition, publishedAt: null }],
+    }))
+    const plan = vi.spyOn(api.pipelines, 'plan').mockImplementation(async (id: string) => ({ publicationId: `pub-${id}`, pipelineId: id, draftVersionId: 'd', draftNumber: 2, copiedOnWrite: false }))
+    vi.spyOn(api.publications, 'get').mockImplementation(() => new Promise(() => undefined))
+    const wrapper = mountTab()
+    await flushPromises()
+    await tick(wrapper, '/omsorg/')
+    await tick(wrapper, 'HR/')
+    await wrapper.get('[data-test=add-topics]').trigger('click')
+    await flushPromises()
+    expect(plan).toHaveBeenCalledWith('p1', { parameters: { pathRules: [
+      { match: 'umea.se/omsorg/', on: 'path', tags: ['omsorg'] }, { match: 'www.umea.se/omsorg/', on: 'path', tags: ['omsorg'] },
+    ] }, version: '1' })
+    expect(plan).toHaveBeenCalledWith('p2', { parameters: { pathRules: [{ match: 'HR/', on: 'path', tags: ['hr'] }] }, version: '1' })
+    wrapper.unmount()
+  })
+
+  it('shows a removed topic as Pending removal with its count and no menu until its re-chunk is done', async () => {
+    setup(['rag-pipeline-editor'])
+    vi.mocked(api.collections.topics).mockResolvedValue({ collectionId: 'c1', topics: [
+      ...topics, { tag: 'skola', documents: 4, rules: [], pending: false, pendingRemoval: true },
+    ] })
+    const wrapper = mountTab()
+    await flushPromises()
+    const row = wrapper.findAll('[data-test=topics] tbody tr').find((r) => r.text().includes('skola'))!
+    expect(row.get('[data-test=topic-pending-removal]').text()).toBe('4 · Pending removal')
+    expect(row.find('[data-test=topic-menu-skola]').exists()).toBe(false)
     wrapper.unmount()
   })
 })

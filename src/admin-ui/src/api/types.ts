@@ -466,6 +466,8 @@ export interface Topic {
   documents: number | null
   rules: { sourceId: string; sourceName: string; on: string; match: string }[] | null
   pending: boolean
+  /** No published rule sets it any more while a source carrying it is processed again (#1082); listed with its count. */
+  pendingRemoval?: boolean
 }
 
 /** One section to pick on the Topics tab (`GET /api/collections/{id}/topic-suggestions`, admin design §4.5). */
@@ -478,6 +480,8 @@ export interface TopicSection {
   suggestedTag: string | null
   /** The topics whose path rules already cover the section. */
   coveredBy: string[]
+  /** A website section's hosts: one host-first rule each is written for it (#1082); none for an upload's folder. */
+  hosts: string[]
 }
 
 /** One rule of processing §7's `pathRules`. */
