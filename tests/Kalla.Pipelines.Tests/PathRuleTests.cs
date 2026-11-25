@@ -100,6 +100,24 @@ public sealed class PathRuleTests
         IReadOnlyList<string> Tags(string url) => PathRuleTests.Tags(rules, new PathRuleSubject(Html) { Url = new Uri(url) });
     }
 
+    [Fact]
+    public void A_rules_pattern_is_compiled_once_and_an_invalid_one_still_matches_nothing()
+    {
+        // #1079: the chunk stage and the topic preview match the same rule against every document of a source.
+        PathRules.Glob("/bygga/**").ShouldBeSameAs(PathRules.Glob("/bygga/**"));
+        PathRules.Glob("/bygga/**").ShouldNotBeSameAs(PathRules.Glob("/bo/**"));
+
+        var regex = new PathRule { Match = @"^/protokoll/(?<year>\d{4})/", On = "path-regex", Tags = ["protokoll"], Date = "${year}-01-01" };
+        var first = new PathRuleSubject(Pdf) { Url = new Uri("https://www.umea.se/protokoll/2024/a.pdf") };
+        var second = new PathRuleSubject(Pdf) { Url = new Uri("https://www.umea.se/protokoll/2025/b.pdf") };
+        PathRules.Match(regex, first)!.Date.ShouldBe(new DateOnly(2024, 1, 1));
+        PathRules.Match(regex, second)!.Date.ShouldBe(new DateOnly(2025, 1, 1));
+
+        var invalid = new PathRule { Match = "(", On = "path-regex", Tags = ["x"] };
+        PathRules.Match(invalid, first).ShouldBeNull();
+        PathRules.Match(invalid, first).ShouldBeNull("an invalid pattern is not cached as a match");
+    }
+
     /// <summary>Every matching rule's tags in rule order, each once, as the <c>chunk</c> stage collects them.</summary>
     internal static IReadOnlyList<string> Tags(IReadOnlyList<PathRule> rules, PathRuleSubject subject) =>
         [.. rules.Select(rule => PathRules.Match(rule, subject)).OfType<PathRuleMatch>().SelectMany(match => match.Tags).Distinct(StringComparer.Ordinal)];
