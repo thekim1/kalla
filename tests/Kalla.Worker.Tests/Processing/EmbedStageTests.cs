@@ -76,8 +76,8 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         builder.AddRagProcessing();
         builder.Services.UseGatewayCredentialCeiling();
         builder.Services.AddHttpClient(EmbeddingClient.HttpClientName)
-            .ConfigurePrimaryHttpMessageHandler(() => primary ?? gateway.Server.CreateHandler())
-            .AddHttpMessageHandler(() => new RecordingHandler(recorder));
+            // Recorded as it leaves the client, after the ceiling handler (TestKit's RecordingHandler, #974).
+            .ConfigurePrimaryHttpMessageHandler(() => new RecordingHandler(primary ?? gateway.Server.CreateHandler(), recorder.Queue));
         var host = builder.Build();
         return new Rig(host, host.Services.GetRequiredService<EmbedStage>(), cache, recorder, store);
     }
@@ -93,10 +93,10 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         result.Vectors.ShouldAllBe(v => v.Length == 1024);
         result.CacheHits.ShouldBe(0);
         var call = rig.Recorder.Requests[^1];
-        call.Headers.GetValues(GatewayHeaders.MaxResidency).Single().ShouldBe("Eu");
-        call.Headers.Authorization!.Parameter.ShouldBe(FakeGatewayFactory.WorkerCredentialKey);
-        call.Headers.GetValues(EmbeddingClient.StepHeader).Single().ShouldBe("embed");
-        call.Headers.Contains(EmbeddingClient.RunIdHeader).ShouldBeTrue();
+        call.Header(GatewayHeaders.MaxResidency).ShouldBe("Eu");
+        call.Header("Authorization").ShouldBe($"Bearer {FakeGatewayFactory.WorkerCredentialKey}");
+        call.Header(GatewayHeaders.Step).ShouldBe("embed");
+        call.Header(GatewayHeaders.RunId).ShouldNotBeNull();
         call.Body.ShouldContain("\"model\":\"bge-m3\"");
         call.Body.ShouldContain("\"encoding_format\":\"float\"");
 
@@ -451,22 +451,12 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
     private static async Task<HealthStatus> CanaryHealthAsync(Rig rig) =>
         (await rig.Host.Services.GetRequiredService<HealthCheckService>().CheckHealthAsync(c => c.Name == "embedding-canary", Ct)).Status;
 
-    /// <summary>What left the worker's client, after the ceiling handler.</summary>
+    /// <summary>What left the worker's client, after the ceiling handler: the queue every RecordingHandler the factory builds shares.</summary>
     private sealed class Recording
     {
-        public System.Collections.Concurrent.ConcurrentQueue<(System.Net.Http.Headers.HttpRequestHeaders Headers, string Body)> Queue { get; } = new();
+        public System.Collections.Concurrent.ConcurrentQueue<RecordedRequest> Queue { get; } = new();
 
-        public IReadOnlyList<(System.Net.Http.Headers.HttpRequestHeaders Headers, string Body)> Requests => [.. Queue];
-    }
-
-    /// <summary>Records each request into a shared <see cref="Recording"/> without changing it.</summary>
-    private sealed class RecordingHandler(Recording recording) : DelegatingHandler
-    {
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            recording.Queue.Enqueue((request.Headers, request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken)));
-            return await base.SendAsync(request, cancellationToken);
-        }
+        public IReadOnlyList<RecordedRequest> Requests => [.. Queue];
     }
 
     private sealed class SlowHandler(HttpMessageHandler inner) : DelegatingHandler(inner)

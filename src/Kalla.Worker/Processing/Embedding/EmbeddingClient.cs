@@ -31,8 +31,6 @@ public sealed record EmbeddingCall(Guid RunId, UsageSink Usage, string Step = Em
 public sealed class EmbeddingClient(IHttpClientFactory clients, TimeProvider clock)
 {
     public const string HttpClientName = "gateway-embed";
-    public const string RunIdHeader = "x-fors-run-id";
-    public const string StepHeader = "x-fors-step";
     public const string EmbedStep = "embed";
 
     private static readonly Uri EmbeddingsPath = new("v1/embeddings", UriKind.Relative);
@@ -48,8 +46,7 @@ public sealed class EmbeddingClient(IHttpClientFactory clients, TimeProvider clo
             Content = JsonContent.Create(new EmbeddingRequest(profile.GatewayModel, inputs, "float", profile.DimensionsParameter), options: Json),
         };
         request.WithMaxResidency(profile.MaxResidency);
-        request.Headers.Add(RunIdHeader, call.RunId.ToString());
-        request.Headers.Add(StepHeader, call.Step);
+        request.WithCallTag(call.Step, call.RunId);
         request.For(call.Usage.Owner.Acting(call.Step));
         HttpResponseMessage response;
         try
