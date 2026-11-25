@@ -25,7 +25,7 @@ gateway's `v0.11.0` or later: the `v0.6.0` asset has none of them.
 ## What you need
 
 - A VM with Docker (Compose v2) and Portainer. Sizing: 4 vCPU, 16 GB RAM and 100 GB SSD for a pilot (floor 4 vCPU,
-  8 GB, 50 GB; R1 sets the final numbers); ClamAV alone takes about 1 GB of RAM.
+  8 GB, 50 GB; the performance test on the test host sets the final numbers); ClamAV alone takes about 1 GB of RAM.
 - **Registry access:** none needed. Källa's images on `ghcr.io/thekim1/kalla/*` and the gateway's are public, so
   Portainer pulls them without a registry entry. (Ume.Rag's images up to 0.8.0, `ghcr.io/thekim1/ume-rag/*`, need a
   `ghcr.io` registry with a GitHub user and a token holding `read:packages`.)
@@ -125,8 +125,7 @@ read the CA only at start.
    Leave `FORS_INTEGRATION_MANIFEST` unset (the file has it commented out) and keep `FORS_INTEGRATION_API_URL` as the file
    has it. The stack file then gives the gateway its default manifest,
    [`deploy/portainer/integration-manifest.json`](../deploy/portainer/integration-manifest.json): the gateway creates
-   the integration `Kalla` and its three credential keys, and hands kalla-admin the Integration API's address (M-17 C7,
-   C11). The manifest names no owner, so the gateway places the integration in a team and a department of its own, both
+   the integration `Kalla` and its three credential keys, and hands kalla-admin the Integration API's address. The manifest names no owner, so the gateway places the integration in a team and a department of its own, both
    named `Kalla` with the code `kalla` (a team that already has the code `kalla` is used instead). You move it to
    your own team in step 7. Two other choices:
    - **Your own team at once:** set `FORS_INTEGRATION_MANIFEST` to the default manifest on one line, with an `"owner"`
@@ -203,7 +202,7 @@ read the CA only at start.
    Integrations → Kalla*, *Edit*, the owner team. The team must be active, in an active department. Every credential
    key of the integration that is not revoked moves with it; usage already recorded stays with the team `kalla`, and
    the new team's budgets count the keys from the move on. Then, under *Access → Integrations → Kalla*, check the
-   three credential keys (residencies `OnPrem` and `Eu`: Källa's ceiling, register M2), then create the **assigned
+   three credential keys (residencies `OnPrem` and `Eu`: Källa's ceiling while there is no on-prem model hardware), then create the **assigned
    keys** the assistants and knowledge bases will run on, one or more per department, in the integration with role
    *Assigned*. The manifest never changes a key that exists: change one here. **Rotate** a credential key here (with a
    grace period), then delete its file `Kalla/rag-<service>` in `<stack>_integration-secrets` and update the stack;
@@ -237,7 +236,7 @@ read the CA only at start.
     protects the client secret its wizard stored the same way. The stack has no WAL archiving: use `pg_dump` or volume
     snapshots.
 
-Then the knowledge bases and assistants: each gets one of its department's assigned keys (V39); a published assistant
+Then the knowledge bases and assistants: each gets one of its department's assigned keys; a published assistant
 must have one once the gateway acts as keys.
 
 ### Declaring sign-in instead
@@ -464,7 +463,7 @@ the old ones (`UME_RAG_X` for `KALLA_X`, `UME_X` for `FORS_X`), and the old serv
 keys, no identity provider), renames its variables as in step 7 and applies the new file once over the running stack:
 `kalla-roles` renames the roles in the copied database, every service comes back healthy on the new images, and the
 database, the CA, the pepper and the Data Protection certificate are kept in the new volumes. The step from 0.5.1 was tested before
-0.8.0 (#817, 2026-11-17) but is in no release's own run: one of 0.5.1's images is no longer on ghcr.io. Sign-in after the upgrade, a hand-made Open WebUI client and keys issued by
+0.8.0 (2026-11-17) but is in no release's own run: one of 0.5.1's images is no longer on ghcr.io. Sign-in after the upgrade, a hand-made Open WebUI client and keys issued by
 hand are not part of that test, and Portainer's own *Update the stack* is not run by it.
 
 **If kalla-admin prints a setup code instead,** the stack did not declare the sign-in: the authority or
