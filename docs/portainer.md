@@ -308,6 +308,13 @@ and kalla-api accepts no Open WebUI user without the profile.
 
 ## Upgrade
 
+**From 0.9.x or later** the update is short: read this release's section of the [upgrade guide](upgrade-guide.md),
+then paste the release's `compose.portainer.yaml` asset over the stack's file, keep your variables, and *Update the
+stack* with *Re-pull image and redeploy*. With the profile `proxy`, restart `kalla-proxy` afterwards (*Containers*,
+select it, *Restart*): it reads the configuration kalla-bootstrap rewrites only at start. Releases in between need not
+be installed; the guide's sections say what each one adds to do by hand. The rest of this section is the path from
+0.5.x, with the rename to Källa and Fors.
+
 From 0.5.x or later to this release, **in one update**, with the rename to Källa and Fors in it: back up, look
 through and rename the stack's variables, paste this release's stack file over the old one and update the stack once.
 Nothing is stopped by hand and no SQL is typed: the stack renames the database roles itself (`kalla-roles` Källa's,
