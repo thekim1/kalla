@@ -152,6 +152,7 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
         bygga.GetProperty("title").GetString().ShouldBe("Bygga, bo och miljö");
         bygga.GetProperty("suggestedTag").GetString().ShouldBe("bygga");
         Strings(bygga.GetProperty("coveredBy")).ShouldBe(["bygga"]);
+        Strings(bygga.GetProperty("hosts")).ShouldBe(["www.umea.se"]); // the host-first rules to write (#1082)
         // A host-first rule covers the section on its host; its tag as chunks carry it (lower case). A title rule covers no section.
         Strings(web[1].GetProperty("coveredBy")).ShouldBe(["kommun"]);
         web[1].GetProperty("documents").GetInt32().ShouldBe(5);
@@ -165,6 +166,7 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
         files.Select(s => s.GetProperty("path").GetString()).ShouldBe(["HR/"]);
         files[0].GetProperty("documents").GetInt32().ShouldBe(6);
         files[0].GetProperty("suggestedTag").GetString().ShouldBe("hr");
+        files[0].GetProperty("hosts").GetArrayLength().ShouldBe(0);
         blocks.Single(b => b.GetProperty("sourceId").GetGuid() == seed.Upload).GetProperty("kind").GetString().ShouldBe("upload");
     }
 
@@ -177,6 +179,7 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
         var kommun = Sections(suggestions, seed.Website).Single(s => s.GetProperty("path").GetString() == "/kommun/");
         kommun.GetProperty("documents").GetInt32().ShouldBe(6);
         Strings(kommun.GetProperty("coveredBy")).ShouldBe(["kommun"]);
+        Strings(kommun.GetProperty("hosts")).ShouldBe(["aaa.umea.se", "www.umea.se"]);
     }
 
     [Fact]
@@ -235,8 +238,9 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
         async Task<List<JsonElement>> TopicsAsync() =>
             [.. (await viewer.GetFromJsonAsync<JsonElement>($"/api/collections/{seed.Collection}/topics", Ct)).GetProperty("topics").EnumerateArray()];
 
-        // No re-process: only the tags on live chunks.
+        // No re-process: only the tags on live chunks, none pending removal although no rule sets ålder or äldre.
         (await TopicsAsync()).Select(t => t.GetProperty("tag").GetString()).ShouldBe(["bygga", "ålder", "äldre"]);
+        (await TopicsAsync()).ShouldAllBe(t => !t.GetProperty("pendingRemoval").GetBoolean());
 
         // The nightly drift sweep processes again without a rule change: nothing pending (#1059).
         var sweep = await EnqueueReprocessAsync(seed.Website, "schedule");
@@ -262,6 +266,10 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
         kommun.GetProperty("pending").GetBoolean().ShouldBeTrue();
         kommun.GetProperty("documents").ValueKind.ShouldBe(JsonValueKind.Null);
         kommun.GetProperty("rules").EnumerateArray().Single().GetProperty("match").GetString().ShouldBe("www.umea.se/kommun/**");
+        // #1082: the tags live chunks of the source still carry, which no published rule sets, are pending removal, with
+        // their counts; a tag a rule still sets is not.
+        topics.Where(t => t.GetProperty("pendingRemoval").GetBoolean()).Select(t => (t.GetProperty("tag").GetString(), t.GetProperty("documents").GetInt32()))
+            .ShouldBe([("ålder", 1), ("äldre", 1)]);
 
         // Running counts as well; once the job is done the tag is gone until a chunk carries it.
         await using var db = TestPostgres.Context(database.Connection(null));
@@ -269,6 +277,7 @@ public sealed class TopicSuggestionsTests(AdminDatabaseFixture database, AdminHo
         (await TopicsAsync()).Count(t => t.GetProperty("pending").GetBoolean()).ShouldBe(2);
         await db.Jobs.Where(j => j.Id == job).ExecuteUpdateAsync(u => u.SetProperty(j => j.State, JobStates.Succeeded), Ct);
         (await TopicsAsync()).Select(t => t.GetProperty("tag").GetString()).ShouldBe(["bygga", "ålder", "äldre"]);
+        (await TopicsAsync()).ShouldAllBe(t => !t.GetProperty("pendingRemoval").GetBoolean());
 
         // A reprocess run still running between its jobs keeps them pending.
         db.Runs.Add(new Run

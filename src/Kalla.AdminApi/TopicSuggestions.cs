@@ -154,7 +154,8 @@ public static partial class TopicSuggestions
                 .Select(host => new PathRuleSubject("") { Url = Uri.TryCreate($"https://{host}{section.Path}", UriKind.Absolute, out var url) ? url : null });
         var coveredBy = subjects.SelectMany(subject => rules.Where(r => r.On == "path").Select(r => PathRules.Match(r, subject))).OfType<PathRuleMatch>()
             .SelectMany(m => m.Tags).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
-        return new SectionDto(section.Path, section.Documents, section.Title, SuggestedTag(section.Path), coveredBy);
+        // The hosts the section was found on: the Topics tab writes one host-first rule per host (Decisions "Topics editor", #1082).
+        return new SectionDto(section.Path, section.Documents, section.Title, SuggestedTag(section.Path), coveredBy, upload ? [] : section.Hosts);
     }
 
     /// <summary>
@@ -224,4 +225,5 @@ public sealed record SourceSuggestionsDto(Guid SourceId, string SourceName, stri
 /// own page when crawled, the tag to propose (null when the segment has no letter or digit), and the topics whose <c>path</c>
 /// rules already cover it.
 /// </summary>
-public sealed record SectionDto(string Path, int Documents, string? Title, string? SuggestedTag, IReadOnlyList<string> CoveredBy);
+/// <summary><see cref="Hosts"/>: a website section's hosts, sorted (the host-first rules to write, #1082); none for an upload's folder.</summary>
+public sealed record SectionDto(string Path, int Documents, string? Title, string? SuggestedTag, IReadOnlyList<string> CoveredBy, IReadOnlyList<string> Hosts);
