@@ -2,7 +2,7 @@
   "source": "github.com/thekim1/fors",
   "sourceDirectory": "src/admin-ui",
   "commit": "e25b491dac6edaa28e3b65091f5b6fe7c84aa688",
-  "note": "The design system copied from the gateway admin UI (repo-and-deployment \u00a72.3). sha256 is the gateway file at the commit; an adapted file differs on purpose (texts through utils/labels.ts, RAG navigation). npm run design-system reports drift as a warning.",
+  "note": "The design system copied from the gateway admin UI (repo-and-deployment §2.3). sha256 is the gateway file at the commit; an adapted file differs on purpose (texts through utils/labels.ts, RAG navigation). npm run design-system reports drift as a warning.",
   "files": [
     {
       "path": "tailwind.config.cjs",
@@ -44,7 +44,8 @@
     {
       "path": "src/components/ui/CheckField.vue",
       "sha256": "a9a18f1e1abd12cddb08eb09f7bc082448844fcee6ecaa915c8be62d7d38036d",
-      "copy": "unchanged"
+      "copy": "adapted",
+      "note": "hideLabel: the label for screen readers only (a row checkbox whose row shows the name); offered to Fors in thekim1/fors#130"
     },
     {
       "path": "src/components/ui/ConfirmDialog.vue",
@@ -119,12 +120,14 @@
     {
       "path": "src/components/ui/TextAreaField.vue",
       "sha256": "d2e4fd7fd364af552b541733bcaa806aa4dbb05df959748f81874b5f54853bf7",
-      "copy": "unchanged"
+      "copy": "adapted",
+      "note": "the password-manager opt-out (noAutofill.ts); offered to Fors in thekim1/fors#130"
     },
     {
       "path": "src/components/ui/TextField.vue",
       "sha256": "c95d5fb9c8e355216b87159301f74be7209332d6686975ed9cfe24d09aa72182",
-      "copy": "unchanged"
+      "copy": "adapted",
+      "note": "the short prop and the password-manager opt-out (noAutofill.ts); offered to Fors in thekim1/fors#130"
     },
     {
       "path": "src/components/ui/ToastRegion.vue",
@@ -149,7 +152,8 @@
     {
       "path": "src/components/ui/UiCard.vue",
       "sha256": "53fed0adb47307b30afa8cdfa7b5aa59ff5a668b05be0f942dfca2b0fe41b305",
-      "copy": "unchanged"
+      "copy": "adapted",
+      "note": "the header row wraps at phone width; offered to Fors in thekim1/fors#130"
     },
     {
       "path": "src/components/ui/UiDialog.vue",
@@ -179,7 +183,8 @@
     {
       "path": "src/components/ui/UiTabs.vue",
       "sha256": "c490d4c796c1dcb15c08b80bb6afbff191af8c5ebb5140639d99786c4eb246ce",
-      "copy": "unchanged"
+      "copy": "adapted",
+      "note": "the tab list wraps at phone width; offered to Fors in thekim1/fors#130"
     },
     {
       "path": "src/components/layout/AppShell.vue",
