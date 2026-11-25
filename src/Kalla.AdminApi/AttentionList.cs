@@ -55,6 +55,9 @@ public static class AttentionKinds
 
     /// <summary>A document cited in 3 or more downvoted answers in the last 7 days (§8.8; Decisions "Downvotes per document").</summary>
     public const string DocumentDownvoted = "document_downvoted";
+
+    /// <summary>A published assistant without a message in 90 days, published 90 days ago or more, and not kept (B-68).</summary>
+    public const string AssistantUnused = "assistant_unused";
 }
 
 /// <summary>What an <see cref="AttentionItem"/> is about; the admin UI links each to its page.</summary>
@@ -108,6 +111,12 @@ public static class AttentionList
     /// <summary>The days, today included (Europe/Stockholm), whose downvotes <see cref="AttentionKinds.DocumentDownvoted"/> counts.</summary>
     public const int DownvoteDays = 7;
 
+    /// <summary>Days without a message (and since the publish) that raise <see cref="AttentionKinds.AssistantUnused"/>.</summary>
+    public const int UnusedDays = 90;
+
+    /// <summary>How long <b>Keep</b> keeps <see cref="AttentionKinds.AssistantUnused"/> from being raised again.</summary>
+    public static readonly TimeSpan UnusedKeep = TimeSpan.FromDays(90);
+
     public static async Task<IReadOnlyList<AttentionItem>> ComputeAsync(AdminContext admin, OrgSyncStatus organisation, GatewayModelSyncStatus models, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(admin);
@@ -124,6 +133,7 @@ public static class AttentionList
         items.AddRange(await AssistantTestsAsync(admin, ct));
         items.AddRange(await AnswersAsync(admin, ct));
         items.AddRange(await DocumentsDownvotedAsync(admin, ct));
+        items.AddRange(await UnusedAssistantsAsync(admin, ct));
         if (admin.IsPlatformAdmin)
         {
             items.AddRange(await FeedbackImportAsync(admin, ct));
@@ -492,6 +502,38 @@ public static class AttentionList
             .. rows.Where(r => titles.ContainsKey(r.DocumentId)).OrderByDescending(r => r.Downvotes).ThenBy(r => r.DocumentId)
                 .Select(r => new AttentionItem(AttentionKinds.DocumentDownvoted, AttentionObjects.Collection, r.CollectionId, r.Name, r.DepartmentId, null,
                     Details(("documentId", r.DocumentId), ("documentTitle", titles[r.DocumentId]), ("downvotes", r.Downvotes), ("days", DownvoteDays)))),
+        ];
+    }
+
+    /// <summary>
+    /// Each active assistant in scope whose published version was published <see cref="UnusedDays"/> days ago or more, with no
+    /// message (<c>AssistantDailyTotals.Messages</c>) in the last <see cref="UnusedDays"/> Europe/Stockholm days, today
+    /// included, and not kept (<c>UnusedKeptUntil</c> not ahead). Since: the last day with a message, else the publish.
+    /// </summary>
+    private static async Task<List<AttentionItem>> UnusedAssistantsAsync(AdminContext admin, CancellationToken ct)
+    {
+        var db = admin.Db;
+        var departments = DepartmentIds(admin);
+        var now = admin.Now;
+        var publishedBefore = now.AddDays(-UnusedDays);
+        var since = CostEndpoints.Today(admin).AddDays(1 - UnusedDays);
+        var rows = await (from a in db.Assistants.AsNoTracking()
+                          join v in db.AssistantVersions.AsNoTracking() on a.PublishedVersionId equals (Guid?)v.Id
+                          where a.State == AssistantStates.Active && a.DeletedAt == null && departments.Contains(a.DepartmentId)
+                                && v.PublishedAt != null && v.PublishedAt <= publishedBefore
+                                && (a.UnusedKeptUntil == null || a.UnusedKeptUntil <= now)
+                                && !db.AssistantDailyTotals.Any(t => t.AssistantId == a.Id && t.Day >= since && t.Messages > 0)
+                          orderby a.Name
+                          select new
+                          {
+                              a.Id, a.Name, a.DepartmentId, v.PublishedAt,
+                              LastUsed = db.AssistantDailyTotals.Where(t => t.AssistantId == a.Id && t.Messages > 0).Max(t => (DateOnly?)t.Day),
+                          }).ToListAsync(ct);
+        return
+        [
+            .. rows.Select(r => new AttentionItem(AttentionKinds.AssistantUnused, AttentionObjects.Assistant, r.Id, r.Name, r.DepartmentId,
+                r.LastUsed is { } day ? new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero) : r.PublishedAt,
+                Details(("days", UnusedDays), ("lastUsed", r.LastUsed?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))))),
         ];
     }
 
