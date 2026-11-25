@@ -8,7 +8,7 @@ import { STAGES, connected, drawingOf, feeds, type MapNode } from '@/utils/mapDr
 // channels), each item a link to its page. The lines are plain SVG measured from the items (no graph library, §10.2);
 // every relation is also text under its item ("Feeds: …", "Used by: …"), so nothing depends on the drawing, and on a
 // phone, where the columns stack, the lines are left out. Pointing at or focusing an item highlights what it feeds and
-// what feeds it.
+// what feeds it; a channel, which has no page here, is a button that holds the highlight (#1083).
 const props = defineProps<{ departmentName: string; rows: MapRow[] }>()
 
 const id = useId()
@@ -23,10 +23,25 @@ const shown = computed<Line[]>(() => lines.value.map((l) => {
   return { ...l, on: !!lit.value && lit.value.has(from) && lit.value.has(to) }
 }))
 
-function relation(node: MapNode): string | null {
-  const names = feeds(drawing.value, node.key)
-  const say = MAP.drawing.relations[node.stage]
-  return names.length && say ? say(names.join(', ')) : null
+/** Every item's relation text, worked out once per drawing (not on every hover, #1083). */
+const relations = computed(() => {
+  const out = new Map<string, string>()
+  for (const stage of STAGES) {
+    const say = (MAP.drawing.relations as Partial<Record<string, (names: string) => string>>)[stage]
+    for (const node of drawing.value.columns[stage]) {
+      const names = feeds(drawing.value, node.key)
+      if (names.length && say) out.set(node.key, say(names.join(', ')))
+    }
+  }
+  return out
+})
+/** An item held by a click (a channel's button), which hover and focus don't clear. */
+const held = ref<string | null>(null)
+const focusOn = (node: MapNode) => (active.value = node.key)
+const focusOff = () => (active.value = held.value)
+function hold(node: MapNode): void {
+  held.value = held.value === node.key ? null : node.key
+  active.value = held.value ?? node.key
 }
 
 /** Each line from the right edge of what feeds to the left edge of what it feeds, as a gentle S. */
@@ -80,7 +95,8 @@ watch(drawing, () => void nextTick(measure))
         />
       </svg>
       <div class="relative grid gap-6 md:grid-cols-4 md:gap-x-12">
-        <section v-for="stage in STAGES" :key="stage" :aria-labelledby="`${id}-${stage}`" :data-test="`map-column-${stage}`">
+        <!-- Plain columns, not regions: with every department shown, labelled sections would repeat the same names (#1083). -->
+        <div v-for="stage in STAGES" :key="stage" class="min-w-0" :data-test="`map-column-${stage}`">
           <h3 :id="`${id}-${stage}`" class="mb-2 text-caption font-medium uppercase tracking-wide text-fg-3">{{ MAP.drawing.columns[stage] }}</h3>
           <ul v-if="drawing.columns[stage].length" class="grid gap-3">
             <!-- The highlight is for the eye: a pointer gets it on hover, the keyboard from the focused link (focusin); the
@@ -88,18 +104,21 @@ watch(drawing, () => void nextTick(measure))
             <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -->
             <li
               v-for="n in drawing.columns[stage]" :key="n.key" :data-node="n.key"
-              class="rounded-control bg-surface px-3 py-2 shadow-inset-input transition-shadow"
+              class="min-w-0 rounded-control bg-surface px-3 py-2 shadow-inset-input transition-shadow [overflow-wrap:anywhere]"
               :class="{ '!bg-accent-soft !shadow-inset-selected': lit?.has(n.key) }" data-test="map-node"
-              @mouseenter="active = n.key" @mouseleave="active = null" @focusin="active = n.key" @focusout="active = null"
+              @mouseenter="focusOn(n)" @mouseleave="focusOff" @focusin="focusOn(n)" @focusout="focusOff"
             >
               <RouterLink v-if="n.to" :to="n.to" class="font-medium text-accent-ink underline">{{ n.name }}</RouterLink>
-              <span v-else class="font-medium">{{ n.name }}</span>
+              <button
+                v-else type="button" class="min-h-6 text-left font-medium max-md:min-h-11" :aria-pressed="held === n.key ? 'true' : 'false'"
+                data-test="map-node-button" @click="hold(n)"
+              >{{ n.name }}</button>
               <span v-if="n.detail" class="block text-small text-fg-2">{{ n.detail }}</span>
-              <span v-if="relation(n)" class="block text-small text-fg-2" data-test="map-relation">{{ relation(n) }}</span>
+              <span v-if="relations.get(n.key)" class="block text-small text-fg-2" data-test="map-relation">{{ relations.get(n.key) }}</span>
             </li>
           </ul>
           <p v-else class="m-0 text-fg-3">{{ MAP.drawing.noneInColumn }}</p>
-        </section>
+        </div>
       </div>
     </div>
   </section>

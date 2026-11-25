@@ -32,4 +32,27 @@ describe('MapDrawing (admin design §5.5.6, B-67)', () => {
     await nodes()[0]!.trigger('focusout')
     expect(nodes().some((n) => n.classes().includes('!bg-accent-soft'))).toBe(false)
   })
+
+  it('lets the keyboard hold a channel, wraps long names, and adds no regions per column (#1083)', async () => {
+    const long = 'https://www.umea.se/bygga-bo-och-miljo/bygglov/ansok-om-bygglov'
+    const withChannel: MapRow = {
+      ...row, collection: { ...row.collection, sources: [{ id: 's1', name: long, type: 'crawl' }] },
+      audience: { clientId: 'k1', name: 'Open WebUI (pilot)', kind: 'open-webui' },
+    }
+    const wrapper = mount(MapDrawing, { props: { departmentName: 'Stadsbyggnad', rows: [withChannel] }, global: { stubs: { RouterLink: RouterLinkStub } } })
+    expect(wrapper.findAll('section')).toHaveLength(1) // the card only
+    const channel = wrapper.get('[data-test=map-node-button]')
+    expect(channel.text()).toBe('Open WebUI (pilot)')
+    await channel.trigger('click')
+    expect(channel.attributes('aria-pressed')).toBe('true')
+    const lit = () => wrapper.findAll('[data-test=map-node]').map((n) => n.classes().includes('!bg-accent-soft'))
+    expect(lit()).toEqual([true, true, true, true]) // the channel and everything that feeds it
+    await wrapper.findAll('[data-test=map-node]')[0]!.trigger('mouseleave')
+    expect(lit()).toEqual([true, true, true, true]) // held until clicked again
+    await channel.trigger('click')
+    expect(channel.attributes('aria-pressed')).toBe('false')
+    await wrapper.findAll('[data-test=map-node]')[3]!.trigger('focusout')
+    expect(lit()).toEqual([false, false, false, false]) // let go, and focus gone
+    expect(wrapper.get('[data-test=map-node]').classes()).toContain('[overflow-wrap:anywhere]')
+  })
 })

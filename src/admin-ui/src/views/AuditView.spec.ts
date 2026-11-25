@@ -208,4 +208,11 @@ describe('Granskningslogg (admin design §9.1)', () => {
     await vi.advanceTimersByTimeAsync(1_000)
     expect(list).toHaveBeenCalledTimes(1)
   })
+
+  it('names every event of the assistant templates and test questions, so their type chip has events to pick (#1072)', () => {
+    for (const code of ['assistanttemplate.create', 'assistanttemplate.update', 'assistanttemplate.delete', 'assistanttest.create', 'assistanttest.update', 'assistanttest.delete', 'assistanttest.run']) {
+      expect(AUDIT_EVENTS[code], code).toBeDefined()
+    }
+    expect(AUDIT_OBJECT_TYPES.department).toBeUndefined() // nothing is audited on a department
+  })
 })

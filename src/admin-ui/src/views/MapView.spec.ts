@@ -124,4 +124,26 @@ describe('Map (admin design §5.5.6, as a table)', () => {
     route.query = {}
     wrapper.unmount()
   })
+
+  it('has a row per source path, and reads a department from a later address change as all of the user\'s (#1072, #1083)', async () => {
+    setActivePinia(createPinia())
+    const mine = '11111111-1111-4111-8111-111111111111'
+    vi.spyOn(api.organisation, 'departments').mockResolvedValue([department({ id: mine, name: 'Bygg och miljö' }), department({ id: 'd2', name: 'Kultur' })])
+    const twoSources: MapRow = { ...own, collection: { ...own.collection, sources: [{ id: 's1', name: 'Blanketter (filer)', type: 'upload' }, { id: 's2', name: 'umea.se/blanketter', type: 'crawl' }] } }
+    const map = vi.spyOn(api.organisation, 'map').mockImplementation(async (id) => ({ departmentId: id, departmentName: 'Bygg och miljö', rows: id === mine ? [twoSources, sharedIn] : [] }))
+    route.query = { department: mine }
+    const wrapper = mount(MapView, { global: { stubs: { RouterLink: RouterLinkStub } } })
+    await flushPromises()
+    const rows = wrapper.findAll('[data-test=map] tbody tr')
+    expect(rows).toHaveLength(3) // two source paths of one knowledge base, and the shared-in one without a source of ours
+    expect(wrapper.findAll('[data-test=map-source]').map((s) => s.text())).toEqual(['Blanketter (filer)', 'umea.se/blanketter'])
+    expect(rows[2]!.text()).toContain('umea.se')
+
+    const calls = map.mock.calls.length
+    ;(wrapper.vm as unknown as { $: { setupState: { filters: { department: string } } } }).$.setupState.filters.department = '22222222-2222-4222-8222-222222222222'
+    await flushPromises()
+    expect(map.mock.calls.slice(calls).map((c) => c[0])).not.toContain('22222222-2222-4222-8222-222222222222')
+    route.query = {}
+    wrapper.unmount()
+  })
 })

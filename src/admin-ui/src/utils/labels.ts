@@ -826,7 +826,7 @@ export const TOPICS = {
   zeroConfirm: 'Save anyway',
 } as const
 
-/** The Map as a table (admin design §5.5.6). */
+/** The Map (admin design §5.5.6): its table and its drawing (B-67). */
 export const MAP = {
   lead: 'Which sources feed which knowledge bases, the assistants that use them and the channels that offer them, with who is responsible.',
   department: 'Department',
@@ -834,6 +834,7 @@ export const MAP = {
   show: 'Show',
   showOptions: { all: 'Everything', shared: 'Shared knowledge bases', unlinked: 'Knowledge bases without an assistant' } as Record<string, string>,
   knowledgeBase: 'Knowledge base',
+  source: 'Source',
   shared: 'Shared',
   sharedIn: (owner: string) => `shared by ${owner}`,
   assistant: 'Assistant',
@@ -851,17 +852,17 @@ export const MAP = {
   shown: (n: number) => `${n} ${n === 1 ? 'row' : 'rows'}`,
   /** The drawing (admin design §5.5.6, B-67). */
   view: 'Show as',
-  views: { table: 'Table', drawing: 'Drawing' } as Record<string, string>,
+  views: { table: 'Table', drawing: 'Drawing' },
   drawing: {
     /** Before the department's name, which is Swedish. */
     title: 'Map ·',
-    columns: { source: 'Sources', collection: 'Knowledge bases', assistant: 'Assistants', audience: 'Channels' } as Record<string, string>,
+    columns: { source: 'Sources', collection: 'Knowledge bases', assistant: 'Assistants', audience: 'Channels' },
     /** The relations as text, beside the lines (§5.5.6: nothing depends on the drawing). */
     relations: {
       source: (names: string) => `Feeds: ${names}`,
       collection: (names: string) => `Used by: ${names}`,
       assistant: (names: string) => `Offered in: ${names}`,
-    } as Record<string, (names: string) => string>,
+    },
     draftLink: (name: string) => `${name} (draft)`,
     noneInColumn: 'None',
     hint: 'Point at or focus an item to highlight what it feeds and what feeds it.',
@@ -2444,6 +2445,13 @@ export const AUDIT_EVENTS = {
   'assistant.retention': 'Assistant’s chat history changed',
   'assistant.archive': 'Assistant archived',
   'assistant.keep': 'Unused assistant kept',
+  'assistanttemplate.create': 'Assistant template created',
+  'assistanttemplate.update': 'Assistant template changed',
+  'assistanttemplate.delete': 'Assistant template deleted',
+  'assistanttest.create': 'Assistant test question added',
+  'assistanttest.update': 'Assistant test question changed',
+  'assistanttest.delete': 'Assistant test question deleted',
+  'assistanttest.run': 'Assistant test questions run',
   'assistant.unarchive': 'Assistant taken out of the archive',
   'client.create': 'App created',
   'client.update': 'App changed',
@@ -2513,7 +2521,6 @@ export const AUDIT_OBJECT_TYPES = {
   assistant: 'Assistant',
   assistanttemplate: 'Assistant template',
   assistanttest: 'Assistant test question',
-  department: 'Department',
   client: 'App',
   key: 'Key',
   collection: 'Knowledge base',
