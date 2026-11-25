@@ -98,11 +98,11 @@ for i in "${!pids[@]}"; do
     echo "passed  $name: $summary"
   fi
   if read -r real user sys < "$logs/$name.time" 2>/dev/null; then
-    awk -v n="$name" -v r="$real" -v u="$user" -v s="$sys" 'BEGIN { printf "  %-26s wall %6.1f s, cpu %6.1f s (%.1f cores)\n", n, r, u + s, r > 0 ? (u + s) / r : 0 }'
+    awk -v n="$name" -v r="$real" -v u="$user" -v s="$sys" 'BEGIN { printf "  %-26s wall %6.1f s, cpu %6.1f s (%.1f cores)\n", n, r, u + s, (r > 0 ? (u + s) / r : 0) }' || true
   fi
 done
 read -r busy1 total1 < <(cpu)
 awk -v b=$((busy1 - busy0)) -v t=$((total1 - total0)) -v w=$((SECONDS - phase_start)) -v c="$(nproc)" \
-  'BEGIN { printf "host cpu over the test phase: %.0f %% busy on %d CPUs for %d s\n", t > 0 ? 100 * b / t : 0, c, w }'
+  'BEGIN { printf "host cpu over the test phase: %.0f %% busy on %d CPUs for %d s\n", (t > 0 ? 100 * b / t : 0), c, w }' || true
 echo "total: $total tests in ${#pids[@]} processes; logs in $logs"
 exit "$failed"
