@@ -76,7 +76,7 @@ After wave 1, or beside it when a wave-1 item waits.
 
 ## Sources (user, 2026-11-22)
 
-### [ ] B-71 The admin's next run from the shared schedule rule
+### [x] B-71 The admin's next run from the shared schedule rule (#1088)
 - **Do:** `Kalla.AdminApi`'s `scheduleInForce` and `nextRunAt` (#935) call A-43's rule in `Kalla.Pipelines` instead of
   repeating it; `CronSchedules` keeps only the save-time validation (`IsValid`, `Invalid`), and the AdminApi's own
   Cronos reference goes if nothing else needs it. No behaviour change.
