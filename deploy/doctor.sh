@@ -6,8 +6,8 @@
 #
 # It reports the Compose project and its services' versions; each volume's host path (named, bind-backed or a direct
 # bind, read from `docker inspect`) and its free space; the overlays and profiles; the pgBackRest stanza, the WAL archive
-# backlog and the newest backups; the newest key escrow set against the newest key; and which deploy directory the host
-# units run from and whether their timers run. Each line is "ok", "warn" or "BLOCK". Run it as root: the volumes' data,
+# backlog and the newest backups; the newest key escrow set against the newest key; and which deploy directory and project
+# the host units act on (install.sh's host.env) and whether their timers run. Each line is "ok", "warn" or "BLOCK". Run it as root: the volumes' data,
 # the WAL backlog and a mode-600 env file are read on the host.
 #
 # Exit codes: 0 nothing blocks an upgrade, 1 something does, 2 a usage error, 3 the doctor could not look (no docker,
@@ -64,7 +64,7 @@ finish() {
   exit 0
 }
 # KEY's last value in the env file, its quotes removed (init-deployment.sh writes KEY='value'); read, never sourced.
-env_value() { sed -n "s/^$1=//p" "$env_file" 2>/dev/null | tail -n 1 | sed -e "s/^'\(.*\)'$/\1/" -e 's/^"\(.*\)"$/\1/'; }
+env_value() { { sed -n "s/^$1=//p" "$env_file" 2>/dev/null || true; } | tail -n 1 | sed -e "s/^'\(.*\)'$/\1/" -e 's/^"\(.*\)"$/\1/'; }
 num() { [[ "${1:-}" =~ ^-?[0-9]+$ ]]; } # a whole number (a metric or a timestamp read from a file)
 ago() { # ago SECONDS → "3 h 12 min" / "2 d 4 h"
   local s="$1"
@@ -294,7 +294,21 @@ units=("$unit_dir"/rag-*.service)
 if [ ! -e "${units[0]}" ]; then
   warn "no host units in $unit_dir (deploy/host/install.sh): no scheduled backups, firewall or restarts"
 else
-  targets="$(for u in "${units[@]}"; do sed -n 's/^ExecStart=\([^ ]*\).*/\1/p' "$u" | xargs -r dirname; done | sed 's#/host$##' | sort | uniq -c)"
+  # install.sh's host.env names the deployment the units act on (D6); units installed before it name their scripts' paths.
+  kalla_state="${KALLA_STATE_DIR:-$(env_value KALLA_STATE_DIR)}"; host_env="${kalla_state:-/etc/kalla}/host.env"
+  hv() { sed -n "s/^$1=//p" "$host_env" 2>/dev/null | tail -n 1 | sed -e "s/^'\(.*\)'$/\1/"; }
+  if grep -qs '^EnvironmentFile=.*/host.env$' "${units[@]}"; then
+    if [ ! -r "$host_env" ]; then
+      block "the units read $host_env, which is missing: they act on nothing (re-run deploy/host/install.sh)"; targets=""
+    else
+      targets="${#units[@]} $(hv KALLA_DEPLOY_DIR)"
+      if [ "$(hv COMPOSE_PROJECT_NAME)" = "$project" ]; then ok "the units act on project $project ($host_env)"
+      else block "the units act on project $(hv COMPOSE_PROJECT_NAME), not $project: their backups and checks miss this deployment (re-run deploy/host/install.sh)"; fi
+    fi
+  else
+    targets="$(for u in "${units[@]}"; do sed -n 's/^ExecStart=\([^ ]*\).*/\1/p' "$u" | xargs -r dirname; done | sed 's#/host$##' | sort | uniq -c)"
+    warn "units from before host.env: they act on deploy/.env's project, not a fixed one (re-run deploy/host/install.sh)"
+  fi
   while read -r count dir; do
     [ -n "$dir" ] || continue
     units_run="$count units run"; [ "$count" != 1 ] || units_run="1 unit runs"

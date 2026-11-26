@@ -560,8 +560,8 @@ first and last: it is read-only, and exits 1 on what blocks an upgrade.
      in `COMPOSE_FILE`, so the next upgrade doesn't replace them. Don't drop one from `COMPOSE_FILE` to make `up` start:
      an overlay that puts the data on a host disk would then start on empty volumes.
 
-   Re-run `sudo deploy/host/install.sh` when `deploy/host/` changed, or when step 1 said the units run from a directory
-   other than `deploy/`.
+   Re-run `sudo deploy/host/install.sh` from the new `deploy/`: the units then act on it, through
+   `/etc/kalla/host.env`. `sudo deploy/host/install.sh --check` says whether they do.
 6. **Superuser steps**, only if the release lists them (below), all before step 7. Role caps and per-role settings
    run against the running database. With a new `KALLA_POSTGRES_IMAGE`, first replace kalla-postgres alone with
    `dc up -d --wait kalla-postgres` (a short outage of every service), then update the extension.
@@ -599,8 +599,11 @@ first and last: it is read-only, and exits 1 on what blocks an upgrade.
 > - **Changed ports or a hand-edited Compose file**: carry the change over in step 5 as an overlay of your own outside
 >   `deploy/`, not as an edit of the release's files, which step 5 replaces. Compare `dc config --services` and
 >   `dc config --images` before and after (plain `dc config` prints the gateway credential keys from `deploy/.env`).
-> - **Host units from another directory** (a `warn` line under *Host units*): they run the old bundle's scripts, or
->   none when that directory is gone. Re-run `sudo deploy/host/install.sh` from the new `deploy/` in step 5.
+> - **Host units from another directory or for another project** (a line under *Host units*): they run the old
+>   bundle's scripts (or none, when that directory is gone), or back up a project that isn't this one. Units from before
+>   0.12.0 have no `host.env` and act on `deploy/.env`'s project. Re-run `sudo deploy/host/install.sh` from the new
+>   `deploy/` in step 5; with a project other than `kalla`, set `COMPOSE_PROJECT_NAME` in `deploy/.env` first, or pass
+>   `--project <name>`.
 > - **No backups configured** (no `compose.backup.yaml`, a `BLOCK` line under *Backups*): there is nothing to restore
 >   from if step 7 fails, step 4's `backup-postgres.sh` fails, and step 8's backup metrics don't exist. Set up a backup
 >   target first ([production-setup](production-setup.md)). To go on without one (a test host you can rebuild), pass
