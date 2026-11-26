@@ -1,0 +1,6 @@
+- **Release gate** (#1120):
+  - `docs/ci-runner.md` spells out the release flow: the dry run runs on `main` after the release PR merges, and the
+    tag goes on that exact commit.
+  - A gate that fails runs every test instead of blocking the release.
+  - The gate reads 100 runs instead of 20.
+  - The build job's checkout no longer leaves its token in `.git/config`.
