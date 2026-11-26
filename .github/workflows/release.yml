@@ -23,7 +23,8 @@ name: Release
 # still built, boot-tested and published. Without such a dry run, or when the gate itself fails, everything runs
 # (scripts/ci/release-gate.sh); a skip needs a gate that succeeded.
 # A manual run (workflow_dispatch) is a dry run of 1-3: the images go to a registry inside the job (localhost:5000), so
-# nothing reaches ghcr.io and no release or tag is created.
+# nothing reaches ghcr.io and no release or tag is created. It also upgrades an odd Compose host from
+# COMPOSE_UPGRADE_FROM (deploy/tests/compose-upgrade-odd.sh), which the tag run doesn't repeat.
 # A manual run with the input portainer_boot (X.Y.Z) runs only deploy/tests/portainer-boot.sh, in minutes: this ref's
 # compose.portainer.yaml pinned to that version's images already on ghcr.io (a tag run pushes them before its boot
 # tests), so a fix to the stack file or the boot test is tested without building anything (handbook, "Release dry runs").
@@ -74,6 +75,10 @@ env:
   # The oldest release an upgrade in one step is tested from (deploy/tests/portainer-upgrade-boot.sh). 0.6.0: v0.5.1's
   # stack asset pins an admin image digest ghcr.io no longer has, and 0.5.0's asset does not pin the gateway's images.
   UPGRADE_FROM: 0.6.0
+  # The release an odd Compose host is upgraded from in the dry run (deploy/tests/compose-upgrade-odd.sh; #1101 D7): the
+  # last one before the state directory, so the run also moves deploy/.env. Compose hosts from before 0.9.0 go through
+  # upgrade-to-0.9.sh first, and from before 0.7.0 through 0.7.0's steps by hand: not one upgrade.
+  COMPOSE_UPGRADE_FROM: 0.11.0
   # The dry run's registry: distribution 3.1.1 (Docker Hub image pushed 2026-09-21).
   DRY_RUN_REGISTRY_IMAGE: registry:3.1.1@sha256:325b4b29b041e82803abeb703e201655e4e23ab83264ec1a7c9ddb0a5b14a6e0
 jobs:
@@ -477,6 +482,25 @@ jobs:
             --from-env "deploy/tests/fixtures/stack-$UPGRADE_FROM.env" \
             --version "${{ steps.version.outputs.version }}" --rename-0.9
           if [ "$GITHUB_EVENT_NAME" != push ]; then docker logout ghcr.io; fi
+      - name: Upgrade an odd Compose host (the dry run only)
+        # Decisions "Compose host layout and upgrades" (#1101 D7): COMPOSE_UPGRADE_FROM's bundle with a project, published
+        # ports and host paths of its own (a bind-backed volume and a direct bind, from an overlay outside the bundle) and
+        # its env file in deploy/, upgraded to this run's bundle as docs/upgrade-guide.md says; the project, the ports,
+        # the host paths and the data must stay. The tag run doesn't repeat it.
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          bash scripts/ci/release-asset.sh "v$COMPOSE_UPGRADE_FROM" "kalla-$COMPOSE_UPGRADE_FROM.tar.gz" \
+            "dist-from/kalla-$COMPOSE_UPGRADE_FROM.tar.gz"
+          # The earlier release's images are on ghcr.io; the login is this job's own and is removed again.
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          status=0
+          bash deploy/tests/compose-upgrade-odd.sh "dist-from/kalla-$COMPOSE_UPGRADE_FROM.tar.gz" "dist/kalla-$VERSION.tar.gz" \
+            --work-dir "$RUNNER_TEMP/odd-upgrade" || status=$?
+          docker logout ghcr.io
+          exit "$status"
       - name: The other images' SBOMs
         # Started above, beside the boot tests; normally done by now.
         run: |

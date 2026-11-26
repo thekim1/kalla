@@ -11,6 +11,7 @@
 #   - refusals with one line: a retired variable, a service that has no credential key, a bad domain, a host name as a
 #     proxy address, s3:// without credentials, --yes without the gateway's address
 #   - the host firewall's subnets are compose.hardened.yaml's
+#   - a site overlay in COMPOSE_FILE survives a re-run, after the bundle's own files
 #   - the state directory: a deploy/.env from before is moved there with its values, a re-run keeps it, the gateway's CA
 #     is written there, and a deploy/.env beside it is refused
 #   - --data-root: compose.host-paths.yaml, the four directories and the marker, the volumes bound to them; a re-run keeps
@@ -150,6 +151,16 @@ refused "is not empty and not Källa's" --data-root "$work/other"
 refused "--data-root is an absolute path" --data-root data
 rm -f "$env"; refused "the host-paths overlay needs --data-root" --domain example.se --gateway-url https://llm.example.se --overlays host-paths
 ok "--data-root: the overlay, the directories and the marker, a re-run, and three refusals"
+
+echo "== a site overlay of the operator's own"
+rm -f "$env"; init --domain example.se --gateway-url https://llm.example.se --backup-target local --yes
+printf 'services: {}\n' > "$work/site.yaml"
+sed -i "s#^COMPOSE_FILE='\(.*\)'\$#COMPOSE_FILE='\1:$work/site.yaml'#" "$env"
+init --yes
+has "COMPOSE_FILE='$d/compose.rag.yaml:$d/compose.backup.yaml:$work/site.yaml'"
+init --overlays backup,rolling --yes
+has "COMPOSE_FILE='$d/compose.rag.yaml:$d/compose.backup.yaml:$d/compose.rolling.yaml:$work/site.yaml'"
+ok "a re-run keeps a site overlay in COMPOSE_FILE, after the bundle's files"
 
 echo "== the state directory"
 state="$work/state"
