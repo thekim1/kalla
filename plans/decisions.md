@@ -410,9 +410,9 @@ release and upgrade script knows.
 
 - **State outside the bundle.** The env file, the gateway's CA certificate and the host units' configuration
   (`host.env`) live in one state directory, `KALLA_STATE_DIR` (default `/etc/kalla`); Källa's own secrets and
-  certificates stay in Docker volumes written by `kalla-bootstrap`. A release bundle never contains or writes it; an upgrade
-  unpacks the new bundle beside the old one and points it at the same state directory. `init-deployment.sh` refuses to
-  create a second state directory when one exists.
+  certificates stay in Docker volumes written by `kalla-bootstrap`. A release bundle never contains or writes it; an
+  upgrade unpacks the new bundle beside the old one and points it at the same state directory. `init-deployment.sh`
+  refuses to create a second state directory when one exists.
 - **Data on a host disk is a supported layout.** `deploy/compose.host-paths.yaml` puts `kalla-postgres-data`,
   `kalla-blobs`, `kalla-pgbackrest-repo` and `kalla-upload-copy` on bind-backed volumes under one `KALLA_DATA_ROOT`;
   `init-deployment.sh --data-root <dir>` selects it, creates the directories with their owners and refuses a non-empty
@@ -433,8 +433,9 @@ release and upgrade script knows.
   checklist, `doctor.sh` first and last, and a *Your host differs from the bundle* box; a release's own section lists
   only what it adds.
 - **Tested:** the release dry run also upgrades one stack that has every difference at once (a custom project name,
-  bind-backed volumes, a direct bind mount, custom published ports) from the previous release (a host from before 0.9 goes
-  through `upgrade-to-0.9.sh` first), keeping its row counts and ports; the tag run doesn't repeat it (Decisions "CI on the self-hosted runner").
+  bind-backed volumes, a direct bind mount, custom published ports) from the previous release (a host from before 0.9
+  goes through `upgrade-to-0.9.sh` first), keeping its row counts and ports; the tag run doesn't repeat it (Decisions
+  "CI on the self-hosted runner").
 
 Order: the doctor, the upgrade page and the host units first; then the upgrade library and the single role-rename path;
 then the state directory and the host-paths overlay; the upgrade test last. Stream a builds it. Detail:
