@@ -601,9 +601,10 @@ first and last: it is read-only, and exits 1 on what blocks an upgrade.
 >   `dc config --images` before and after (plain `dc config` prints the gateway credential keys from `deploy/.env`).
 > - **Host units from another directory** (a `warn` line under *Host units*): they run the old bundle's scripts, or
 >   none when that directory is gone. Re-run `sudo deploy/host/install.sh` from the new `deploy/` in step 5.
-> - **No backups configured** (no `compose.backup.yaml`): there is nothing to restore from if step 7 fails, step 4's
->   `backup-postgres.sh` fails, and step 8's backup metrics don't exist. Set up a backup target first
->   ([production-setup](production-setup.md)). If you go on without one, replace step 4 with a copy of the data:
+> - **No backups configured** (no `compose.backup.yaml`, a `BLOCK` line under *Backups*): there is nothing to restore
+>   from if step 7 fails, step 4's `backup-postgres.sh` fails, and step 8's backup metrics don't exist. Set up a backup
+>   target first ([production-setup](production-setup.md)). To go on without one (a test host you can rebuild), pass
+>   `--no-backups-ok` to the doctor in steps 1 and 9, and replace step 4 with a copy of the data:
 >   `dc stop`, then copy each path the doctor lists under *Volumes and free space* (the host path of a bind-backed
 >   volume, or the volume's `_data` directory) with `sudo cp -a` to a disk of its own, and `dc start`. Rolling back is
 >   then copying it back with the services stopped.

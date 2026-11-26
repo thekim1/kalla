@@ -6,40 +6,52 @@
 #
 # It reports the Compose project and its services' versions; each volume's host path (named, bind-backed or a direct
 # bind, read from `docker inspect`) and its free space; the overlays and profiles; the pgBackRest stanza, the WAL archive
-# backlog and the newest backups; the newest key escrow set; and which deploy directory the host units run from and
-# whether the firewall timer runs. Each line is "ok", "warn" or "BLOCK".
+# backlog and the newest backups; the newest key escrow set against the newest key; and which deploy directory the host
+# units run from and whether their timers run. Each line is "ok", "warn" or "BLOCK". Run it as root: the volumes' data,
+# the WAL backlog and a mode-600 env file are read on the host.
 #
-# Exit codes: 0 nothing blocks an upgrade, 1 something does, 2 a usage error. What blocks: no running Källa project,
-# or two of them and no --project; with backups configured (compose.backup.yaml), a stanza that isn't ok, a WAL backlog
-# beyond the 5-minute RPO, or no backup in the last --max-backup-age hours.
+# Exit codes: 0 nothing blocks an upgrade, 1 something does, 2 a usage error, 3 the doctor could not look (no docker,
+# or no access to it). What blocks: no Källa project (no kalla-postgres container, running or stopped), or two of them
+# and no project named; no compose.backup.yaml, unless --no-backups-ok; with backups, a backup status that can't be
+# read fresh, a stanza that isn't ok, a WAL backlog beyond the 5-minute RPO, or no backup in the last --max-backup-age
+# hours.
+#
+# The project: --project, else COMPOSE_PROJECT_NAME from the shell, else the env file's, else the only one running.
 #
 # Options:
 #   --env-file FILE         [deploy/.env] the deployment: its COMPOSE_PROJECT_NAME, COMPOSE_FILE and COMPOSE_PROFILES
-#   --project NAME          the Compose project, when the env file doesn't name it and more than one runs
-#   --escrow-dir DIR        where deploy/escrow-keys.sh writes the key sets: report the newest set of this project
+#   --project NAME          the Compose project, when neither the shell nor the env file names it and more than one runs
+#   --escrow-dir DIR        where deploy/escrow-keys.sh writes the key sets: the newest set of this project, and
+#                           whether a key changed after it
 #   --max-backup-age HOURS  [26] the newest backup (any type) must be younger (the alert of §7.4 rule 5)
+#   --no-backups-ok         a deployment without compose.backup.yaml only warns (a test host you can rebuild)
 #   --state-dir DIR         [/var/lib/kalla] where rag-backup-status.timer writes backup.prom
 #   --unit-dir DIR          [/etc/systemd/system] where deploy/host/install.sh put the host units
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-env_file="$here/.env"; project=""; escrow_dir=""; max_backup_age=26
+env_file="$here/.env"; project=""; escrow_dir=""; max_backup_age=26; no_backups_ok=0
 state_dir=/var/lib/kalla; unit_dir=/etc/systemd/system
+shell_project="${COMPOSE_PROJECT_NAME:-}"
 
-usage() { sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+value() { if [ $# -lt 2 ] || [ -z "$2" ]; then echo "error: $1 needs a value" >&2; exit 2; fi; }
 while [ $# -gt 0 ]; do
   case "$1" in
-    --env-file) env_file="${2:-}"; shift 2;;
-    --project) project="${2:-}"; shift 2;;
-    --escrow-dir) escrow_dir="${2:-}"; shift 2;;
-    --max-backup-age) max_backup_age="${2:-}"; shift 2;;
-    --state-dir) state_dir="${2:-}"; shift 2;;
-    --unit-dir) unit_dir="${2:-}"; shift 2;;
+    --env-file) value "$@"; env_file="$2"; shift 2;;
+    --project) value "$@"; project="$2"; shift 2;;
+    --escrow-dir) value "$@"; escrow_dir="$2"; shift 2;;
+    --max-backup-age) value "$@"; max_backup_age="$2"; shift 2;;
+    --no-backups-ok) no_backups_ok=1; shift;;
+    --state-dir) value "$@"; state_dir="$2"; shift 2;;
+    --unit-dir) value "$@"; unit_dir="$2"; shift 2;;
     -h|--help) usage 0;;
     *) echo "unknown option: $1" >&2; usage 2;;
   esac
 done
 [[ "$max_backup_age" =~ ^[0-9]+$ ]] || { echo "error: --max-backup-age takes whole hours" >&2; exit 2; }
+command -v docker >/dev/null || { echo "error: no docker command on this host" >&2; exit 3; }
+docker info >/dev/null 2>&1 || { echo "error: docker doesn't answer (run as root, or as a member of the docker group)" >&2; exit 3; }
 
 blocks=0; warns=0
 ok() { printf '  ok     %s\n' "$*"; }
@@ -53,6 +65,7 @@ finish() {
 }
 # KEY's last value in the env file, its quotes removed (init-deployment.sh writes KEY='value'); read, never sourced.
 env_value() { sed -n "s/^$1=//p" "$env_file" 2>/dev/null | tail -n 1 | sed -e "s/^'\(.*\)'$/\1/" -e 's/^"\(.*\)"$/\1/'; }
+num() { [[ "${1:-}" =~ ^-?[0-9]+$ ]]; } # a whole number (a metric or a timestamp read from a file)
 ago() { # ago SECONDS → "3 h 12 min" / "2 d 4 h"
   local s="$1"
   if [ "$s" -ge 86400 ]; then echo "$((s / 86400)) d $((s % 86400 / 3600)) h"
@@ -68,9 +81,11 @@ compose_file=""; profiles=""; env_readable=0
 if [ -r "$env_file" ]; then
   env_readable=1
   compose_file="$(env_value COMPOSE_FILE)"; profiles="$(env_value COMPOSE_PROFILES)"
+  [ -n "$project" ] || project="$shell_project"
   [ -n "$project" ] || project="$(env_value COMPOSE_PROJECT_NAME)"
   ok "env file $env_file"
 else
+  [ -n "$project" ] || project="$shell_project"
   warn "cannot read $env_file (pass --env-file; as root for a mode-600 file): the overlays and backups are not checked"
 fi
 # Every project with a kalla-postgres container, by Compose's labels.
@@ -96,7 +111,8 @@ containers="$(docker ps -a --filter "label=com.docker.compose.project=$project" 
 section "Services"
 while IFS='|' read -r service name image state; do
   [ -n "$service" ] || continue
-  version="${image%@*}"; version="${version##*:}"; [ "$version" != "${image%@*}" ] || version="?"
+  # The tag of the image's last path part (a registry's :port is in an earlier part); a digest-only image has none.
+  last="${image%@*}"; last="${last##*/}"; version="?"; [[ "$last" != *:* ]] || version="${last##*:}"
   case "$state" in
     running) ok "$(printf '%-24s %-12s %s' "$service" "$version" "$state")";;
     exited) case "$service" in
@@ -112,7 +128,8 @@ done <<< "$containers"
 section "Overlays and profiles"
 any="$(sed -n '1s/^[^|]*|\([^|]*\)|.*/\1/p' <<< "$containers")"
 used="$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$any" 2>/dev/null || true)"
-names() { tr ':,' '\n' | sed -n 's#.*/\{0,1\}compose\.\(.*\)\.yaml$#\1#p' | sort -u | tr '\n' ' ' | sed 's/ $//'; }
+# compose.<name>.yaml is named <name>; any other file (a site overlay of your own) by its file name.
+names() { tr ':,' '\n' | sed -e '/^$/d' -e 's#.*/##' -e 's#^compose\.\(.*\)\.yaml$#\1#' | sort -u | tr '\n' ' ' | sed 's/ $//'; }
 in_env="$(names <<< "$compose_file")"; in_use="$(names <<< "$used")"
 [ "$env_readable" = 0 ] || ok "COMPOSE_FILE: ${in_env:-none}"
 if [ -n "$in_use" ]; then
@@ -122,10 +139,26 @@ if [ -n "$in_use" ]; then
   case "$used" in *"$here/"*|"") ;; *) warn "the containers were started from another directory: ${used%%,*}";; esac
 fi
 [ "$env_readable" = 0 ] || ok "COMPOSE_PROFILES: ${profiles:-none}"
+# The profiles the containers show: a profile's services exist only when it was on at the last `up`.
+files="$(tr ',' '\n' <<< "$used")"; [ -n "$files" ] || files="$(ls "$here"/compose*.yaml 2>/dev/null || true)"
+gated="$(while read -r f; do [ -r "$f" ] && awk '/^  [a-z0-9-]+:$/ { svc = substr($1, 1, length($1) - 1) }
+  /^    profiles: \[/ { gsub(/[][,]/, " "); for (i = 2; i <= NF; i++) print svc, $i }' "$f"; done <<< "$files" \
+  | grep -v '^rag-upload-backup ' || true)" # the upload copy runs from its timer, not from `up`
+shown=""; wanted=""
+while read -r svc prof; do
+  [ -n "$svc" ] || continue
+  if grep -q "^$svc|" <<< "$containers" && [[ " $shown " != *" $prof "* ]]; then shown="${shown:+$shown }$prof"; fi
+  if [[ ",$profiles," == *",$prof,"* ]] && [[ " $wanted " != *" $prof "* ]]; then wanted="${wanted:+$wanted }$prof"; fi
+done <<< "$gated"
+if [ -n "$gated" ]; then
+  if [ "$env_readable" = 1 ] && [ "$(tr ' ' '\n' <<< "$shown" | sort | tr '\n' ' ')" != "$(tr ' ' '\n' <<< "$wanted" | sort | tr '\n' ' ')" ]; then
+    warn "the containers show the profiles: ${shown:-none} (the env file's next \`up\` changes that)"
+  else ok "the containers show the profiles: ${shown:-none}"; fi
+fi
 
 # ---- Volumes -------------------------------------------------------------------------------------------------------
 section "Volumes and free space"
-seen=" "
+seen=" "; pgdata=""; secrets_path=""; certs_path=""
 while IFS='|' read -r _ name _ _; do
   [ -n "$name" ] || continue
   while IFS='|' read -r type vol source _; do
@@ -137,6 +170,11 @@ while IFS='|' read -r _ name _ _; do
       [ "$device" != "<no value>" ] || device=""
       if [ -n "$device" ]; then kind="bind-backed volume $vol"; path="$device"
       else kind="volume $vol"; path="$source"; fi
+      case "$vol" in
+        "${project}_kalla-postgres-data") pgdata="$path";;
+        "${project}_kalla-secrets") secrets_path="$path";;
+        "${project}_kalla-certs") certs_path="$path";;
+      esac
     else
       # The Docker socket, the host's /etc and the like are not data.
       case "$source" in /run/*|/var/run/*|/etc/*|/proc/*|/sys/*|/dev/*) continue;; esac
@@ -151,26 +189,40 @@ done <<< "$containers"
 # ---- Backups -------------------------------------------------------------------------------------------------------
 section "Backups (pgBackRest)"
 if [[ " $in_env $in_use " != *" backup "* ]]; then
-  warn "no compose.backup.yaml: this deployment takes no backups, so an upgrade has nothing to restore from"
+  if [ "$no_backups_ok" = 1 ]; then
+    warn "no compose.backup.yaml: this deployment takes no backups (--no-backups-ok), so an upgrade has nothing to restore from"
+  else
+    block "no compose.backup.yaml: this deployment takes no backups, so an upgrade has nothing to restore from (set up a backup target, or pass --no-backups-ok)"
+  fi
 else
-  prom="$state_dir/backup.prom"; tmp=""
+  prom="$state_dir/backup.prom"; tmp=""; stale_by=0
   metric() { sed -n "s/^$1 //p" "$prom" | tail -n 1; }
-  # rag-backup-status.timer refreshes backup.prom every two minutes; read it fresh when it is older than ten.
-  fresh=0
+  # rag-backup-status.timer refreshes backup.prom every two minutes; read it fresh when it is older than ten. A stale
+  # file that can't be replaced by a fresh read is not trusted: a dead status timer is what hid the VM's backlog.
+  fresh=0; read_at=""
   if [ -r "$prom" ]; then
-    read_at="$(sed -n 's/^rag_backup_status_timestamp_seconds //p' "$prom")"
-    [ -n "$read_at" ] && [ $(( $(date +%s) - read_at )) -lt 600 ] && fresh=1
+    read_at="$(metric rag_backup_status_timestamp_seconds)"
+    if num "$read_at"; then stale_by=$(( $(date +%s) - read_at )); [ "$stale_by" -lt 600 ] && fresh=1
+    else read_at=""; fi
   fi
   if [ "$fresh" = 0 ] && [ "$env_readable" = 1 ]; then
     tmp="$(mktemp -d)"; trap 'rm -r "$tmp"' EXIT
-    if COMPOSE_PROJECT_NAME="$project" bash "$here/backup-postgres.sh" --status-only --env-file "$env_file" --state-dir "$tmp" >/dev/null 2>&1; then
-      prom="$tmp/backup.prom"; warn "backup.prom in $state_dir is missing or stale: is rag-backup-status.timer running? (read now instead)"
+    if COMPOSE_PROJECT_NAME="$project" bash "$here/backup-postgres.sh" --status-only --env-file "$env_file" --state-dir "$tmp" >/dev/null 2>&1 \
+      && [ -r "$tmp/backup.prom" ]; then
+      prom="$tmp/backup.prom"; fresh=1; stale_by=0
+      warn "backup.prom in $state_dir is missing or stale: is rag-backup-status.timer running? (read now instead)"
     fi
   fi
-  if [ ! -r "$prom" ]; then
-    block "the backup status could not be read (no fresh $state_dir/backup.prom, and kalla-postgres didn't answer)"
-  else
-    now="$(metric rag_backup_status_timestamp_seconds)"
+  if [ "$fresh" = 0 ]; then
+    if [ -n "$read_at" ]; then
+      block "the backup status is $(ago "$stale_by") old ($state_dir/backup.prom) and could not be read now (kalla-postgres stopped, or the env file not readable): is rag-backup-status.timer running?"
+    else
+      block "the backup status could not be read (no current $state_dir/backup.prom, and kalla-postgres didn't answer)"
+    fi
+  fi
+  if [ -r "$prom" ] && num "$(metric rag_backup_status_timestamp_seconds)"; then
+    [ "$fresh" = 1 ] || echo "         as of $(date -u -d "@$(metric rag_backup_status_timestamp_seconds)" +%Y-%m-%dT%H:%MZ), not trusted:"
+    now="$(date +%s)"
     code="$(metric rag_backup_repo_status)"
     case "$code" in
       0) ok "stanza ragdb: ok";;
@@ -178,22 +230,33 @@ else
       99) block "stanza ragdb: the repository could not be read (status 99): no stanza, or the target is unreachable";;
       *) block "stanza ragdb: pgBackRest status ${code:-unknown}";;
     esac
-    wal="$(metric rag_backup_wal_archive_age_seconds)"
-    if [ "${wal:--1}" -lt 0 ]; then warn "WAL archive: unknown (nothing archived yet, or a standby)"
-    elif [ "$wal" -gt 300 ]; then block "WAL archive: a backlog, the newest archived segment is $(ago "$wal") old (RPO 5 min)"
+    wal="$(metric rag_backup_wal_archive_age_seconds)"; num "$wal" || wal=-1
+    if [ "$wal" -lt 0 ]; then warn "WAL archive: unknown (nothing archived yet, or a standby)"
+    elif [ $((wal + stale_by)) -gt 300 ]; then block "WAL archive: a backlog, the newest archived segment is $(ago $((wal + stale_by))) old (RPO 5 min)"
     else ok "WAL archive: no backlog"; fi
     for type in full diff; do
-      at="$(sed -n "s/^rag_backup_last_timestamp_seconds{type=\"$type\"} //p" "$prom")"
-      if [ "${at:-0}" = 0 ]; then
+      at="$(sed -n "s/^rag_backup_last_timestamp_seconds{type=\"$type\"} //p" "$prom")"; num "$at" || at=0
+      if [ "$at" = 0 ]; then
         if [ "$type" = full ]; then block "no full backup"; else ok "no $type backup yet"; fi
       else
         ok "newest $type backup: $(date -u -d "@$at" +%Y-%m-%dT%H:%MZ) ($(ago $((now - at))) ago)"
       fi
     done
-    age="$(metric rag_backup_age_seconds)"
-    if [ "${age:-0}" -gt $((max_backup_age * 3600)) ]; then
+    # The age when the file was written, plus how old the file is.
+    age="$(metric rag_backup_age_seconds)"; num "$age" || age=0
+    age=$((age + stale_by))
+    if [ "$age" -gt $((max_backup_age * 3600)) ]; then
       block "the newest backup is $(ago "$age") old (more than $max_backup_age h): run deploy/backup-postgres.sh --type full first"
     fi
+  fi
+  # The segments waiting to be archived, counted on the host (the data directory as root).
+  if [ -n "$pgdata" ]; then
+    if [ -r "$pgdata/pg_wal/archive_status" ]; then
+      ready="$(find "$pgdata/pg_wal/archive_status" -maxdepth 1 -name '*.ready' 2>/dev/null | wc -l)"
+      if [ "$ready" -gt 2 ]; then
+        block "WAL archive: $ready segments wait to be archived (about $((ready * 16 / 1024)) GiB in pg_wal)"
+      else ok "WAL archive: $ready segments waiting"; fi
+    else warn "WAL archive: pg_wal not readable here, the waiting segments not counted (run as root)"; fi
   fi
 fi
 
@@ -202,9 +265,27 @@ section "Key escrow"
 if [ -z "$escrow_dir" ]; then
   warn "not checked: pass --escrow-dir (deploy/escrow-keys.sh's DEST) to see the newest set"
 else
-  newest="$(find "$escrow_dir" -maxdepth 1 -type d -name "kalla-keys-$project-*" 2>/dev/null | sort | tail -n 1)"
+  # escrow-keys.sh's own name, so project kalla doesn't take kalla-test's sets.
+  newest="$(find "$escrow_dir" -mindepth 1 -maxdepth 1 -type d -name "kalla-keys-$project-????????T??????Z" 2>/dev/null | LC_ALL=C sort | tail -n 1)"
   if [ -z "$newest" ]; then warn "no key set of project $project in $escrow_dir: run deploy/escrow-keys.sh $escrow_dir"
-  else ok "newest set: $(basename "$newest") (check it with deploy/escrow-keys.sh --verify $escrow_dir)"; fi
+  else
+    stamp="${newest##*-}"
+    set_at="$(date -u -d "${stamp:0:4}-${stamp:4:2}-${stamp:6:2} ${stamp:9:2}:${stamp:11:2}:${stamp:13:2}" +%s 2>/dev/null || echo "")"
+    ok "newest set: $(basename "$newest") (check it with deploy/escrow-keys.sh --verify $escrow_dir)"
+    # The files escrow-keys.sh exports; one changed after the set means it is missing from every set.
+    if [ -z "$secrets_path$certs_path" ]; then :
+    elif [ ! -r "${secrets_path:-$certs_path}" ]; then warn "the keys' dates not read (the volumes as root)"
+    elif num "$set_at"; then
+      key_at="$( { [ -z "$secrets_path" ] || find "$secrets_path" -maxdepth 3 -type f \( -path "$secrets_path/.pepper" \
+          -o -path "$secrets_path/keys/rag-blob-*" -o -path "$secrets_path/pgbackrest/cipher-pass" \
+          -o -path "$secrets_path/postgres/*_password" -o -path "$secrets_path/api/Security__ConversationIdKeys__*" \) -printf '%T@\n'
+        [ -z "$certs_path" ] || find "$certs_path" -maxdepth 1 -type f \( -name data-protection.pfx -o -name ca.pem -o -name ca.key \) -printf '%T@\n'
+      } 2>/dev/null | cut -d. -f1 | sort -n | tail -n 1)"
+      if num "$key_at" && [ "$key_at" -gt "$set_at" ]; then
+        warn "a key changed after the newest set ($(date -u -d "@$key_at" +%Y-%m-%dT%H:%MZ)): run deploy/escrow-keys.sh $escrow_dir again"
+      elif num "$key_at"; then ok "no key changed after the newest set"; fi
+    fi
+  fi
 fi
 
 # ---- Host units ----------------------------------------------------------------------------------------------------
@@ -226,7 +307,10 @@ else
     else warn "rag-firewall.timer is not active, with compose.hardened.yaml in use"; fi
   fi
   if [[ " $in_env $in_use " == *" backup "* ]]; then
-    for t in rag-backup.timer rag-backup-status.timer; do
+    backup_timers=(rag-backup.timer rag-backup-status.timer)
+    # install.sh enables the upload copy's timer except with an S3 target.
+    [[ "$(env_value KALLA_BACKUP_TARGET)" == s3://* ]] || backup_timers+=(rag-upload-backup.timer)
+    for t in "${backup_timers[@]}"; do
       if systemctl is-active --quiet "$t" 2>/dev/null; then ok "$t is active"; else warn "$t is not active"; fi
     done
   fi
