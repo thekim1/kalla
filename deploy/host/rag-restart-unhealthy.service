@@ -6,7 +6,10 @@ After=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=@DEPLOY_DIR@/host/restart-unhealthy.sh
+# The deployment (its deploy/ directory and Compose project) from install.sh's host.env, so the unit follows the
+# project and an upgrade's new directory (Decisions "Compose host layout and upgrades").
+EnvironmentFile=@STATE_DIR@/host.env
+ExecStart=/bin/sh -c 'exec "$$KALLA_DEPLOY_DIR/host/restart-unhealthy.sh"'
 TimeoutStartSec=5min
 NoNewPrivileges=yes
 PrivateTmp=yes

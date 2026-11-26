@@ -46,7 +46,7 @@ EOF
 # shellcheck disable=SC2016 # expanded by the stand-in
 printf '#!/usr/bin/env bash\n[ -e "$FAKE/active.${@: -1}" ]\n' > "$fake/bin/systemctl"
 chmod +x "$fake/bin/docker" "$fake/bin/systemctl"
-export FAKE="$fake" PATH="$fake/bin:$PATH"
+export FAKE="$fake" PATH="$fake/bin:$PATH" KALLA_STATE_DIR="$work/kstate"
 
 d="$work/deploy"
 # A deployment: project kalla, the backup and hardened overlays, the data on a host disk.
@@ -66,7 +66,8 @@ EOF
   touch -d '2026-11-01 08:00' "$work/data/secrets/.pepper" "$work/data/secrets/keys/rag-blob-1"
   echo "$d/compose.rag.yaml,$d/compose.backup.yaml,$d/compose.hardened.yaml" > "$fake/config_files"
   printf "COMPOSE_FILE='compose.rag.yaml:compose.backup.yaml:compose.hardened.yaml'\nCOMPOSE_PROFILES='clamav'\n" > "$d/.env"
-  sed "s|@DEPLOY_DIR@|$d|g" "$root/deploy/host/rag-backup.service" > "$work/units/rag-backup.service"
+  sed -e "s|@DEPLOY_DIR@|$d|g" -e "s|@STATE_DIR@|$work/kstate|g" "$root/deploy/host/rag-backup.service" > "$work/units/rag-backup.service"
+  mkdir -p "$work/kstate"; printf "KALLA_DEPLOY_DIR='%s'\nCOMPOSE_PROJECT_NAME='%s'\n" "$d" "$p" > "$work/kstate/host.env"
   touch "$fake/active.rag-firewall.timer" "$fake/active.rag-backup.timer" "$fake/active.rag-backup-status.timer" "$fake/active.rag-upload-backup.timer"
 }
 prom() { # prom CODE WAL_AGE FULL_AGO DIFF_AGO (seconds; 0 = none)
@@ -107,6 +108,7 @@ has "started with: backup hardened rag"
 has "ok     stanza ragdb: ok"
 has "ok     WAL archive: no backlog"
 has "ok     newest full backup:"
+has "ok     the units act on project kalla ($work/kstate/host.env)"
 has "ok     1 unit runs from $d"
 has "ok     rag-firewall.timer is active"
 has "ok     rag-upload-backup.timer is active"
@@ -145,7 +147,7 @@ printf "COMPOSE_PROJECT_NAME='second'\n" >> "$d/.env"; run 0; has "ok     projec
 echo "== another project name, no backups, stale units"
 setup ume-rag; prom 0 0 7200 0
 printf "COMPOSE_FILE='compose.rag.yaml:/etc/kalla/site.yaml'\nCOMPOSE_PROFILES='clamav'\n" > "$d/.env"; echo "$d/compose.rag.yaml,/etc/kalla/site.yaml" > "$fake/config_files"
-sed -i "s|$d|$work/old-bundle/deploy|g" "$work/units/rag-backup.service"
+sed -i "s|$d|$work/old-bundle/deploy|g" "$work/kstate/host.env"
 run 1; has "BLOCK  no compose.backup.yaml: this deployment takes no backups"
 run 0 --no-backups-ok
 has "warn   project ume-rag (found by its containers' labels): set COMPOSE_PROJECT_NAME=ume-rag"
@@ -153,6 +155,14 @@ has "warn   no compose.backup.yaml: this deployment takes no backups (--no-backu
 has "started with: rag site.yaml"
 has "warn   1 unit runs from $work/old-bundle/deploy, which doesn't exist"
 hasnt "stanza"
+# The units act on another project (the VM's failure: backups that pointed at nothing after a rename).
+sed -i "s|^COMPOSE_PROJECT_NAME=.*|COMPOSE_PROJECT_NAME='kalla'|" "$work/kstate/host.env"
+run 1 --no-backups-ok; has "BLOCK  the units act on project kalla, not ume-rag"
+mv "$work/kstate/host.env" "$work/kstate/host.env.gone"; run 1 --no-backups-ok
+has "BLOCK  the units read $work/kstate/host.env, which is missing"; mv "$work/kstate/host.env.gone" "$work/kstate/host.env"
+# Units installed before host.env name their scripts' paths.
+printf '[Service]\nExecStart=%s/backup-postgres.sh --type auto\n' "$d" > "$work/units/rag-backup.service"
+run 0 --no-backups-ok; has "warn   units from before host.env"; has "ok     1 unit runs from $d"
 
 echo "== a stopped service, a registry with a port"
 sed -i -e 's/|running$/|exited/' -e 's#ghcr.io/thekim1/kalla/api:0.11.0@#registry.local:5000/kalla/api@#' "$fake/containers.ume-rag"

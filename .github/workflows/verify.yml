@@ -412,6 +412,9 @@ jobs:
         # Decisions "Compose host layout and upgrades": offline, with docker and systemctl stand-ins that answer from
         # files (deploy/tests/doctor.sh).
         run: bash deploy/tests/doctor.sh
+      - name: install.sh writes host.env, which the units read, and --check finds units that aren't this bundle's
+        # Decisions "Compose host layout and upgrades" (#1101 D6): into directories only (deploy/tests/host-install.sh).
+        run: bash deploy/tests/host-install.sh
       - name: kalla-bootstrap in its Compose form keeps its secrets on a re-run
         # deploy/.env from init-deployment.sh, then kalla-bootstrap alone, twice, on throwaway volumes: the gateway's CA and
         # keys from host directories, no gateway blocks in the proxy, the setup wizard's address, the overlays' inputs,

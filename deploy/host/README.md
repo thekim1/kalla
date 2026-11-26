@@ -9,10 +9,15 @@ sudo deploy/host/install.sh            # reads KALLA_HOST_MEMORY from deploy/.en
 systemctl list-timers 'rag-*'
 ```
 
-The install script copies the units to `/etc/systemd/system`, with the deployment's `deploy/` directory in place of
-`@DEPLOY_DIR@`, reloads systemd, enables what `COMPOSE_FILE` in `deploy/.env` uses (`rag-firewall.service` and the
+The install script copies the units to `/etc/systemd/system` and writes `/etc/kalla/host.env` (the state directory,
+`KALLA_STATE_DIR`): the deployment's `deploy/` directory (`KALLA_DEPLOY_DIR`) and its Compose project
+(`COMPOSE_PROJECT_NAME`: `--project`, else `deploy/.env`'s, else the only Källa project on the host, else `kalla`). Every
+unit reads that file, so the units act on the project by name, whatever its containers are called, and an upgrade's
+`install.sh` from the new bundle moves them to its directory. It then reloads systemd, enables what `COMPOSE_FILE` in `deploy/.env` uses (`rag-firewall.service` and the
 restart-unhealthy timer with `compose.hardened.yaml`, the backup timers with `compose.backup.yaml`, the certificate check
-always), and warns when Docker does not use the systemd cgroup driver. Re-run it after an upgrade or after changing `--host-memory`. `--unit-dir DIR --no-enable` only
+always), and warns when Docker does not use the systemd cgroup driver. Re-run it after an upgrade or after changing `--host-memory`. `sudo deploy/host/install.sh --check` changes nothing and
+exits 1 unless the installed units are this bundle's and `host.env` names this `deploy/` directory and a project with a
+kalla-postgres container; `deploy/doctor.sh` reports the same under *Host units*. `--unit-dir DIR --no-enable` only
 writes the rendered units (CI runs `systemd-analyze verify` on them).
 
 | Unit | What it does | When |

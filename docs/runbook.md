@@ -676,10 +676,11 @@ run. To keep one, override the service's command with `sudo systemctl edit rag-f
 ```ini
 [Service]
 ExecStart=
-ExecStart=/opt/kalla/deploy/host/docker-user-firewall.sh --env-file /opt/kalla/deploy/.env --allow kalla-crawl=intranet.umea.se
+ExecStart=/bin/sh -c 'exec "$$KALLA_DEPLOY_DIR/host/docker-user-firewall.sh" --env-file "$$KALLA_DEPLOY_DIR/.env" --allow kalla-crawl=intranet.umea.se'
 ```
 
-(with your deployment's path). `install.sh` leaves that override in place.
+`install.sh` leaves that override in place. Written this way it takes the deploy directory from `/etc/kalla/host.env`
+as the unit does, so it follows an upgrade; an override with a fixed path keeps running the old bundle's script.
 
 ## Crawl politeness per host
 
