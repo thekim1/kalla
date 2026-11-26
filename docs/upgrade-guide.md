@@ -600,9 +600,11 @@ first and last: it is read-only, and exits 1 on what blocks an upgrade.
 >   `COMPOSE_PROJECT_NAME=<name>` in `deploy/.env` once, or Compose starts a second, empty deployment named `kalla`
 >   beside yours. With two projects on the host, pass `--project <name>` to the doctor.
 > - **Data on a host disk** (a *bind-backed volume* or a *bind* under *Volumes and free space*): this procedure leaves
->   the data where it is. Keep the overlay or the volume definitions that put it there (step 5), and check in step 9
->   that the same host paths are listed. An upgrade script that carries volumes over (0.9.0's `upgrade-to-0.9.sh`)
->   points the new volumes at the same host paths instead of copying; read its plan before `--apply`.
+>   the data where it is. Keep the overlay or the volume definitions that put it there (step 5): the bundle's
+>   `compose.host-paths.yaml` with `KALLA_DATA_ROOT` (`init-deployment.sh --data-root`), or an overlay of yours outside
+>   `deploy/`. Check in step 9 that the same host paths are listed. An upgrade script that carries volumes over
+>   (0.9.0's `upgrade-to-0.9.sh`) points the new volumes at the same host paths instead of copying; read its plan
+>   before `--apply`.
 > - **Changed ports or a hand-edited Compose file**: carry the change over in step 5 as an overlay of your own outside
 >   `deploy/`, not as an edit of the release's files, which step 5 replaces. Compare `dc config --services` and
 >   `dc config --images` before and after (plain `dc config` prints the gateway credential keys from `deploy/.env`).

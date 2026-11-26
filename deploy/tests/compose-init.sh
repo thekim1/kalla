@@ -11,6 +11,8 @@
 #   - refusals with one line: a retired variable, a service that has no credential key, a bad domain, a host name as a
 #     proxy address, s3:// without credentials, --yes without the gateway's address
 #   - the host firewall's subnets are compose.hardened.yaml's
+#   - --data-root: compose.host-paths.yaml, the four directories and the marker, the volumes bound to them; a re-run keeps
+#     it; a non-empty directory that isn't Källa's, a relative path and the overlay without a root are refused
 #
 #   deploy/tests/compose-init.sh
 #
@@ -120,5 +122,30 @@ init --domain example.se --gateway-url https://llm.example.se --backup-target lo
 json | jq -r '.networks | to_entries[] | "\(.key) \(.value.ipam.config[0].subnet)"' | sort > "$work/subnets"
 bash "$d/host/docker-user-firewall.sh" --print-subnets | sort | diff -u "$work/subnets" - || fail "the subnets differ"
 ok "every network of the hardened stack has the firewall's subnet"
+echo "== --data-root"
+rm -f "$env"; root="$work/data"
+# A project of its own: the runners' daemon may hold kalla_kalla-* volumes of other tests, which --data-root refuses.
+init --domain example.se --gateway-url https://llm.example.se --backup-target local --data-root "$root/" \
+  --set COMPOSE_PROJECT_NAME=kalla-init-test --yes
+has "KALLA_DATA_ROOT='$root'"; has "COMPOSE_FILE='$d/compose.rag.yaml:$d/compose.backup.yaml:$d/compose.host-paths.yaml'"
+for sub in postgres blobs pgbackrest upload-copy; do [ -d "$root/$sub" ] || fail "no $root/$sub"; done
+[ -f "$root/.kalla-data-root" ] || fail "no marker in $root"
+if [ "$(id -u)" = 0 ]; then
+  [ "$(stat -c '%u %a' "$root/postgres")" = "999 700" ] || fail "postgres/ is $(stat -c '%u %a' "$root/postgres"), not 999 700"
+else
+  grep -q "sudo chown 999:999 $root/postgres && sudo chmod 700 $root/postgres" "$work/init.log" || fail "no chown step for postgres/: $(cat "$work/init.log")"
+fi
+json > "$work/c.json"
+for v in kalla-postgres-data:postgres kalla-blobs:blobs kalla-pgbackrest-repo:pgbackrest kalla-upload-copy:upload-copy; do
+  [ "$(jq -r --arg v "${v%%:*}" '.volumes[$v].driver_opts.device' "$work/c.json")" = "$root/${v#*:}" ] || fail "${v%%:*} is not bound to $root/${v#*:}"
+done
+touch "$root/postgres/PG_VERSION"; init --yes
+has "KALLA_DATA_ROOT='$root'"; grep -q "compose.host-paths.yaml" "$env" || fail "a re-run dropped compose.host-paths.yaml"
+mkdir -p "$work/other"; touch "$work/other/file"
+refused "is not empty and not Källa's" --data-root "$work/other"
+refused "--data-root is an absolute path" --data-root data
+rm -f "$env"; refused "the host-paths overlay needs --data-root" --domain example.se --gateway-url https://llm.example.se --overlays host-paths
+ok "--data-root: the overlay, the directories and the marker, a re-run, and three refusals"
+
 bash "$d/init-deployment.sh" --help | grep -q -- '--backup-target TARGET' || fail "--help does not list the options"
 echo PASS

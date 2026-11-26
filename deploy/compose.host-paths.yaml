@@ -1,0 +1,24 @@
+# Data on a host disk (Decisions "Compose host layout and upgrades"; repo-and-deployment §6.3): the four volumes that
+# hold what can't be fetched again are bind-backed volumes under one KALLA_DATA_ROOT, so the data stays on a disk of the
+# host's own (its size, its snapshots) and survives `docker volume prune`. init-deployment.sh --data-root DIR selects it
+# and creates the directories with their owners:
+#   DIR/postgres     kalla-postgres-data    the database (uid 999, mode 700)
+#   DIR/blobs        kalla-blobs            fetched files, uploads, parse output (uid 1654)
+#   DIR/pgbackrest   kalla-pgbackrest-repo  the pgBackRest repository with --backup-target local (uid 999)
+#   DIR/upload-copy  kalla-upload-copy      the upload copy with --backup-target local (uid 1654)
+# A backup share (--backup-target DIR or s3://) is used as before: KALLA_BACKUP_DIR and KALLA_UPLOAD_BACKUP_DIR win.
+# KALLA_DATA_ROOT is read only with this overlay. The volumes keep their names, so doctor.sh, escrow-keys.sh and the
+# upgrade scripts find them as any other volume (as bind-backed volumes, by `docker inspect`).
+volumes:
+  kalla-postgres-data:
+    driver: local
+    driver_opts: {type: none, o: bind, device: "${KALLA_DATA_ROOT:?KALLA_DATA_ROOT is required with compose.host-paths.yaml (init-deployment.sh --data-root)}/postgres"}
+  kalla-blobs:
+    driver: local
+    driver_opts: {type: none, o: bind, device: "${KALLA_DATA_ROOT:?KALLA_DATA_ROOT is required with compose.host-paths.yaml (init-deployment.sh --data-root)}/blobs"}
+  kalla-pgbackrest-repo:
+    driver: local
+    driver_opts: {type: none, o: bind, device: "${KALLA_DATA_ROOT:?KALLA_DATA_ROOT is required with compose.host-paths.yaml (init-deployment.sh --data-root)}/pgbackrest"}
+  kalla-upload-copy:
+    driver: local
+    driver_opts: {type: none, o: bind, device: "${KALLA_DATA_ROOT:?KALLA_DATA_ROOT is required with compose.host-paths.yaml (init-deployment.sh --data-root)}/upload-copy"}

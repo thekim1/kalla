@@ -268,10 +268,12 @@ jobs:
           FORS_DOMAIN: example.se
           KALLA_GATEWAY_URL: https://llm.example.se
           KALLA_BACKUP_TARGET: local
+          KALLA_DATA_ROOT: /srv/kalla
         run: |
           profiles=(--profile clamav --profile render --profile openwebui --profile proxy --profile backup)
           for files in "rag" "rag backup" "rag hardened" "rag backup hardened" "rag host-24g clamav-conf" \
-                       "rag clamav-conf" "rag rolling" "rag backup hardened host-24g clamav-conf rolling"; do
+                       "rag clamav-conf" "rag rolling" "rag host-paths" "rag backup host-paths" \
+                       "rag backup hardened host-24g clamav-conf rolling host-paths"; do
             args=(); for f in $files; do args+=(-f "deploy/compose.$f.yaml"); done
             echo "docker compose ${args[*]} config --quiet"
             docker compose "${args[@]}" config --quiet
