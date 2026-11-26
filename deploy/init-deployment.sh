@@ -95,7 +95,17 @@ if [ -f "$read_env" ]; then
   done < "$read_env"
 fi
 # The overlays the env file uses already.
-overlays=" $(get COMPOSE_FILE | tr ':' '\n' | sed -n 's#.*/compose\.\(.*\)\.yaml$#\1#p' | sed '/^rag$/d' | tr '\n' ' ')"
+# The overlays the env file uses already, and any other file in COMPOSE_FILE: a site overlay of the operator's own
+# (outside deploy/, docs/upgrade-guide.md, *Your host differs from the bundle*), which every run keeps, after the
+# bundle's files. The bundle's own files are written with this bundle's directory, so a new bundle takes over.
+known="rag backup hardened host-24g clamav-conf rolling host-paths"
+overlays=" "; site_files=()
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  o="$(sed -n 's#^\(.*/\)\{0,1\}compose\.\(.*\)\.yaml$#\2#p' <<< "$f")"
+  if [ -n "$o" ] && [[ " $known " == *" $o "* ]]; then [ "$o" = rag ] || overlays="$overlays$o "
+  else site_files+=("$f"); fi
+done < <(get COMPOSE_FILE | tr ':' '\n')
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -205,6 +215,7 @@ compose_file="$here/compose.rag.yaml"
 for o in backup hardened host-24g clamav-conf rolling host-paths; do
   [[ "$overlays" != *" $o "* ]] || compose_file="$compose_file:$here/compose.$o.yaml"
 done
+for f in ${site_files[@]+"${site_files[@]}"}; do compose_file="$compose_file:$f"; done
 [[ "$compose_file" != *"'"* ]] || die "the path $here contains '"
 
 # Data on a host disk (compose.host-paths.yaml; Decisions "Compose host layout and upgrades"): the directories with
