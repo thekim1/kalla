@@ -1,6 +1,7 @@
 name: Release
 # Push a tag vX.Y.Z (or vX.Y.Z-pre) to release (plans/platform/repo-and-deployment.md §7.2, §8.1; as the gateway's):
-#   1. verify.yml and parser.yml run in full, beside build (2-3); e2e.yml (called) only when asked, after build: the
+#   1. verify.yml and parser.yml run beside build (2-3), unless the gate (below) finds a green dry run of this commit;
+#      e2e.yml (called) only when asked, after build: the
 #      repository variable RELEASE_E2E is 'true' for a tag push, or the dry run's input e2e is ticked (Decisions "E2E
 #      optional on release");
 #   2. every image is pushed to ghcr.io/<owner>/kalla/<service>:X.Y.Z (and :latest unless X.Y.Z is a pre-release):
@@ -14,11 +15,13 @@ name: Release
 #   4. once 1-3 are green: :latest moves to the images (not for a pre-release), a GitHub release is created with the
 #      bundle, the Portainer stack, the SBOMs and SHA256SUMS, and a pull request pins deploy/portainer/ to the release's
 #      images (not for a pre-release).
-# build doesn't wait for verify and parser (about 8 minutes on both runners): a red test stops publish, so only the
-# version's images (never :latest) can reach ghcr.io from a commit whose tests fail, as when a boot test fails.
-# A release starts with a dry run (Decisions "CI on the self-hosted runner", #1084): the gate job finds a green dry run
-# of the tag's commit, and then verify and parser are skipped, and e2e too when that dry run ran it. The images are
-# still built, boot-tested and published. Without such a dry run everything runs (scripts/ci/release-gate.sh).
+# build doesn't wait for verify and parser when they run (about 8 minutes on both runners): a red test stops publish, so
+# only the version's images (never :latest) can reach ghcr.io from a commit whose tests fail, as when a boot test fails.
+# A release starts with a dry run of the commit that gets tagged: main after the release PR merges, then the tag on that
+# exact commit (Decisions "CI on the self-hosted runner", #1084; docs/ci-runner.md). The gate job finds the green dry
+# run of the tag's commit, and then verify and parser are skipped, and e2e too when that dry run ran it. The images are
+# still built, boot-tested and published. Without such a dry run, or when the gate itself fails, everything runs
+# (scripts/ci/release-gate.sh); a skip needs a gate that succeeded.
 # A manual run (workflow_dispatch) is a dry run of 1-3: the images go to a registry inside the job (localhost:5000), so
 # nothing reaches ghcr.io and no release or tag is created.
 # A manual run with the input portainer_boot (X.Y.Z) runs only deploy/tests/portainer-boot.sh, in minutes: this ref's
@@ -79,6 +82,7 @@ jobs:
     runs-on: [self-hosted, linux, x64]
     permissions:
       actions: read
+      contents: read
     outputs:
       skip_tests: ${{ steps.gate.outputs.skip_tests }}
       skip_e2e: ${{ steps.gate.outputs.skip_e2e }}
@@ -90,8 +94,9 @@ jobs:
         run: bash scripts/ci/release-gate.sh
 
   verify:
+    # !cancelled(): a gate that failed skips nothing, so verify runs.
     needs: gate
-    if: inputs.portainer_boot == '' && needs.gate.outputs.skip_tests != 'true'
+    if: "!cancelled() && inputs.portainer_boot == '' && !(needs.gate.result == 'success' && needs.gate.outputs.skip_tests == 'true')"
     uses: ./.github/workflows/verify.yml
     with:
       # verify's renderer job leaves out the worker image's Playwright driver check: build runs it on the pushed image.
@@ -99,7 +104,7 @@ jobs:
 
   parser:
     needs: gate
-    if: inputs.portainer_boot == '' && needs.gate.outputs.skip_tests != 'true'
+    if: "!cancelled() && inputs.portainer_boot == '' && !(needs.gate.result == 'success' && needs.gate.outputs.skip_tests == 'true')"
     uses: ./.github/workflows/parser.yml
 
   portainer-boot:
@@ -172,10 +177,10 @@ jobs:
     needs: [gate, verify, parser, build]
     if: >-
       !cancelled() && needs.build.result == 'success' &&
-      ((github.event_name == 'push' && vars.RELEASE_E2E == 'true' && needs.gate.outputs.skip_e2e != 'true') ||
+      ((github.event_name == 'push' && vars.RELEASE_E2E == 'true' && !(needs.gate.result == 'success' && needs.gate.outputs.skip_e2e == 'true')) ||
        (github.event_name == 'workflow_dispatch' && inputs.e2e)) &&
-      (needs.verify.result == 'success' || (needs.verify.result == 'skipped' && needs.gate.outputs.skip_tests == 'true')) &&
-      (needs.parser.result == 'success' || (needs.parser.result == 'skipped' && needs.gate.outputs.skip_tests == 'true'))
+      (needs.verify.result == 'success' || (needs.verify.result == 'skipped' && needs.gate.result == 'success' && needs.gate.outputs.skip_tests == 'true')) &&
+      (needs.parser.result == 'success' || (needs.parser.result == 'skipped' && needs.gate.result == 'success' && needs.gate.outputs.skip_tests == 'true'))
     uses: ./.github/workflows/e2e.yml
 
   build:
@@ -188,6 +193,9 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The packages: write token stays out of .git/config, where a dry run's branch code could read it (#1120).
+          persist-credentials: false
       - name: A Docker client config of this job's own
         # The runners share one user's ~/.docker/config.json, where a tag release's `docker login ghcr.io` used to leave
         # its GITHUB_TOKEN behind. Once expired, buildx still sent it for ghcr.io and the dry run of 0.4.0 failed pulling
@@ -488,7 +496,7 @@ jobs:
           pkill -f "spdx-json=$GITHUB_WORKSPACE/sbom/" || true
           pkill -f "metadata-file $RUNNER_TEMP/release-images/" || true
           # The pull loop first, so it doesn't start the next pull.
-          [ -s "$RUNNER_TEMP/prepull/pid" ] && kill "$(cat "$RUNNER_TEMP/prepull/pid")" 2>/dev/null || true
+          if [ -s "$RUNNER_TEMP/prepull/pid" ]; then kill "$(cat "$RUNNER_TEMP/prepull/pid")" 2>/dev/null || true; fi
           pkill -f "$RUNNER_TEMP/prepull/docker-config" || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -507,9 +515,9 @@ jobs:
     # verify and parser may be skipped only because the gate found a green dry run of this commit (header).
     needs: [gate, verify, parser, build, e2e]
     if: >-
-      !cancelled() && github.event_name == 'push' && needs.gate.result == 'success' &&
-      (needs.verify.result == 'success' || (needs.verify.result == 'skipped' && needs.gate.outputs.skip_tests == 'true')) &&
-      (needs.parser.result == 'success' || (needs.parser.result == 'skipped' && needs.gate.outputs.skip_tests == 'true')) &&
+      !cancelled() && github.event_name == 'push' &&
+      (needs.verify.result == 'success' || (needs.verify.result == 'skipped' && needs.gate.result == 'success' && needs.gate.outputs.skip_tests == 'true')) &&
+      (needs.parser.result == 'success' || (needs.parser.result == 'skipped' && needs.gate.result == 'success' && needs.gate.outputs.skip_tests == 'true')) &&
       needs.build.result == 'success' && (needs.e2e.result == 'success' || needs.e2e.result == 'skipped')
     runs-on: [self-hosted, linux, x64]
     permissions:

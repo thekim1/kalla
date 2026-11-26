@@ -8,8 +8,9 @@
 # jobs ("verify / …", "parser / …"), none of them failed or cancelled. It ran the browser tests when it has "e2e / …"
 # jobs, none failed or cancelled.
 #
-# Writes skip_tests=true|false and skip_e2e=true|false to $GITHUB_OUTPUT. Anything else than a tag push, or an API
-# error, gives false for both: the tag run then runs everything, as without a dry run.
+# Writes skip_tests=true|false and skip_e2e=true|false to $GITHUB_OUTPUT. Anything else than a tag push, an API error
+# or a run's jobs that can't be read gives false for both: the tag run then runs everything, as without a dry run. So
+# does a crash of this script: release.yml skips only after a gate that succeeded.
 # Needs GH_TOKEN (actions: read), GITHUB_REPOSITORY, GITHUB_SHA, GITHUB_EVENT_NAME; curl and jq (the runners have no gh).
 set -euo pipefail
 
@@ -22,7 +23,7 @@ api="https://api.github.com/repos/${GITHUB_REPOSITORY:?}"
 auth=(-H "Authorization: Bearer ${GH_TOKEN:?}" -H "X-GitHub-Api-Version: 2022-11-28")
 get() { curl -fsSL "${auth[@]}" "$api/$1"; }
 
-runs="$(get "actions/workflows/release.yml/runs?event=workflow_dispatch&head_sha=${GITHUB_SHA:?}&status=success&per_page=20" |
+runs="$(get "actions/workflows/release.yml/runs?event=workflow_dispatch&head_sha=${GITHUB_SHA:?}&status=success&per_page=100" |
   jq -r '.workflow_runs | sort_by(.created_at) | reverse | .[].id')" ||
   { echo "::warning::the dry runs of ${GITHUB_SHA:0:8} could not be listed; everything runs"; result false false; }
 
@@ -35,7 +36,7 @@ for id in $runs; do
     ([.jobs[] | select(.name == "build" and .conclusion == "success")] | length > 0) as $build
     | if $build and green("verify / ") and green("parser / ") then
         (if green("e2e / ") then "tests e2e" else "tests" end)
-      else "none" end' <<< "$jobs")"
+      else "none" end' <<< "$jobs" 2>/dev/null)" || verdict=none
   case "$verdict" in
     "tests e2e") echo "dry run $id of ${GITHUB_SHA:0:8} is green, with the browser tests: verify, parser and e2e are skipped"
                  echo "::notice::reusing dry run https://github.com/$GITHUB_REPOSITORY/actions/runs/$id (verify, parser, e2e)"; result true true ;;
