@@ -161,6 +161,13 @@ chatbot's assistant (T4) once it exists; until then FakeGateway and the demo see
 | B-68 | Unused assistants: the attention item with *Archive* and *Keep* | admin §4.5 (`…/keep`), §5.5.1; data-model `Assistants.UnusedKeptUntil` |
 | B-69 | The evaluation trend chart (`TimeSeriesChart`, copied from the gateway) | admin §7.1 |
 
+**Status (2026-11-26):** done: B-67, B-68 and B-69 are on `main` (with B-64, B-65, B-71), unreleased.
+
+**Wave 3: tools, and ingestion breadth** (user, 2026-11-26). Stream b builds **Tools and MCP** (P2: read-only tools under
+Källa's own identity, `client-credentials`; per-user tools stay P3, identity §9); stream a builds **Ingestion breadth**,
+the worker split (#511) first, then site-profile learning and re-learning (connectors §5.6), e-mail and archives, the
+shared crawl frontier and publish plans from effect tags. Each stream writes its queue items from the designs.
+
 **Later waves: themes that need no input** (the user picks the order):
 
 - **Tools and MCP:** skills with know-how and tools, the in-process tool hub (`hosted` servers, read-only tools), the

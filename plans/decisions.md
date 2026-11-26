@@ -1023,7 +1023,9 @@ included, and `max_tokens` is then always sent, also when the model's limit is u
 limits on the mirror row until the gateway sends them (`fors.context_window`, `fors.max_output_tokens` on
 `GET /v1/models`); then the sync fills them and the manual fields go. The assistant's gateway key's output cap
 (`max_output_tokens` in `/v1/fors/context`), when set, caps every answer too. The test panel shows the `max_tokens`
-sent and whether the answer stopped at the limit. Detail: `chat-api/design.md` §6.3,
+sent and whether the answer stopped at the limit. An answer call that stops at the limit with no visible text is retried
+once with the full limit and the lowest reasoning effort the model takes; still empty, the turn is `unavailable`, never
+an empty `answered` (user, 2026-11-26, #1106). Detail: `chat-api/design.md` §6.3,
 §8.1; `admin/design.md` §4.9, §4.10, V17, §5.5.4; `platform/data-model.md` `GatewayModels`, `AssistantVersions`;
 `gateway-changes/design.md` §7.3.
 
