@@ -85,8 +85,8 @@ and the release preparation folds the notes in here and writes the release's *Ro
     already renamed the roles by hand, or updated to 0.9.0 before renaming them, is updated once as well: what is done
     is skipped. If `kalla-roles` fails, its log says why; the statements by hand on `kalla-postgres` are the fallback
     (same section).
-  - **Compose:** `deploy/upgrade/upgrade-to-0.9.sh` still renames the roles in the old `rag-postgres`; `kalla-roles`
-    then finds nothing to rename.
+  - **Compose:** the same: `kalla-roles` renames the roles in the data that `deploy/upgrade/upgrade-to-0.9.sh` carried
+    over (the script no longer signs in to the old `rag-postgres`).
   - **Kubernetes:** unchanged, by hand (0.9.0, step 2): the migration Job has the migrator's credentials only, and the
     superuser signs in only over the database's own socket.
 - **New volume `kalla-postgres-socket`** (Compose and Portainer): `kalla-postgres`'s Unix socket, in memory
@@ -132,14 +132,22 @@ and the release preparation folds the notes in here and writes the release's *Ro
   keys' files under `Ume.Rag/` in the integration secrets (read when `Kalla/` has none). In the gateway, rename the
   integration `Ume.Rag` to `Kalla` under *Integrations* before provisioning from Fors 0.12's manifest, or a second
   integration is created (Fors's guide, *Integrations*).
-- **Compose:** from the new release's directory, with the old installation running, run
-  `./deploy/upgrade/upgrade-to-0.9.sh`. It renames the variables in `deploy/.env` (keeping `.env.pre-0.9`), stops the
-  old project `ume-rag` except Postgres, renames the roles, removes the old containers and copies the volumes
-  `ume-rag_rag-*` to `kalla_kalla-*` (the backup volumes too). A run that stopped part-way is safe to repeat: a
-  volume whose copy did not finish is copied again. Then run `./deploy/init-deployment.sh` and start the release as
-  usual. Remove the old volumes once it runs. **Not with data on a host disk** (a volume backed by a bind, or a bind
-  in an overlay of your own): the script copies the named volumes, so the new ones start empty. Keep the old project
-  name in `COMPOSE_PROJECT_NAME` and the overlay instead (*Your host differs from the bundle*, below).
+- **Compose:** from the new release's directory, with the old installation still there, run
+  `./deploy/upgrade/upgrade-to-0.9.sh` first without options: it prints its plan and changes nothing. It finds the old
+  project by its containers' Compose labels (the service `rag-postgres` or `postgres`; `--old-project` when there are
+  two) and where each volume's data is, from `docker inspect`. Read the plan, then run it again with `--apply`:
+  - it renames the variables in `deploy/.env` (keeping `.env.pre-0.9`);
+  - it stops and removes the old project's containers (`docker compose -p <old> down`; the volumes stay);
+  - it copies each named volume `<old>_rag-*` into `<project>_kalla-*`. A run that stopped part-way is safe to repeat:
+    a volume whose copy did not finish is copied again;
+  - data on a host disk (a volume backed by a bind, or a direct bind) is not copied: the new volume is a bind-backed
+    volume of the same path. A backup directory that `KALLA_BACKUP_DIR` names is left as it is;
+  - it refuses an old `postgres-data`, `certs`, `secrets` or `blobs` that is missing or empty, and a new volume that
+    already holds other data.
+
+  The database roles are renamed by the release's `kalla-roles` when it starts, as in the Portainer stack. Then run
+  `./deploy/init-deployment.sh` and start the release as usual. Remove the copied old volumes once it runs, never the
+  host paths the new volumes point at.
 - **Portainer** (one stack with the gateway; every step in [portainer.md](portainer.md), *Upgrade*): rename the roles
   first, then update once.
   1. **Stop the services, not the databases:** in *Containers*, every container of the stack except `postgres` and
@@ -593,9 +601,8 @@ first and last: it is read-only, and exits 1 on what blocks an upgrade.
 >   beside yours. With two projects on the host, pass `--project <name>` to the doctor.
 > - **Data on a host disk** (a *bind-backed volume* or a *bind* under *Volumes and free space*): this procedure leaves
 >   the data where it is. Keep the overlay or the volume definitions that put it there (step 5), and check in step 9
->   that the same host paths are listed. Don't run a script that copies volumes by name, such as 0.9.0's
->   `upgrade-to-0.9.sh`: it copies the named volumes, not the host directories behind them, and the new ones start
->   empty.
+>   that the same host paths are listed. An upgrade script that carries volumes over (0.9.0's `upgrade-to-0.9.sh`)
+>   points the new volumes at the same host paths instead of copying; read its plan before `--apply`.
 > - **Changed ports or a hand-edited Compose file**: carry the change over in step 5 as an overlay of your own outside
 >   `deploy/`, not as an edit of the release's files, which step 5 replaces. Compare `dc config --services` and
 >   `dc config --images` before and after (plain `dc config` prints the gateway credential keys from `deploy/.env`).
