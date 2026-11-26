@@ -6,8 +6,8 @@ pilot's CPU caps, the real backup target and escrowed keys. It is the cheapest h
 It waits for the test host, the backup target and the key-escrow location.
 
 Install with [production-setup.md](production-setup.md) and operate with the [runbook](runbook.md). This page lists only
-the test host's own choices and the checks to record. `dc` stands for `docker compose --env-file deploy/.env`, run from
-the directory that holds `deploy/`.
+the test host's own choices and the checks to record. `dc` stands for `docker compose --env-file /etc/kalla/.env`, run
+from the directory that holds `deploy/`.
 
 ## What it checks
 
@@ -90,7 +90,7 @@ Health, first on the host, then through the proxy from a client on the municipal
 
 ```bash
 sudo docker run --rm --network none -v kalla_kalla-certs:/c:ro --entrypoint cat \
-  "$(sudo docker compose --env-file deploy/.env config --images kalla-bootstrap)" /c/ca.pem > rag-ca.pem
+  "$(sudo docker compose --env-file /etc/kalla/.env config --images kalla-bootstrap)" /c/ca.pem > rag-ca.pem
 curl --cacert rag-ca.pem https://localhost:8543/health/ready
 curl --cacert rag-ca.pem https://localhost:9543/health/ready
 curl -fsS https://rag-api-test.intern.umea.se/health/ready

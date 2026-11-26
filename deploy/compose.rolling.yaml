@@ -2,8 +2,8 @@
 # kalla-api and kalla-admin ("b" slots) next to the ones in compose.rag.yaml, on their own host ports, so a reverse proxy
 # can send traffic to both while deploy/rolling-update.sh replaces one slot at a time.
 #
-#   ./deploy/init-deployment.sh ... --rolling     # adds this file to COMPOSE_FILE in deploy/.env
-#   docker compose --env-file deploy/.env up -d --wait
+#   ./deploy/init-deployment.sh ... --rolling     # adds this file to COMPOSE_FILE in /etc/kalla/.env
+#   docker compose --env-file /etc/kalla/.env up -d --wait
 #   ./deploy/rolling-update.sh                    # later, for every update
 #
 # Needs a reverse proxy of your own in front that lists both ports of each service (deploy/proxy/nginx.conf.example

@@ -7,9 +7,10 @@
 # certificate check always.
 #
 # The units act on the deployment named in host.env in the state directory (KALLA_STATE_DIR, default /etc/kalla;
-# Decisions "Compose host layout and upgrades"): KALLA_DEPLOY_DIR, this deploy/ directory, and COMPOSE_PROJECT_NAME,
-# the Compose project. This script writes it, so after an upgrade the units run the new bundle's scripts against the
-# same project, and a project that isn't called kalla is never missed.
+# Decisions "Compose host layout and upgrades"): KALLA_DEPLOY_DIR, this deploy/ directory, KALLA_ENV_FILE, the
+# deployment's env file (the state directory's .env), and COMPOSE_PROJECT_NAME, the Compose project. This script
+# writes it, so after an upgrade the units run the new bundle's scripts against the same project, and a project that
+# isn't called kalla is never missed.
 #
 #   sudo deploy/host/install.sh [--host-memory 16|24] [--project NAME] [--no-enable]
 #   sudo deploy/host/install.sh --check
@@ -46,7 +47,9 @@ while [ $# -gt 0 ]; do
   esac
 done
 deploy_dir="$(cd "$deploy_dir" && pwd)"
-env_file="$deploy_dir/.env"
+# The deployment's env file: the state directory's (Decisions "Compose host layout and upgrades"), else deploy/.env (a
+# clone, or a host whose env file init-deployment.sh hasn't moved yet). The units get it through host.env.
+env_file="${KALLA_STATE_DIR:-/etc/kalla}/.env"; [ -e "$env_file" ] || [ ! -e "$deploy_dir/.env" ] || env_file="$deploy_dir/.env"
 # KEY's last value in deploy/.env, its quotes removed (init-deployment.sh writes KEY='value'); read, never sourced.
 env_value() { { sed -n "s/^$1=//p" "$env_file" 2>/dev/null || true; } | tail -n 1 | sed -e "s/^'\(.*\)'$/\1/" -e 's/^"\(.*\)"$/\1/'; }
 [ -n "$host_memory" ] || host_memory="$(env_value KALLA_HOST_MEMORY)"
@@ -72,7 +75,7 @@ fi
 if [ -z "$project" ]; then
   case "$running" in
     "") project=kalla;;
-    *" "*) die "more than one Källa project here ($running): pass --project, or set COMPOSE_PROJECT_NAME in deploy/.env";;
+    *" "*) die "more than one Källa project here ($running): pass --project, or set COMPOSE_PROJECT_NAME in $env_file";;
     *) project="$running";;
   esac
 fi
@@ -84,7 +87,7 @@ render() { sed -e "s|@DEPLOY_DIR@|$deploy_dir|g" -e "s|@STATE_DIR@|$state_dir|g"
 host_env_text() {
   printf '# Written by deploy/host/install.sh: the deployment the host units act on (Decisions "Compose host layout and\n'
   printf '# upgrades"). Re-run install.sh from a new bundle after an upgrade; change nothing here by hand.\n'
-  printf "KALLA_DEPLOY_DIR='%s'\nCOMPOSE_PROJECT_NAME='%s'\n" "$deploy_dir" "$project"
+  printf "KALLA_DEPLOY_DIR='%s'\nKALLA_ENV_FILE='%s'\nCOMPOSE_PROJECT_NAME='%s'\n" "$deploy_dir" "$env_file" "$project"
 }
 
 if [ "$check" = 1 ]; then
@@ -98,6 +101,7 @@ if [ "$check" = 1 ]; then
   if [ ! -r "$host_env" ]; then fail "$host_env: missing, so the units have no deployment (re-run install.sh)"
   else
     [ "$(hv KALLA_DEPLOY_DIR)" = "$deploy_dir" ] || fail "$host_env: the units run from $(hv KALLA_DEPLOY_DIR), not $deploy_dir"
+    [ "$(hv KALLA_ENV_FILE)" = "$env_file" ] || fail "$host_env: the units read $(hv KALLA_ENV_FILE), not $env_file (re-run install.sh)"
     [ "$(hv COMPOSE_PROJECT_NAME)" = "$project" ] || fail "$host_env: the units act on project $(hv COMPOSE_PROJECT_NAME), not $project"
     if [ "$system" = 1 ] && command -v docker >/dev/null && [[ " $running " != *" $(hv COMPOSE_PROJECT_NAME) "* ]]; then
       fail "$host_env: project $(hv COMPOSE_PROJECT_NAME) has no kalla-postgres container (Källa projects here: ${running:-none})"

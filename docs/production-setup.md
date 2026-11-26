@@ -7,8 +7,8 @@ profile `render` a seventh (`kalla-renderer`, below), and the one-shots `kalla-b
 database roles from before the rename to Källa, a no-op after that) and `kalla-migrate`.
 `kalla-bootstrap` creates the certificates and secrets in the volumes `kalla-certs` and `kalla-secrets` and copies the
 static configuration into `kalla-config`. The same file is the Källa part of the Portainer stack. `init-deployment.sh`
-writes `deploy/.env`, whose `COMPOSE_FILE` lists `compose.rag.yaml` and the overlays your options need, so every
-command below is `docker compose --env-file deploy/.env ...` without `-f`. Run the commands from the directory that
+writes `/etc/kalla/.env`, whose `COMPOSE_FILE` lists `compose.rag.yaml` and the overlays your options need, so every
+command below is `docker compose --env-file /etc/kalla/.env ...` without `-f`. Run the commands from the directory that
 holds `deploy/`.
 
 **A first install next to a gateway on the same host:** the [quick start](compose-quick-start.md) is the short path, and
@@ -39,8 +39,8 @@ upgrades in the [upgrade guide](upgrade-guide.md); the test host's choices and c
   below). On Ubuntu 23.10 and later AppArmor may restrict them (`sysctl kernel.apparmor_restrict_unprivileged_userns`):
   check that the renderer becomes healthy after the first `up` (*Renderer*, below).
 - **An encrypted disk** for the Docker volumes (`kalla-postgres-data`, `kalla-blobs`, `kalla-clamav-db`, `kalla-certs`,
-  `kalla-secrets`, `kalla-config`) and `deploy/.env`, which holds the keys and secrets you give `init-deployment.sh`.
-  To keep the database and the blobs on a disk of their own instead of under `/var/lib/docker`, give
+  `kalla-secrets`, `kalla-config`) and `/etc/kalla/.env`, which holds the keys and secrets you give
+  `init-deployment.sh`. To keep the database and the blobs on a disk of their own instead of under `/var/lib/docker`, give
   `init-deployment.sh --data-root /srv/kalla` (as root, on a new deployment): `compose.host-paths.yaml` then binds
   `kalla-postgres-data`, `kalla-blobs` and, with `--backup-target local`, the two backup volumes to `postgres/`,
   `blobs/`, `pgbackrest/` and `upload-copy/` under it, created with their owners. The directory must be new, empty or
@@ -113,7 +113,7 @@ grows by about 9 KB per chunk. The performance test on the test host sets the fi
 ### 1. Files and images
 
 **From a release (`v0.1.0` on):** download `kalla-X.Y.Z.tar.gz` and `SHA256SUMS` from the GitHub release, check and
-unpack it. Its Compose files already pin every image by digest (`ghcr.io/<owner>/kalla/<service>`), so `deploy/.env`
+unpack it. Its Compose files already pin every image by digest (`ghcr.io/<owner>/kalla/<service>`), so `/etc/kalla/.env`
 needs no image variables:
 
 ```bash
@@ -142,7 +142,7 @@ dotnet publish src/Kalla.AdminApi -c Release -t:PublishContainer -p:PublishAdmin
 ```
 
 The image defaults in `deploy/compose.rag.yaml` are the released pins, so images built on the host or elsewhere are set
-in `deploy/.env` with `init-deployment.sh --set`: `--set KALLA_API_IMAGE=kalla/api:latest` for a local build, or by
+in `/etc/kalla/.env` with `init-deployment.sh --set`: `--set KALLA_API_IMAGE=kalla/api:latest` for a local build, or by
 digest for one pushed to a registry, `--set KALLA_API_IMAGE=ghcr.io/<owner>/kalla/api@sha256:...`. The variables are
 `KALLA_POSTGRES_IMAGE`, `KALLA_MIGRATIONS_IMAGE`, `KALLA_API_IMAGE`, `KALLA_ADMIN_IMAGE`, `KALLA_WORKER_IMAGE`,
 `KALLA_PARSER_IMAGE`, `KALLA_CLAMAV_IMAGE`, `KALLA_RENDERER_IMAGE` and, for the profiles `openwebui` and `proxy`,
@@ -161,7 +161,7 @@ digest for one pushed to a registry, `--set KALLA_API_IMAGE=ghcr.io/<owner>/kall
 ```
 
 Without `--yes` it asks for what is missing: the domain (or `--api-host`), the gateway's address and, with
-`--hardened`, the sign-in provider's address. It writes only `deploy/.env` (mode 600): the variables of
+`--hardened`, the sign-in provider's address. It writes only `/etc/kalla/.env` (mode 600): the variables of
 `compose.rag.yaml`, which are the Portainer stack's ([`deploy/portainer/stack.env.example`](../deploy/portainer/stack.env.example)
 lists them), and `COMPOSE_FILE` with `compose.rag.yaml` and the overlays. A key or secret you give it (a credential
 key, the S3 credentials, a file passed with `--set-file`) is kept there as a variable, as the Portainer stack keeps it
@@ -183,13 +183,13 @@ and `pg_hba.conf`, the database roles, the ClamAV confs, the TLS proxy's `nginx.
 each service's files to its user (uid 999, 1654, 10001, 10002 and 1000), so nothing needs a `chown`. Secrets and
 certificates reach every service as read-only files from those volumes, never as environment variables; Open WebUI and
 the renderer take theirs only from their environment, so their entrypoints read the files and pass them on. The end of
-its log (`docker compose --env-file deploy/.env logs kalla-bootstrap`) lists what is still missing and points at the
+its log (`docker compose --env-file /etc/kalla/.env logs kalla-bootstrap`) lists what is still missing and points at the
 setup wizard.
 
 Both are safe to re-run. `kalla-bootstrap` never overwrites an existing secret, key or Data Protection certificate (a new
 one would break existing data or backups); the connection strings and the files that follow a variable (the credential
 keys, a declared client secret) are written again at every start. A re-run of `init-deployment.sh` changes what its
-options name and keeps every other variable in `deploy/.env` (an empty one, and comments, are dropped), so
+options name and keeps every other variable in `/etc/kalla/.env` (an empty one, and comments, are dropped), so
 `KALLA_SETUP_REOPEN` and anything you added stays.
 
 | Option | Default | Effect |
@@ -246,8 +246,8 @@ Give the admin's client the two redirect URIs the setup wizard shows (code + PKC
 **The setup wizard** (identity design §19) sets sign-in after the first start (*5. Start*); a Compose install asks for
 no sign-in value before it:
 
-1. Read the setup code: `docker compose --env-file deploy/.env logs kalla-admin | grep 'Setup code'`. It is valid for
-   one hour; while setup was never finished, `docker compose --env-file deploy/.env restart kalla-admin` prints a new one. Treat it like a password: whoever
+1. Read the setup code: `docker compose --env-file /etc/kalla/.env logs kalla-admin | grep 'Setup code'`. It is valid
+   for one hour; while setup was never finished, `docker compose --env-file /etc/kalla/.env restart kalla-admin` prints a new one. Treat it like a password: whoever
    holds it chooses the sign-in provider while setup is open.
 2. Open `https://<admin host>[:<admin port>]/setup` at the address users will use (the redirect URIs are built from
    it), and enter the code.
@@ -274,7 +274,7 @@ them when the variable is removed. Secrets stay out of the repository.
 For an identity provider whose tokens carry groups instead, a platform admin maps groups to roles in RAG's admin
 (*Settings → Role groups*: one list per role, each group a `rag-` name or an Entra object id); it applies at each
 user's next sign-in. The only deployment value is the break-glass for the first platform admin,
-`KALLA_OIDC_GROUPS_PLATFORM_ADMIN` in `deploy/.env` (`;`-separated), merged with the setting and never replaced. The claim names default to `roles`, `groups`, `departmentCodes` and `teamCodes`
+`KALLA_OIDC_GROUPS_PLATFORM_ADMIN` in `/etc/kalla/.env` (`;`-separated), merged with the setting and never replaced. The claim names default to `roles`, `groups`, `departmentCodes` and `teamCodes`
 (`KALLA_OIDC_ROLE_CLAIM`, `_GROUP_CLAIM`, `_DEPARTMENT_CLAIM`, `_TEAM_CLAIM`), the gateway's defaults too. Users
 keep one account and one set of groups in the shared Keycloak for both products. Whether gateway groups may also grant
 RAG roles is still open.
@@ -285,15 +285,15 @@ Bicep in `infra/entra/`, applied by a GitHub workflow after IT's approval: see
 
 **Opening the setup wizard again** (a client secret about to expire, a new provider, a broken sign-in): set
 `KALLA_SETUP_REOPEN` to a new value (`./deploy/init-deployment.sh --set KALLA_SETUP_REOPEN=$(date +%F)`) and run
-`docker compose --env-file deploy/.env up -d`. kalla-admin opens the wizard once and prints a new setup code, valid for
-one hour, in `docker compose --env-file deploy/.env logs kalla-admin`; the current sign-in keeps working until you finish.
+`docker compose --env-file /etc/kalla/.env up -d`. kalla-admin opens the wizard once and prints a new setup code, valid
+for one hour, in `docker compose --env-file /etc/kalla/.env logs kalla-admin`; the current sign-in keeps working until you finish.
 `init-deployment.sh` keeps the value on a re-run. Before restoring a database, remove the variable first
 (`--set KALLA_SETUP_REOPEN=`), or the restored database opens the wizard again. The runbook has the lock-out and restore cases (*Sign-in and the setup wizard*).
 
 ### 4. Host units
 
 ```bash
-sudo deploy/host/install.sh            # reads KALLA_HOST_MEMORY from deploy/.env
+sudo deploy/host/install.sh            # reads KALLA_HOST_MEMORY from /etc/kalla/.env
 systemctl list-timers 'rag-*'
 ```
 
@@ -302,7 +302,7 @@ It installs the units of `deploy/host/` ([`deploy/host/README.md`](../deploy/hos
 timer and the restart-unhealthy timer with `compose.hardened.yaml` (`--hardened`: run it before the first `up` then),
 the backup, backup-status and upload-copy timers with `compose.backup.yaml` (`--backup-target`), and the
 certificate-expiry timer always. It warns when Docker does not use the systemd cgroup driver. The upload-copy timer is
-not enabled with an S3 backup target. Options: `--host-memory 16|24` (else from `deploy/.env`),
+not enabled with an S3 backup target. Options: `--host-memory 16|24` (else from `/etc/kalla/.env`),
 `--deploy-dir DIR`, `--unit-dir DIR` (only writes the units there) and `--no-enable`. Re-run it after an upgrade or a
 change of `--host-memory`.
 
@@ -316,9 +316,9 @@ sudo iptables -S UME-RAG-EGRESS
 ### 5. Start
 
 ```bash
-docker compose --env-file deploy/.env up -d --wait
-docker compose --env-file deploy/.env logs kalla-bootstrap                       # its last lines: what is still missing
-docker compose --env-file deploy/.env exec -T kalla-postgres pgbackrest --stanza=ragdb stanza-create
+docker compose --env-file /etc/kalla/.env up -d --wait
+docker compose --env-file /etc/kalla/.env logs kalla-bootstrap                       # its last lines: what is still missing
+docker compose --env-file /etc/kalla/.env exec -T kalla-postgres pgbackrest --stanza=ragdb stanza-create
 ```
 
 `up --wait` returns when every service is healthy and `kalla-migrate` has finished. The end of `kalla-bootstrap`'s log
@@ -340,13 +340,13 @@ escrow* says how to keep it. `kalla-certs/ca.key` also stays in the volume: `kal
 service certificate (*Internal TLS*, below), and anyone who can read it can issue certificates the services trust.
 
 ```bash
-image="$(docker compose --env-file deploy/.env config --images kalla-bootstrap)"
+image="$(docker compose --env-file /etc/kalla/.env config --images kalla-bootstrap)"
 ```
 
 Check the listeners with the internal CA, read out of the volume the same way:
 
 ```bash
-docker compose --env-file deploy/.env ps
+docker compose --env-file /etc/kalla/.env ps
 docker run --rm --network none -v kalla_kalla-certs:/c:ro --entrypoint cat "$image" /c/ca.pem > rag-ca.pem
 curl --cacert rag-ca.pem https://localhost:8543/health/ready
 curl --cacert rag-ca.pem https://localhost:9543/health/ready
@@ -378,7 +378,7 @@ never holds another service's key. The three keys come about in one of three way
   ([quick start](compose-quick-start.md), step 3; the gateway's `docs/integrations.md`, *Provisioning from a manifest*).
   The integration gets a team and department of its own, `kalla`: move it to your team in the gateway's admin
   afterwards. To rotate, rotate the key in the gateway's admin, delete its file under `integration-secrets/Kalla/`,
-  run the gateway's `up` again, then `docker compose --env-file deploy/.env up -d` (`kalla-bootstrap` copies the new
+  run the gateway's `up` again, then `docker compose --env-file /etc/kalla/.env up -d` (`kalla-bootstrap` copies the new
   key) and restart the service.
 - **A gateway admin creates them from the preset:** *Access → Integrations → Add from manifest*, the preset *Källa*.
   The three secrets are shown once; hand them over as step 3 below says.
@@ -411,7 +411,7 @@ never holds another service's key. The three keys come about in one of three way
    - An expiry as your key policy sets it; rotate before it (below).
 3. **Hand them over** as one file per key, holding the key alone on one line, and pass them to `init-deployment.sh`:
    `--gateway-credential-key-file api=kalla-api.key --gateway-credential-key-file admin=kalla-admin.key
-   --gateway-credential-key-file worker=kalla-worker.key`. It keeps them in `deploy/.env` (mode 600) as
+   --gateway-credential-key-file worker=kalla-worker.key`. It keeps them in `/etc/kalla/.env` (mode 600) as
    `KALLA_API_GATEWAY_KEY`, `KALLA_ADMIN_GATEWAY_KEY` and `KALLA_WORKER_GATEWAY_KEY`, and `kalla-bootstrap` writes
    each as its service's secret file `Gateway__Key` in `kalla-secrets` at every start. Delete the handed-over files
    afterwards. On Kubernetes, `create-secrets.sh` takes the same option and
@@ -424,10 +424,10 @@ Settings, scopes included, are changed by gateway admins only; the key's manager
 **Rotate one key.** In the gateway's admin UI, rotate that service's key with the 24-hour grace period (the new key
 keeps the integration, role, scopes, residencies and address list; the old one works until the grace period ends). Put
 the new key in a file and re-run `./deploy/init-deployment.sh --gateway-credential-key-file SERVICE=FILE` for that
-service only: it changes that variable and keeps the rest of `deploy/.env`. Then run
-`docker compose --env-file deploy/.env up -d` (`kalla-bootstrap` rewrites the key file) and restart the service:
-`docker compose --env-file deploy/.env restart kalla-api` (or `kalla-admin`, `kalla-worker`). Check its log for gateway
-`401` answers, then let the grace period end or revoke the old key. Kubernetes: `create-secrets.sh` again with that
+service only: it changes that variable and keeps the rest of `/etc/kalla/.env`. Then run
+`docker compose --env-file /etc/kalla/.env up -d` (`kalla-bootstrap` rewrites the key file) and restart the service:
+`docker compose --env-file /etc/kalla/.env restart kalla-api` (or `kalla-admin`, `kalla-worker`). Check its log for
+gateway `401` answers, then let the grace period end or revoke the old key. Kubernetes: `create-secrets.sh` again with that
 option, then
 `kubectl rollout restart deployment/kalla-<service>`. Portainer: change the variable, update the stack (`kalla-bootstrap`
 rewrites the file), then restart that service's container. A key that
@@ -474,7 +474,7 @@ which kalla-admin reaches over the gateway's `edge` network (Decisions "Upgrades
 repository is always encrypted client-side (`aes-256-cbc`, passphrase in `kalla-secrets/pgbackrest/cipher-pass`, which
 `kalla-bootstrap` generates once and writes into `pgbackrest/repo.conf`; escrowed).
 
-| Target | pgBackRest repository | Upload copy | `deploy/.env` |
+| Target | pgBackRest repository | Upload copy | `/etc/kalla/.env` |
 |---|---|---|---|
 | `DIR` (a share mounted on the host) | `DIR/pgbackrest`, mounted into kalla-postgres at `/var/lib/pgbackrest` | `DIR/uploads` (`rag-upload-backup.timer`) | `KALLA_BACKUP_DIR`, `KALLA_UPLOAD_BACKUP_DIR` |
 | `s3://ENDPOINT/BUCKET[/PATH]` | the bucket, path `/PATH` (default `/kalla`), path-style URIs, over the `backup` network | not built yet: replicate the bucket's `uploads/` prefix once the blob store moves to S3 | `KALLA_BACKUP_ENDPOINT` (the firewall allows only this) |
@@ -509,7 +509,7 @@ the Files card's summary and noted in their details; only new and changed files 
 
 To change it, re-run `init-deployment.sh --profiles` with the new list, with or without `clamav` (for example
 `--profiles ''` or `--profiles clamav`; the list replaces the current one), then
-`docker compose --env-file deploy/.env up -d --wait`, which recreates the worker with the new mode. When turning it off, also `docker compose --env-file deploy/.env rm -sf kalla-clamav` (`up` leaves a
+`docker compose --env-file /etc/kalla/.env up -d --wait`, which recreates the worker with the new mode. When turning it off, also `docker compose --env-file /etc/kalla/.env rm -sf kalla-clamav` (`up` leaves a
 container of a profile that is off alone). When turning it on, freshclam downloads the signatures first (several
 minutes); files wait with `clamav.unavailable` until clamd is ready. On Kubernetes the same choice is the
 `components/clamav` component ([Kubernetes](kubernetes.md), *Malware scan*); in the Portainer stack, `clamav` in
@@ -538,22 +538,22 @@ request itself with the crawler's guard (connectors design §8.3). The worker fi
 (`ws://kalla-renderer:3000/<secret path>`, the secret file `kalla-secrets/worker/Render__Endpoint`); without that file
 `browser` sources wait with `render.not_configured`. Rotate the path by deleting `.render-ws-path` in `kalla-secrets`
 (`docker run --rm -v kalla_kalla-secrets:/s alpine rm /s/.render-ws-path`), then
-`docker compose --env-file deploy/.env up -d` and `docker compose --env-file deploy/.env restart kalla-renderer kalla-worker`.
+`docker compose --env-file /etc/kalla/.env up -d` and `docker compose --env-file /etc/kalla/.env restart kalla-renderer kalla-worker`.
 
 It is **off unless you ask for it**: the service has the Compose profile `render`, and `kalla-bootstrap` writes the
 worker's endpoint file only while `render` is in `COMPOSE_PROFILES` (and removes it without), so the profile and the
 endpoint always go together. To turn it on or off, re-run `init-deployment.sh --profiles` with the new list, with or
-without `render` (for example `--profiles clamav,render`), then `docker compose --env-file deploy/.env up -d --wait`,
-which recreates the worker with the new endpoint. When turning it off,
-`docker compose --env-file deploy/.env rm -sf kalla-renderer` stops the renderer (`up` leaves a container of a profile
-that is off alone).
+without `render` (for example `--profiles clamav,render`), then `docker compose --env-file /etc/kalla/.env up -d
+--wait`, which recreates the worker with the new endpoint. When turning it off,
+`docker compose --env-file /etc/kalla/.env rm -sf kalla-renderer` stops the renderer (`up` leaves a container of a
+profile that is off alone).
 
 It runs hardened like the others. With `--hardened` (`compose.hardened.yaml`) it gets a seccomp profile of its own
 (`images/renderer/seccomp.json`: Docker's default with `clone`, `unshare` and `chroot` allowed), so Chromium's own
 sandbox can create its user namespaces; without that overlay it runs without Docker's seccomp filter, as in the
 Portainer stack, and Chromium's own sandbox stays on. Without them
 Chromium refuses to start ("No usable sandbox") and the renderer restarts in a loop: `docker compose --env-file
-deploy/.env logs kalla-renderer` shows it. On Ubuntu 23.10 and later, if AppArmor restricts unprivileged user namespaces,
+/etc/kalla/.env logs kalla-renderer` shows it. On Ubuntu 23.10 and later, if AppArmor restricts unprivileged user namespaces,
 that is what happens; do not turn the sandbox off, agree a fix with IT (an AppArmor profile for the renderer, or the
 sysctl). One browser serves every render; launch-server exits when Chromium does and Docker restarts it.
 
@@ -591,13 +591,13 @@ path, on the internal `kalla-render` network.
 
 Internal certificates last 825 days, the internal CA 10 years. `kalla-bootstrap` re-issues a service certificate at the
 first start within 30 days of its expiry (or when its host names change), which needs `kalla-certs/ca.key`; run
-`docker compose --env-file deploy/.env up -d` then, and restart what its checklist names
-(`docker compose --env-file deploy/.env restart kalla-postgres kalla-parser`: they read their certificates only at start).
+`docker compose --env-file /etc/kalla/.env up -d` then, and restart what its checklist names
+(`docker compose --env-file /etc/kalla/.env restart kalla-postgres kalla-parser`: they read their certificates only at start).
 The certificate-expiry timer (`deploy/host/cert-expiry.sh`, *4. Host units*) warns 60 days ahead. **A new internal
 CA:** delete `ca.pem` and `ca.key` in `kalla-certs`
-(`docker run --rm -v kalla_kalla-certs:/c alpine rm /c/ca.pem /c/ca.key`) and run `docker compose --env-file deploy/.env up -d --wait`: `kalla-bootstrap` creates a new CA and re-issues
+(`docker run --rm -v kalla_kalla-certs:/c alpine rm /c/ca.pem /c/ca.key`) and run `docker compose --env-file /etc/kalla/.env up -d --wait`: `kalla-bootstrap` creates a new CA and re-issues
 every service certificate. Then restart every Källa service (and `kalla-proxy`, `kalla-openwebui` where their profiles
-are on), which read the CA only at start: `docker compose --env-file deploy/.env restart`.
+are on), which read the CA only at start: `docker compose --env-file /etc/kalla/.env restart`.
 
 ## Kubernetes
 
@@ -689,7 +689,7 @@ events); without the entry every request comes from the proxy, and a key allow-l
 With certificates from your PKI for the two listeners, put `api.crt` and `api.key`, `admin.crt` and `admin.key` in a
 host directory and set `KALLA_PKI_DIR` to it (`--set KALLA_PKI_DIR=DIR`): `kalla-bootstrap` copies a pair found there
 at every start instead of issuing one from the internal CA, so a renewed pair is picked up at the next
-`docker compose --env-file deploy/.env up -d`. The chain the services must trust goes into `KALLA_TRUST_DIR` as a
+`docker compose --env-file /etc/kalla/.env up -d`. The chain the services must trust goes into `KALLA_TRUST_DIR` as a
 `*.pem` file.
 
 ## Telemetry
@@ -716,7 +716,7 @@ chats are pruned; until then they stay unpruned. It needs the 24 GB host.
 
 ```bash
 ./deploy/init-deployment.sh --profiles clamav,openwebui --set KALLA_OPENWEBUI_HOST=chat.intern.umea.se
-docker compose --env-file deploy/.env up -d --wait
+docker compose --env-file /etc/kalla/.env up -d --wait
 sudo systemctl start rag-firewall.service   # with --hardened: allow kalla-edge Open WebUI's provider now
 ```
 
@@ -728,7 +728,7 @@ WebUI as `openwebui/rag-api-key`, which its start wrapper passes on as `OPENAI_A
 it as the deployment's own Open WebUI client while the profile is on (identity design §5.2): nothing to create in the
 admin. A new key: delete `.openwebui-rag-api-key` in `kalla-secrets`
 (`docker run --rm -v kalla_kalla-secrets:/s alpine rm /s/.openwebui-rag-api-key`), run
-`docker compose --env-file deploy/.env up -d --wait` and restart `kalla-api` and `kalla-openwebui`; `kalla-migrate` revokes
+`docker compose --env-file /etc/kalla/.env up -d --wait` and restart `kalla-api` and `kalla-openwebui`; `kalla-migrate` revokes
 the old key. The run book for a local P1a run is [p1a-local-run.md](p1a-local-run.md).
 
 **The feedback service account** (chat design §14.2). kalla-api's feedback importer reads Open WebUI's feedback list
@@ -744,7 +744,7 @@ the key with it, checks that the key reads the feedback list (only `API_KEYS_ALL
 and writes it to `kalla-secrets/openwebui-feedback/OpenWebUi__AdminApiKey`, which kalla-api reads without a restart
 (`Security__ExtraSecretsDirectory`). A key that still works is kept on the next `up`; a new key: delete that file
 (`docker run --rm -v kalla_kalla-secrets:/s alpine rm /s/openwebui-feedback/OpenWebUi__AdminApiKey`) and run
-`docker compose --env-file deploy/.env up -d` again. If the store had users before the account was created (a store
+`docker compose --env-file /etc/kalla/.env up -d` again. If the store had users before the account was created (a store
 Open WebUI used before), the job stops because the account is not admin: create it as an existing admin with
 `POST /api/v1/auths/add` (name, the email above, the password from `kalla-secrets/openwebui/admin-password`, role
 `admin`), then run `up` again. kalla-api's importer finds Open WebUI by itself: `kalla-bootstrap` gives it the stack's
@@ -765,8 +765,8 @@ a closed banner returns on the next reload.
 minute for kalla-api at start, starts Open WebUI with the provider URL, client id, client secret and button label it
 answers, and asks again every minute: when an answer differs it stops Open WebUI and exits, and `restart:
 unless-stopped` starts it with the new values (users then sign in again). Each value comes from the deployment
-(the `KALLA_OPENWEBUI_OIDC_*` variables in `deploy/.env`; the client secret reaches kalla-api and kalla-admin as secret
-files from `kalla-bootstrap`) when set, else from kalla-admin's
+(the `KALLA_OPENWEBUI_OIDC_*` variables in `/etc/kalla/.env`; the client secret reaches kalla-api and kalla-admin as
+secret files from `kalla-bootstrap`) when set, else from kalla-admin's
 setup wizard, else the default (client `open-webui`, kalla-admin's authority's discovery document, *Umeå kommun*). With
 no provider at all, or a stored secret kalla-api can't read, it starts Open WebUI without OIDC sign-in, so nobody can sign
 in (its log says so). A provider the wizard sets on another host than the authority needs `--allow kalla-edge=HOST` for

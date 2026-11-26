@@ -29,6 +29,8 @@ repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 work="$(mktemp -d)"; project="kalla-bootstrap-$$"
 mkdir -p "$work/images"; cp -R "$repo/deploy" "$work/"; cp -R "$repo/images/clamav" "$work/images/"; rm -f "$work/deploy/.env"
 d="$work/deploy"
+# The env file in the copy's deploy/, so the run leaves nothing in /etc/kalla.
+export KALLA_STATE_DIR="$d"
 dc() { docker compose -p "$project" --env-file "$d/.env" "$@"; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "ok: $*"; }

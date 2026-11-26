@@ -114,14 +114,14 @@ sudo ./deploy/init-deployment.sh --api-host <host> --admin-host <host> \
   --gateway-secrets-dir ../fors-X.Y.Z/deploy/integration-secrets \
   --set KALLA_API_PUBLIC_URL=https://<host>:8543 \
   --backup-target local
-sudo docker compose --env-file deploy/.env up -d --wait
-sudo docker compose --env-file deploy/.env logs kalla-bootstrap
-sudo docker compose --env-file deploy/.env exec -T kalla-postgres pgbackrest --stanza=ragdb stanza-create
+sudo docker compose --env-file /etc/kalla/.env up -d --wait
+sudo docker compose --env-file /etc/kalla/.env logs kalla-bootstrap
+sudo docker compose --env-file /etc/kalla/.env exec -T kalla-postgres pgbackrest --stanza=ragdb stanza-create
 sudo deploy/host/install.sh
 sudo systemctl start rag-backup.service
 ```
 
-- **The script writes only `deploy/.env`** (mode 600). The certificates and secrets are created at the first `up` by
+- **The script writes only `/etc/kalla/.env`** (mode 600). The certificates and secrets are created at the first `up` by
   the one-shot `kalla-bootstrap`, in Docker volumes; the end of its log lists what is still missing (a credential key,
   for example) and the setup wizard's address.
 - **`--gateway-ca-file` is the gateway's CA certificate**, which the script copies to `deploy/gateway-ca` (only the
@@ -144,7 +144,7 @@ The script ends with the next steps, the setup wizard's address among them.
 
 **Källa's setup wizard:**
 
-1. Read the setup code: `sudo docker compose --env-file deploy/.env logs kalla-admin | grep 'Setup code'`
+1. Read the setup code: `sudo docker compose --env-file /etc/kalla/.env logs kalla-admin | grep 'Setup code'`
 2. Open `https://<host>:9543/setup`, at the address users will use, and enter the code.
 3. Register the two redirect URIs the wizard shows on the client `kalla-admin`, type the client secret, press
    **Test sign-in** and sign in as yourself. **Finish** is offered once a platform admin's test passed.
@@ -174,7 +174,7 @@ The script ends with the next steps, the setup wizard's address among them.
   *Settings → Network* in Källa's admin: production-setup.md.
 - **The cost and budget read-back is off** after this guide: *Models* shows *Cost and budgets from the AI gateway:
   Off*, since the gateway names no Integration API address (its `FORS_INTEGRATION_API_URL`). The gateway's
-  `deploy/.env` needs it and kalla-admin a route to the gateway's Admin API:
+  `/etc/kalla/.env` needs it and kalla-admin a route to the gateway's Admin API:
   [production-setup.md](production-setup.md#cost-and-budget-read-back).
 - **Open WebUI** for staff chat: [production-setup.md](production-setup.md#open-webui-optional).
 - **Upgrades:** the [upgrade guide](upgrade-guide.md); day-to-day operation: the [runbook](runbook.md).
@@ -190,9 +190,9 @@ call), caps the ingestion containers as a group, and gives the renderer its secc
 docker info --format '{{.CgroupDriver}} {{.CgroupVersion}}'    # systemd 2
 docker network ls -q | xargs docker network inspect --format '{{.Name}} {{range .IPAM.Config}}{{.Subnet}} {{end}}'
 sudo ./deploy/init-deployment.sh --hardened --oidc-authority https://<provider>/realms/fors [--proxy-address <proxy>]
-sudo docker compose --env-file deploy/.env down
+sudo docker compose --env-file /etc/kalla/.env down
 sudo deploy/host/install.sh
-sudo docker compose --env-file deploy/.env up -d --wait
+sudo docker compose --env-file /etc/kalla/.env up -d --wait
 ```
 
 - **The cgroup driver must be `systemd` on cgroup v2**, and **no Docker network may use `172.30.0.0/16`**: with
@@ -214,10 +214,10 @@ sudo docker compose --env-file deploy/.env up -d --wait
 |---|---|---|
 | `up` fails with "Pool overlaps with other one on this address space" | on a hardened host, a Docker network already uses `172.30.x.x` | step 7; recreate that network after setting `default-address-pools` |
 | `up --wait` times out on `kalla-worker`, `kalla-parser` or `kalla-clamav` | on a hardened host, the cgroup driver is not `systemd`, or the slice is not installed | `systemctl status rag-ingestion.slice`, `docker info`; `sudo deploy/host/install.sh` |
-| `kalla-clamav` unhealthy for more than 15 minutes | no signature download | `docker compose --env-file deploy/.env logs kalla-clamav`; `--freshclam-proxy` behind an egress proxy |
+| `kalla-clamav` unhealthy for more than 15 minutes | no signature download | `docker compose --env-file /etc/kalla/.env logs kalla-clamav`; `--freshclam-proxy` behind an egress proxy |
 | The end of `kalla-bootstrap`'s log: *KALLA_API_GATEWAY_KEY: no key for kalla-api* (or `kalla-admin`, `kalla-worker`) | the gateway has not applied the manifest | step 3: the manifest in `deploy/integration-manifests`, mode 644, then the gateway's `up` again (its `migrations` log names a manifest it refused), then Källa's `up -d` |
-| The wizard: *kalla-admin could not reach the provider address* | on a hardened host, the firewall does not know the provider | re-run `init-deployment.sh --oidc-authority <provider>`, then `sudo docker compose --env-file deploy/.env up -d` and `sudo systemctl start rag-firewall.service` |
-| *Models* is empty, or the organisation sync is *degraded* | Källa's containers do not reach the gateway, or do not trust its certificate | the check below; `--gateway-ca-file` with the gateway's `deploy/certs/ca.pem`; `docker compose --env-file deploy/.env logs kalla-admin` |
+| The wizard: *kalla-admin could not reach the provider address* | on a hardened host, the firewall does not know the provider | re-run `init-deployment.sh --oidc-authority <provider>`, then `sudo docker compose --env-file /etc/kalla/.env up -d` and `sudo systemctl start rag-firewall.service` |
+| *Models* is empty, or the organisation sync is *degraded* | Källa's containers do not reach the gateway, or do not trust its certificate | the check below; `--gateway-ca-file` with the gateway's `deploy/certs/ca.pem`; `docker compose --env-file /etc/kalla/.env logs kalla-admin` |
 | 403 `model_not_allowed` or `max_residency_not_met` in a log | the model is not hosted at `OnPrem` or `Eu`, or a key lists other models | the provider's residency and the three keys, in the gateway's admin |
 
 **Do Källa's containers reach the gateway?** A throwaway container on the `llm` network takes the same way out as

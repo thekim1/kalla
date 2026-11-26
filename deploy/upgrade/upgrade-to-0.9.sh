@@ -31,7 +31,8 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 deploy="$(cd "$here/.." && pwd)"
 # shellcheck source=deploy/upgrade/lib.sh
 . "$here/lib.sh"
-old_project=""; env_file="$deploy/.env"
+old_project=""
+env_file="${KALLA_STATE_DIR:-/etc/kalla}/.env"; [ -e "$env_file" ] || [ ! -e "$deploy/.env" ] || env_file="$deploy/.env"
 
 usage() { sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 step() { echo; echo "== $*"; }

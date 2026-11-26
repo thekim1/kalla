@@ -25,7 +25,10 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-env_file="$here/.env"; target=""; confirm=0; set_label=""; timeout=10800
+# The deployment's env file (Decisions "Compose host layout and upgrades"): the state directory's, else deploy/.env (a
+# clone, or a host whose env file init-deployment.sh hasn't moved yet). --env-file wins.
+target=""; confirm=0; set_label=""; timeout=10800
+env_file="${KALLA_STATE_DIR:-/etc/kalla}/.env"; [ -e "$env_file" ] || [ ! -e "$here/.env" ] || env_file="$here/.env"
 
 usage() { sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 die() { echo "error: $*" >&2; exit 1; }

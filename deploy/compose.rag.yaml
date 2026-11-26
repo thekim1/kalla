@@ -1,8 +1,8 @@
 # Källa's services, the one definition of every deployment form (Decisions "One deployment bootstrap"). Docker Compose
 # runs this file directly, as the project kalla:
 #
-#   deploy/init-deployment.sh ...                       # deploy/.env: the domain, the gateway, the optional parts
-#   docker compose --env-file deploy/.env up -d --wait  # its COMPOSE_FILE names this file and the overlays
+#   deploy/init-deployment.sh ...                       # /etc/kalla/.env: the domain, the gateway, the optional parts
+#   docker compose --env-file /etc/kalla/.env up -d --wait  # its COMPOSE_FILE names this file and the overlays
 #
 # The one-shot kalla-bootstrap (deploy/portainer/bootstrap.sh) creates the certificates and secrets in the volumes
 # kalla-certs and kalla-secrets on the first start and the static configuration in kalla-config on every start; the end of
@@ -247,7 +247,7 @@ services:
       Rag__Roles: knowledge,chat,mcp
       BlobStore__Root: /data/blobs/rag
       #@joined Gateway__BaseUrl: ${KALLA_GATEWAY_URL:-https://gateway:8443}
-      Gateway__BaseUrl: ${KALLA_GATEWAY_URL:?Set KALLA_GATEWAY_URL in deploy/.env}  #@alone
+      Gateway__BaseUrl: ${KALLA_GATEWAY_URL:?Set KALLA_GATEWAY_URL in /etc/kalla/.env}  #@alone
       # Citation links are absolute: the public host over HTTPS unless a URL is given (a port, a path).
       Knowledge__PublicBaseUrl: ${KALLA_API_PUBLIC_URL:-https://${KALLA_API_HOST:-${FORS_DOMAIN:+rag.}${FORS_DOMAIN:-}}}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${FORS_OTEL_ENDPOINT:-}
@@ -335,7 +335,7 @@ services:
       OpenWebUi__PublicUrl: https://${KALLA_OPENWEBUI_HOST:-${FORS_DOMAIN:+chat.}${FORS_DOMAIN:-localhost}}
       BlobStore__Root: /data/blobs/rag
       #@joined Gateway__BaseUrl: ${KALLA_GATEWAY_URL:-https://gateway:8443}
-      Gateway__BaseUrl: ${KALLA_GATEWAY_URL:?Set KALLA_GATEWAY_URL in deploy/.env}  #@alone
+      Gateway__BaseUrl: ${KALLA_GATEWAY_URL:?Set KALLA_GATEWAY_URL in /etc/kalla/.env}  #@alone
       OTEL_EXPORTER_OTLP_ENDPOINT: ${FORS_OTEL_ENDPOINT:-}
       # Traces: a share of the requests that start here (#503); a parent's decision wins.
       OTEL_TRACES_SAMPLER: ${FORS_OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
@@ -399,7 +399,7 @@ services:
       BlobStore__Root: /data/blobs/rag
       TMPDIR: /data/blobs/spool
       #@joined Gateway__BaseUrl: ${KALLA_GATEWAY_URL:-https://gateway:8443}
-      Gateway__BaseUrl: ${KALLA_GATEWAY_URL:?Set KALLA_GATEWAY_URL in deploy/.env}  #@alone
+      Gateway__BaseUrl: ${KALLA_GATEWAY_URL:?Set KALLA_GATEWAY_URL in /etc/kalla/.env}  #@alone
       Crawl__AllowedPrivateRanges: ${KALLA_CRAWL_ALLOW:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${FORS_OTEL_ENDPOINT:-}
       # Traces: a share of the requests that start here (#503); a parent's decision wins.

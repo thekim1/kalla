@@ -11,6 +11,8 @@
 #   - refusals with one line: a retired variable, a service that has no credential key, a bad domain, a host name as a
 #     proxy address, s3:// without credentials, --yes without the gateway's address
 #   - the host firewall's subnets are compose.hardened.yaml's
+#   - the state directory: a deploy/.env from before is moved there with its values, a re-run keeps it, the gateway's CA
+#     is written there, and a deploy/.env beside it is refused
 #   - --data-root: compose.host-paths.yaml, the four directories and the marker, the volumes bound to them; a re-run keeps
 #     it; a non-empty directory that isn't Källa's, a relative path and the overlay without a root are refused
 #
@@ -24,6 +26,8 @@ cp -R "$repo/deploy" "$work/"; rm -f "$work/deploy/.env"
 d="$work/deploy"; env="$d/.env"
 # deploy/.env is under test: an inherited variable would override it.
 while IFS= read -r var; do unset "$var"; done < <(compgen -e | grep -E '^(UME_|RAG_|FORS_|KALLA_|COMPOSE_)' || true)
+# The env file in the copy's deploy/, as in a clone; "the state directory" below moves it out.
+export KALLA_STATE_DIR="$d"
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "ok: $*"; }
 init() { bash "$d/init-deployment.sh" "$@" < /dev/null > "$work/init.log" 2>&1 || { cat "$work/init.log"; fail "init-deployment.sh $* failed"; }; }
@@ -147,5 +151,26 @@ refused "--data-root is an absolute path" --data-root data
 rm -f "$env"; refused "the host-paths overlay needs --data-root" --domain example.se --gateway-url https://llm.example.se --overlays host-paths
 ok "--data-root: the overlay, the directories and the marker, a re-run, and three refusals"
 
-bash "$d/init-deployment.sh" --help | grep -q -- '--backup-target TARGET' || fail "--help does not list the options"
+echo "== the state directory"
+state="$work/state"
+init --domain example.se --gateway-url https://llm.example.se --gateway-ca-file "$work/gw-ca.pem" --yes
+grep -qx "KALLA_GATEWAY_CA_DIR='$d/gateway-ca'" "$env" || fail "the CA isn't in the bundle's deploy/ before the move"
+[ -f "$d/.env" ] || fail "no deploy/.env to move"
+KALLA_STATE_DIR="$state" init --yes
+[ ! -e "$d/.env" ] || fail "deploy/.env is still in the bundle"
+grep -qx "FORS_DOMAIN='example.se'" "$state/.env" || fail "the moved env file lost its values: $(cat "$state/.env")"
+[ "$(stat -c %a "$state/.env")" = 600 ] || fail "the state directory's env file is not mode 600"
+grep -q "Moved $d/.env to $state/.env" "$work/init.log" || fail "the move isn't reported: $(cat "$work/init.log")"
+grep -q -- "--env-file $state/.env" "$work/init.log" || fail "the next steps don't name $state/.env"
+grep -qx "KALLA_GATEWAY_CA_DIR='$state/gateway-ca'" "$state/.env" || fail "the bundle's gateway CA wasn't carried to the state directory"
+cmp -s "$work/gw-ca.pem" "$state/gateway-ca/ca.pem" || fail "the carried CA differs"
+KALLA_STATE_DIR="$state" init --gateway-ca-file "$work/gw-ca.pem" --yes
+cmp -s "$work/gw-ca.pem" "$state/gateway-ca/ca.pem" || fail "the gateway's CA is not in the state directory"
+grep -qx "KALLA_GATEWAY_CA_DIR='$state/gateway-ca'" "$state/.env" || fail "KALLA_GATEWAY_CA_DIR doesn't name the state directory"
+echo "COMPOSE_PROFILES=''" > "$d/.env"
+KALLA_STATE_DIR="$state" refused "two env files, $d/.env and $state/.env"
+rm "$d/.env"
+ok "a deploy/.env is moved to the state directory with its values; the gateway's CA goes there; two env files are refused"
+
+grep -q -- '--backup-target TARGET' <<< "$(bash "$d/init-deployment.sh" --help)" || fail "--help does not list the options"
 echo PASS

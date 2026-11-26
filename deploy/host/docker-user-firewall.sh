@@ -42,7 +42,8 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-env_file="$here/../.env"; dry_run=0; remove=0; print_subnets=0
+env_file="${KALLA_STATE_DIR:-/etc/kalla}/.env"; [ -e "$env_file" ] || [ ! -e "$here/../.env" ] || env_file="$here/../.env"
+dry_run=0; remove=0; print_subnets=0
 dns_servers=(); extra=()
 chain=UME-RAG-EGRESS; input_chain=UME-RAG-INPUT
 reject=(-j REJECT --reject-with icmp-admin-prohibited)

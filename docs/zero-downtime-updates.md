@@ -13,7 +13,7 @@ for an installation that does not ask for it. The design is [`repo-and-deploymen
 | Portainer (`deploy/portainer/compose.portainer.yaml`) | Update the stack | Not supported: Portainer recreates every container at once |
 | Kubernetes | – | Built in: see [Kubernetes](kubernetes.md) |
 
-`dc` stands for `docker compose --env-file deploy/.env`, as in the runbook.
+`dc` stands for `docker compose --env-file /etc/kalla/.env`, as in the runbook.
 
 ## How it works
 
@@ -68,8 +68,8 @@ dc up -d --wait
 ports; without it the ports are open to whoever reaches the host (they bind `0.0.0.0` unless `KALLA_API_BIND` and
 `KALLA_ADMIN_BIND` say otherwise).
 
-Existing installation: re-run `init-deployment.sh` with only `--rolling` (it keeps every other line of `deploy/.env`;
-the certificates and secrets are in the volumes), restart the firewall where it is installed
+Existing installation: re-run `init-deployment.sh` with only `--rolling` (it keeps every other line of
+`/etc/kalla/.env`; the certificates and secrets are in the volumes), restart the firewall where it is installed
 (`sudo systemctl restart rag-firewall`), `dc up -d --wait`, and add the second slots to the proxy.
 
 **nginx** (`deploy/proxy/nginx.conf.example`: fill in its placeholders and enable the lines marked `#rolling`):
@@ -112,7 +112,7 @@ the monitor interval times the failures before a member is marked down, for exam
 ### Update
 
 Read the [upgrade guide](upgrade-guide.md) for the release, take the backup of its step 4, set the image pins in
-`deploy/.env` (or unpack the new release bundle over `deploy/`), then:
+`/etc/kalla/.env` (or unpack the new release bundle over `deploy/`), then:
 
 ```bash
 ./deploy/rolling-update.sh            # --pull to pull the images first
@@ -133,7 +133,7 @@ first (upgrade guide, *Superuser steps*).
 
 ### Settings
 
-In `deploy/.env`, read by `compose.rolling.yaml`:
+In `/etc/kalla/.env`, read by `compose.rolling.yaml`:
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -160,7 +160,7 @@ In `deploy/.env`, read by `compose.rolling.yaml`:
 
 `deploy/tests/compose-rolling-e2e.sh` builds nothing: it runs against images you have (`compose.rag.yaml`'s pinned
 images, or others through `KALLA_API_IMAGE`, `KALLA_ADMIN_IMAGE`, `KALLA_MIGRATIONS_IMAGE` and `KALLA_POSTGRES_IMAGE`, such as
-`kalla/*:latest` built locally). It starts `compose.rag.yaml` + `compose.rolling.yaml` with the `deploy/.env` that
+`kalla/*:latest` built locally). It starts `compose.rag.yaml` + `compose.rolling.yaml` with the `/etc/kalla/.env` that
 `init-deployment.sh --rolling` writes, puts nginx with `deploy/proxy/nginx.conf.example` (both slots of each service)
 in front, replaces every slot with `rolling-update.sh --force` while clients send POST and GET requests to kalla-api and
 load the admin UI, and fails on a single lost request. The proxy runs on the stack's `kalla-edge` network and reaches the

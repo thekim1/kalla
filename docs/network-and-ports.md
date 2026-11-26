@@ -235,7 +235,7 @@ with a shared secret (`OpenWebUi__JwtSecret`), not through the IdP (identity des
 ## 4. Internal only
 
 These ports exist only inside Docker networks. None is published on the host, so **none should be opened on any host or
-network firewall**. Check with `docker compose --env-file deploy/.env ps` (the `PORTS` column shows only the
+network firewall**. Check with `docker compose --env-file /etc/kalla/.env ps` (the `PORTS` column shows only the
 listeners of §2) and `ss -ltnp`.
 
 | Container | Port | Protocol | Network | Clients | Source |
@@ -270,7 +270,7 @@ host, realm `fors`, and RAG's clients come from `deploy/keycloak/rag-additions.j
 
 - `KALLA_OIDC_AUTHORITY=https://<keycloak host>/realms/fors`; `KALLA_GATEWAY_URL=https://<gateway host>`.
 - RAG host egress: `llm` → `<gateway host>:443` and `<keycloak host>:443`; `kalla-crawl` → `<gateway host>:443`;
-  `kalla-edge` → `<keycloak host>:443` (with Open WebUI). All derived by the firewall from `deploy/.env`.
+  `kalla-edge` → `<keycloak host>:443` (with Open WebUI). All derived by the firewall from `/etc/kalla/.env`.
 - Browsers: admins and staff → `<keycloak host>:443` and the proxy's RAG host names.
 - The gateway host's own inbound (its proxy, Keycloak's port `11443` on loopback) belongs to the gateway team.
 - **RAG on the gateway host itself** ([compose-quick-start.md](compose-quick-start.md)): the same rules; when the
@@ -363,7 +363,7 @@ for developers on their own machines and are never opened on a server firewall. 
 ## 6. Checklist for the firewall and proxy request
 
 Replace the placeholders; with `--hardened` the RAG host's firewall script derives its own egress rules from
-`deploy/.env`, so these are the rules **outside** the host (network firewalls, the proxy) plus the published-port
+`/etc/kalla/.env`, so these are the rules **outside** the host (network firewalls, the proxy) plus the published-port
 restriction. Without `--hardened` the outbound rules below are the only ones.
 
 ```text
@@ -407,8 +407,8 @@ Never opened
 ## 7. Where each port and destination is configured
 
 Change a value in the place in the first column; the others follow from it. A re-run of `init-deployment.sh` changes
-what its options name and keeps the rest of `deploy/.env`. After a change of `deploy/.env`:
-`docker compose --env-file deploy/.env up -d` and, with `--hardened`, `sudo systemctl start rag-firewall.service`.
+what its options name and keeps the rest of `/etc/kalla/.env`. After a change of `/etc/kalla/.env`:
+`docker compose --env-file /etc/kalla/.env up -d` and, with `--hardened`, `sudo systemctl start rag-firewall.service`.
 
 | Value | Set with | Written to | Read by |
 |---|---|---|---|

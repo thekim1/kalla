@@ -1,7 +1,7 @@
 # Operational runbook
 
 For the pilot host set up as in [production-setup.md](production-setup.md). Commands run from the directory that holds
-`deploy/`, as root or a member of the `docker` group; `dc` below stands for `docker compose --env-file deploy/.env`.
+`deploy/`, as root or a member of the `docker` group; `dc` below stands for `docker compose --env-file /etc/kalla/.env`.
 The design behind this page is [`plans/platform/repo-and-deployment.md`](../plans/platform/repo-and-deployment.md)
 §6 and §7.4. Upgrades are in the [upgrade guide](upgrade-guide.md), security events in
 [security-events.md](security-events.md), the test host's deployment and drill in [test-host.md](test-host.md). Every port and outbound destination, per setup: [network-and-ports.md](network-and-ports.md).
@@ -40,7 +40,7 @@ out once, as `rag-ca.pem`, for the checks below:
 
 ```bash
 docker run --rm --network none -v kalla_kalla-certs:/c:ro --entrypoint cat \
-  "$(docker compose --env-file deploy/.env config --images kalla-bootstrap)" /c/ca.pem > rag-ca.pem
+  "$(docker compose --env-file /etc/kalla/.env config --images kalla-bootstrap)" /c/ca.pem > rag-ca.pem
 ```
 
 ## Daily checks
@@ -307,8 +307,8 @@ sudo deploy/backup-postgres.sh --status-only             # refresh the metrics o
 sudo systemctl start rag-backup.service                  # the scheduled run (--type auto), now
 ```
 
-`--env-file FILE` (default `deploy/.env`) picks the deployment, and `--state-dir DIR` (default `$STATE_DIRECTORY`, else
-`/var/lib/kalla`) where `backup.prom` and `backup-last-run` go. A diff without a full becomes a full. A failed run is
+`--env-file FILE` (default `/etc/kalla/.env`) picks the deployment, and `--state-dir DIR` (default `$STATE_DIRECTORY`,
+else `/var/lib/kalla`) where `backup.prom` and `backup-last-run` go. A diff without a full becomes a full. A failed run is
 recorded (`rag_backup_last_run_success 0`) and the metrics are refreshed if the database still answers.
 
 ### Metrics and alerts
@@ -345,7 +345,7 @@ Proposed alerts (§7.4 rule 5):
 `deploy/restore-pitr.sh` restores ragdb **in place** to a moment you choose. It replaces the current database:
 everything archived before it starts stays restorable, nothing written after its first step is.
 
-**First, the setup wizard's re-open value:** remove `KALLA_SETUP_REOPEN` from `deploy/.env`
+**First, the setup wizard's re-open value:** remove `KALLA_SETUP_REOPEN` from `/etc/kalla/.env`
 (`./deploy/init-deployment.sh --set KALLA_SETUP_REOPEN=`, then `dc up -d`; Kubernetes: the
 `Setup__Reopen` literal; Portainer: the variable). The restored database may have consumed an older value, and kalla-admin
 would open the wizard again for an hour. The client secrets the wizard stored need the same `data-protection.pfx`
@@ -473,7 +473,7 @@ sudo deploy/escrow-keys.sh --verify /media/escrow-a     # the newest set there, 
 sudo deploy/escrow-keys.sh --restore /media/escrow-a/<set>   # into a new deployment, before its first start
 ```
 
-The deployment is the Compose installation of `deploy/.env` (`--env-file FILE` for another), a Portainer stack by
+The deployment is the Compose installation of `/etc/kalla/.env` (`--env-file FILE` for another), a Portainer stack by
 `--project <stack>` (the image comes from the stack's `kalla-bootstrap` container; before the stack's first deploy pass
 `--image` with the stack file's `kalla-bootstrap` image), or Kubernetes' directories by `--secrets-dir deploy/secrets
 --certs-dir deploy/certs`.
@@ -516,10 +516,10 @@ or `uploads/` in the volume `kalla-upload-copy` with a `local` target). Keys are
 is missing is always safe. With the stack running:
 
 ```bash
-dir="$(sed -n "s/^KALLA_UPLOAD_BACKUP_DIR='\(.*\)'$/\1/p" deploy/.env)"
+dir="$(sed -n "s/^KALLA_UPLOAD_BACKUP_DIR='\(.*\)'$/\1/p" /etc/kalla/.env)"
 docker run --rm --network none --user 1654:1654 --read-only \
   -v kalla_kalla-blobs:/data/blobs -v "${dir:-kalla_kalla-upload-copy}:/backup:ro" \
-  --entrypoint sh "$(docker compose --env-file deploy/.env config --images kalla-bootstrap)" -c '
+  --entrypoint sh "$(docker compose --env-file /etc/kalla/.env config --images kalla-bootstrap)" -c '
     cd /backup/uploads && find . -type f ! -name "*.partial" | while IFS= read -r f; do
       [ -e "/data/blobs/rag/uploads/$f" ] && continue
       mkdir -p "/data/blobs/rag/uploads/$(dirname "$f")" && cp -p "$f" "/data/blobs/rag/uploads/$f"
@@ -663,7 +663,7 @@ A container sends all its egress through the network that holds its default rout
 ```bash
 deploy/host/docker-user-firewall.sh --dry-run                    # the rules it would apply (no root needed)
 deploy/host/docker-user-firewall.sh --print-subnets              # the networks and their subnets
-sudo systemctl start rag-firewall.service                        # apply now (after a change of deploy/.env)
+sudo systemctl start rag-firewall.service                        # apply now (after a change of /etc/kalla/.env)
 sudo iptables -S UME-RAG-EGRESS
 sudo deploy/host/docker-user-firewall.sh --remove                # take the chains and jumps out
 ```
@@ -832,8 +832,8 @@ badge (the gateway still refuses the calls).
 kalla-admin's sign-in provider, client and secret, and Open WebUI's, are set in the setup wizard (identity design §19;
 first setup: [production-setup.md](production-setup.md), *3. Sign-in*, or [portainer.md](portainer.md), *First deploy*
 step 5). After setup they change only in the wizard after a re-open, never from an admin session. A value the
-deployment sets (`deploy/.env`, the Portainer variables, the Kubernetes literals and secret files) wins and is locked
-there.
+deployment sets (`/etc/kalla/.env`, the Portainer variables, the Kubernetes literals and secret files) wins and is
+locked there.
 
 **Re-open:** give `KALLA_SETUP_REOPEN` (Kubernetes: `Setup__Reopen`) a new value, for example today's date, and
 `dc up -d` (Portainer: update the stack; Kubernetes: `deploy.sh`). kalla-admin opens the wizard once, for one hour, and
@@ -850,8 +850,8 @@ open it again; the next re-open needs another new value.
 - **Locked out** (sign-in broken: a revoked secret, a moved provider, a certificate kalla-admin no longer trusts): re-open
   and fix the values in the wizard, which tests them before saving. Or declare the working values (`--oidc-authority`
   and `--set-file KALLA_OIDC_CLIENT_SECRET=FILE` with a re-run of `init-deployment.sh`, then
-  `docker compose --env-file deploy/.env up -d` and, with `--hardened`, `sudo systemctl start rag-firewall.service`,
-  since a restart alone does not read a changed `deploy/.env`; Portainer: the variables and an update of the stack): a deployment value always wins. *Sign-in is not set up* on the sign-in page means no usable authority, or a
+  `docker compose --env-file /etc/kalla/.env up -d` and, with `--hardened`, `sudo systemctl start rag-firewall.service`,
+  since a restart alone does not read a changed `/etc/kalla/.env`; Portainer: the variables and an update of the stack): a deployment value always wins. *Sign-in is not set up* on the sign-in page means no usable authority, or a
   stored secret kalla-admin can't read.
 - **Restoring a database:** empty the re-open value first (*Restore*, above), or the restored database may open the
   wizard again for an hour. The secrets the wizard stored are encrypted with Data Protection: they can be read only
@@ -897,7 +897,7 @@ open it again; the next re-open needs another new value.
 | `kalla-migrate` exited non-zero; api, admin and worker do not start | `dc logs kalla-migrate`. They wait for a successful migration, so the old schema is untouched; fix the cause and `dc up -d --wait` again |
 | A service exits at once with a permission error on `/run/app-secrets` or `/run/certs` | The files in the volumes belong to the wrong user: `kalla-bootstrap` gives them to their users at every start, so `dc up -d --wait` again and read `dc logs kalla-bootstrap` |
 | One service's model calls fail: admin code `gateway_key_missing`, or the gateway answers `401` | No credential key in `kalla-secrets/<service>/Gateway__Key` (the end of `dc logs kalla-bootstrap` names the services without one), or the key is wrong, expired or revoked: ask the gateway admin, then re-run `init-deployment.sh --gateway-credential-key-file SERVICE=FILE`, `dc up -d` and restart that service (production-setup.md, *Gateway credential keys*) |
-| `rag-firewall.service` failed: "cannot resolve HOST" | DNS for an allow-listed name failed; the previous rules stay in place. Check the name in `deploy/.env` |
+| `rag-firewall.service` failed: "cannot resolve HOST" | DNS for an allow-listed name failed; the previous rules stay in place. Check the name in `/etc/kalla/.env` |
 | `rag-firewall.service` failed: "no DOCKER-USER chain" | Docker is not running, or runs without its iptables integration |
 | `install.sh` warns "Docker does not use the systemd cgroup driver" | The ingestion slice caps nothing: set `native.cgroupdriver=systemd` (production-setup.md), restart Docker, then `dc up -d --force-recreate` |
 | `escrow-keys.sh --verify`: "differs from the deployment's key" | A key was rotated after that escrow: escrow again and verify |

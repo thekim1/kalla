@@ -67,6 +67,8 @@ version="${name#kalla-}"
 if [ -z "$work" ]; then work="$(mktemp -d)"; else mkdir -p "$work"; work="$(cd "$work" && pwd)"; fi
 tar -xzf "$bundle" -C "$work"
 deploy="$work/$name/deploy"
+# The env file in the bundle's deploy/, so the run leaves nothing in /etc/kalla.
+export KALLA_STATE_DIR="$deploy"
 project="kalla-smoke"
 
 dc() { docker compose -p "$project" --env-file "$deploy/.env" "$@"; }

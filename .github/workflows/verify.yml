@@ -405,7 +405,7 @@ jobs:
         # Decisions "One deployment bootstrap": create-secrets.sh runs deploy/portainer/bootstrap.sh on the operator's
         # machine. No cluster: --generate-only, twice, then with options that change something.
         run: bash deploy/tests/kubernetes-secrets.sh
-      - name: init-deployment.sh writes deploy/.env, and a re-run keeps it
+      - name: init-deployment.sh writes the env file, and a re-run keeps it
         # Offline in a copy of deploy/: a first run, mode 600, the clamav profile and no sign-in value; a re-run keeps
         # every line (KALLA_SETUP_REOPEN among them); the options and their overlays; the refusals; the host firewall's
         # rules and subnets (deploy/tests/compose-init.sh).
