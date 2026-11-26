@@ -20,7 +20,7 @@ export function useTabQuery<T extends string>(tabs: readonly [T, ...T[]], aliase
     if (query.tab === undefined) delete query.tab
     void router.replace({ query })
   })
-  // An old value (`?tab=files`) is rewritten to the tab's own name, so the address names the tab that shows (#1049).
+  // An old value (`?tab=files`) is rewritten to the tab's own name, so the address names the tab that shows.
   const canonical = (value: unknown) => {
     if (!route || !router?.replace || typeof value !== 'string' || tabs.includes(value as T) || !(value in aliases)) return
     const query = { ...route.query, tab: parse(value) === tabs[0] ? undefined : parse(value) }

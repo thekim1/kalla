@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
- * One of a page's summary tiles (admin design §5.5.2 *Overview*): a title, the figure, a line under it and an optional
+ * One of a page's summary tiles (layout rules in docs/admin-ui.md, rule 9): a title, the figure, a line under it and an optional
  * link or action in the `default` slot. Only a tile that needs action has a coloured border, and it says so in text
- * (`attention`), never by colour alone. Built in Källa until Fors takes it (§5.12, Shared components).
+ * (`attention`), never by colour alone.
  */
 import { useId } from 'vue'
 
@@ -11,7 +11,7 @@ const titleId = `tile-${useId()}`
 </script>
 
 <template>
-  <!-- A group named by its title, not a landmark or a heading (four tiles would add four regions and skip a level; #1049). -->
+  <!-- A group named by its title, not a landmark or a heading (four tiles would add four regions and skip a level). -->
   <div
     class="material grid content-start gap-1 rounded-card p-4"
     :class="attention ? 'shadow-[inset_0_0_0_2px_var(--warn)]' : ''"

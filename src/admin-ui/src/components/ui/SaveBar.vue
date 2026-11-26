@@ -5,16 +5,15 @@ import ConfirmDialog from './ConfirmDialog.vue'
 import UiButton from './UiButton.vue'
 
 /**
- * The save bar (admin design §5.12 rule 7 and *Saving*): "n unsaved changes · Discard · Save changes", with the
+ * The save bar (layout rules in docs/admin-ui.md, rule 7): "n unsaved changes · Discard · Save changes", with the
  * consequence when there is one. A labelled region that appears with a polite announcement; sticky at the bottom of the
  * page, and on a phone fixed above the bottom menu with 44 px buttons sharing the width. While it shows, the page's
  * scroll-padding-bottom is what it covers (its height, and on a phone the bottom menu under it too), so a focused field
  * is never hidden behind it; the field being edited when it appears is scrolled clear of it as well. On a phone a spacer
  * of its height under the form keeps the end of the page clear of it. Discard asks once. When the bar goes (after a save
- * or a discard) with focus in it, focus returns to the field last edited, not to the body. Built in Källa until Fors
- * takes it (§5.12, Shared components).
+ * or a discard) with focus in it, focus returns to the field last edited, not to the body.
  *
- * The `phone` slot holds an action the page offers from the bar on a phone (the assistant's *Try the draft*, §5.5.4):
+ * The `phone` slot holds an action the page offers from the bar on a phone (Källa's assistant: *Try the draft*):
  * shown beside the buttons while there are changes, and on its own in the same place while there are none.
  */
 const props = defineProps<{ changes: number; saving?: boolean; consequence?: string; disabled?: boolean }>()

@@ -13,7 +13,7 @@ afterEach(() => {
   document.documentElement.style.scrollPaddingBottom = ''
 })
 
-describe('SaveBar (admin design §5.12 rule 7, Saving)', () => {
+describe('SaveBar (layout rule 7)', () => {
   it('shows nothing without changes, then the count, the consequence and a polite announcement in a labelled region', async () => {
     HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) { this.open = true }
     const wrapper = mount(SaveBar, { props: { changes: 0 }, attachTo: document.body })

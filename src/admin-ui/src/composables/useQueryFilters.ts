@@ -9,7 +9,7 @@ export const IS_ID = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-
 export const ONE_OF = (values: readonly string[]) => (v: string) => values.includes(v)
 
 /**
- * A page's filters kept in the address (admin design §5.12 *Filters*): `?period=30d&rating=down`, so a filtered view can
+ * A page's filters kept in the address (layout rules in docs/admin-ui.md, rule 2): `?period=30d&rating=down`, so a filtered view can
  * be linked, survives a reload and comes back with back and forward. Each key has a default; a key at its default is
  * left out of the address. A change replaces the query (no history entry, no reload, focus stays where it is), and a
  * change of the address (a link, back, forward) is followed.
@@ -66,7 +66,7 @@ export function useQueryFilters<K extends string>(defaults: Record<K, string>, v
   const active = computed(() => keys.filter((k) => filters[k] !== defaults[k]))
   /**
    * Clear filters: every key back to its default. The button goes with the last set filter, so focus moves to the first
-   * chip of `row` (the filter row), never to the body (§5.12 *Filters*, WCAG 2.4.3).
+   * chip of `row` (the filter row), never to the body (WCAG 2.4.3).
    */
   function clear(row?: HTMLElement | null): void {
     for (const k of keys) filters[k] = defaults[k]
