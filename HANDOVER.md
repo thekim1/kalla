@@ -308,9 +308,12 @@ On `~/research/rag` (the user's machine), as the main session, while `thekim1`'s
 
 - **A release:** the preparation as #788 did it (*Unreleased* in `CHANGELOG.md` and `docs/upgrade-guide.md` under the
   version, `docs/portainer.md`'s version, the ticked queue items to `plans/archive/work/to-v<version>.md`, the
-  roadmap's table; `scripts/unreleased.py fold` moves `changes/` in), a dry run with `e2e=true`, an annotated tag on
-  the merge commit (with the user's go-ahead; pushed by `thekim1` or the user: release tags are protected, *Start
-  here*), then the pin pull
+  roadmap's table; `scripts/unreleased.py fold` moves `changes/` in); **after it is squash-merged**, the dry run on
+  `main` itself (`gh workflow run release.yml --ref main -f version=X.Y.Z-dryrun -f e2e=true`), then an annotated tag
+  on **that same commit**, with nothing merged in between: the tag run's `gate` matches the dry run by commit, and a
+  dry run on the release branch never matches the squash commit (0.11.0's ran on `3b8f85f6`, its tag is `a3076ed4`;
+  #1114's review). With the user's go-ahead; pushed by `thekim1` or the user: release tags are protected, *Start
+  here*. Then the pin pull
   request that `release.yml` opens: it starts no checks, so close and reopen it before merging (handbook, *CI and
   releases*). The upgrade boot test starts from `release.yml`'s `UPGRADE_FROM` (0.6.0); its images must still be on
   ghcr.io.
