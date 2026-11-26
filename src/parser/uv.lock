@@ -270,7 +270,7 @@ wheels = [
 
 [[package]]
 name = "docling-slim"
-version = "2.150.0"
+version = "2.150.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -283,9 +283,9 @@ dependencies = [
     { name = "requests" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/23/f2/7a5417b5cebaecf08876b1837d2570942bf39f098e3cfdccb94ac968341b/docling_slim-2.150.0.tar.gz", hash = "sha256:09467855e2d15082d273b58cad84432d2a0202aff27ace2fa625b28843ba4b8a", size = 1038543, upload-time = "2026-11-10T07:58:52.643Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/82/9a/af7933a0323bcee151dbf563ec3549d7c604c36ccca5608002d4de3f10d7/docling_slim-2.150.1.tar.gz", hash = "sha256:30d50598957e3f83337b82a9f4fd76c6f72c409dbf03f6fca4afc7a331117e4f", size = 1045666, upload-time = "2026-11-14T07:06:25.371Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e5/67/b8d662b3d9f9fce15f8db724b8e967cbffc0f4ae381d644ae2ac80e09266/docling_slim-2.150.0-py3-none-any.whl", hash = "sha256:bf152723ea98318933e1e07dd01a15aaabdb1a4cfb5627557c839c18ddeed869", size = 1247415, upload-time = "2026-11-10T07:58:50.487Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/3f/52b2c00bbbf1a989f6ff136e072c05d36ec4c18714224671c60018d1a2c2/docling_slim-2.150.1-py3-none-any.whl", hash = "sha256:e62f17bb546208d3f6794c09bdae61a96ef698a5bbc05696f7fbfdbb02a0fa3a", size = 1254921, upload-time = "2026-11-14T07:06:23.014Z" },
 ]
 
 [package.optional-dependencies]
@@ -330,7 +330,7 @@ wheels = [
 
 [[package]]
 name = "fastapi"
-version = "0.162.5"
+version = "0.163.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-doc" },
@@ -341,9 +341,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4e/7b/ae546e10f153fcf9a6afd8b9fe4730bdfeb8fdcb93178d54122973ef3f4c/fastapi-0.162.5.tar.gz", hash = "sha256:1ca37f64f61c99cebd38636e67525fb721c5e8c1169f07f2a35d73b0a63265d4", size = 531785, upload-time = "2026-11-11T22:29:53.177Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f1/98/5411252e1c08bdd919c5d55774cebe9da0bebfb174c4e4ffa1a5821935ff/fastapi-0.163.0.tar.gz", hash = "sha256:ef55fa066d74b922aac7231af7869c4469b88ca00cac5d0421e42ceee213a902", size = 543109, upload-time = "2026-11-14T16:53:16.356Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/10/19/5b9abfa67a29b862e509911eef40f4901f78aa48de32ad1f939b5c2b165e/fastapi-0.162.5-py3-none-any.whl", hash = "sha256:5303c67415fde762889ca337db79d27b755b8bd09cef314fa7a4340bb30bfd2b", size = 151782, upload-time = "2026-11-11T22:29:51.47Z" },
+    { url = "https://files.pythonhosted.org/packages/de/b0/2d68e967b2fc6012ef1e7e91253c8222a2a895a45dee3677562deb93987e/fastapi-0.163.0-py3-none-any.whl", hash = "sha256:7572550ab4935e3ff373dc0191aea410d6c48127cc5477bc290b992fe539e345", size = 154381, upload-time = "2026-11-14T16:53:14.67Z" },
 ]
 
 [[package]]
@@ -1560,7 +1560,7 @@ wheels = [
 
 [[package]]
 name = "transformers"
-version = "5.22.2"
+version = "5.23.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "huggingface-hub" },
@@ -1573,9 +1573,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "typer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/42/54/b040ac523bad74f303d032505e3464cf4794f9d51defc8981ec66001936e/transformers-5.22.2.tar.gz", hash = "sha256:55f57e5cbd7c0b500b7a706daa0ecd76567b56ca139e6e02ef0bba0437e3a763", size = 10383941, upload-time = "2026-11-06T15:42:57.587Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7e/d3/1ff04cfc1ddbc6853af16973b17cd437426b4303599bc3e84af11fe55057/transformers-5.23.0.tar.gz", hash = "sha256:19d647a4d5d903a7c644ca5cde2d86efc3dde7d8c687ae7988806ff2205efa71", size = 10614788, upload-time = "2026-11-13T14:10:39.947Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ff/bb/cc0b27a3000ddcf4903d3a26983c8b4c9a36050bbaf05675f353e8bcb08c/transformers-5.22.2-py3-none-any.whl", hash = "sha256:829c2820aff91730b8ec45a4b8ff4be07f586a140b68a9073998b36fa35297dc", size = 13053178, upload-time = "2026-11-06T15:42:54.257Z" },
+    { url = "https://files.pythonhosted.org/packages/bf/62/8c06b0b932cc9a5dac7ce48bf23737107143e75f9b20fd99e97dde1463c3/transformers-5.23.0-py3-none-any.whl", hash = "sha256:018e82fd07490ad5bb58414f65e31576033dc7f36bed10c574843f69b90991bf", size = 13336114, upload-time = "2026-11-13T14:10:36.154Z" },
 ]
 
 [[package]]
@@ -1667,8 +1667,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "defusedxml", specifier = "==0.7.1" },
-    { name = "docling-slim", extras = ["convert-core", "format-pdf", "format-office", "format-opendocument", "models-local"], specifier = "==2.150.0" },
-    { name = "fastapi", specifier = "==0.162.5" },
+    { name = "docling-slim", extras = ["convert-core", "format-pdf", "format-office", "format-opendocument", "models-local"], specifier = "==2.150.1" },
+    { name = "fastapi", specifier = "==0.163.0" },
     { name = "opencv-python-headless", specifier = "==4.14.0.94" },
     { name = "pandas", specifier = "==3.1.1" },
     { name = "pillow", specifier = "==13.0.0" },
@@ -1679,7 +1679,7 @@ requires-dist = [
     { name = "python-multipart", specifier = "==0.0.33" },
     { name = "torch", specifier = "==2.15.0", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torchvision", specifier = "==0.29.2", index = "https://download.pytorch.org/whl/cpu" },
-    { name = "transformers", specifier = "==5.22.2" },
+    { name = "transformers", specifier = "==5.23.0" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]
 
