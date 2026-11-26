@@ -531,11 +531,13 @@ drilled yet.
 
 ## Updates and restarts
 
-Upgrades follow the [upgrade guide](upgrade-guide.md#upgrade-procedure-compose-host): `deploy/doctor.sh` first, announce
-the window, take a full backup and verify the escrow, replace `deploy/`, run the superuser steps if the release lists them, then `dc up -d --wait`, which runs `kalla-migrate`
-first (after `kalla-bootstrap`), and the doctor again. With one slot each (the default) `kalla-api` and `kalla-admin` are replaced together in
-one announced window. With `init-deployment.sh --rolling` there are two of each behind your own proxy, and `deploy/rolling-update.sh` replaces them one
-at a time for releases marked *Rolling update: yes* ([Updates without downtime](zero-downtime-updates.md)).
+Upgrades follow the [upgrade guide](upgrade-guide.md#upgrade-procedure-compose-host): the new release's
+`deploy/doctor.sh` first, announce the window, take a full backup and verify the escrow, replace `deploy/` and carry
+your files forward, run the superuser steps if the release lists them, then `dc up -d --wait`, which runs
+`kalla-migrate` first (after `kalla-bootstrap`), and the doctor again. With one slot each (the default) `kalla-api` and
+`kalla-admin` are replaced together in one announced window. With `init-deployment.sh --rolling` there are two of each
+behind your own proxy, and `deploy/rolling-update.sh` replaces them one at a time for releases marked *Rolling update:
+yes* ([Updates without downtime](zero-downtime-updates.md)).
 
 **The worker is stop-then-start, never overlapping.** Two `kalla-worker` processes at once would exceed its role's
 connection limit; its job leases make a short pause harmless. Never scale it (`--scale kalla-worker=2`) or start a
