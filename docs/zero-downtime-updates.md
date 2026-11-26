@@ -111,7 +111,7 @@ the monitor interval times the failures before a member is marked down, for exam
 
 ### Update
 
-Read the [upgrade guide](upgrade-guide.md) for the release, take the backup of its step 3, set the image pins in
+Read the [upgrade guide](upgrade-guide.md) for the release, take the backup of its step 4, set the image pins in
 `deploy/.env` (or unpack the new release bundle over `deploy/`), then:
 
 ```bash
