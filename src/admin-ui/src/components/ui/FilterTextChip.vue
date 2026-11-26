@@ -4,9 +4,9 @@ import { FILTERS } from '@/utils/labels'
 import { NO_PASSWORD_MANAGER } from './noAutofill'
 
 /**
- * A filter chip for free text (admin design §5.12 *Filters*): the Audit log's *Who*. Named for its filter ("Who:"), a
+ * A filter chip for free text (layout rules in docs/admin-ui.md, rule 2), for example an audit log's *Who*. Named for its filter ("Who:"), a
  * text field inside it with the `any` text as its placeholder; a set chip is coloured with an × of its own. The page
- * debounces what it sends. Built in Källa until Fors takes it.
+ * debounces what it sends.
  */
 const props = defineProps<{ label: string; modelValue: string; any: string; hint?: string }>()
 const emit = defineEmits<{ (e: 'update:modelValue', value: string): void }>()

@@ -3,9 +3,8 @@ import { FILTERS } from '@/utils/labels'
 import FilterChip from './FilterChip.vue'
 
 /**
- * The period chip of a filter row (admin design §5.12 *Filters*): *Last 7 days*, *Last 30 days* (the default), *This
- * month* and *Custom…*, which adds the range as two labelled date fields in the UI's date format. Built in Källa until
- * Fors takes it.
+ * The period chip of a filter row (layout rules in docs/admin-ui.md, rule 2): *Last 7 days*, *Last 30 days* (the default), *This
+ * month* and *Custom…*, which adds the range as two labelled date fields in the UI's date format.
  */
 defineProps<{ period: string; from: string; to: string; idPrefix: string }>()
 const emit = defineEmits<{ (e: 'update:period' | 'update:from' | 'update:to', value: string): void }>()

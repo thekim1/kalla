@@ -5,7 +5,7 @@ import { createMemoryHistory, createRouter, RouterView } from 'vue-router'
 import { useTabQuery } from './useTabQuery'
 
 describe('useTabQuery (a tab in ?tab=)', () => {
-  it('opens the tab an old value moved to, and rewrites the address to the tab\'s own name (#1049)', async () => {
+  it('opens the tab an old value moved to, and rewrites the address to the tab\'s own name', async () => {
     let tab!: ReturnType<typeof useTabQuery<'overview' | 'content' | 'quality'>>
     const Page = defineComponent({ setup: () => { tab = useTabQuery(['overview', 'content', 'quality'] as const, { files: 'content', sources: 'content' }); return () => h('p') } })
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/c', component: Page }] })

@@ -1,4 +1,4 @@
-/** AI Gateway admin — Tailwind config (v3 syntax; in v4 load with `@config "./tailwind.config.js";`).
+/** Fors admin — Tailwind config (v3 syntax; in v4 load with `@config "./tailwind.config.js";`).
  *  All colors resolve to CSS variables in tokens.css, so the three themes switch with
  *  <html data-theme="light|dark|lumen"> and no `dark:` variants are needed. Never hard-code hex in components. */
 const v = (name) => `var(--${name})`;

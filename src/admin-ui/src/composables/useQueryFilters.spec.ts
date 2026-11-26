@@ -5,7 +5,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router'
 import { IS_DAY, ONE_OF, useQueryFilters } from './useQueryFilters'
 
-describe('useQueryFilters (admin design §5.12 Filters, B-80)', () => {
+describe('useQueryFilters (layout rule 2)', () => {
   async function page() {
     let api!: ReturnType<typeof useQueryFilters<'period' | 'rating'>>
     const Page = defineComponent({ setup: () => { api = useQueryFilters({ period: '30d', rating: '' }); return () => h('p') } })
@@ -52,7 +52,7 @@ describe('useQueryFilters (admin design §5.12 Filters, B-80)', () => {
     expect({ ...api().filters }).toEqual({ period: '30d', rating: '' })
   })
 
-  it('reads a value outside a key\'s set as its default, and drops a custom range once the period is no longer Custom (#1051)', async () => {
+  it('reads a value outside a key\'s set as its default, and drops a custom range once the period is no longer Custom', async () => {
     let api!: ReturnType<typeof useQueryFilters<'period' | 'from' | 'to' | 'state'>>
     const Page = defineComponent({
       setup: () => {
@@ -80,7 +80,7 @@ describe('useQueryFilters (admin design §5.12 Filters, B-80)', () => {
     expect(api.active.value).toEqual(['period'])
   })
 
-  it('moves focus to the first chip of the row on Clear filters, never to the body (#1051)', async () => {
+  it('moves focus to the first chip of the row on Clear filters, never to the body', async () => {
     let api!: ReturnType<typeof useQueryFilters<'rating'>>
     const Page = defineComponent({ setup: () => { api = useQueryFilters({ rating: '' }); return () => h('p') } })
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/f', component: Page }] })

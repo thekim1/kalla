@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 
 /**
- * A form's unsaved changes (admin design §5.12 rule 7, *Saving*): `snapshot` returns the form's values by field, `reset()`
+ * A form's unsaved changes (layout rules in docs/admin-ui.md, rule 7): `snapshot` returns the form's values by field, `reset()`
  * takes them as saved (after a load, a save or a discard), and `changes` counts the fields that differ from that, so the
  * save bar can say "3 unsaved changes". Values compare as JSON; a plain object's own fields count one by one (a group
  * of settings is several fields), an array as one. Nothing counts until the first `reset()`.

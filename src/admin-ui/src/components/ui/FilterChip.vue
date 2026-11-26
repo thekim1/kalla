@@ -8,11 +8,10 @@ export interface ChipOption {
 }
 
 /**
- * One filter of a filter row (admin design §5.12 *Filters*): a chip whose name says the filter and its value
+ * One filter of a filter row (layout rules in docs/admin-ui.md, rule 2): a chip whose name says the filter and its value
  * ("Rating: Thumbs down"), a native select inside it, so the keyboard and screen readers get a real list box. A set chip
  * is coloured and has an × of its own ("Remove the rating filter"); unset, it shows the `any` text. The × goes with
- * its own click, so focus moves to the chip's select, not to the body (WCAG 2.4.3). Built in Källa until Fors takes it
- * (§5.12, Shared components).
+ * its own click, so focus moves to the chip's select, not to the body (WCAG 2.4.3).
  */
 const props = defineProps<{ label: string; modelValue: string; options: ChipOption[]; any: string; unset?: string }>()
 const emit = defineEmits<{ (e: 'update:modelValue', value: string): void }>()
@@ -29,13 +28,13 @@ function remove(): void {
 
 <template>
   <span
-    class="inline-flex h-ctl items-center rounded-full text-small max-md:h-11"
+    class="inline-flex h-ctl min-w-0 max-w-full items-center rounded-full text-small max-md:h-11"
     :class="set ? 'bg-accent-soft text-accent-ink shadow-inset-selected' : 'bg-surface text-fg shadow-inset-input'"
     :data-test="`chip-${label}`"
   >
-    <label :for="id" class="cursor-pointer pl-3 font-medium">{{ label }}:</label>
+    <label :for="id" class="shrink-0 cursor-pointer pl-3 font-medium">{{ label }}:</label>
     <select
-      :id="id" ref="select" :value="modelValue" class="h-full cursor-pointer appearance-none rounded-full bg-transparent py-0 pl-1 text-small"
+      :id="id" ref="select" :value="modelValue" class="h-full min-w-0 cursor-pointer appearance-none truncate rounded-full bg-transparent py-0 pl-1 text-small"
       :class="set ? 'pr-1' : 'pr-3'" data-test="chip-select"
       @change="emit('update:modelValue', ($event.target as HTMLSelectElement).value)"
     >
@@ -43,7 +42,7 @@ function remove(): void {
       <option v-for="o in options" :key="o.value" :value="o.value">{{ o.label }}</option>
     </select>
     <button
-      v-if="set" type="button" class="mr-1 grid size-7 place-items-center rounded-full hover:bg-hover max-md:size-11"
+      v-if="set" type="button" class="mr-1 grid size-7 shrink-0 place-items-center rounded-full hover:bg-hover max-md:size-11"
       :aria-label="FILTERS.remove(label)" data-test="chip-remove" @click="remove"
     >
       <span aria-hidden="true">×</span>

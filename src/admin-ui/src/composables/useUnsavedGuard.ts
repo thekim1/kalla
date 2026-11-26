@@ -12,7 +12,7 @@ export interface TabGuard {
 }
 
 /**
- * Leaving with unsaved changes asks first (admin design §5.12, *Saving*): a route change in the app, the same page for
+ * Leaving with unsaved changes asks first (layout rules in docs/admin-ui.md, rule 7): a route change in the app, the same page for
  * another object (a copy's new id), a tab change by a link when `tab` is given, a tab change on the page
  * (`confirmLeave()`, called by the tab switch) and closing or reloading the browser tab (the browser's own prompt).
  */
