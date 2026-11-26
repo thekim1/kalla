@@ -16,7 +16,7 @@ before. **An upgrade may skip releases** (from 0.5.1 on; each release tests it b
 stack, named in its section, and applying the new file): read each skipped release's section for what it asks of you,
 and do the update once.
 
-`dc` below stands for `docker compose --env-file deploy/.env`, run from the directory that holds `deploy/`.
+`dc` below stands for `docker compose --env-file /etc/kalla/.env`, run from the directory that holds `deploy/`.
 
 A pull request does not edit *Unreleased* below: it adds `changes/<branch>.upgrade.md` ([`changes/`](../changes/README.md)),
 and the release preparation folds the notes in here and writes the release's *Rolling update* line.
@@ -534,11 +534,11 @@ above says what that release adds to these steps (the older ones still repeat so
 first and last: it is read-only, and exits 1 on what blocks an upgrade.
 
 1. **Check the host** with the new release's doctor. Unpack the release's bundle beside the live one (here
-   `~/kalla-<version>/`) and point its doctor at the live `deploy/.env`; 0.11.0 and older have no doctor of their
+   `~/kalla-<version>/`) and point its doctor at the live `/etc/kalla/.env`; 0.11.0 and older have no doctor of their
    own, and without `--env-file` the doctor reads the unpacked bundle's `.env`, which doesn't exist:
 
    ```bash
-   sudo ~/kalla-<version>/deploy/doctor.sh --env-file deploy/.env --escrow-dir /media/<escrow>
+   sudo ~/kalla-<version>/deploy/doctor.sh --env-file /etc/kalla/.env --escrow-dir /media/<escrow>
    ```
 
    It names the project, the services' versions, where each volume's data is on the host and its free space, the
@@ -558,12 +558,15 @@ first and last: it is read-only, and exits 1 on what blocks an upgrade.
    ```
 
    Note the time: with the WAL archive, any later moment is restorable too (runbook, *Restore*).
-5. **New files and images.** Replace `deploy/` with the release's, and carry forward what is yours (the internal
-   certificates and the generated secrets are in the Docker volumes, not in `deploy/`):
-   - `deploy/.env`, with any image pins you set in it removed or updated (*Image pins* below);
-   - every directory under `deploy/` that a `KALLA_*_DIR` in `deploy/.env` names: `deploy/gateway-ca/`, which
-     `init-deployment.sh --gateway-ca-file` writes, and your own trust, certificate or gateway-secrets directory if you
-     put it there. Their binds are not created when missing, so `up` fails without them;
+5. **New files and images.** Replace `deploy/` with the release's, or unpack it beside the old one. What is yours is
+   outside it (the internal certificates and the generated secrets are in the Docker volumes):
+   - the env file and the gateway's CA are in the state directory, `/etc/kalla` (Decisions "Compose host layout and
+     upgrades"). Point the new `deploy/` at them with its own `sudo deploy/init-deployment.sh` (no options: it keeps
+     every value and writes `COMPOSE_FILE` with the new directory), and remove or update any image pins you set
+     (*Image pins* below). A host from before keeps its env file in the old `deploy/.env`: copy that file into the new
+     `deploy/` first, and this run moves it to `/etc/kalla/.env`;
+   - any other directory a `KALLA_*_DIR` names (your own trust, certificate or gateway-secrets directory): keep it
+     outside `deploy/`. Their binds are not created when missing, so `up` fails without them;
    - your own Compose overlays. Keep them outside `deploy/` (for example in `/etc/kalla/`), named by an absolute path
      in `COMPOSE_FILE`, so the next upgrade doesn't replace them. Don't drop one from `COMPOSE_FILE` to make `up` start:
      an overlay that puts the data on a host disk would then start on empty volumes.
@@ -597,7 +600,7 @@ first and last: it is read-only, and exits 1 on what blocks an upgrade.
 > **Your host differs from the bundle** when step 1 shows any of these. Each one changes a step above.
 >
 > - **Another project name** than `kalla` (a `warn` line under *Project*): every `dc` command needs it. Set
->   `COMPOSE_PROJECT_NAME=<name>` in `deploy/.env` once, or Compose starts a second, empty deployment named `kalla`
+>   `COMPOSE_PROJECT_NAME=<name>` in `/etc/kalla/.env` once, or Compose starts a second, empty deployment named `kalla`
 >   beside yours. With two projects on the host, pass `--project <name>` to the doctor.
 > - **Data on a host disk** (a *bind-backed volume* or a *bind* under *Volumes and free space*): this procedure leaves
 >   the data where it is. Keep the overlay or the volume definitions that put it there (step 5): the bundle's
@@ -607,12 +610,12 @@ first and last: it is read-only, and exits 1 on what blocks an upgrade.
 >   before `--apply`.
 > - **Changed ports or a hand-edited Compose file**: carry the change over in step 5 as an overlay of your own outside
 >   `deploy/`, not as an edit of the release's files, which step 5 replaces. Compare `dc config --services` and
->   `dc config --images` before and after (plain `dc config` prints the gateway credential keys from `deploy/.env`).
+>   `dc config --images` before and after (plain `dc config` prints the gateway credential keys from `/etc/kalla/.env`).
 > - **Host units from another directory or for another project** (a line under *Host units*): they run the old
 >   bundle's scripts (or none, when that directory is gone), or back up a project that isn't this one. Units from before
 >   0.12.0 have no `host.env` and act on `deploy/.env`'s project. Re-run `sudo deploy/host/install.sh` from the new
->   `deploy/` in step 5; with a project other than `kalla`, set `COMPOSE_PROJECT_NAME` in `deploy/.env` first, or pass
->   `--project <name>`.
+>   `deploy/` in step 5; with a project other than `kalla`, set `COMPOSE_PROJECT_NAME` in `/etc/kalla/.env` first, or
+>   pass `--project <name>`.
 > - **No backups configured** (no `compose.backup.yaml`, a `BLOCK` line under *Backups*): there is nothing to restore
 >   from if step 7 fails, step 4's `backup-postgres.sh` fails, and step 8's backup metrics don't exist. Set up a backup
 >   target first ([production-setup](production-setup.md)). To go on without one (a test host you can rebuild), pass
@@ -630,7 +633,7 @@ first and last: it is read-only, and exits 1 on what blocks an upgrade.
 Production runs images pinned by digest. A release bundle (from `v0.1.0`) has each digest written into the Compose
 files' `${KALLA_X_IMAGE:-…}` defaults by `deploy/build-release-bundle.sh`, which refuses an unpinned image; in a clone
 the defaults of `deploy/compose.rag.yaml` are the last release's pins. To run images from a registry or built on the
-host, or to override one, set the variable in `deploy/.env` (`init-deployment.sh --set
+host, or to override one, set the variable in `/etc/kalla/.env` (`init-deployment.sh --set
 KALLA_API_IMAGE=<image>@sha256:…`; `--set KALLA_API_IMAGE=` removes it again):
 
 | Variable | Image |
@@ -696,10 +699,10 @@ None of these has happened yet; the first release that brings one adds its comma
   them.
 - **Gateway credential keys and the OIDC client secret:** run `init-deployment.sh` with only the new
   `--gateway-credential-key-file SERVICE=FILE` or `--set-file KALLA_OIDC_CLIENT_SECRET=FILE` (it keeps the rest of
-  `deploy/.env`), then `dc up -d`: `kalla-bootstrap` rewrites those files. Restart the services that read them. A credential key is rotated in the gateway with its 24-hour grace period first
+  `/etc/kalla/.env`), then `dc up -d`: `kalla-bootstrap` rewrites those files. Restart the services that read them. A credential key is rotated in the gateway with its 24-hour grace period first
   (production-setup.md, *Gateway credential keys*).
 - **Never regenerate** the pepper, the Data Protection certificate, the blob master key or the pgBackRest passphrase:
   existing data or backups would become unreadable. There is no rotation procedure for them yet; after any future
   rotation, escrow again (runbook, *Key escrow*).
 - A re-run of `init-deployment.sh` changes only what its options name and keeps every other variable in
-  `deploy/.env` (image pins and `FORS_OTEL_ENDPOINT` included); only comments and empty values are dropped.
+  `/etc/kalla/.env` (image pins and `FORS_OTEL_ENDPOINT` included); only comments and empty values are dropped.

@@ -38,7 +38,7 @@ there yet, and the local images:
 cp -r deploy ~/rag-p1a && cd ~/rag-p1a
 images=()
 for s in postgres migrations api admin worker parser clamav renderer; do images+=(--set "KALLA_${s^^}_IMAGE=kalla/$s:latest"); done
-./init-deployment.sh --gateway-url https://gateway.invalid --api-host localhost --backup-target local "${images[@]}" --yes
+KALLA_STATE_DIR=. ./init-deployment.sh --gateway-url https://gateway.invalid --api-host localhost --backup-target local "${images[@]}" --yes
 docker compose --env-file .env up -d --wait
 docker compose --env-file .env ps
 docker run --rm --network none -v kalla_kalla-certs:/c:ro --entrypoint cat \

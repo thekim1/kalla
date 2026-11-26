@@ -5,15 +5,15 @@ them as root after `deploy/init-deployment.sh` and, with `compose.hardened.yaml`
 `docker compose up`:
 
 ```sh
-sudo deploy/host/install.sh            # reads KALLA_HOST_MEMORY from deploy/.env
+sudo deploy/host/install.sh            # reads KALLA_HOST_MEMORY from /etc/kalla/.env
 systemctl list-timers 'rag-*'
 ```
 
 The install script copies the units to `/etc/systemd/system` and writes `/etc/kalla/host.env` (the state directory,
 `KALLA_STATE_DIR`): the deployment's `deploy/` directory (`KALLA_DEPLOY_DIR`) and its Compose project
-(`COMPOSE_PROJECT_NAME`: `--project`, else `deploy/.env`'s, else the only Källa project on the host, else `kalla`). Every
+(`COMPOSE_PROJECT_NAME`: `--project`, else `/etc/kalla/.env`'s, else the only Källa project on the host, else `kalla`). Every
 unit reads that file, so the units act on the project by name, whatever its containers are called, and an upgrade's
-`install.sh` from the new bundle moves them to its directory. It then reloads systemd, enables what `COMPOSE_FILE` in `deploy/.env` uses (`rag-firewall.service` and the
+`install.sh` from the new bundle moves them to its directory. It then reloads systemd, enables what `COMPOSE_FILE` in `/etc/kalla/.env` uses (`rag-firewall.service` and the
 restart-unhealthy timer with `compose.hardened.yaml`, the backup timers with `compose.backup.yaml`, the certificate check
 always), and warns when Docker does not use the systemd cgroup driver. Re-run it after an upgrade or after changing `--host-memory`. `sudo deploy/host/install.sh --check` changes nothing and
 exits 1 unless the installed units are this bundle's and `host.env` names this `deploy/` directory and a project with a
@@ -36,7 +36,7 @@ With `compose.hardened.yaml`:
 
 - **cgroup v2 with Docker's systemd cgroup driver** (`docker info` shows `Cgroup Driver: systemd`, `Cgroup Version: 2`;
   to-verify #90). Without it the slice caps nothing. Where the slice is not installed (a developer machine), set
-  `KALLA_INGESTION_SLICE=` (empty) in `deploy/.env`: `init-deployment.sh --set KALLA_INGESTION_SLICE=`, which a
+  `KALLA_INGESTION_SLICE=` (empty) in `/etc/kalla/.env`: `init-deployment.sh --set KALLA_INGESTION_SLICE=`, which a
   re-run keeps.
 - **Docker's iptables integration** (the default), so `DOCKER-USER` exists. The firewall uses the `iptables` that
   Docker uses (`iptables-nft` on current distributions). IPv4 only: the Compose networks have no IPv6.
@@ -44,7 +44,7 @@ With `compose.hardened.yaml`:
 
 ## Firewall
 
-Check the rules before applying them, and after a change of `deploy/.env`:
+Check the rules before applying them, and after a change of `/etc/kalla/.env`:
 
 ```sh
 deploy/host/docker-user-firewall.sh --dry-run

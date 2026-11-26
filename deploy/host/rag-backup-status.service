@@ -9,7 +9,7 @@ Type=oneshot
 # The deployment (its deploy/ directory and Compose project) from install.sh's host.env, so the unit follows the
 # project and an upgrade's new directory (Decisions "Compose host layout and upgrades").
 EnvironmentFile=@STATE_DIR@/host.env
-ExecStart=/bin/sh -c 'exec "$$KALLA_DEPLOY_DIR/backup-postgres.sh" --status-only --env-file "$$KALLA_DEPLOY_DIR/.env"'
+ExecStart=/bin/sh -c 'exec "$$KALLA_DEPLOY_DIR/backup-postgres.sh" --status-only --env-file "$$KALLA_ENV_FILE"'
 TimeoutStartSec=90s
 StateDirectory=kalla
 StateDirectoryMode=0755

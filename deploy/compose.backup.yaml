@@ -4,7 +4,7 @@
 # settings to kalla-secrets/pgbackrest/repo.conf from KALLA_BACKUP_TARGET, generating the passphrase once (escrow it:
 # deploy/escrow-keys.sh). Once per new database or repository, then WAL archiving works:
 #
-#   docker compose --env-file deploy/.env exec -T kalla-postgres pgbackrest --stanza=ragdb stanza-create
+#   docker compose --env-file /etc/kalla/.env exec -T kalla-postgres pgbackrest --stanza=ragdb stanza-create
 #
 # KALLA_BACKUP_TARGET: s3://ENDPOINT/BUCKET[/PATH] (with KALLA_BACKUP_S3_KEY and KALLA_BACKUP_S3_KEY_SECRET; the
 # upload copy to S3 is not built yet), or a posix repository: KALLA_BACKUP_DIR, a directory on the backup share, and
@@ -13,7 +13,7 @@
 services:
   kalla-bootstrap:
     environment:
-      KALLA_BACKUP_TARGET: ${KALLA_BACKUP_TARGET:?Set KALLA_BACKUP_TARGET in deploy/.env, or leave out compose.backup.yaml}
+      KALLA_BACKUP_TARGET: ${KALLA_BACKUP_TARGET:?Set KALLA_BACKUP_TARGET in /etc/kalla/.env, or leave out compose.backup.yaml}
       KALLA_BACKUP_S3_KEY: ${KALLA_BACKUP_S3_KEY:-}
       KALLA_BACKUP_S3_KEY_SECRET: ${KALLA_BACKUP_S3_KEY_SECRET:-}
       KALLA_BACKUP_S3_REGION: ${KALLA_BACKUP_S3_REGION:-}

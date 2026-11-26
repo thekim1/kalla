@@ -30,10 +30,11 @@ while [ $# -gt 0 ]; do
 done
 
 # deploy/.env names the files (COMPOSE_FILE, init-deployment.sh --rolling adds compose.rolling.yaml).
-compose=(docker compose --env-file "$here/.env")
+env_file="${KALLA_STATE_DIR:-/etc/kalla}/.env"; [ -e "$env_file" ] || [ ! -e "$here/.env" ] || env_file="$here/.env"
+compose=(docker compose --env-file "$env_file")
 services="$("${compose[@]}" config --services)"
 grep -qx kalla-api-b <<<"$services" || {
-  echo "error: no kalla-api-b: COMPOSE_FILE in deploy/.env does not list compose.rolling.yaml." >&2
+  echo "error: no kalla-api-b: COMPOSE_FILE in $env_file does not list compose.rolling.yaml." >&2
   echo "  Re-run ./deploy/init-deployment.sh with --rolling, then: ${compose[*]} up -d --wait" >&2
   exit 1
 }

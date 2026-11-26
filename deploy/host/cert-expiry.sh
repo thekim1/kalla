@@ -23,7 +23,10 @@ umask 027
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 deploy_dir="$(dirname "$here")"
-env_file="$deploy_dir/.env"; certs=""; days=60; state_dir="${STATE_DIRECTORY:-/var/lib/kalla}"
+# The deployment's env file (Decisions "Compose host layout and upgrades"): the state directory's, else deploy/.env (a
+# clone, or a host whose env file init-deployment.sh hasn't moved yet). --env-file wins.
+certs=""; days=60; state_dir="${STATE_DIRECTORY:-/var/lib/kalla}"
+env_file="${KALLA_STATE_DIR:-/etc/kalla}/.env"; [ -e "$env_file" ] || [ ! -e "$deploy_dir/.env" ] || env_file="$deploy_dir/.env"
 
 usage() { sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 die() { echo "error: $*" >&2; exit 1; }
@@ -76,7 +79,7 @@ rag_cert_expiry_timestamp_seconds{file=\"$file\"} $end"
   elif [ "$(cat "$certs/$svc/.san" 2>/dev/null)" = operator ]; then
     how="your PKI's certificate: put the new one in KALLA_PKI_DIR, then run kalla-bootstrap again"
   else
-    how="run kalla-bootstrap within 30 days of that date (Compose: docker compose --env-file deploy/.env up -d; Portainer: update the stack): it re-issues the certificate and says what to restart"
+    how="run kalla-bootstrap within 30 days of that date (Compose: docker compose --env-file /etc/kalla/.env up -d; Portainer: update the stack): it re-issues the certificate and says what to restart"
   fi
   echo "warning: $file expires $(date -u -d "@$end" +%F) ($left days): $how"
 done

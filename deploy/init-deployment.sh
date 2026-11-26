@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
-# Writes deploy/.env for Docker Compose: the variables of deploy/compose.rag.yaml (the Portainer stack's names) and
-# COMPOSE_FILE with the overlays in use. It generates no certificate or secret: kalla-bootstrap does, in the volumes, at
+# Writes the deployment's env file for Docker Compose: the variables of deploy/compose.rag.yaml (the Portainer stack's
+# names) and COMPOSE_FILE with the overlays in use. It lives in the state directory, KALLA_STATE_DIR (default
+# /etc/kalla, so run it as root), outside every bundle (Decisions "Compose host layout and upgrades"): a new bundle is
+# pointed at it by running its own init-deployment.sh, which writes COMPOSE_FILE with its own directory. A deploy/.env
+# from before is moved there on the first run; a deploy/.env beside the state directory's, or a second state directory,
+# is refused. Run by sudo, it gives the file to the user who ran sudo (that user's `dc` reads it). In
+# a clone, KALLA_STATE_DIR=deploy keeps the file in deploy/. It generates no certificate or secret: kalla-bootstrap does, in the volumes, at
 # the first `up`, and ends its log with what is still missing and the setup wizard's address. Sign-in is set in the
 # setup wizard (https://<admin host>:9543/setup without a proxy, the setup code in kalla-admin's log); only with
 # --hardened is the provider's address asked for, since the host firewall lets kalla-admin reach that provider alone. A
 # re-run changes what its options name and keeps every other line. A secret it is given (a key file, S3 credentials)
-# is kept in deploy/.env, mode 600, as Portainer keeps it in the stack's variables.
+# is kept in the env file, mode 600, as Portainer keeps it in the stack's variables.
 #
-#   deploy/init-deployment.sh                       # asks for the domain and the gateway's address
-#   deploy/init-deployment.sh --domain example.se --gateway-url https://llm.example.se --backup-target /mnt/backup --yes
-#   docker compose --env-file deploy/.env up -d --wait
+#   sudo deploy/init-deployment.sh                  # asks for the domain and the gateway's address
+#   sudo deploy/init-deployment.sh --domain example.se --gateway-url https://llm.example.se --backup-target /mnt/backup --yes
+#   docker compose --env-file /etc/kalla/.env up -d --wait
 #
 # Options (each sets the variable it names):
 #   --domain DOMAIN          FORS_DOMAIN: kalla-api, kalla-admin and Open WebUI are rag., rag-admin. and chat.DOMAIN
@@ -17,7 +22,8 @@
 #                            KALLA_API_HOST, KALLA_ADMIN_HOST: a name of its own instead
 #   --gateway-url URL        KALLA_GATEWAY_URL: the gateway's https URL (required)
 #   --gateway-ca-file FILE   the gateway's CA certificate (a gateway on this host: deploy/certs/ca.pem of its
-#                            directory), copied to deploy/gateway-ca/ca.pem, which KALLA_GATEWAY_CA_DIR then names;
+#                            directory), copied to gateway-ca/ca.pem in the state directory, which
+#                            KALLA_GATEWAY_CA_DIR then names;
 #                            give it again when the gateway gets a new CA. Not needed for a gateway with a public
 #                            certificate. (Only the certificate is copied: the gateway's directory also holds its keys.)
 #   --gateway-secrets-dir DIR  KALLA_GATEWAY_SECRETS_DIR: the credential keys a gateway on this host wrote from
@@ -50,7 +56,7 @@
 set -euo pipefail
 umask 077
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-env_file="$here/.env"; yes=0; overlays_given=""; add=(); sets=()
+yes=0; overlays_given=""; add=(); sets=()
 usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; exit "${1:-0}"; }
 die() { echo "error: $*" >&2; exit 1; }
 readable() { [ -r "$1" ] && [ -f "$1" ] || die "cannot read $1"; }
@@ -60,19 +66,35 @@ dir_of() {
   [ -x "$1" ] || die "cannot enter $1 as $(id -un): run deploy/init-deployment.sh as root (sudo) or as the directory's owner"
 }
 
+# The state directory and its env file; the deploy/.env of a host from before, which is moved there.
+state_dir="${KALLA_STATE_DIR:-/etc/kalla}"; [ "$state_dir" = / ] || state_dir="${state_dir%/}"
+[[ "$state_dir" == /* ]] || state_dir="$(pwd)/$state_dir"
+env_file="$state_dir/.env"; old_env="$here/.env"; moved=""; read_env="$env_file"
+same() { [ "$(cd "$1" 2>/dev/null && pwd -P)" = "$(cd "$2" 2>/dev/null && pwd -P)" ]; }
+if [ "$state_dir" != /etc/kalla ] && [ -e /etc/kalla/.env ] && ! same "$state_dir" /etc/kalla; then
+  die "a state directory exists already, /etc/kalla, and KALLA_STATE_DIR names $state_dir: keep one (Decisions \"Compose host layout and upgrades\")"
+fi
+if [ -e "$old_env" ] && ! same "$here" "$state_dir"; then
+  [ ! -e "$env_file" ] || die "two env files, $old_env and $env_file: the state directory's is the one in use, so remove $old_env"
+  moved="$old_env"; read_env="$old_env"
+fi
+(umask 022; mkdir -p "$state_dir") 2>/dev/null || die "cannot create $state_dir as $(id -un): run deploy/init-deployment.sh as root (sudo), or set KALLA_STATE_DIR"
+# The user who ran sudo keeps reading the file, as deploy/.env was theirs.
+owner=""; [ "$(id -u)" != 0 ] || [ -z "${SUDO_UID:-}" ] || owner="$SUDO_UID:${SUDO_GID:-$SUDO_UID}"
+
 declare -A val=(); order=()
 put() { [ -n "${val[$1]+x}" ] || order+=("$1"); val[$1]="$2"; }
 get() { echo "${val[$1]:-}"; }
-# The current deploy/.env, read (never sourced: it is Compose's file, not a shell script), quotes removed.
-if [ -f "$env_file" ]; then
+# The current env file, read (never sourced: it is Compose's file, not a shell script), quotes removed.
+if [ -f "$read_env" ]; then
   while IFS= read -r line; do
     [[ "$line" =~ ^([A-Z_][A-Z0-9_]*)=(.*)$ ]] || continue
     n="${BASH_REMATCH[1]}"; v="${BASH_REMATCH[2]}"
     if [[ "$v" =~ ^\'(.*)\'$ || "$v" =~ ^\"(.*)\"$ ]]; then v="${BASH_REMATCH[1]}"; fi
     put "$n" "$v"
-  done < "$env_file"
+  done < "$read_env"
 fi
-# The overlays deploy/.env uses already.
+# The overlays the env file uses already.
 overlays=" $(get COMPOSE_FILE | tr ':' '\n' | sed -n 's#.*/compose\.\(.*\)\.yaml$#\1#p' | sed '/^rag$/d' | tr '\n' ' ')"
 
 while [ $# -gt 0 ]; do
@@ -88,8 +110,8 @@ while [ $# -gt 0 ]; do
     --gateway-ca-file)
       readable "$2"; grep -q 'BEGIN CERTIFICATE' "$2" || die "$2 is not a PEM certificate"
       ! grep -q 'PRIVATE KEY' "$2" || die "$2 holds a private key: give the CA's certificate only"
-      mkdir -p "$here/gateway-ca"; (umask 022; cat "$2" > "$here/gateway-ca/ca.pem"); chmod 755 "$here/gateway-ca"
-      sets+=("KALLA_GATEWAY_CA_DIR=$here/gateway-ca");;
+      mkdir -p "$state_dir/gateway-ca"; (umask 022; cat "$2" > "$state_dir/gateway-ca/ca.pem"); chmod 755 "$state_dir/gateway-ca"
+      sets+=("KALLA_GATEWAY_CA_DIR=$state_dir/gateway-ca");;
     --gateway-secrets-dir) dir_of "$2"; sets+=("KALLA_GATEWAY_SECRETS_DIR=$(cd "$2" && pwd)");;
     --gateway-credential-key-file)
       svc="${2%%=*}"; case "$svc" in api|admin|worker) ;; *) die "$1 SERVICE=FILE: SERVICE is api, admin or worker";; esac
@@ -122,6 +144,13 @@ for s in ${sets[@]+"${sets[@]}"}; do
   case "$v" in *"'"*|*$'\n'*) die "the value of $name contains ' or a line break";; esac
   put "$name" "$v"
 done
+# The gateway's CA that --gateway-ca-file wrote into a bundle's deploy/ before the state directory: copied there, so a
+# new bundle beside the old one, or the old one removed, still finds it.
+ca="$(get KALLA_GATEWAY_CA_DIR)"
+if [[ "$ca" == */deploy/gateway-ca ]] && [ "$ca" != "$state_dir/gateway-ca" ] && [ -f "$ca/ca.pem" ] && ! same "$ca" "$state_dir/gateway-ca"; then
+  mkdir -p "$state_dir/gateway-ca"; (umask 022; cat "$ca/ca.pem" > "$state_dir/gateway-ca/ca.pem"); chmod 755 "$state_dir/gateway-ca"
+  put KALLA_GATEWAY_CA_DIR "$state_dir/gateway-ca"; echo "Copied the gateway's CA from $ca to $state_dir/gateway-ca."
+fi
 # A first run's profiles: the malware scan. Set and empty (--profiles ''), none.
 [ -n "${val[COMPOSE_PROFILES]+x}" ] || put COMPOSE_PROFILES clamav
 
@@ -221,7 +250,8 @@ tmp="$(mktemp "$env_file.XXXXXX")"
     if [ "$n" != COMPOSE_FILE ] && { [ -n "${val[$n]}" ] || [ "$n" = COMPOSE_PROFILES ] || [ "$n" = KALLA_INGESTION_SLICE ]; }; then printf "%s='%s'\n" "$n" "${val[$n]}"; fi
   done
 } > "$tmp"
-chmod 600 "$tmp"; mv -f "$tmp" "$env_file"
+chmod 600 "$tmp"; [ -z "$owner" ] || chown "$owner" "$tmp"; mv -f "$tmp" "$env_file"
+if [ -n "$moved" ]; then rm -f "$moved"; echo "Moved $moved to $env_file (the state directory, outside the bundle)."; fi
 
 admin="$(get KALLA_ADMIN_HOST)"; [ -n "$admin" ] || admin="${val[FORS_DOMAIN]:+rag-admin.$(get FORS_DOMAIN)}"
 api="$(get KALLA_API_HOST)"; [ -n "$api" ] || api="${val[FORS_DOMAIN]:+rag.$(get FORS_DOMAIN)}"

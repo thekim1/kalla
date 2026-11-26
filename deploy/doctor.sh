@@ -30,7 +30,10 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-env_file="$here/.env"; project=""; escrow_dir=""; max_backup_age=26; no_backups_ok=0
+# The deployment's env file (Decisions "Compose host layout and upgrades"): the state directory's, else deploy/.env (a
+# clone, or a host whose env file init-deployment.sh hasn't moved yet). --env-file wins.
+project=""; escrow_dir=""; max_backup_age=26; no_backups_ok=0
+env_file="${KALLA_STATE_DIR:-/etc/kalla}/.env"; [ -e "$env_file" ] || [ ! -e "$here/.env" ] || env_file="$here/.env"
 state_dir=/var/lib/kalla; unit_dir=/etc/systemd/system
 shell_project="${COMPOSE_PROJECT_NAME:-}"
 

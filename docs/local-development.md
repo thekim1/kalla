@@ -270,7 +270,8 @@ commit `contracts/parser/v1/`; CI fails when they differ.
 ## Production Compose on your machine
 
 To try the production files locally, build the images, then run `init-deployment.sh` in a scratch copy of `deploy/`
-(not in the clone: it writes `deploy/.env` next to itself). The certificates and secrets go into the project's Docker
+(not in the clone), with `KALLA_STATE_DIR` naming that copy: on a host the env file goes to `/etc/kalla/.env`, here
+next to the scripts. The certificates and secrets go into the project's Docker
 volumes (`kalla-bootstrap` creates them at the first `up`). The image defaults in `compose.rag.yaml` are the released
 pins, so name the local builds with `--set`:
 
@@ -283,7 +284,7 @@ for p in Api AdminApi Worker MigrationService; do dotnet publish src/Kalla.$p -c
 mkdir -p ~/rag-deploy-test && cp -r deploy ~/rag-deploy-test/
 images=()
 for s in postgres migrations api admin worker parser clamav renderer; do images+=(--set "KALLA_${s^^}_IMAGE=kalla/$s:latest"); done
-~/rag-deploy-test/deploy/init-deployment.sh --api-host localhost --gateway-url https://<a gateway> \
+KALLA_STATE_DIR=~/rag-deploy-test/deploy ~/rag-deploy-test/deploy/init-deployment.sh --api-host localhost --gateway-url https://<a gateway> \
   --backup-target local "${images[@]}" --yes
 docker compose --env-file ~/rag-deploy-test/deploy/.env up -d --wait
 docker compose --env-file ~/rag-deploy-test/deploy/.env logs kalla-admin | grep 'Setup code'

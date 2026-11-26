@@ -34,7 +34,10 @@ set -euo pipefail
 umask 077
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-env_file="$here/.env"; project=""; secrets=""; certs=""; image=""; mode="export"; dest=""
+# The deployment's env file (Decisions "Compose host layout and upgrades"): the state directory's, else deploy/.env (a
+# clone, or a host whose env file init-deployment.sh hasn't moved yet). --env-file wins.
+project=""; secrets=""; certs=""; image=""; mode="export"; dest=""
+env_file="${KALLA_STATE_DIR:-/etc/kalla}/.env"; [ -e "$env_file" ] || [ ! -e "$here/.env" ] || env_file="$here/.env"
 
 usage() { sed -n '2,32p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 die() { echo "error: $*" >&2; exit 1; }
