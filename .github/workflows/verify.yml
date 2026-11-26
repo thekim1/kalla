@@ -415,6 +415,10 @@ jobs:
       - name: install.sh writes host.env, which the units read, and --check finds units that aren't this bundle's
         # Decisions "Compose host layout and upgrades" (#1101 D6): into directories only (deploy/tests/host-install.sh).
         run: bash deploy/tests/host-install.sh
+      - name: upgrade-to-0.9.sh reads the deployment, plans before --apply, and never copies data on a host path
+        # Decisions "Compose host layout and upgrades" (#1101 D2, D3): offline, with a docker stand-in that answers from
+        # files and records every call (deploy/tests/upgrade-0.9.sh).
+        run: bash deploy/tests/upgrade-0.9.sh
       - name: kalla-bootstrap in its Compose form keeps its secrets on a re-run
         # deploy/.env from init-deployment.sh, then kalla-bootstrap alone, twice, on throwaway volumes: the gateway's CA and
         # keys from host directories, no gateway blocks in the proxy, the setup wizard's address, the overlays' inputs,
@@ -454,7 +458,10 @@ jobs:
           echo "$out"
           grep -q '^warning: postgres/postgres.crt expires .*: run kalla-bootstrap within 30 days' <<< "$out"
       - name: Deployment scripts pass shellcheck
-        run: shellcheck deploy/*.sh deploy/postgres/*.sh deploy/host/*.sh deploy/tests/*.sh deploy/portainer/*.sh deploy/kubernetes/*.sh
+        run: |
+          shellcheck deploy/*.sh deploy/postgres/*.sh deploy/host/*.sh deploy/tests/*.sh deploy/portainer/*.sh deploy/kubernetes/*.sh
+          # The upgrade scripts source their library (lib.sh): -x follows it.
+          shellcheck -x deploy/upgrade/*.sh
       - name: Host units pass systemd-analyze verify
         run: |
           units="$RUNNER_TEMP/units"
