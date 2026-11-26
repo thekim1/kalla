@@ -37,7 +37,12 @@
 #   --proxy-address LIST     KALLA_PROXY_SOURCES: your reverse proxy's IPv4 addresses or CIDRs, which the host firewall
 #                            alone admits to the published ports
 #   --rolling                compose.rolling.yaml: a second kalla-api and kalla-admin (deploy/rolling-update.sh)
-#   --overlays LIST          the overlays exactly: backup, hardened, host-24g, clamav-conf, rolling (empty: none)
+#   --data-root DIR          KALLA_DATA_ROOT, with compose.host-paths.yaml: the database, the blobs and (with
+#                            --backup-target local) the backups on a host disk, in DIR/postgres, DIR/blobs,
+#                            DIR/pgbackrest and DIR/upload-copy, created with their owners (as root). DIR is new, empty
+#                            or Källa's (DIR/.kalla-data-root); for a new deployment, not to move one
+#   --overlays LIST          the overlays exactly: backup, hardened, host-24g, clamav-conf, rolling, host-paths (empty:
+#                            none)
 #   --set NAME=VALUE         any other variable (deploy/portainer/stack.env.example lists them); empty removes it,
 #                            except KALLA_INGESTION_SLICE, whose empty value is kept (a host without the slice)
 #   --set-file NAME=FILE     the same with FILE's first line as the value, for a secret (KALLA_OIDC_CLIENT_SECRET)
@@ -97,6 +102,7 @@ while [ $# -gt 0 ]; do
     --backup-s3-region) sets+=("KALLA_BACKUP_S3_REGION=$2");;
     --host-memory) sets+=("KALLA_HOST_MEMORY=$2");;
     --freshclam-proxy) sets+=("KALLA_FRESHCLAM_PROXY=$2"); add+=(clamav-conf);;
+    --data-root) sets+=("KALLA_DATA_ROOT=${2%/}"); add+=(host-paths);;
     --oidc-authority) sets+=("KALLA_OIDC_AUTHORITY=$2");; --proxy-address) sets+=("KALLA_PROXY_SOURCES=$2");;
     --overlays) overlays_given=1; overlays=" ${2//,/ } ";;
     --set) sets+=("$2");;
@@ -150,7 +156,7 @@ for p in $(get COMPOSE_PROFILES | tr ',' ' '); do
   case "$p" in clamav|render|openwebui|proxy) ;; *) die "unknown profile $p: clamav, render, openwebui or proxy";; esac
 done
 for o in $overlays; do
-  case "$o" in backup|hardened|host-24g|clamav-conf|rolling) ;; *) die "unknown overlay $o";; esac
+  case "$o" in backup|hardened|host-24g|clamav-conf|rolling|host-paths) ;; *) die "unknown overlay $o";; esac
 done
 for a in $(get KALLA_PROXY_SOURCES | tr ',' ' '); do
   [[ "$a" =~ ^[0-9]+(\.[0-9]+){3}(/[0-9]+)?$ ]] || die "--proxy-address takes IPv4 addresses or CIDRs, comma-separated: $a"
@@ -167,10 +173,43 @@ case "$target" in
   *) die "--backup-target is an absolute path, s3://ENDPOINT/BUCKET[/PATH] or local";;
 esac
 compose_file="$here/compose.rag.yaml"
-for o in backup hardened host-24g clamav-conf rolling; do
+for o in backup hardened host-24g clamav-conf rolling host-paths; do
   [[ "$overlays" != *" $o "* ]] || compose_file="$compose_file:$here/compose.$o.yaml"
 done
 [[ "$compose_file" != *"'"* ]] || die "the path $here contains '"
+
+# Data on a host disk (compose.host-paths.yaml; Decisions "Compose host layout and upgrades"): the directories with
+# their owners. One that holds data already keeps its owner; a chown this user may not do is printed as a next step.
+data_todo=()
+if [[ "$overlays" == *" host-paths "* ]]; then
+  root="$(get KALLA_DATA_ROOT)"
+  [ -n "$root" ] || die "the host-paths overlay needs --data-root"
+  [[ "$root" == /?* ]] || die "--data-root is an absolute path, not $root"
+  marker="$root/.kalla-data-root"
+  if [ -d "$root" ] && [ ! -e "$marker" ] && [ -n "$(ls -A "$root" 2>/dev/null)" ]; then
+    die "$root is not empty and not Källa's (no .kalla-data-root): give a new or empty directory"
+  fi
+  # A volume that exists already stays where it is: Compose doesn't move it to the new path.
+  project="$(get COMPOSE_PROJECT_NAME)"; project="${project:-kalla}"
+  if command -v docker >/dev/null && docker info >/dev/null 2>&1; then
+    for v in postgres-data:postgres blobs:blobs pgbackrest-repo:pgbackrest upload-copy:upload-copy; do
+      name="${project}_kalla-${v%%:*}"
+      docker volume inspect "$name" >/dev/null 2>&1 || continue
+      dev="$(docker volume inspect -f '{{index .Options "device"}}' "$name" 2>/dev/null || true)"
+      [ "$dev" = "$root/${v#*:}" ] || die "the volume $name exists already (${dev/<no value>/a named volume}), and Compose doesn't move it to $root/${v#*:}: --data-root is for a new deployment (docs/upgrade-guide.md, *Your host differs from the bundle*)"
+    done
+  fi
+  mkdir -p "$root" 2>/dev/null || die "cannot create $root as $(id -un): run deploy/init-deployment.sh as root (sudo)"
+  chmod 755 "$root" 2>/dev/null || true
+  for d in postgres:999:700 blobs:1654:750 pgbackrest:999:750 upload-copy:1654:750; do
+    IFS=: read -r name uid mode <<< "$d"; p="$root/$name"
+    mkdir -p "$p" 2>/dev/null || die "cannot create $p as $(id -un): run deploy/init-deployment.sh as root (sudo)"
+    [ -z "$(ls -A "$p" 2>/dev/null)" ] || continue
+    if { [ "$(stat -c %u "$p")" = "$uid" ] || chown "$uid:$uid" "$p" 2>/dev/null; } && chmod "$mode" "$p" 2>/dev/null; then :
+    else data_todo+=("sudo chown $uid:$uid $p && sudo chmod $mode $p"); fi
+  done
+  [ -e "$marker" ] || (umask 022; echo "# Källa's data root: deploy/init-deployment.sh --data-root, deploy/compose.host-paths.yaml" > "$marker")
+fi
 
 tmp="$(mktemp "$env_file.XXXXXX")"
 {
@@ -196,6 +235,7 @@ fi
 admin="${admin:-$api}"; [ "$port" = 443 ] || admin="$admin:$port"
 dc="docker compose --env-file $env_file"
 echo "Wrote $env_file (mode 600). Next:"
+for t in ${data_todo[@]+"${data_todo[@]}"}; do echo "  $t    # the data directory's owner: not given as $(id -un)"; done
 [[ "$overlays" != *" hardened "* ]] || echo "  sudo $here/host/install.sh    # before the first up: the slice, the firewall, the timers"
 echo "  $dc up -d --wait"
 echo "  $dc logs kalla-bootstrap    # its last lines: what is still missing, and the setup wizard's address"

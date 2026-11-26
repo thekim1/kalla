@@ -15,6 +15,7 @@
 #   compose.host-24g.yaml     the 24 GB host's limits
 #   compose.clamav-conf.yaml  ClamAV's confs for the 24 GB host and freshclam's proxy
 #   compose.rolling.yaml      a second kalla-api and kalla-admin for updates without downtime (deploy/rolling-update.sh)
+#   compose.host-paths.yaml   the database, the blobs and the local backups on a host disk under KALLA_DATA_ROOT
 #
 # deploy/portainer/build-stack.sh merges this file with the gateway's Portainer stack into
 # deploy/portainer/compose.portainer.yaml (its header: deploy/portainer/stack-header.txt), and these marks say what

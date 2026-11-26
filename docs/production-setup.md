@@ -40,6 +40,11 @@ upgrades in the [upgrade guide](upgrade-guide.md); the test host's choices and c
   check that the renderer becomes healthy after the first `up` (*Renderer*, below).
 - **An encrypted disk** for the Docker volumes (`kalla-postgres-data`, `kalla-blobs`, `kalla-clamav-db`, `kalla-certs`,
   `kalla-secrets`, `kalla-config`) and `deploy/.env`, which holds the keys and secrets you give `init-deployment.sh`.
+  To keep the database and the blobs on a disk of their own instead of under `/var/lib/docker`, give
+  `init-deployment.sh --data-root /srv/kalla` (as root, on a new deployment): `compose.host-paths.yaml` then binds
+  `kalla-postgres-data`, `kalla-blobs` and, with `--backup-target local`, the two backup volumes to `postgres/`,
+  `blobs/`, `pgbackrest/` and `upload-copy/` under it, created with their owners. The directory must be new, empty or
+  Källa's (it gets a `.kalla-data-root` file); the volumes keep their names, so every script finds them.
 - **The backup target**, agreed with IT: a share mounted on the host, or an S3-compatible store (below).
 - **Escrow media** for the long-lived keys (runbook, *Key escrow*).
 
