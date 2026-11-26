@@ -305,7 +305,7 @@ public sealed partial class ChatApiTests
         (await AnswerAsync(await AskWith(client, AltanQuestion))).ShouldStartWith("Testsvar på"); // warm: config, embedding cache
 
         // Only this test's requests count (§16.2 item 2): each runs under its own trace, given as traceparent.
-        var statements = new ConcurrentDictionary<ActivityTraceId, int>();
+        var statements = new ConcurrentDictionary<ActivityTraceId, ConcurrentQueue<string>>();
         using var listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name is "Npgsql" or "Microsoft.AspNetCore",
@@ -313,15 +313,15 @@ public sealed partial class ChatApiTests
             ActivityStopped = activity =>
             {
                 // Statements only: a physical connection opened from the pool is a span without a query.
-                if (activity.Source.Name == "Npgsql" && activity.GetTagItem("db.query.text") is string { Length: > 0 })
+                if (activity.Source.Name == "Npgsql" && activity.GetTagItem("db.query.text") is string { Length: > 0 } text)
                 {
-                    statements.AddOrUpdate(activity.TraceId, 1, (_, n) => n + 1);
+                    statements.GetOrAdd(activity.TraceId, _ => new ConcurrentQueue<string>()).Enqueue(text);
                 }
             },
         };
         ActivitySource.AddActivityListener(listener);
 
-        async Task<(int Statements, string[] Calls)> Turn(string? kalla)
+        async Task<(string[] Statements, string[] Calls)> Turn(string? kalla)
         {
             calls.Clear();
             var trace = ActivityTraceId.CreateRandom();
@@ -333,14 +333,28 @@ public sealed partial class ChatApiTests
             request.Headers.Add("traceparent", $"00-{trace}-{ActivitySpanId.CreateRandom()}-01");
             using var response = await client.SendAsync(request, Ct);
             response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
-            return (statements.GetValueOrDefault(trace), [.. calls.Select(c => c.Path + " " + c.Step).Order()]);
+            return (statements.TryGetValue(trace, out var seen) ? [.. seen] : [], [.. calls.Select(c => c.Path + " " + c.Step).Order()]);
         }
 
-        var without = await Turn(null);
-        var with = await Turn("""{"related_documents":10}""");
-        without.Statements.ShouldBeGreaterThan(0); // the knowledge role's statements are seen at all
-        with.Statements.ShouldBe(without.Statements);
-        with.Calls.ShouldBe(without.Calls);
+        // Each kind twice, alternating, and the fewer statements of the two counts: a statement that isn't the turn's own
+        // can land in one request's trace (the Data Protection key ring read again after a failed read under load, #1117),
+        // but one that related documents add is in both turns with them.
+        var turns = new List<(string Kind, string[] Statements, string[] Calls)>();
+        foreach (var kalla in new[] { null, """{"related_documents":10}""", null, """{"related_documents":10}""" })
+        {
+            var (seen, made) = await Turn(kalla);
+            turns.Add((kalla is null ? "without" : "with", seen, made));
+        }
+
+        var report = string.Join("\n", turns.Select(t => $"{t.Kind}: {t.Statements.Length}\n  " + string.Join("\n  ", t.Statements.Select(q => q.ReplaceLineEndings(" ")[..Math.Min(100, q.Length)]))));
+        var without = turns.Where(t => t.Kind == "without").Min(t => t.Statements.Length);
+        var with = turns.Where(t => t.Kind == "with").Min(t => t.Statements.Length);
+        without.ShouldBeGreaterThan(0, report); // the knowledge role's statements are seen at all
+        with.ShouldBe(without, report);
+        foreach (var turn in turns)
+        {
+            turn.Calls.ShouldBe(turns[0].Calls);
+        }
     }
 
     [Fact]
