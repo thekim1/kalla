@@ -6,7 +6,7 @@ orchestrated with Aspire 13.6. The design lives beside the code: start at [`AGEN
 [`HANDOVER.md`](HANDOVER.md).
 
 **Status: P1 (pilot), built and released; the live block is ahead.** The last release is
-[`v0.11.0`](https://github.com/thekim1/kalla/releases/tag/v0.11.0) (2026-11-24), on Fors `v0.13.0`;
+[`v0.12.0`](https://github.com/thekim1/kalla/releases/tag/v0.12.0) (2026-11-28), on Fors `v0.14.0`;
 [`CHANGELOG.md`](CHANGELOG.md) has every release. P1 was built on FakeGateway, fixtures and the dev Keycloak first; the
 live parts (the real gateway, the shared Keycloak, the umea.se crawl, the gold set, the pilot member, the test host)
 come as one block at the end. Built:

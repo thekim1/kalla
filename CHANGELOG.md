@@ -6,6 +6,164 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
+## 0.12.0 (2026-11-28)
+
+**P2 wave 2 and a Compose host layout every script knows.** New: the drawn Map (B-67), unused assistants on Home
+with *Archive* and *Keep* (B-68), accuracy over time on a knowledge base's *Quality* tab (B-69), and the topic form
+with its match preview (B-65), with topics stored host-first. Compose hosts (#1101): the env file and the gateway's CA
+move to the state directory `/etc/kalla`, `deploy/doctor.sh` checks a host before and after an upgrade, data on a host
+disk is a supported layout, and the host units act on the project by name. An answer that stops at the model's limit
+with no text is retried once and is otherwise `unavailable`, never an empty `answered` (#1106). Releases reuse the same
+commit's dry run (#1084). On **Fors 0.14.0** (from 0.13.0: a rolling update with nothing to do). One migration, a
+nullable column; no variable is required. **Rolling update: yes** for the Portainer stack; a Compose host follows the
+upgrade guide's steps (the env file's move and `install.sh` again, [upgrade guide](docs/upgrade-guide.md#0120)).
+
+### Added
+
+- **Topic rule preview** (B-65, part 1): `POST /api/collections/{id}/topic-rules/preview` says what one topic rule
+  matches among a source's live documents before it is saved ("Matches N of M"), with the first ten, through the same
+  matcher the worker tags with; an invalid rule is refused as it would be at Save. The Topics tab's suggestions now
+  read an upload's file names exactly as the rules do, so a name written with a leading slash is in no folder section.
+- **Topic form** (B-65, part 2): the Topics tab has *Add topic*, and *Edit* on each rule: a form for the documents
+  under an address or folder, whose title contains a text, or of a file type, with *Advanced* for every rule kind and
+  a rule the form can't show in words as its JSON. Before saving it says how many documents the rule matches, with the
+  first ten, and a rule that matches nothing is asked about again at Save. *Remove topic* is in the row's ⋯ menu.
+  Every change is saved through the processing's publication plan, confirmed once. The source page's *Topics* is now
+  read-only, in words with a link to the tab, and is kept as it is when other processing settings are published.
+- **The drawn Map** (B-67): the Map has **Table** / **Drawing** at the end of its filter row (`?view=drawing`). The
+  drawing is one card per department, with a column each for the sources, the knowledge bases, the assistants and the
+  channels. Each item links to its page, and arrows show what feeds what; a link only an assistant's draft has is
+  dashed. Under every item the same relation is written out ("Feeds: …", "Used by: …", "Offered in: …"), and on a phone,
+  where the columns stack, only that text shows. Pointing at or focusing an item highlights everything upstream and
+  downstream of it. The map's API now lists the sources of each of the department's own knowledge bases.
+- **Unused assistants** (B-68): Home's *Needs attention* lists a published assistant nobody has asked anything in 90
+  days (published at least 90 days ago), with when it was last asked. **Archive** hides it from every client after a
+  confirmation, as on its page; **Keep** keeps it off the list for 90 days (`POST /api/assistants/{id}/keep`, audited
+  `assistant.keep`). Health's *By department* is a larger touch target on a phone.
+- **Accuracy over time** (B-69): the knowledge base's *Quality* tab shows recall@10 and MRR of its latest 30
+  evaluations as a chart, one line per measure and question layer, the organisation's own test questions first, with
+  the same runs in a table under it (`GET /api/collections/{id}/evaluation/trend`). It replaces the *Earlier
+  evaluations* table.
+- **`deploy/doctor.sh`, a check before every upgrade of a Compose host** (#1101): read-only, it reports the project
+  (found by its containers' labels, never a guess between two), the services' versions, each volume's host path and free
+  space (named, bind-backed or a direct bind), the overlays and profiles, the pgBackRest stanza, the WAL backlog and the
+  newest backups, the newest key escrow set (`--escrow-dir`), and which deploy directory the host units run from. It
+  exits 1 on what blocks an upgrade: no running project or two without `--project`, and with backups configured a
+  stanza that isn't ok, a WAL backlog beyond 5 minutes, or no backup in 26 hours (`--max-backup-age`).
+- **Release gate** (#1120):
+  - `docs/ci-runner.md` spells out the release flow: the dry run runs on `main` after the release PR merges, and the
+    tag goes on that exact commit.
+  - A gate that fails runs every test instead of blocking the release.
+  - The gate reads 100 runs instead of 20.
+  - The build job's checkout no longer leaves its token in `.git/config`.
+- **Data on a host disk is a supported layout** (#1101 D1): `init-deployment.sh --data-root DIR` adds
+  `compose.host-paths.yaml`, which binds `kalla-postgres-data`, `kalla-blobs` and the two local backup volumes to
+  `DIR/postgres`, `DIR/blobs`, `DIR/pgbackrest` and `DIR/upload-copy`. It creates them with their owners, refuses a
+  non-empty directory that isn't Källa's, and refuses a deployment whose volumes exist already. Named volumes stay the
+  default.
+- **The release dry run upgrades an odd Compose host** (#1101 D7): the last release's bundle with a project, ports and
+  host paths of its own is upgraded as the upgrade guide says, and its project, ports, host paths and data must stay.
+
+### Changed
+
+- **Home and the filters, after review** (#1062, #1063): on a phone the *Menu* sheet no longer shows a "Home" heading
+  over Home. Health greys what hasn't happened yet: no fetches in 24 hours, and a sync that has never succeeded. The
+  *Assistants in use* title is inside its card. An unknown `?view=` on the knowledge base list reads as *Ours*, and the
+  search runs a moment after typing, so a copied link always holds a search that has run. On the Audit log, an event
+  from the address brings its type of object, *Clear filters* folds *More filters*, and assistant templates, assistant
+  test questions and departments have names as types of object. The Map reads another department's id from the
+  address as all of yours. *Clear filters* and the custom date fields are 44 px tall on a phone.
+- **Topics, after review** (#1075, #1076):
+  - **Saving no longer stores a rule twice:**
+    - A rule that matches as an existing one adds its topics to that rule.
+    - A retried Confirm publishes only what the failed one left.
+    - The list and suggestions are read again after every attempt.
+    - Open section levels close after a save.
+  - **The source page shows and keeps the published topics**, so a topic change cancelled on the Topics tab doesn't go
+    live with the next processing change.
+  - **Editing a rule with several topics as JSON** replaces that rule instead of copying it.
+  - **Rules without topics** (only a document type or date) no longer break the page.
+  - **No second change starts while one is being planned.**
+  - **A refused plan keeps the form open**, with the reason.
+  - **The rule form:**
+    - *Whose title contains* ignores case.
+    - JSON rules must name valid topics.
+    - The file types include Word, Excel and PowerPoint 97–2003, OpenDocument and CSV.
+  - **The match preview** stops after 3 seconds and says how far it got, and a new keystroke cancels the previous count.
+  - **Suggestions** count a section as covered on any of its hosts, show while a level loads, and announce an empty
+    level.
+  - **Smaller:** a single address reads "at /kontakt", and a pasted address is shown without its query. If the plan
+    replaces an unpublished change to the processing, the confirmation says so.
+- **The Map and the audit log, after review** (#1083, #1072):
+  - The Map's table has a *Source* column, one row per source path, as the drawing has.
+  - Long names wrap in the drawing instead of spilling into the next column.
+  - A channel can be selected by keyboard to highlight what feeds it.
+  - A department in the address that isn't yours is caught also after back or forward.
+  - The table no longer shows "nothing to show" before it has loaded.
+  - The audit log names the assistant template and assistant test events, and no longer offers *Department* as a type of
+    object.
+  - Enter in the knowledge base search loads the list once.
+- **Topics: host-first rules and Pending removal** (#1082, Decisions "Topics editor"): a website section picked on the
+  Topics tab is saved as one rule per host it was found on (`www.umea.se/omsorg/`), so a host the source gains later
+  isn't tagged by it; an upload folder is saved as before. A removed topic stays in the list as *Pending removal*,
+  with its count and without its menu, until its documents have been processed again.
+- **Platform pages** (#1028, #1055): Models has two tabs, *Models* (first) and *Embedding*, under the *AI gateway* card,
+  and the test gateway's `fake-*` models behind *Show test models*; its menu icon is its own. Settings groups its
+  sections as *Answers*, *Content*, *Data protection* and *Platform*, with each section's JSON under *Advanced: edit as
+  JSON* and its form at most 680 px wide. Apps and keys shows only an *Off* badge for an app that is off, and *Never
+  used* and a key's *Never* expiry in grey. Number fields are short, and Add app's type cards show the one chosen.
+- **Faster CI** (#1084): a release builds its four Dockerfile images at the same time, beside the admin UI and the .NET
+  publishes, and runs the bundle's smoke test and the Portainer boot side by side while the oldest supported release's
+  images are pulled for the upgrade test. `verify.yml` folds the `ownership` and `doc-refs` guards into `changes`, runs
+  the evaluation smoke inside `backend` on its build, runs the admin UI's lint, typecheck and unit tests at once, and
+  leaves the worker image's driver check to the release's build job.
+- **Save bar on the Settings page** (#1034): every section, Prompt texts, Website fetching and Personal data among them,
+  saves through the save bar with its count of unsaved changes and Discard, and opening another section or leaving the
+  page with unsaved changes asks first.
+- **Path rules compile once** (#1079): a rule's regex or glob is compiled once and reused, not once per document, so
+  the chunk stage and the Topics tab's match preview check more documents in the same time.
+- **Faster admin start-up and tests**: kalla-admin and kalla-api build their endpoints' request handling at compile time
+  (ASP.NET's request delegate generator) instead of at each start, so a test host starts without compiling them again.
+- **`deploy/doctor.sh` trusts less and checks more** (#1121):
+  - A stale `backup.prom` that can't be read fresh now blocks, and the backups' ages include how old the file is.
+  - The key escrow match takes only this project's sets, and warns when a key changed after the newest set.
+  - The WAL backlog is also counted by the segments waiting in `pg_wal`.
+  - The project comes from `--project`, then the shell's `COMPOSE_PROJECT_NAME`, then the env file.
+  - It reports the profiles the containers show, a site overlay by its file name, and `rag-upload-backup.timer`.
+  - It exits 3 when docker doesn't answer.
+- **The host units act on the project by name** (#1101 D6): `deploy/host/install.sh` writes `/etc/kalla/host.env`,
+  which names the deploy directory and the Compose project. Every unit reads that file, so a project that isn't called
+  `kalla` is backed up, and the units follow a new bundle's directory.
+  - `install.sh --check` verifies the units and `host.env`.
+  - `deploy/doctor.sh` blocks when the units act on another project.
+- **`upgrade-to-0.9.sh` reads the deployment** (#1101 D2, D3): the Compose upgrade from before 0.9.0 runs on a shared
+  library, `deploy/upgrade/lib.sh`.
+  - It finds the old project by its containers' labels and each volume's data from `docker inspect`.
+  - It prints its plan and changes nothing without `--apply`, which replaces `--yes`.
+  - Data on a host path is pointed to, never copied, and a missing or empty source is refused.
+  - It no longer renames the database roles: `kalla-roles` does that when the release starts, as in the Portainer
+    stack.
+- **The env file lives outside the bundle** (#1101 D4): `init-deployment.sh` writes `/etc/kalla/.env`, in the state
+  directory `KALLA_STATE_DIR`, and the gateway's CA beside it.
+  - Every script reads the state directory's env file, else `deploy/.env`.
+  - An upgrade unpacks the new bundle and runs its `init-deployment.sh`, which points `COMPOSE_FILE` at it.
+  - A second state directory, or a `deploy/.env` beside the state directory's, is refused.
+
+### Fixed
+
+- **The ⋯ menu shows its icon** (thekim1/fors#130): the icon fonts are regenerated from the admin UI's own icon
+  names, so `more_horiz` (the ⋯ menu) and `swap_horiz` (*Replace* in a file's menu) are no longer shown as their names.
+  The shared components are Fors's again (Fors `5038efa`): the ⋯ menu, save bar, filter chips, period picker, summary
+  tile and breadcrumb are copied back unchanged, and a filter chip or select no longer overflows a narrow row.
+- **`init-deployment.sh` keeps a site overlay** (#1101 D7): a re-run used to rebuild `COMPOSE_FILE` from the bundle's
+  own overlays and drop a file of the operator's own. It now keeps every other file, after the bundle's.
+- **An answer with no text is never `answered`** (#1106): when the answer model stops at its output limit before
+  writing any text (a reasoning model that spent `max_tokens` thinking), Källa asks once more with the full output
+  limit and the platform's lowest reasoning effort (`Settings.Chat.CondenseReasoningEffort`). The client sees only the
+  extra time. If that answer is empty too, the turn ends with the unavailable text and outcome `unavailable`, and a
+  Warning logs `answer_empty` with both calls' `max_tokens` and output tokens. An answer that wrote text and then
+  stopped at the limit stays `answered`.
+
 ## 0.11.0 (2026-11-24)
 
 **The admin UI reworked** (the UX pass, B-74 to B-82): one primary action per page and the rest in ⋯ menus, a save

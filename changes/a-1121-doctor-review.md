@@ -1,7 +1,0 @@
-- **`deploy/doctor.sh` trusts less and checks more** (#1121):
-  - A stale `backup.prom` that can't be read fresh now blocks, and the backups' ages include how old the file is.
-  - The key escrow match takes only this project's sets, and warns when a key changed after the newest set.
-  - The WAL backlog is also counted by the segments waiting in `pg_wal`.
-  - The project comes from `--project`, then the shell's `COMPOSE_PROJECT_NAME`, then the env file.
-  - It reports the profiles the containers show, a site overlay by its file name, and `rag-upload-backup.timer`.
-  - It exits 3 when docker doesn't answer.
