@@ -1147,6 +1147,7 @@ item with another entry is added to the list by the work that entry names, and i
 | The nightly `answers` run's faithfulness or citation precision 5 points below its median of the last 28 days (processing §14.8; Decisions "Nightly answer run") | the nightly answer run |
 | A document cited in 3 or more downvoted answers in the last 7 Europe/Stockholm days, today included (`DocumentDailyFeedback`, §8.8), not raised for a deleted document: an item about the knowledge base, for its owning department, that names the document in its details and links to the knowledge base's Overview, where its *Feedback on documents* card is | *Feedback on documents* (§8.8) |
 | A published assistant without a message in 90 days (`AssistantDailyTotals`; published ≥ 90 days ago), with **Archive** (`…/archive`) and **Keep** (`…/keep`: not raised again while `UnusedKeptUntil` is ahead, 90 days) (simplification pass §15) | P2 wave 2 |
+| Backups, for platform admins: no pgBackRest stanza, the WAL archive behind (`rag_backup_wal_archive_age_seconds` over 5 minutes, or waiting `.ready` segments), or no full backup in 26 hours; read from the backup status `deploy/doctor.sh` reads (`backup.prom`); not raised when the deployment runs without backups on purpose (the doctor's opt-out) (user, 2026-11-26, #1101) | the backup status reader (stream b) |
 | Site-profile proposals (platform admins; weakness review §1) | site-profile learning (a later wave) |
 | Tool drift and pending approvals | tools (a later wave) |
 

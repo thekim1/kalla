@@ -507,6 +507,15 @@ the mirror row only for a model the gateway gives none for (admin §4.10, gatewa
 rail (Decisions "Answer length from the model"): the assistant's answer length never exceeds it, and the test panel's
 `maxTokensSource` is `key` when `K` decided the value.
 
+**An answer with no text** (#1106; Decisions "Answer length from the model"). When the answer call ends with
+`finish_reason: "length"` and no visible content (a reasoning model spent `max_tokens` before writing), the turn is
+never `answered`: Källa makes **one** more call with the full output limit `R` (not `min(R, C − P)`) and, for a model
+that takes it, `reasoning_effort` lowered to the lowest it accepts; nothing has reached the client yet but the role
+delta and the progress events, so the retry is invisible apart from the time. Text then: the turn goes on as `answered`.
+Still empty: the turn ends with the §10.2 unavailable text and outcome `unavailable`, logged with the cause
+(`answer_empty`, both calls' `max_tokens` and output token counts, no text). A turn that already streamed text and then
+stops at the limit stays `answered` (the test panel shows the cut, as today).
+
 **Platform ceiling** (`X`, same Decisions entry). A platform admin may set `Settings.Chat.MaxAnswerTokens` to bound the
 answer length, and with it the cost, of every assistant on every model. Unset (the default), nothing changes. Set, it
 lowers `R` for every assistant, an override included, and fills `R` when the model's limit is unknown, so `max_tokens`

@@ -408,10 +408,11 @@ P2. Detail: `admin/design.md` §5.5.1; `deploy/portainer/bootstrap.sh`.
 A Compose host (the bundle run with `docker compose`, not the Portainer stack) has one supported layout that every
 release and upgrade script knows.
 
-- **State outside the bundle.** `deploy/.env`, `secrets/`, `certs/` and the host units' configuration live in one
-  state directory, `KALLA_STATE_DIR` (default `/etc/kalla`). A release bundle never contains or writes it; an upgrade
-  unpacks the new bundle beside the old one and points it at the same state directory. `init-deployment.sh` refuses to
-  create a second state directory when one exists.
+- **State outside the bundle.** The env file, the gateway's CA certificate and the host units' configuration
+  (`host.env`) live in one state directory, `KALLA_STATE_DIR` (default `/etc/kalla`); Källa's own secrets and
+  certificates stay in Docker volumes written by `kalla-bootstrap`. A release bundle never contains or writes it; an
+  upgrade unpacks the new bundle beside the old one and points it at the same state directory. `init-deployment.sh`
+  refuses to create a second state directory when one exists.
 - **Data on a host disk is a supported layout.** `deploy/compose.host-paths.yaml` puts `kalla-postgres-data`,
   `kalla-blobs`, `kalla-pgbackrest-repo` and `kalla-upload-copy` on bind-backed volumes under one `KALLA_DATA_ROOT`;
   `init-deployment.sh --data-root <dir>` selects it, creates the directories with their owners and refuses a non-empty
@@ -432,8 +433,9 @@ release and upgrade script knows.
   checklist, `doctor.sh` first and last, and a *Your host differs from the bundle* box; a release's own section lists
   only what it adds.
 - **Tested:** the release dry run also upgrades one stack that has every difference at once (a custom project name,
-  bind-backed volumes, a direct bind mount, custom published ports) from `UPGRADE_FROM`, keeping its row counts and
-  ports; the tag run doesn't repeat it (Decisions "CI on the self-hosted runner").
+  bind-backed volumes, a direct bind mount, custom published ports) from the previous release (a host from before 0.9
+  goes through `upgrade-to-0.9.sh` first), keeping its row counts and ports; the tag run doesn't repeat it (Decisions
+  "CI on the self-hosted runner").
 
 Order: the doctor, the upgrade page and the host units first; then the upgrade library and the single role-rename path;
 then the state directory and the host-paths overlay; the upgrade test last. Stream a builds it. Detail:
@@ -1023,7 +1025,9 @@ included, and `max_tokens` is then always sent, also when the model's limit is u
 limits on the mirror row until the gateway sends them (`fors.context_window`, `fors.max_output_tokens` on
 `GET /v1/models`); then the sync fills them and the manual fields go. The assistant's gateway key's output cap
 (`max_output_tokens` in `/v1/fors/context`), when set, caps every answer too. The test panel shows the `max_tokens`
-sent and whether the answer stopped at the limit. Detail: `chat-api/design.md` §6.3,
+sent and whether the answer stopped at the limit. An answer call that stops at the limit with no visible text is retried
+once with the full limit and the lowest reasoning effort the model takes; still empty, the turn is `unavailable`, never
+an empty `answered` (user, 2026-11-26, #1106). Detail: `chat-api/design.md` §6.3,
 §8.1; `admin/design.md` §4.9, §4.10, V17, §5.5.4; `platform/data-model.md` `GatewayModels`, `AssistantVersions`;
 `gateway-changes/design.md` §7.3.
 
