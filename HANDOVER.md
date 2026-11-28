@@ -3,9 +3,9 @@
 State of the Källa work for the next session, rewritten each session (earlier ones: `git log -- HANDOVER.md`). **Last
 release `v0.11.0`** (2026-11-25 00:19 UTC, tag at `a3076ed4`, on Fors `v0.13.0`): the admin UI reworked (the UX pass
 B-74 to B-82), B-64, and session 57's six items. **`main` has unreleased code since the tag:** P2 wave 2 (B-67 to
-B-69), B-65, B-71, the topics decisions built (#1087), #1084's CI work, the operator docs and the post-merge follow-ups
-(*State*). The
-user's VM runs 0.5.0. Three machines have worked on it: `~/research/rag` (the user's, sessions 49 to 55 and 57),
+B-69), B-65, B-71, all of #1101's Compose work (D1 to D8), #1084's faster CI (R1 to R7), the operator docs and the
+review follow-ups (*State*); **0.12.0 has the user's go-ahead** (#1136). The user's VM was upgraded by `thekim1`
+(#920). Three machines have worked on it: `~/research/rag` (the user's, sessions 49 to 55 and 57),
 `~/git/ume-rag-platform` (the user's WSL machine, session 56, which ran beside session 57 until 2026-11-24) and
 `thekim1`'s (stream b, stream a, the releases, and a coordinating session that writes proposals). Several sessions post
 as `ume-nichlas` at the same hour: look before you write. *Start here* says what does not travel between machines.
@@ -30,7 +30,7 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
    `plans/archive/work/`), results in `results-a.md`, `results-b.md` and `results-main.md`.
 5. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and doesn't bind.
 
-## Start here (session 61)
+## Start here (session 62)
 
 **What does not travel between machines:**
 - **Claude Code's own memory stays on the machine it was written on.** Everything that binds is in
@@ -70,62 +70,44 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
   its pull request what you are about to write; review its pull requests as comments (claims checked against the code).
 - **A decision for the user is asked as four alternatives with one recommendation** (the question tool).
 
-**Open when this was written** (2026-11-25, evening): the main session's #1107 (#1084's CI design text) and #1109
-(#1101's Compose host layout), **both approved by the user and green, but blocked** (item 1); this file's pull request;
-Dependabot's #958. `thekim1` works fast and merges with `--admin` before a review comes: review after the merge and
-file the findings as an issue (that is how #1049 to #1083 went, each fixed within hours). In order:
+**Open when this was written** (2026-11-27, morning): the main session's #1133 (the user's answers of 2026-11-26,
+**approval needed**) and this file's pull request; Dependabot's #958. The *Protect main* ruleset is fixed (#1122,
+`changes, ownership, doc-refs` required, no `evaluation-smoke`), so approved pull requests merge normally again.
+`thekim1` merges its own with `--admin`, often within the hour; **review only open pull requests** (handbook, *How we
+work*). In order:
 
-1. **The *Protect main* ruleset is stale** (since #1090): it requires `ownership`, `doc-refs` and `evaluation-smoke`,
-   which no longer exist (the guard job is now `changes, ownership, doc-refs`; the smoke runs inside `backend`). Every
-   pull request not merged with `--admin` is `BLOCKED`. Neither `ume-nichlas` nor `Crotalus` has admin on the
-   repository; `thekim1` was asked twice on #1084. Once fixed, merge #1107 and #1109 (approved; a push dismisses the
-   approval, so don't push to them without the user's word again).
-2. **#1108 (stream a), #1090's review:** the pre-pull of `UPGRADE_FROM`'s images pulls nothing (each ref gets a leading
-   `-` from the regex, `docker pull` reads it as a flag; dry run 45607043615 shows it), old job names in prose, the
-   pre-pull loop survives the cleanup. Also there: what of #1084's decision is still to build (R4a the registry cache,
-   R6 the `gate` job, R7's Syft single pull, `docs/ci-runner.md`'s time) and **P7**, which the user's decision
-   includes but `thekim1` called not worth it; settle it from one measurement.
-3. **#1106, unlabelled, the chat:** a follow-up answer can end with no text (`finish_reason: "length"`) and still report
-   `kalla.outcome: "answered"`; reproduced on the deployed instance. Likely the model spends its output budget before
-   visible text. Give it an owner (answering is stream b's) and decide what the outcome should be (not *answered*).
-4. **Pick P2 wave 3 (the user).** Wave 2 is done (B-67, B-68, B-69 merged 2026-11-25) and stream b has no code item
-   left; stream a has the live block and #1101's work. Session 60 recommended **Tools and MCP** and explained it to the
-   user (below); **Ingestion breadth** (which holds site-profile learning, the "self-learning crawler") is the other
-   candidate and could run as stream a's wave beside it. Ask as four alternatives with a recommendation. Then update
-   the roadmap (*P2 Broaden*: wave 2's status still says open).
-   - **What session 60 told the user about tools and per-user auth:** P2 tools run as Källa's own identity
-     (`client-credentials`, the Entra app `kalla-tools`), read-only, for public or department data; per-user tools
-     (on-behalf-of, identity §9) are P3 and wait on the Entra move (a tenant) and, for Open WebUI, on E1. Other
-     platforms: Bifrost (six upstream auth modes incl. OBO, enterprise-only per-user), Open WebUI (headers, a signed
-     JWT, or the user's own token), Eneo (delegated OAuth, service account or tenant app, no ACL trimming), the big
-     assistants' connectors (per-user OAuth consent). Källa's `/mcp` server takes delegated `Mcp.Use` tokens from
-     pre-registered clients, capped at `internal`.
-   - **Site-profile learning** (connectors §5.6, Decisions "Site profiles and learning"): designed, deterministic, from
-     30–50 sample pages, re-learned on a quality drop, a lossy profile becomes a proposal; not built; to-verify rows
-     31, 137, 159. Little gain for umea.se (the preset works); it pays off with more hosts.
-5. **Release 0.12.0** when the user wants it: first a dry run with `e2e=true`, runners idle (proves #1073, #1090 and
-   the renamed buttons; the last `e2e.yml` run was 2026-11-23), after #1108's fix. Stream a measures the tag run
-   against #1084's 11.3-minute target once R4a and R6 are in.
-6. **#1101's work (stream a)**, decided (Decisions "Compose host layout and upgrades", in #1109): D5 `doctor.sh`, D8
-   the Compose upgrade page, D6 the units first; then D2 and D3; then D1 and D4; D7 last. Review each pull request.
-7. **The NVDA pass** can start (`plans/work/nvda-pass.md`, rewritten in #1061); the user's team runs it.
-8. **Not queued yet, decide and queue** (design is on `main`): **the chat stage metrics of chat §17**
-   (`rag.chat.stage.duration`, `rag.chat.ttft`, `rag.chat.overhead`, marked not built; B-72 takes its own
-   timestamps), and **a filter for files not scanned for malware** in the file list (the row mark is gone since
-   #1027).
-9. **B-83's hand-off, stream a's:** `e2e.yml` runs only the `pilot` and `accessibility` projects; the `upload` project
+1. **#1133** (approve, then merge): P2 wave 3; the empty answer retried then `unavailable` (chat §6.3, #1106); the
+   backup attention items (admin §5.5.1); #1101's two accepted deviations in Decisions "Compose host layout and
+   upgrades" (secrets and certificates stay in volumes; the odd-host test upgrades from the previous release).
+2. **Release 0.12.0, go-ahead given (#1136, `thekim1`):** the preparation pull request (review it while it is open:
+   the fold, `CHANGELOG.md`, the upgrade guide's 0.12.0 section **with the Compose state-directory move to
+   `/etc/kalla` as an operator step**, `docs/portainer.md`'s version, `to-v0.12.0.md`, the roadmap's table), its
+   squash merge, then the dry run **on `main`** with `e2e=true` (runners idle; the last `e2e.yml` run was 2026-11-23),
+   the tag on **that same commit**, the pin pull request. The tag run's gate should skip verify and parser and name the
+   dry run; its time goes on #1084 against the 11.3-minute target.
+3. **P2 wave 3 (#1135):** each stream writes its queue items from the designs and posts the list there. Stream b:
+   Tools and MCP (tools design §3 to §8, read-only, `client-credentials`; M1 and V1's re-checks first). Stream a:
+   Ingestion breadth (#511's worker split first, then site-profile learning, e-mail and archives, the shared frontier,
+   effect-tag publish plans). Answer design questions there; review the first pull requests of each while open.
+4. **Stream b's decided items:** #1106 (the empty answer: one retry with the full limit and the lowest reasoning
+   effort, then `unavailable`, three test cases) and #1134 (the backup items; the admin's read path to the backup
+   status is a question for stream a on that issue). Flaky: #1115.
+5. **Fors #143** (`upgrade-to-0.12.sh` reading the deployment as Källa's `deploy/upgrade/lib.sh` does): the gateway's.
+6. **The NVDA pass** can start (`plans/work/nvda-pass.md`, rewritten in #1061); the user's team runs it.
+7. **Not queued yet, decide and queue** (design is on `main`): **the chat stage metrics of chat §17**
+   (`rag.chat.stage.duration`, `rag.chat.ttft`, `rag.chat.overhead`, marked not built), and **a filter for files not
+   scanned for malware** in the file list (the row mark is gone since #1027).
+8. **B-83's hand-off, stream a's:** `e2e.yml` runs only the `pilot` and `accessibility` projects; the `upload` project
    runs by hand. Add it to the workflow, or decide it stays by hand.
-10. **A paused upload source** (said on #1024): `POST /api/upload-batches/{id}/commit` still takes a batch for a paused
-    one, whose sync job the worker drops; refusing it with `source_paused` is open.
-11. **Smaller follow-ups left in comments:** #1078's (the last-used lookup has no `(AssistantId, Day)` index; a failed
-    *Archive* closes its dialog; B-68's browser checks thin), #1088's (pin the DST cases in `SourceSchedulesTests`,
-    stream a's file), #1072's (`department` audit type matches no writer), #1059's points 3 and 4, #1080's point e
-    (an old case-sensitive title rule becomes `(?i)` when saved unchanged), the new cards without `quietZero`.
-12. **#958, the parser's bumps:** `LICENSES.md` regenerated on the branch; stream a's. Try `opencv-python-headless`
-    5.1.0.95 now that the uv cutoff allows it; it may retire the FFmpeg exceptions before 2026-12-17.
-13. **Docs still open, stream a's:** #993 (stale facts), #995 (items 2 to 6 done in #1100; the rest).
-14. **#925's steps 2 to 4** (personal-data verdicts, *reject*, the false-positive summary): `thekim1`'s session's.
-15. **Repository variables:** `vars.KALLA_TEST_HOST_RUNNER`, `vars.KALLA_TEST_HOST_DEPLOY_ENV`, `vars.KALLA_R1_*`
+9. **A paused upload source** (said on #1024): `POST /api/upload-batches/{id}/commit` still takes a batch for a paused
+   one, whose sync job the worker drops; refusing it with `source_paused` is open.
+10. **#1084:** P7 (the parser-image ordering) is to be measured once on a parser pull request; drop it from the record
+    if it saves under half a minute.
+11. **#958, the parser's bumps:** `LICENSES.md` regenerated on the branch; stream a's. Try `opencv-python-headless`
+    5.1.0.95; it may retire the FFmpeg exceptions before 2026-12-17.
+12. **Docs still open, stream a's:** #993 (stale facts), #995 (the rest after #1100).
+13. **#925's steps 2 to 4** (personal-data verdicts, *reject*, the false-positive summary): `thekim1`'s session's.
+14. **Repository variables:** `vars.KALLA_TEST_HOST_RUNNER`, `vars.KALLA_TEST_HOST_DEPLOY_ENV`, `vars.KALLA_R1_*`
     and `secrets.KALLA_R1_API_KEY` don't exist; asked on #905 (2026-11-21), no answer yet.
 
 ### Waiting on the user
@@ -178,7 +160,7 @@ file the findings as an issue (that is how #1049 to #1083 went, each fixed withi
   content (#884), so a test that queues a command for a deleted source can lose its lease (#897).
 - **The demo seed's slug in a test:** `openwebui.spec.ts` leaves out the assistant named `demo-assistent` (#882).
 
-## What session 60 did (2026-11-25)
+## What session 60 did (2026-11-25 to 27)
 
 On `~/research/rag`.
 
@@ -198,6 +180,14 @@ On `~/research/rag`.
   version.
 - Found the stale ruleset after #1090 (item 1). GitHub's API failed on writes for a few minutes (502s); #1109 was
   created through the REST API afterwards.
+- **2026-11-26:** the ruleset fixed by `thekim1` from #1122's instructions (the main session has no admin on the
+  repository); #1119 (the Decisions bullet typo; HANDOVER's release steps: the dry run on `main` after the squash
+  merge, the tag on that commit, as #1114's gate needs). Reviews of the then-open #1118 (fixed before its merge),
+  #1114 → #1120 and #1116 → #1121 (both fixed in #1124, #1125). Stream a built all of #1101 (D1 to D8, #1116 to
+  #1132); #1101 closed with its two deviations accepted, Fors #143 opened for the gateway's upgrade script.
+- **The user's answers of 2026-11-26** (four questions, the recommended option each): wave 3 tools plus ingestion,
+  0.12.0 now, the empty answer retried then `unavailable`, the backup attention items (#1133, #1134, #1135, #1136).
+- **The user's working rule from then on:** no reviews of merged pull requests (handbook, *How we work*).
 
 ## What session 59 did (2026-11-24 and 25)
 
@@ -347,17 +337,18 @@ On `~/research/rag` (the user's machine), as the main session, while `thekim1`'s
 - **What a deployer types in Portainer:** 1 value since 0.7.0 (`FORS_DOMAIN`, no secret).
 - **On `main`, unreleased:** P2 wave 2 (B-67 the drawn Map, B-68 unused assistants with *Archive*/*Keep*, B-69 the
   evaluation trend chart), B-65 (the topic preview and form), B-71 (the admin's next run from the worker's rule),
-  host-first topic rules and *Pending removal* (#1087), the post-merge follow-ups (#1057, #1058, #1072, #1080, #1086),
-  #1084's parallel release builds and boot tests, one guard job and the smoke inside `backend` (#1090, #1099, #1103),
-  `PathRules` compiling once (#1079), the operator docs (#992, #994, #995 in part), the code-quality leftovers (#974,
-  #980). Migrations: `Assistants.UnusedKeptUntil` (B-68).
-- **Queues:** stream a: the live block (A-L1 to A-L10), A-34 and A-35 with only their live checks open, #1108, #1101's
-  D1 to D8, #993, #995. Stream b: no code item left (B-42 to B-46 wait on live checks, the B-L items on the gold set);
-  #1106 when it is given an owner. P2 wave 3 waits on the user's pick (item 4). Main: M-4.
-- **Open issues that matter:** #1084 and #1101 (decided, being built), #1106 (the chat, no owner), #1108 (stream a),
-  #993, #995 (docs), #781 (flaky, watch), #511 (the worker split), #333, #100 (the grading script for the go-live gate),
-  #48. In Fors: no open pull request; proposals #108 and #109, #99, #91, a flaky test #124, and #130 (five adapted
-  files offered, #1105).
+  host-first topic rules and *Pending removal* (#1087), all of #1101 for Compose hosts (`deploy/doctor.sh`, the
+  upgrade page, the units from `/etc/kalla/host.env`, `deploy/upgrade/lib.sh`, `compose.host-paths.yaml` and
+  `--data-root`, the env file and the gateway's CA in `/etc/kalla`, the odd-host upgrade in the dry run), #1084's
+  release gate, registry cache, parallel builds and boot tests and one guard job, the shared components copied back
+  from Fors (#1123), the operator docs and the review follow-ups. Migrations: `Assistants.UnusedKeptUntil` (B-68).
+- **Queues:** stream a: the live block (A-L1 to A-L10), A-34 and A-35 with only their live checks open, #993, #995,
+  and wave 3's Ingestion breadth once queued (#1135). Stream b: #1106, #1134, #1115, and wave 3's Tools and MCP once
+  queued; B-42 to B-46 wait on live checks, the B-L items on the gold set. Main: M-4.
+- **Open issues that matter:** #1136 (0.12.0), #1135 (wave 3), #1134 and #1106 (stream b, decided), #1084 (P7 and
+  the timing left), #1115 and #781 (flaky), #993, #995 (docs), #511 (the worker split, wave 3's first step), #333,
+  #100 (the grading script for the go-live gate), #48. In Fors: #143 (the upgrade script), proposals #108 and #109,
+  #99, #91, a flaky test #124.
 - **Dependabot works:** grouped pull requests; `.github/dependabot.yml`'s header lists where a pin is repeated.
   Playwright is bumped by hand, in the package list, the renderer image and its lockfile together (#907).
 - **The user's machine (`~/research/rag`), not the machine of session 56:** the main clone on `main`, no worktrees

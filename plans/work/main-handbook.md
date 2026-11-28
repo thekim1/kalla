@@ -31,7 +31,8 @@ learned, not every session (the session's state is in [`../../HANDOVER.md`](../.
   evidence comment.
 - **Two machines.** `thekim1`'s runs stream b, often stream a, and a coordinating session of its own; talk only
   through GitHub (labels `stream-b`, `stream-a`, `main`). It merges its own pull requests; review their
-  security-relevant parts. Before taking stream b's paths, look for open `b/…` work and say so in an issue.
+  security-relevant parts **while they are open**. **Don't review pull requests that are already merged** (user,
+  2026-11-26): report them in a line when checking GitHub and spend reviews on open ones. Before taking stream b's paths, look for open `b/…` work and say so in an issue.
   **Look at the open pull requests before each step** (`gh pr list`), and say on the other machine's pull request
   what you are about to write. `gh` here acts as `ume-nichlas`: run `gh auth status` before every push or post.
 - **Lean CI:** pull-request jobs are path-filtered; the full set runs before a release, plus a release dry run;
