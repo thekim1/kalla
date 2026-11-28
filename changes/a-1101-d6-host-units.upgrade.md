@@ -1,4 +1,0 @@
-- **Re-run `sudo deploy/host/install.sh` after this upgrade** (#1101 D6, Compose hosts with the host units).
-  - It writes `/etc/kalla/host.env`, which the units now read; without it they don't start.
-  - With a project other than `kalla`, set `COMPOSE_PROJECT_NAME` in `deploy/.env` first, or pass `--project <name>`.
-  - `sudo deploy/host/install.sh --check` then says `ok`.

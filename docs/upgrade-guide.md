@@ -23,6 +23,38 @@ and the release preparation folds the notes in here and writes the release's *Ro
 
 ## Unreleased
 
+## 0.12.0
+
+- **Rolling update: yes** for the Portainer stack, from 0.11.0: one migration adds the nullable column
+  `config."Assistants"."UnusedKeptUntil"`; no variable is required. Paste this release's stack file (or set the image
+  variables to 0.12.0's) and update the stack once. A Compose host follows the steps below and *Upgrade procedure
+  (Compose host)*.
+- **The gateway moves to Fors 0.14.0** (from 0.13.0: a rolling update with no migration and nothing to do; Fors's
+  upgrade guide, *0.14.0*). The stack file pins its images.
+- **One upgrade procedure for a Compose host** (#1101): *Upgrade procedure (Compose host)* below replaces *Upgrade
+  procedure (single slot)*. It starts with the new release's `deploy/doctor.sh`, run from the unpacked bundle with
+  `--env-file` pointing at the live `deploy/.env`, and ends with the doctor again. Step 5 lists what to carry forward
+  when `deploy/` is replaced: `deploy/.env`, `deploy/gateway-ca/` and any other directory a `KALLA_*_DIR` names there,
+  and your own overlays, best kept outside `deploy/`. The box *Your host differs from the bundle* says what changes
+  when the doctor shows another project name, data on a host disk, changed ports, host units from another directory or
+  no backups.
+- **`deploy/doctor.sh` blocks a deployment without backups** (#1121): no `compose.backup.yaml` is now a `BLOCK` line.
+  On a test host you can rebuild, pass `--no-backups-ok` (*Upgrade procedure (Compose host)*, *Your host differs from
+  the bundle*).
+- **Re-run `sudo deploy/host/install.sh` after this upgrade** (#1101 D6, Compose hosts with the host units).
+  - It writes `/etc/kalla/host.env`, which the units now read; without it they don't start.
+  - With a project other than `kalla`, set `COMPOSE_PROJECT_NAME` in `deploy/.env` first, or pass `--project <name>`.
+  - `sudo deploy/host/install.sh --check` then says `ok`.
+- **`upgrade-to-0.9.sh` plans before it acts** (#1101 D2, D3; Compose hosts upgrading from 0.8 or earlier): run it
+  without options to see the plan, then with `--apply`. `--yes` is gone. Data on a host disk is no longer copied into
+  empty named volumes: the new volumes point at the same paths (*0.9.0*, *Compose*).
+- **`deploy/.env` moves to `/etc/kalla/.env`** (#1101 D4, Compose hosts).
+  - Run the new bundle's `sudo deploy/init-deployment.sh` with no options, with the old `deploy/.env` copied into the
+    new `deploy/` first. It moves the file to `/etc/kalla/.env`, still mode 600, owned by the user who ran sudo. A
+    `--gateway-ca-file` given again goes to `/etc/kalla/gateway-ca/`.
+  - Then re-run `sudo deploy/host/install.sh`: the units read the env file's path from `/etc/kalla/host.env`.
+  - `dc` is now `docker compose --env-file /etc/kalla/.env`.
+
 ## 0.11.0
 
 - **Rolling update: yes** from 0.10.0: three migrations, each a new table (`chat."AssistantDailyOutcomes"`,

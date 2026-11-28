@@ -615,7 +615,7 @@ and [portainer.md](portainer.md) for a first deploy and each upgrade step by ste
 **On a new VM** (Docker and Portainer installed, nothing else):
 
 1. **Take the release's file:** the `compose.portainer.yaml` asset of the GitHub release (or the repository's copy at
-   the release tag). It pins the gateway's images (the gateway release it was built from: Fors `v0.13.0` for Källa
+   the release tag). It pins the gateway's images (the gateway release it was built from: Fors `v0.14.0` for Källa `0.12.0`, `v0.13.0` for
    `0.10.0` and `0.11.0`, `v0.12.2` for `0.9.1` and `0.9.2`, `v0.12.1` for `0.9.0`, `v0.11.0` for `0.7.0` and `0.8.0`) and Källa's by digest, so no image
    variable is needed.
 2. **Registry:** none needed. Källa's images on `ghcr.io/thekim1/kalla/*` and the gateway's are public.

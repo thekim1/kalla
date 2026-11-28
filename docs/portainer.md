@@ -1,6 +1,6 @@
-# Deploying and upgrading with Portainer (0.11.x)
+# Deploying and upgrading with Portainer (0.12.x)
 
-How to run Källa with Fors `v0.13.0` as one Portainer stack: a first deploy on a new VM, and the upgrade
+How to run Källa with Fors `v0.14.0` as one Portainer stack: a first deploy on a new VM, and the upgrade
 of a `0.5.x` or later stack in one update (an older one: *Upgrade from before 0.5.0*). The stack is configured only
 through environment variables, for hosts where `init-deployment.sh` can't run. Background and the full variable list:
 the header of [`deploy/portainer/compose.portainer.yaml`](../deploy/portainer/compose.portainer.yaml), the runbook's
@@ -13,9 +13,9 @@ the header of [`deploy/portainer/compose.portainer.yaml`](../deploy/portainer/co
 
 ## Which file
 
-Use the **`compose.portainer.yaml` asset of the `v0.11.0` release** (or later), or the same file in the repository at
+Use the **`compose.portainer.yaml` asset of the `v0.12.0` release** (or later), or the same file in the repository at
 `deploy/portainer/compose.portainer.yaml` once the release's pin PR has merged. It pins the gateway's images
-(`v0.13.0` in the `v0.11.0` and `v0.10.0` assets; `v0.12.2` in the `v0.9.2` and `v0.9.1` assets; `v0.12.1` in the `v0.9.0` asset; `v0.11.0` in the `v0.8.0` and `v0.7.0` assets; `v0.10.3` in the `v0.6.0` asset; `v0.10.1` in the `v0.5.1` asset)
+(`v0.14.0` in the `v0.12.0` asset; `v0.13.0` in the `v0.11.0` and `v0.10.0` assets; `v0.12.2` in the `v0.9.2` and `v0.9.1` assets; `v0.12.1` in the `v0.9.0` asset; `v0.11.0` in the `v0.8.0` and `v0.7.0` assets; `v0.10.3` in the `v0.6.0` asset; `v0.10.1` in the `v0.5.1` asset)
 and Källa's by digest, so no image variable is needed, and has Open WebUI as the profile `openwebui`. The `v0.5.0`
 asset predates both: it has no Open WebUI and leaves `GATEWAY_IMAGE`, `ADMINAPI_IMAGE` and `MIGRATIONS_IMAGE` to be
 set by hand. The one typed
@@ -320,7 +320,7 @@ Nothing is stopped by hand and no SQL is typed: the stack renames the database r
 the gateway's `roles` the gateway's). No release in between has to be installed first. Where a migration can't run
 beside the old version of a service (0.6.0's `RemoveWorkerConcurrency` and the old admin), `kalla-migrate` keeps that
 service out of the database until its new version starts. Plan a window of about half an hour: the stack is down
-during the update of step 8, and the gateway moves to Fors `v0.13.0`. The release tests this path by booting 0.6.0's
+during the update of step 8, and the gateway moves to Fors `v0.14.0`. The release tests this path by booting 0.6.0's
 stack with its variables, renaming the variables as in step 7 and applying the new file over it once.
 
 **Names in this section:** steps 2 to 6 name the variables by their new names; until step 7 your stack still has
