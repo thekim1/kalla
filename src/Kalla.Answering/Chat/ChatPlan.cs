@@ -91,6 +91,13 @@ public sealed record ChatPlan(Guid MessageId, string Model, DateTimeOffset Creat
     /// <summary>Where <see cref="MaxTokens"/> came from (<see cref="MaxTokensSources"/>); null is left out of the request.</summary>
     public string MaxTokensSource { get; init; } = MaxTokensSources.Provider;
 
+    /// <summary>
+    /// The full output limit <c>R</c> (chat design §6.3, #1106), not <c>min(R, C − P)</c>: the <c>max_tokens</c> of the one retry
+    /// of an answer that stopped at the limit with no visible text; the client's <c>max_tokens</c> still lowers it (§3.2), and
+    /// null leaves it out of the request.
+    /// </summary>
+    public int? FullMaxTokens { get; init; }
+
     /// <summary>The caveat line of a degraded answer (§10.2) or of a general-knowledge answer (§10.4), or null; written by us, first.</summary>
     public string? Caveat => Outcome == ChatOutcome.AnsweredGeneral
         ? Platform.Texts[Language == LanguageGuess.English ? PromptTexts.CaveatGeneralEn : PromptTexts.CaveatGeneralSv] + "\n\n"

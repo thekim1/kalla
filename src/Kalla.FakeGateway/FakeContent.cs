@@ -89,6 +89,9 @@ public static partial class FakeContent
     /// <summary>The response header that echoes the request's <c>max_tokens</c>, <c>none</c> when it was left out (B-31).</summary>
     public const string MaxTokensHeader = "x-fake-max-tokens";
 
+    /// <summary>The <c>reasoning_effort</c> a chat call sent, <c>none</c> when left out (#1106).</summary>
+    public const string ReasoningEffortHeader = "x-fake-reasoning-effort";
+
     /// <summary>The gateway's cost header on a complete JSON answer (gateway <c>GatewayHeaders.CostUsd</c>).</summary>
     public const string CostHeader = "x-fors-cost-usd";
 

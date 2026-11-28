@@ -158,10 +158,11 @@ public static class ChatEndpoints
                     var streamed = await service.OpenAnswerAsync(plan, stream: true, ct);
                     var followUps = service.FollowUpCount(plan, parsed.Kalla);
                     var later = followUps > 0 || service.EscalationPending(plan, parsed.Kalla);
-                    return new ChatSse(streamed, who.Client.Kind == "open-webui", parsed.IncludeUsage, (c, p, o) => Enqueue(plan, c, p, o),
-                        parsed.Kalla is null ? null : cited => Kalla(plan, cited)!,
-                        later ? (cited, delivered, token) => service.LaterAsync(plan, parsed.Kalla, parsed.Question, followUps, delivered, cited, token) : null,
-                        (outcome, cited) => EnqueueAborted(plan, outcome, cited),
+                    // The callbacks read streamed.Plan: an answer that stayed empty after its retry is unavailable (#1106).
+                    return new ChatSse(streamed, who.Client.Kind == "open-webui", parsed.IncludeUsage, (c, p, o) => Enqueue(streamed.Plan, c, p, o),
+                        parsed.Kalla is null ? null : cited => Kalla(streamed.Plan, cited)!,
+                        later ? (cited, delivered, token) => service.LaterAsync(streamed.Plan, parsed.Kalla, parsed.Question, followUps, delivered, cited, token) : null,
+                        (outcome, cited) => EnqueueAborted(streamed.Plan, outcome, cited),
                         // §9.10: the progress chunk only now, after the gateway accepted the answer call (a refusal above is still an HTTP error).
                         KallaProgress.For(plan, parsed.Kalla));
                 }

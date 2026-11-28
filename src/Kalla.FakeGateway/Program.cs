@@ -14,6 +14,7 @@ using Kalla.FakeGateway;
 //   OnPrem gets 502 and Eu an answer from Eu; fake-slow → 3 s delay; fake-wrong-residency → answers with x-fors-residency
 //   External; fake-drained → 503 + Retry-After (its in-ceiling targets are drained);
 //   fake-stream-broken | -stall | -no-done | -empty-deltas | -length → streaming edge cases (chat design §18.4);
+//   fake-empty-answer → no text and finish_reason length unless reasoning_effort is sent; fake-empty-always → never text (#1106);
 //   fake-no-cost → answers without x-fors-cost-usd and without the stream cost comment.
 // With stream_options.include_usage the last chunk carries usage only, as OpenAI's do. The cost as gateway phase 2
 // (gateway-changes §5.4, GatewayRequestHandler at v0.10.0): x-fors-cost-usd (eight decimals) on every complete JSON answer,
@@ -151,7 +152,16 @@ app.MapPost("/v1/chat/completions", async (HttpContext ctx, IOptionsSnapshot<Fak
         finishReason = "length";
     }
 
+    // #1106: a reasoning model that spends its whole max_tokens before writing: fake-empty-answer answers nothing with
+    // finish_reason length unless reasoning_effort is sent (echoed in x-fake-reasoning-effort), fake-empty-always never answers.
+    var effort = body["reasoning_effort"] is JsonValue r && r.TryGetValue<string>(out var asked) ? asked : null;
+    ctx.Response.Headers[FakeContent.ReasoningEffortHeader] = effort ?? "none";
     var completionTokens = FakeContent.Tokens(answer);
+    if (model.Name == "fake-empty-always" || (model.Name == "fake-empty-answer" && effort is null))
+    {
+        (answer, finishReason, completionTokens) = ("", "length", maxTokens ?? 64);
+    }
+
     var cachedTokens = Math.Clamp(o.CachedInputTokens, 0, promptTokens);
     var cost = FakeCatalog.Cost(model, promptTokens, cachedTokens, completionTokens);
     ctx.RequestServices.GetRequiredService<FakeUsage>().Record(ctx, call, model, promptTokens, completionTokens, cost);

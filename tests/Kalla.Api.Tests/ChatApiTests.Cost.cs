@@ -42,7 +42,11 @@ public sealed partial class ChatApiTests
     private static readonly ModelPricesEntry ChatPrices = new(0.15m, 0.075m, 0.60m);
 
     /// <summary>What the FakeGateway answered one call with: its step, the tokens it reported and its cost (header or stream comment).</summary>
-    private sealed record CostCall(string? Step, bool StreamCostAsked, GatewayTokens Tokens, decimal? CostUsd, bool Streamed);
+    private sealed record CostCall(string? Step, bool StreamCostAsked, GatewayTokens Tokens, decimal? CostUsd, bool Streamed)
+    {
+        /// <summary>The call's <c>reasoning_effort</c> and <c>max_tokens</c> as sent (null when left out; #1106).</summary>
+        public (string? ReasoningEffort, int? MaxTokens) Sent { get; init; }
+    }
 
     /// <summary>
     /// The FakeGateway behind a recorder: each <c>2xx</c> answer is buffered and its usage and cost read as the gateway sent them
@@ -73,6 +77,9 @@ public sealed partial class ChatApiTests
 
             await response.Content.LoadIntoBufferAsync(cancellationToken);
             var text = await response.Content.ReadAsStringAsync(cancellationToken);
+            using var sentBody = JsonDocument.Parse(body.Length > 0 ? body : "{}");
+            var sent = (sentBody.RootElement.TryGetProperty("reasoning_effort", out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() : null,
+                sentBody.RootElement.TryGetProperty("max_tokens", out var m) && m.ValueKind == JsonValueKind.Number ? m.GetInt32() : (int?)null);
             if (response.Content.Headers.ContentType?.MediaType == "text/event-stream")
             {
                 var lines = text.Split('\n');
@@ -80,12 +87,12 @@ public sealed partial class ChatApiTests
                 using var chunk = JsonDocument.Parse(usage["data: ".Length..]);
                 var comment = lines.SingleOrDefault(l => l.StartsWith(GatewayUsageReader.CostCommentPrefix, StringComparison.Ordinal));
                 calls.Enqueue(new CostCall(step, asked, GatewayUsageReader.Tokens(chunk.RootElement)!.Value,
-                    comment is null ? null : decimal.Parse(comment[GatewayUsageReader.CostCommentPrefix.Length..], CultureInfo.InvariantCulture), Streamed: true));
+                    comment is null ? null : decimal.Parse(comment[GatewayUsageReader.CostCommentPrefix.Length..], CultureInfo.InvariantCulture), Streamed: true) { Sent = sent });
             }
             else
             {
                 using var json = JsonDocument.Parse(text);
-                calls.Enqueue(new CostCall(step, asked, GatewayUsageReader.Tokens(json.RootElement)!.Value, GatewayUsageReader.CostHeader(response), Streamed: false));
+                calls.Enqueue(new CostCall(step, asked, GatewayUsageReader.Tokens(json.RootElement)!.Value, GatewayUsageReader.CostHeader(response), Streamed: false) { Sent = sent });
             }
 
             return response;
