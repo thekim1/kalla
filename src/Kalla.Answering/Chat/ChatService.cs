@@ -148,9 +148,11 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         {
             // §3.2: the client's max_tokens lowers the turn's limit, never raises it; with no known limit it is the limit.
             var (maxTokens, source) = limits.MaxTokens(prompt?.EstimatedTokens ?? 0);
+            var fullMaxTokens = limits.Output;
             if (chat.MaxTokens is { } asked)
             {
                 maxTokens = maxTokens is { } limit ? Math.Min(asked, limit) : asked;
+                fullMaxTokens = fullMaxTokens is { } full ? Math.Min(asked, full) : asked;
             }
 
             return new(messageId, chat.Model, created, assistant, ceiling, settings, maxTokens, language, fixedText, outcome, prompt, retrieval, degraded, platform,
@@ -159,6 +161,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
                 Query = query,
                 SearchedTopics = retrieval?.SearchedTopics ?? linkTopics,
                 MaxTokensSource = source,
+                FullMaxTokens = fullMaxTokens,
                 Usage = usage,
                 Timings = timings,
             };
@@ -415,7 +418,10 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         IReadOnlyList<PromptSource> cited, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(plan);
-        var suggestions = followUps > 0 ? FollowUpsAsync(plan, question, followUps, delivered, cited, ct) : null;
+        // An answer that stayed empty after its retry is unavailable (#1106): no suggestions for it, the member still sent.
+        var suggestions = followUps <= 0 ? null
+            : plan.Outcome == ChatOutcome.Unavailable ? Task.FromResult<IReadOnlyList<string>>([])
+            : FollowUpsAsync(plan, question, followUps, delivered, cited, ct);
         var escalation = EscalationPending(plan, asked) ? EscalationAsync(plan, question, ct) : null;
         return new KallaLater(suggestions is null ? null : await suggestions, escalation is null ? null : await escalation);
     }
@@ -501,6 +507,34 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
     }
 
     /// <summary>
+    /// The one retry of an answer call that stopped at the limit with no visible text (chat design §6.3, #1106): the same prompt
+    /// with the full output limit <see cref="ChatPlan.FullMaxTokens"/> and <c>reasoning_effort</c> =
+    /// <c>Settings.Chat.CondenseReasoningEffort</c> when set (the platform's lowest effort; Källa has no per-model list), as the
+    /// assistant's key; a stream or a JSON answer as the first call was. Its errors are the first call's (§3.6).
+    /// </summary>
+    internal async Task<(HttpResponseMessage? Stream, GatewayAnswer? Complete)> RetryAnswerAsync(ChatPlan plan, bool stream, CancellationToken ct)
+    {
+        var model = plan.Assistant.Published!.GatewayModel;
+        var effort = plan.Platform.CondenseReasoningEffort;
+        using var acting = GatewayCallScope.Begin(Acting(plan.Assistant));
+        if (stream)
+        {
+            return (await gateway.OpenStreamAsync(model, plan.Ceiling, plan.Prompt!.Messages, plan.FullMaxTokens, plan.Settings.Temperature, plan.MessageId, ct, effort), null);
+        }
+
+        return (null, await gateway.CompleteAsync(model, plan.Ceiling, plan.Prompt!.Messages, plan.FullMaxTokens, plan.Settings.Temperature, plan.MessageId,
+            GatewayChatClient.AnswerStep, ct, effort, plan.Usage.Add));
+    }
+
+    /// <summary>
+    /// An answer that stayed empty after its retry (#1106): one Warning with the cause and both calls' <c>max_tokens</c> and output
+    /// tokens (<c>-1</c> when the retry was refused), no text.
+    /// </summary>
+    internal void LogAnswerEmpty(ChatPlan plan, int? firstMaxTokens, int firstOutput, int? retryMaxTokens, int retryOutput) =>
+        LogEmpty(logger, plan.Model, plan.MessageId, firstMaxTokens?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none", firstOutput,
+            retryMaxTokens?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none", retryOutput);
+
+    /// <summary>
     /// The turn as one JSON answer: the events of <see cref="ChatAnswer.ReadAsync"/> folded into the content and its annotations;
     /// every call's usage in <paramref name="usage"/>, its step times in <paramref name="timings"/> (§9.10; null: from now).
     /// </summary>
@@ -533,6 +567,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         }
 
         answer.Finish();
+        plan = answer.Plan; // unavailable when the answer stayed empty after its retry (#1106)
         return new ChatCompletion(plan.MessageId, plan.Model, content.ToString(), annotations, answer.Cited, end.PromptTokens, end.CompletionTokens, end.FinishReason,
             plan.Outcome, plan.Created) { Plan = plan };
     }
@@ -617,6 +652,9 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
 
     [LoggerMessage(LogLevel.Information, "Chat answer for {Assistant}, message {MessageId}: {Sources} sources in the prompt, {Cited} cited, condense {Condense}")]
     private static partial void LogAnswered(ILogger logger, string assistant, Guid messageId, int sources, int cited, string condense);
+
+    [LoggerMessage(LogLevel.Warning, "Chat answer for {Assistant}, message {MessageId}: answer_empty, max_tokens {FirstMaxTokens} gave {FirstOutput} output tokens, the retry's {RetryMaxTokens} gave {RetryOutput}; the turn is unavailable")]
+    private static partial void LogEmpty(ILogger logger, string assistant, Guid messageId, string firstMaxTokens, int firstOutput, string retryMaxTokens, int retryOutput);
 
     [LoggerMessage(LogLevel.Information, "Long question of message {MessageId} searched by its first 2,000 characters: condense {Reason}")]
     private static partial void LogLongQuestionFallback(ILogger logger, Guid messageId, string reason);

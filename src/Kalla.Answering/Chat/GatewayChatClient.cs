@@ -102,8 +102,8 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
     /// then writes its first byte.
     /// </summary>
     public Task<HttpResponseMessage> OpenStreamAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int? maxTokens, double? temperature,
-        Guid runId, CancellationToken ct) =>
-        SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: true, AnswerStep, null,
+        Guid runId, CancellationToken ct, string? reasoningEffort = null) =>
+        SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: true, AnswerStep, reasoningEffort,
             TimeSpan.FromSeconds(options.Value.GatewayHeadersTimeoutSeconds), ct);
 
     /// <summary>
